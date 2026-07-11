@@ -1,0 +1,11 @@
+# Reference Caddy config for TwitchBot-Web. Caddy terminates TLS (auto Let's
+# Encrypt cert + renewal) and forwards plain HTTP to the Node process on
+# localhost:3000, matching what app.js's `trust proxy` / cookie `secure` flag
+# already assume in production (NODE_ENV=production).
+#
+# Copy to /etc/caddy/Caddyfile on the host, replace the domain, then:
+#   sudo systemctl reload caddy
+
+panel.example.com {
+	reverse_proxy localhost:3000
+}

@@ -1,0 +1,7 @@
+node_modules/
+.env
+public/css/output.css
+*.log
+.DS_Store
+CLAUDE.md 
+PLAN.md 

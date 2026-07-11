@@ -1,0 +1,25 @@
+<nav class="site-nav fixed top-0 inset-x-0 z-50 h-14 flex items-center justify-between px-3 sm:px-6 bg-neutral-950/90 backdrop-blur border-b border-neutral-800">
+  <a href="/" class="text-sm font-semibold tracking-wide text-neutral-100 shrink-0">ChatWizardBot</a>
+  <div class="flex items-center gap-2.5 sm:gap-6 text-xs sm:text-sm text-neutral-400 min-w-0">
+    <a href="/commands" class="hover:text-neutral-100 transition-colors">Commands</a>
+    <a href="/games" class="hover:text-neutral-100 transition-colors">Games</a>
+    <a href="/about" class="hidden sm:inline hover:text-neutral-100 transition-colors">About</a>
+    <% if (typeof user !== "undefined" && user) { %>
+      <span class="text-neutral-200 truncate max-w-[5rem] sm:max-w-none"><%= user.displayName %></span>
+      <form id="logout-form" method="post" action="/auth/logout" class="inline shrink-0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="hover:text-neutral-100 transition-colors">Log out</button>
+      </form>
+      <dialog id="logout-confirm-dialog" class="rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 p-6 m-auto backdrop:bg-black/60">
+        <p class="text-sm mb-5">Log out?</p>
+        <div class="flex justify-end gap-3 text-sm">
+          <button type="button" id="logout-cancel" class="px-3 py-1.5 rounded-md text-neutral-400 hover:text-neutral-100 transition-colors">Cancel</button>
+          <button type="button" id="logout-confirm" class="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors">Log out</button>
+        </div>
+      </dialog>
+      <script src="/js/logout-confirm.js" defer></script>
+    <% } else { %>
+      <a href="/auth/login" class="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors shrink-0 whitespace-nowrap">Login with Twitch</a>
+    <% } %>
+  </div>
+</nav>

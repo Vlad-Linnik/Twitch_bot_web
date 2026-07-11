@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Cross-document (MPA) native view transitions - progressive enhancement,
+   browsers without support simply ignore this and navigate normally. */
+@view-transition {
+  navigation: auto;
+}
+
+/* Pin the nav so the browser treats it as the SAME element across the
+   outgoing and incoming documents instead of cross-fading it like the rest
+   of the page. Requires the nav's markup to be byte-identical on every page
+   (see views/partials/nav.ejs). */
+nav.site-nav {
+  view-transition-name: site-nav;
+  contain: layout;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}

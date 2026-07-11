@@ -1,0 +1,23 @@
+# Reference systemd unit for TwitchBot-Web. Copy to
+# /etc/systemd/system/twitchbot-web.service on the host, replace the paths
+# and user, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now twitchbot-web
+#
+# Assumes `npm run build:css` has already been run once (npm start does not
+# rebuild it - see CLAUDE.md's Commands section) and .env has NODE_ENV=production.
+
+[Unit]
+Description=TwitchBot-Web control panel
+After=network.target mongod.service
+
+[Service]
+Type=simple
+User=REPLACE_WITH_DEPLOY_USER
+WorkingDirectory=/REPLACE/WITH/PATH/TwitchBot-Web
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

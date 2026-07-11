@@ -1,0 +1,92 @@
+<%- include('partials/head', { title: channel.channelLogin + ' settings' }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-3xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= channel.channelLogin %> settings</h1>
+  <p class="text-neutral-500 text-sm mb-10">Changes take effect within a few seconds - no bot restart needed.</p>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      Settings saved.
+    </div>
+  <% } %>
+  <% if (typeof error !== "undefined" && error) { %>
+    <div class="mb-8 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3">
+      <%= error %>
+    </div>
+  <% } %>
+
+  <form method="post" action="/<%= channel.channelLogin %>/settings" class="space-y-10">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3">Banned words</h2>
+      <label class="block text-sm text-neutral-400 mb-1">Words (one per line)</label>
+      <textarea name="bannedWordsList" rows="4" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.bannedWords.words.join('\n') %></textarea>
+      <label class="block text-sm text-neutral-400 mt-3 mb-1">Timeout reason</label>
+      <input type="text" name="timeoutReason" value="<%= config.bannedWords.timeoutReason %>" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3">Spam signatures</h2>
+      <label class="block text-sm text-neutral-400 mb-1">One per line</label>
+      <textarea name="spamSignaturesList" rows="4" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.spamSignatures.join('\n') %></textarea>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3">7TV</h2>
+      <label class="block text-sm text-neutral-400 mb-1">Emote set URL</label>
+      <input type="text" name="emoteSetUrl" value="<%= config.sevenTv.emoteSetUrl %>" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3">Commands</h2>
+      <div class="rounded-lg border border-neutral-800 overflow-hidden">
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-4 py-2 whitespace-nowrap">Command</th>
+              <th class="text-left font-medium px-4 py-2 whitespace-nowrap">Signature</th>
+              <th class="text-left font-medium px-4 py-2 w-24">Enabled</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% Object.keys(config.commands).forEach(function(name) { %>
+              <% const cmd = config.commands[name]; %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+                <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= name %></td>
+                <td class="px-4 py-2 font-mono text-purple-300 whitespace-nowrap"><%= cmd.signature || '—' %></td>
+                <td class="px-4 py-2">
+                  <input type="checkbox" name="commands.<%= name %>.enabled" <%= cmd.enabled ? 'checked' : '' %> class="accent-purple-600" />
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3">Responses</h2>
+      <label class="block text-sm text-neutral-400 mb-1">"Busy" filler responses (one per line)</label>
+      <textarea name="busyResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.busy.join('\n') %></textarea>
+
+      <label class="block text-sm text-neutral-400 mt-3 mb-1">Yes/No answers (one per line)</label>
+      <textarea name="yesNoResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.yesNo.join('\n') %></textarea>
+
+      <label class="block text-sm text-neutral-400 mt-3 mb-1">Insult mod-exempt phrases (one per line)</label>
+      <textarea name="insultModExempt" rows="2" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.insultModExempt.join('\n') %></textarea>
+
+      <label class="block text-sm text-neutral-400 mt-3 mb-1">"Bot is not a mod" response</label>
+      <input type="text" name="insultBotNotMod" value="<%= config.responses.insultBotNotMod %>" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+    </section>
+
+    <button type="submit" class="px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+      Save settings
+    </button>
+  </form>
+</main>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,35 @@
+<%- include('partials/head', { title: 'Home' }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6">
+  <section class="py-20 text-center">
+    <h1 class="text-4xl font-bold text-neutral-100 tracking-tight">ChatWizardBot</h1>
+    <p class="mt-4 text-neutral-400 max-w-xl mx-auto">
+      A Twitch chat bot with moderation, mini-games, and per-channel customization.
+      Manage settings and view stats for channels below.
+    </p>
+  </section>
+
+  <section class="pb-24">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4">Channels</h2>
+    <% if (channels.length === 0) { %>
+      <p class="text-neutral-500 text-sm">No channels registered yet.</p>
+    <% } else { %>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <% channels.forEach(function(ch) { %>
+          <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+            <h3 class="font-medium text-neutral-100"><%= ch.channelLogin %></h3>
+            <% if (ch.canManage) { %>
+              <div class="mt-3 flex gap-3 text-sm">
+                <a href="/<%= ch.channelLogin %>/statistics" class="text-purple-400 hover:text-purple-300">Statistics</a>
+                <a href="/<%= ch.channelLogin %>/settings" class="text-purple-400 hover:text-purple-300">Settings</a>
+              </div>
+            <% } %>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>
