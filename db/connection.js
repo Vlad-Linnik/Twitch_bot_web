@@ -3,6 +3,7 @@ const env = require("../config/env");
 
 const client = new MongoClient(env.mongoUri);
 let db;
+let webDb;
 
 async function connect() {
   if (!db) {
@@ -13,8 +14,20 @@ async function connect() {
   return db;
 }
 
+// Same MongoClient/connection, second logical database for web-only data
+// (sessions, site preferences, cached Twitch profile data) that the bot never
+// reads - see ../CLAUDE.md's shared-collections table for why this is separate.
+async function connectWeb() {
+  if (!webDb) {
+    await client.connect();
+    webDb = client.db(env.webMongoDb);
+    console.log("[db] Connected to MongoDB (web db):", env.webMongoDb);
+  }
+  return webDb;
+}
+
 function getClient() {
   return client;
 }
 
-module.exports = { connect, getClient };
+module.exports = { connect, connectWeb, getClient };

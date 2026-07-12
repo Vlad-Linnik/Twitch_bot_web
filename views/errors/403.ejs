@@ -1,13 +1,13 @@
-<%- include('../partials/head', { title: 'Access denied' }) %>
+<%- include('../partials/head', { title: t('errors.accessDeniedTitle') }) %>
 <%- include('../partials/nav') %>
 
 <main class="pt-14 max-w-lg mx-auto px-6 py-24 text-center">
-  <h1 class="text-2xl font-bold text-neutral-100 mb-3">Access denied</h1>
+  <h1 class="text-2xl font-bold text-neutral-100 mb-3"><%= t('errors.accessDeniedTitle') %></h1>
   <p class="text-neutral-400">
     <% if (typeof user !== "undefined" && user) { %>
-      You don't have permission to view this page.
+      <%= t('errors.accessDeniedMessage') %>
     <% } else { %>
-      You need to <a href="/auth/login" class="text-purple-400 hover:text-purple-300">log in with Twitch</a> to view this page.
+      <%= t('errors.loginRequiredMessage') %> <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('errors.loginRequiredLink') %></a><%= t('errors.loginRequiredSuffix') %>
     <% } %>
   </p>
   <% if (typeof message !== "undefined" && message) { %>

@@ -1,0 +1,51 @@
+<%- include('partials/head', { title: t('accountSettings.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('accountSettings.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-10"><%= t('accountSettings.subtitle') %></p>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('accountSettings.saved') %>
+    </div>
+  <% } %>
+
+  <form method="post" action="/settings" data-transition="none" class="space-y-10">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('accountSettings.languageHeading') %></h2>
+      <label class="flex items-center gap-2 text-sm text-neutral-300 mb-2">
+        <input type="radio" name="locale" value="en" <%= locale === 'en' ? 'checked' : '' %> class="radio-custom" />
+        <%= nativeLanguageNames.en %>
+      </label>
+      <label class="flex items-center gap-2 text-sm text-neutral-300">
+        <input type="radio" name="locale" value="ru" <%= locale === 'ru' ? 'checked' : '' %> class="radio-custom" />
+        <%= nativeLanguageNames.ru %>
+      </label>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('accountSettings.chatColorHeading') %></h2>
+      <label class="flex items-center gap-2 text-sm text-neutral-300 mb-2">
+        <input type="radio" name="chatColorMode" value="twitch" <%= prefs.chatColorMode !== 'custom' ? 'checked' : '' %> class="radio-custom" />
+        <%= t('accountSettings.chatColorTwitch') %>
+        <% if (profile && profile.chatColor) { %>
+          <span class="inline-block w-3 h-3 rounded-full border border-neutral-700" style="background-color: <%= profile.chatColor %>"></span>
+        <% } %>
+      </label>
+      <label class="flex items-center gap-2 text-sm text-neutral-300">
+        <input type="radio" name="chatColorMode" value="custom" <%= prefs.chatColorMode === 'custom' ? 'checked' : '' %> class="radio-custom" />
+        <%= t('accountSettings.chatColorCustom') %>
+        <input type="color" name="customChatColor" value="<%= prefs.customChatColor || '#a855f7' %>" class="w-8 h-8 rounded border border-neutral-800 bg-neutral-900" />
+      </label>
+    </section>
+
+    <button type="submit" class="px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+      <%= t('accountSettings.save') %>
+    </button>
+  </form>
+</main>
+
+<%- include('partials/foot') %>

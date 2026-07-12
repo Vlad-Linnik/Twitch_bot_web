@@ -1,23 +1,23 @@
-<%- include('partials/head', { title: channel.channelLogin + ' statistics' }) %>
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('statistics.titleSuffix') }) %>
 <%- include('partials/nav') %>
 
 <main class="pt-14 max-w-4xl mx-auto px-6 py-16">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-10"><%= channel.channelLogin %> statistics</h1>
+  <h1 class="text-3xl font-bold text-neutral-100 mb-10"><%= channel.channelLogin %> <%= t('statistics.titleSuffix') %></h1>
 
   <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12">
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide">Unique chatters</p>
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.uniqueChatters') %></p>
       <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.uniqueChatters %></p>
     </div>
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide">Total messages</p>
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.totalMessages') %></p>
       <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.totalMessages %></p>
     </div>
   </section>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
     <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3">Top chatters</h2>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.topChatters') %></h2>
       <ol class="space-y-1 text-sm">
         <% topChatters.forEach(function(u, i) { %>
           <li class="flex justify-between border-b border-neutral-900 py-1.5">
@@ -29,7 +29,7 @@
     </section>
 
     <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3">Top words</h2>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.topWords') %></h2>
       <ol class="space-y-1 text-sm">
         <% topWords.forEach(function(w, i) { %>
           <li class="flex justify-between border-b border-neutral-900 py-1.5">
@@ -42,17 +42,17 @@
   </div>
 
   <section class="mt-12">
-    <h2 class="text-lg font-semibold text-neutral-100 mb-3">Recent moderator actions</h2>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.recentModActions') %></h2>
     <div class="rounded-lg border border-neutral-800 overflow-hidden">
       <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-neutral-900 text-neutral-400">
           <tr>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap">Action</th>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap">Moderator</th>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap">Target</th>
-            <th class="text-left font-medium px-4 py-2">Reason</th>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap">When</th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colAction') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colModerator') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colTarget') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('statistics.colReason') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colWhen') %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-neutral-800">
@@ -61,12 +61,12 @@
               <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= a.action %></td>
               <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= a.modID %></td>
               <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= a.userId %></td>
-              <td class="px-4 py-2 text-neutral-400"><%= a.reason || '—' %></td>
+              <td class="px-4 py-2 text-neutral-400"><%= a.reason || t('statistics.noReason') %></td>
               <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(a.timestamp).toLocaleString() %></td>
             </tr>
           <% }) %>
           <% if (modActions.length === 0) { %>
-            <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500">No moderator actions recorded yet.</td></tr>
+            <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('statistics.noModActions') %></td></tr>
           <% } %>
         </tbody>
       </table>

@@ -4,62 +4,9 @@ const channelConfigRepo = require("../db/channelConfigRepo");
 const { requireLevel } = require("../middleware/permissions");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
+const { MAX_LIST_ITEMS, sanitizeWord, isValidHttpUrl, parseSubmittedConfig } = require("../lib/settingsValidation");
 
 const router = express.Router();
-
-const MAX_LIST_ITEMS = 200;
-const MAX_STRING_LEN = 500;
-
-function sanitizeStringList(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => typeof item === "string")
-    .map((item) => item.trim().slice(0, MAX_STRING_LEN))
-    .filter(Boolean)
-    .slice(0, MAX_LIST_ITEMS);
-}
-
-// The bot fetches this URL server-side to pull 7TV emotes, so reject anything
-// that isn't a well-formed http(s) URL rather than persisting it unchecked.
-function isValidHttpUrl(value) {
-  if (!value) return true;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-// Parses the submitted form into the same shape as config/defaultChannelConfig.json,
-// dropping anything that isn't an expected field (never trust the request body shape).
-function parseSubmittedConfig(body, existingCommands) {
-  const commands = {};
-  for (const [name, existing] of Object.entries(existingCommands || {})) {
-    commands[name] = {
-      ...existing,
-      enabled: body[`commands.${name}.enabled`] === "on",
-    };
-  }
-
-  return {
-    bannedWords: {
-      words: sanitizeStringList((body.bannedWordsList || "").split("\n")),
-      timeoutReason: (body.timeoutReason || "").trim().slice(0, MAX_STRING_LEN),
-    },
-    spamSignatures: sanitizeStringList((body.spamSignaturesList || "").split("\n")),
-    sevenTv: {
-      emoteSetUrl: (body.emoteSetUrl || "").trim().slice(0, MAX_STRING_LEN),
-    },
-    commands,
-    responses: {
-      busy: sanitizeStringList((body.busyResponses || "").split("\n")),
-      yesNo: sanitizeStringList((body.yesNoResponses || "").split("\n")),
-      insultModExempt: sanitizeStringList((body.insultModExempt || "").split("\n")),
-      insultBotNotMod: (body.insultBotNotMod || "").trim().slice(0, MAX_STRING_LEN),
-    },
-  };
-}
 
 router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
   try {
@@ -79,7 +26,7 @@ router.post("/:channel/settings", settingsWriteLimiter, requireLevel(2), verifyT
     if (!channel) return res.status(404).render("errors/404");
 
     const existing = await channelConfigRepo.getConfig(req.params.channel);
-    const parsed = parseSubmittedConfig(req.body, existing.commands);
+    const parsed = parseSubmittedConfig(req.body, existing);
 
     if (!isValidHttpUrl(parsed.sevenTv.emoteSetUrl)) {
       return res.status(400).render("settings", {
@@ -93,6 +40,101 @@ router.post("/:channel/settings", settingsWriteLimiter, requireLevel(2), verifyT
     await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
 
     res.redirect(`/${req.params.channel}/settings?saved=1`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Banned Words and Spam Signatures moved off the main settings page onto
+// their own sub-pages (search + add/edit/delete instead of one big textarea
+// blob) - both are just a flat string array on the config, so the add/edit/
+// delete routes share this factory instead of tripling the same CRUD logic.
+function registerWordListRoutes(basePath, viewName, getList) {
+  router.get(`/:channel${basePath}`, requireLevel(2), async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.channel);
+      if (!channel) return res.status(404).render("errors/404");
+
+      const config = await channelConfigRepo.getConfig(req.params.channel);
+      const words = getList(config);
+      const rawEdit = parseInt(req.query.edit, 10);
+      const editIndex = Number.isInteger(rawEdit) && rawEdit >= 0 && rawEdit < words.length ? rawEdit : null;
+
+      res.render(viewName, { channel, config, editIndex });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post(`/:channel${basePath}/add`, settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.channel);
+      if (!channel) return res.status(404).render("errors/404");
+
+      const config = await channelConfigRepo.getConfig(req.params.channel);
+      const words = getList(config);
+      const word = sanitizeWord(req.body.word);
+      if (word && !words.includes(word) && words.length < MAX_LIST_ITEMS) {
+        words.push(word);
+        await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+      }
+      res.redirect(`/${req.params.channel}${basePath}`);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post(`/:channel${basePath}/edit`, settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.channel);
+      if (!channel) return res.status(404).render("errors/404");
+
+      const config = await channelConfigRepo.getConfig(req.params.channel);
+      const words = getList(config);
+      const index = parseInt(req.body.index, 10);
+      const word = sanitizeWord(req.body.word);
+      if (word && Number.isInteger(index) && index >= 0 && index < words.length) {
+        words[index] = word;
+        await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+      }
+      res.redirect(`/${req.params.channel}${basePath}`);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post(`/:channel${basePath}/delete`, settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.channel);
+      if (!channel) return res.status(404).render("errors/404");
+
+      const config = await channelConfigRepo.getConfig(req.params.channel);
+      const words = getList(config);
+      const index = parseInt(req.body.index, 10);
+      if (Number.isInteger(index) && index >= 0 && index < words.length) {
+        words.splice(index, 1);
+        await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+      }
+      res.redirect(`/${req.params.channel}${basePath}`);
+    } catch (err) {
+      next(err);
+    }
+  });
+}
+
+registerWordListRoutes("/settings/banned-words", "channelBannedWords", (config) => config.bannedWords.words);
+registerWordListRoutes("/settings/spam-signatures", "channelSpamSignatures", (config) => config.spamSignatures);
+
+router.post("/:channel/settings/banned-words/timeout-reason", settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    config.bannedWords.timeoutReason = sanitizeWord(req.body.timeoutReason);
+    await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+
+    res.redirect(`/${req.params.channel}/settings/banned-words`);
   } catch (err) {
     next(err);
   }

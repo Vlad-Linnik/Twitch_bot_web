@@ -1,18 +1,10 @@
-<%- include('partials/head', { title: 'Games' }) %>
+<%- include('partials/head', { title: t('games.title') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-3xl mx-auto px-6 py-16">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-10">Mini-Games</h1>
-
-  <div class="space-y-6">
-    <% games.forEach(function(game) { %>
-      <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 class="font-medium text-neutral-100"><%= game.name %></h2>
-        <p class="font-mono text-purple-300 text-sm mt-1"><%= game.trigger %></p>
-        <p class="text-neutral-400 text-sm mt-2 leading-relaxed"><%= game.description %></p>
-      </div>
-    <% }) %>
-  </div>
+<main class="pt-14 max-w-3xl mx-auto px-6 py-24 text-center">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-4"><%= t('games.title') %></h1>
+  <p class="text-2xl font-semibold text-purple-400 mb-3"><%= t('games.comingSoon') %></p>
+  <p class="text-neutral-500 text-sm max-w-md mx-auto"><%= t('games.comingSoonSubtitle') %></p>
 </main>
 
 <%- include('partials/foot') %>

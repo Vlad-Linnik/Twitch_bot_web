@@ -15,7 +15,155 @@ nav.site-nav {
   contain: layout;
 }
 
-::view-transition-old(root),
+/* Directional slide instead of the default cross-fade: the outgoing page
+   slides left off-screen while the incoming page slides in from the right.
+   This is the fallback for any navigation public/js/page-transitions.js
+   doesn't recognize (or if JS didn't run) - kept unguarded/lowest-specificity
+   so the ::view-transition-type() overrides below can take over per-nav. */
+::view-transition-old(root) {
+  animation: slide-out 220ms ease-in forwards;
+}
 ::view-transition-new(root) {
-  animation-duration: 180ms;
+  animation: slide-in 220ms ease-out forwards;
+}
+
+/* Reverse of the default: destination sits to the left of the origin in the
+   nav bar (e.g. Games -> Commands), so the outgoing page slides right and the
+   incoming page enters from the left. */
+html:active-view-transition-type(backward) {
+  &::view-transition-old(root) {
+    animation-name: slide-out-reverse;
+  }
+  &::view-transition-new(root) {
+    animation-name: slide-in-reverse;
+  }
+}
+
+/* Language switch: same page, cross-fade instead of sliding. */
+html:active-view-transition-type(fade) {
+  &::view-transition-old(root) {
+    animation: fade-out 150ms forwards;
+  }
+  &::view-transition-new(root) {
+    animation: fade-in 150ms forwards;
+  }
+}
+
+/* Same-page reload (e.g. a settings save redirect) - no visible transition. */
+html:active-view-transition-type(none) {
+  &::view-transition-old(root),
+  &::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+@keyframes slide-out {
+  to {
+    translate: -100vw 0;
+  }
+}
+@keyframes slide-in {
+  from {
+    translate: 100vw 0;
+  }
+}
+@keyframes slide-out-reverse {
+  to {
+    translate: 100vw 0;
+  }
+}
+@keyframes slide-in-reverse {
+  from {
+    translate: -100vw 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Custom radio buttons: a plain circle instead of the native OS control,
+   filled with a smaller dot when checked. */
+input[type="radio"].radio-custom {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-neutral-600, #525252);
+  background-color: transparent;
+  display: inline-block;
+  position: relative;
+  transition: border-color 150ms;
+}
+input[type="radio"].radio-custom:hover {
+  border-color: var(--color-neutral-400, #a3a3a3);
+}
+input[type="radio"].radio-custom:checked {
+  border-color: var(--color-purple-500, #a855f7);
+}
+input[type="radio"].radio-custom:checked::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 9999px;
+  background-color: var(--color-purple-500, #a855f7);
+}
+
+/* Toggle switch: a styled track+thumb driven by a visually-hidden checkbox,
+   used in place of the native checkbox for command enable/disable. */
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.toggle-track {
+  position: relative;
+  width: 2.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background-color: var(--color-neutral-700, #404040);
+  transition: background-color 150ms;
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background-color: white;
+  transition: translate 150ms;
+}
+.toggle-switch input:checked ~ .toggle-track {
+  background-color: var(--color-purple-600, #9333ea);
+}
+.toggle-switch input:checked ~ .toggle-track .toggle-thumb {
+  translate: 1rem 0;
+}
+.toggle-switch input:focus-visible ~ .toggle-track {
+  outline: 2px solid var(--color-purple-500, #a855f7);
+  outline-offset: 2px;
+}
+
+/* Logout confirmation dialog: scale/fade in on open instead of appearing
+   instantly (native <dialog> adds the [open] attribute synchronously on
+   showModal(), so this keyframe runs immediately). */
+#logout-confirm-dialog[open] {
+  animation: dialog-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes dialog-pop {
+  from {
+    opacity: 0;
+    scale: 0.85;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
 }

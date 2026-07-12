@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.use("/auth", authLimiter, require("./authRoutes"));
 router.use("/", require("./home"));
+router.use("/", require("./accountSettings"));
 router.use("/", require("./settings"));
 router.use("/", require("./statistics"));
 router.use("/", require("./commands"));

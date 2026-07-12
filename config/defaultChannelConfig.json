@@ -31,6 +31,6 @@
     "busy": ["I am busy"],
     "yesNo": ["Yes", "No", "Can't say", "eeeh", "Maybe", "50/50", "Probably yes"],
     "insultModExempt": [],
-    "insultBotNotMod": ""
+    "insufficientPermissions": "I don't have moderator permissions to do that here."
   }
 }

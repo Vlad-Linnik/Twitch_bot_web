@@ -1,25 +1,75 @@
-<nav class="site-nav fixed top-0 inset-x-0 z-50 h-14 flex items-center justify-between px-3 sm:px-6 bg-neutral-950/90 backdrop-blur border-b border-neutral-800">
-  <a href="/" class="text-sm font-semibold tracking-wide text-neutral-100 shrink-0">ChatWizardBot</a>
-  <div class="flex items-center gap-2.5 sm:gap-6 text-xs sm:text-sm text-neutral-400 min-w-0">
-    <a href="/commands" class="hover:text-neutral-100 transition-colors">Commands</a>
-    <a href="/games" class="hover:text-neutral-100 transition-colors">Games</a>
-    <a href="/about" class="hidden sm:inline hover:text-neutral-100 transition-colors">About</a>
+<nav class="site-nav fixed top-0 inset-x-0 z-50 h-14 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 sm:px-6 bg-neutral-950/90 backdrop-blur border-b border-neutral-800">
+  <a href="/" class="justify-self-start text-sm font-semibold tracking-wide text-neutral-100 shrink-0 truncate"><%= t('nav.brand') %></a>
+  <div class="justify-self-center flex items-center gap-2.5 sm:gap-6 text-xs sm:text-sm text-neutral-400 min-w-0">
+    <a href="/commands" class="hover:text-neutral-100 transition-colors <%= currentPath === '/commands' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.commands') %></a>
+    <a href="/games" class="hover:text-neutral-100 transition-colors <%= currentPath === '/games' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.games') %></a>
+    <a href="/about" class="hidden sm:inline hover:text-neutral-100 transition-colors <%= currentPath === '/about' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.about') %></a>
+  </div>
+  <div class="justify-self-end flex items-center gap-2.5 sm:gap-6 text-xs sm:text-sm text-neutral-400 min-w-0">
+    <div class="hidden sm:flex items-center gap-1 shrink-0">
+      <a href="?lang=en" data-transition="fade" class="hover:text-neutral-100 transition-colors <%= locale === 'en' ? 'text-neutral-100' : '' %>">EN</a>
+      <span class="text-neutral-700">/</span>
+      <a href="?lang=ru" data-transition="fade" class="hover:text-neutral-100 transition-colors <%= locale === 'ru' ? 'text-neutral-100' : '' %>">RU</a>
+    </div>
     <% if (typeof user !== "undefined" && user) { %>
-      <span class="text-neutral-200 truncate max-w-[5rem] sm:max-w-none"><%= user.displayName %></span>
+      <div class="relative group shrink-0">
+        <span
+          class="text-neutral-200 truncate max-w-[5rem] sm:max-w-none cursor-default"
+          <% if (typeof userDisplayColor !== "undefined" && userDisplayColor) { %>style="color: <%= userDisplayColor %>"<% } %>
+        ><%= user.displayName %></span>
+
+        <div class="absolute right-0 top-full pt-2 hidden group-hover:block">
+          <div class="w-64 rounded-lg border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/40 py-2 text-sm">
+            <p class="px-4 pb-1 text-neutral-500 text-xs uppercase tracking-wide"><%= t('nav.creatorDashboard') %></p>
+            <% if (typeof navMenu !== "undefined" && navMenu && navMenu.channelConnected) { %>
+              <div class="px-4 pb-2 flex items-center justify-between">
+                <span class="text-neutral-300 truncate"><%= navMenu.ownedChannel.channelLogin %></span>
+                <span class="flex gap-3 shrink-0">
+                  <a href="/<%= navMenu.ownedChannel.channelLogin %>/statistics" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
+                  <a href="/<%= navMenu.ownedChannel.channelLogin %>/settings" class="text-purple-400 hover:text-purple-300"><%= t('nav.settingsLink') %></a>
+                </span>
+              </div>
+            <% } else { %>
+              <p class="px-4 pb-2 text-neutral-600 text-xs"><%= t('nav.channelNotConnected') %></p>
+            <% } %>
+
+            <div class="border-t border-neutral-800 my-1"></div>
+
+            <p class="px-4 pt-1 pb-1 text-neutral-500 text-xs uppercase tracking-wide"><%= t('nav.channelsIModerate') %></p>
+            <% if (typeof navMenu !== "undefined" && navMenu && navMenu.moderatedChannels.length > 0) { %>
+              <% navMenu.moderatedChannels.forEach(function(ch) { %>
+                <div class="px-4 py-1 flex items-center justify-between">
+                  <span class="text-neutral-300 truncate"><%= ch.channelLogin %></span>
+                  <span class="flex gap-3 shrink-0">
+                    <a href="/<%= ch.channelLogin %>/statistics" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
+                    <a href="/<%= ch.channelLogin %>/settings" class="text-purple-400 hover:text-purple-300"><%= t('nav.settingsLink') %></a>
+                  </span>
+                </div>
+              <% }) %>
+            <% } else { %>
+              <p class="px-4 py-1 text-neutral-600 text-xs"><%= t('nav.noModeratedChannels') %></p>
+            <% } %>
+
+            <div class="border-t border-neutral-800 my-1"></div>
+
+            <a href="/settings" class="block px-4 py-2 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"><%= t('nav.settings') %></a>
+          </div>
+        </div>
+      </div>
       <form id="logout-form" method="post" action="/auth/logout" class="inline shrink-0">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <button type="submit" class="hover:text-neutral-100 transition-colors">Log out</button>
+        <button type="submit" class="hover:text-neutral-100 transition-colors"><%= t('nav.logout') %></button>
       </form>
       <dialog id="logout-confirm-dialog" class="rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 p-6 m-auto backdrop:bg-black/60">
-        <p class="text-sm mb-5">Log out?</p>
+        <p class="text-sm mb-5"><%= t('nav.logoutConfirmTitle') %></p>
         <div class="flex justify-end gap-3 text-sm">
-          <button type="button" id="logout-cancel" class="px-3 py-1.5 rounded-md text-neutral-400 hover:text-neutral-100 transition-colors">Cancel</button>
-          <button type="button" id="logout-confirm" class="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors">Log out</button>
+          <button type="button" id="logout-cancel" class="px-3 py-1.5 rounded-md text-neutral-400 hover:text-neutral-100 transition-colors"><%= t('nav.logoutCancel') %></button>
+          <button type="button" id="logout-confirm" class="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors"><%= t('nav.logoutConfirm') %></button>
         </div>
       </dialog>
       <script src="/js/logout-confirm.js" defer></script>
     <% } else { %>
-      <a href="/auth/login" class="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors shrink-0 whitespace-nowrap">Login with Twitch</a>
+      <a href="/auth/login" class="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors shrink-0 whitespace-nowrap"><%= t('nav.login') %></a>
     <% } %>
   </div>
 </nav>

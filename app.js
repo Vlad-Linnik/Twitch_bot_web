@@ -4,6 +4,8 @@ const path = require("path");
 const env = require("./config/env");
 const createSessionMiddleware = require("./middleware/session");
 const attachUser = require("./middleware/auth");
+const i18nMiddleware = require("./middleware/i18n");
+const navMenuMiddleware = require("./middleware/navMenu");
 const csrf = require("./middleware/csrf");
 
 function createApp() {
@@ -16,12 +18,23 @@ function createApp() {
 
   // HSTS unconditionally tells browsers to force HTTPS on future visits, which
   // would break plain-HTTP local dev - only send it once we're actually in production.
-  app.use(helmet({ hsts: env.isProduction }));
+  // referrerPolicy: helmet defaults to "no-referrer", which also zeroes out
+  // document.referrer on the landed page (not just the network header) - that
+  // breaks public/js/page-transitions.js's same-origin from/to comparison.
+  // "same-origin" still sends nothing to cross-origin destinations, just
+  // restores it for navigation within this site.
+  app.use(helmet({ hsts: env.isProduction, referrerPolicy: { policy: "same-origin" } }));
   app.use(express.static(path.join(__dirname, "public")));
   app.use(express.urlencoded({ extended: false }));
   app.use(createSessionMiddleware());
   app.use(attachUser);
+  app.use(i18nMiddleware);
+  app.use(navMenuMiddleware);
   app.use(csrf.ensureToken);
+  app.use((req, res, next) => {
+    res.locals.currentPath = req.path;
+    next();
+  });
 
   app.use("/", require("./routes"));
 

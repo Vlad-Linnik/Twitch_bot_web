@@ -1,31 +1,42 @@
-<%- include('partials/head', { title: 'Commands' }) %>
+<%- include('partials/head', { title: t('commands.title') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-2">Available Commands</h1>
-  <p class="text-neutral-500 text-sm mb-10">
-    Signatures shown are defaults - each channel owner can rename them via that channel's settings page.
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-2"><%= t('commands.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-6">
+    <%= t('commands.subtitle') %>
   </p>
 
+  <input
+    type="search"
+    id="commands-search"
+    placeholder="<%= t('commands.searchPlaceholder') %>"
+    class="w-full mb-10 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
+  />
+
   <% commandGroups.forEach(function(group) { %>
-    <section class="mb-10">
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= group.category %></h2>
+    <section class="mb-10" data-command-group>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t(group.categoryKey) %></h2>
       <div class="rounded-lg border border-neutral-800 overflow-hidden">
         <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-neutral-900 text-neutral-400">
             <tr>
-              <th class="text-left font-medium px-4 py-2">Command</th>
-              <th class="text-left font-medium px-4 py-2 w-28">Access</th>
-              <th class="text-left font-medium px-4 py-2">Description</th>
+              <th class="text-left font-medium px-4 py-2"><%= t('commands.colCommand') %></th>
+              <th class="text-left font-medium px-4 py-2 w-32"><%= t('commands.colAccess') %></th>
+              <th class="text-left font-medium px-4 py-2 w-24"><%= t('commands.colCooldown') %></th>
+              <th class="text-left font-medium px-4 py-2 w-64"><%= t('commands.colDescription') %></th>
+              <th class="text-left font-medium px-4 py-2 w-72"><%= t('commands.colExample') %></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-800">
             <% group.commands.forEach(function(cmd) { %>
-              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40" data-command-row data-search-text="<%= (cmd.signature + ' ' + t(cmd.descriptionKey) + ' ' + t(cmd.useCaseKey)).toLowerCase() %>">
                 <td class="px-4 py-2 font-mono text-purple-300 whitespace-nowrap"><%= cmd.signature %></td>
-                <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= cmd.access %></td>
-                <td class="px-4 py-2 text-neutral-400"><%= cmd.description %></td>
+                <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t(cmd.accessKey) %></td>
+                <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
+                <td class="px-4 py-2 text-neutral-300"><%= t(cmd.descriptionKey) %></td>
+                <td class="px-4 py-2 text-neutral-400"><%= t(cmd.useCaseKey) %></td>
               </tr>
             <% }) %>
           </tbody>
@@ -36,4 +47,5 @@
   <% }) %>
 </main>
 
+<script src="/js/commands-search.js" defer></script>
 <%- include('partials/foot') %>

@@ -1,0 +1,16 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.spamSignaturesHeading') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+  <h1 class="text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.spamSignaturesHeading') %></h1>
+  <p class="text-neutral-500 text-sm mb-2"><%= t('channelSettings.spamSignaturesIntro') %></p>
+  <p class="text-neutral-600 text-sm mb-8 italic"><%= t('channelSettings.spamSignaturesExample') %></p>
+
+  <section>
+    <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.wordsLabel') %></h2>
+    <%- include('partials/wordListEditor', { words: config.spamSignatures, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/spam-signatures', editIndex, csrfToken }) %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

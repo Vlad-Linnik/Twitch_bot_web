@@ -11,7 +11,7 @@ function createSessionMiddleware() {
     saveUninitialized: false,
     store: MongoStore.create({
       client: getClient(),
-      dbName: env.mongoDb,
+      dbName: env.webMongoDb,
       collectionName: "sessions",
       ttl: 7 * 24 * 60 * 60, // 7 days
     }),

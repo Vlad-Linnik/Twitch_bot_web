@@ -15,6 +15,10 @@ const env = {
 
   mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017",
   mongoDb: process.env.MONGODB_DB || "twitch_chat_stats",
+  // Web-only data the bot never reads (sessions, site preferences, cached Twitch
+  // profile data) - kept out of the shared twitch_chat_stats db on purpose, see
+  // ../CLAUDE.md's shared-collections table. Same Mongo server, separate database.
+  webMongoDb: process.env.WEB_MONGODB_DB || "chatwizardbot_web",
 
   sessionSecret: process.env.SESSION_SECRET || "dev_only_insecure_secret",
 

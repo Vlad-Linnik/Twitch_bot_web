@@ -21,6 +21,22 @@ async function listEnabled() {
   return col.find({ enabled: true }).sort({ channelLogin: 1 }).toArray();
 }
 
+// A Twitch user can own at most one channel - ownerId doubles as that
+// channel's channelId (see upsertChannel/seedChannel.js), so this is a
+// single-doc lookup, not a list. Used by the nav dropdown's "Creator Dashboard".
+async function findByOwnerId(ownerId) {
+  const col = await ensureInitialized();
+  return col.findOne({ ownerId: String(ownerId), enabled: true });
+}
+
+// Used by the nav dropdown's "Channels I Can Moderate" (modsRepo.getChannelsModeratedBy
+// returns channelIds, this resolves them to full Channel docs).
+async function findManyByIds(channelIds) {
+  const col = await ensureInitialized();
+  if (!channelIds.length) return [];
+  return col.find({ channelId: { $in: channelIds.map(String) }, enabled: true }).sort({ channelLogin: 1 }).toArray();
+}
+
 async function upsertChannel({ channelLogin, channelId, ownerId }) {
   const col = await ensureInitialized();
   const login = channelLogin.toLowerCase();
@@ -36,4 +52,4 @@ async function upsertChannel({ channelLogin, channelId, ownerId }) {
   return findByLogin(login);
 }
 
-module.exports = { findByLogin, listEnabled, upsertChannel };
+module.exports = { findByLogin, listEnabled, upsertChannel, findByOwnerId, findManyByIds };

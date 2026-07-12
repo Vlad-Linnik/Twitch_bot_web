@@ -1,0 +1,25 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.bannedWordsHeading') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+  <h1 class="text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.bannedWordsHeading') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('channelSettings.bannedWordsIntro') %></p>
+
+  <section class="mb-10">
+    <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.wordsLabel') %></h2>
+    <%- include('partials/wordListEditor', { words: config.bannedWords.words, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/banned-words', editIndex, csrfToken }) %>
+  </section>
+
+  <section>
+    <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.timeoutReasonLabel') %></h2>
+    <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.timeoutReasonHint') %></p>
+    <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/timeout-reason" data-transition="none" class="flex gap-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="text" name="timeoutReason" value="<%= config.bannedWords.timeoutReason %>" class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
+    </form>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

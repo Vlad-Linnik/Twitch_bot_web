@@ -23,6 +23,14 @@ async function isModerator(channelId, userId) {
   return !!doc?.moderators?.includes(String(userId));
 }
 
+// Reverse lookup for the nav dropdown's "Channels I Can Moderate" - which
+// channelIds list this userId as a moderator.
+async function getChannelsModeratedBy(userId) {
+  const col = await ensureInitialized();
+  const docs = await col.find({ moderators: String(userId) }).toArray();
+  return docs.map((doc) => doc.channelId);
+}
+
 async function addModerator(channelId, userId) {
   const col = await ensureInitialized();
   await col.updateOne(
@@ -40,4 +48,4 @@ async function removeModerator(channelId, userId) {
   );
 }
 
-module.exports = { getModerators, isModerator, addModerator, removeModerator };
+module.exports = { getModerators, isModerator, addModerator, removeModerator, getChannelsModeratedBy };
