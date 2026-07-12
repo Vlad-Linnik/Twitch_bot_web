@@ -11,7 +11,14 @@
 
     <div>
       <h2 class="text-neutral-200 font-medium mb-1"><%= t('about.creatorHeading') %></h2>
-      <p><%= t('about.creatorName') %></p>
+      <p>
+        <%# Rendered in the creator's own Twitch chat colour (or their custom override from
+            /settings) and linked to their channel. Falls back to a plain purple link if the colour
+            couldn't be resolved - see routes/about.js. %>
+        <a href="https://twitch.tv/<%= creator.login %>" target="_blank" rel="noopener noreferrer"
+           class="font-medium hover:underline underline-offset-2 <%= creator.color ? '' : 'text-purple-400 hover:text-purple-300' %>"
+           <% if (creator.color) { %>style="color: <%= creator.color %>"<% } %>>@<%= creator.login %></a>
+      </p>
     </div>
 
     <div>

@@ -38,6 +38,13 @@ if (settingsForm && saveButton) {
     pendingLeaveAction?.();
   });
 
+  // Submitting the form IS how you save, not a "leave without saving" - the
+  // dirty check above exists only to catch navigating *away* with unsaved
+  // edits, and must not also fire against this navigation.
+  settingsForm.addEventListener("submit", () => {
+    bypassGuard = true;
+  });
+
   // Browser back/forward/refresh/tab-close can't be intercepted with custom UI
   // (a deliberate cross-browser restriction against sites hijacking this
   // prompt) - this is the one case still limited to the browser's native dialog.

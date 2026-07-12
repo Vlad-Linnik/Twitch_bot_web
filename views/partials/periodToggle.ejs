@@ -1,0 +1,20 @@
+<%#
+  Period switcher, rendered to the right of a component's heading (per spec).
+
+  Server-rendered as real <button>s carrying data-* attributes; public/js/user-dashboard.js binds
+  them. Rendering them server-side (rather than building them in JS) means the control is present
+  and labelled even before the script runs, and the active period is correct on first paint.
+
+  Params: periods (string[]), period (the active one), component (which panel these drive).
+%>
+<div class="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-900 p-0.5 shrink-0"
+     role="group" data-period-toggle="<%= component %>">
+  <% periods.forEach(function(p) { %>
+    <button type="button"
+            data-period="<%= p %>"
+            aria-pressed="<%= p === period ? 'true' : 'false' %>"
+            class="px-2 py-1 text-xs rounded transition-colors <%= p === period ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-500 hover:text-neutral-300' %>">
+      <%= t('userDashboard.period.' + p) %>
+    </button>
+  <% }) %>
+</div>

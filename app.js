@@ -7,6 +7,7 @@ const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
 const csrf = require("./middleware/csrf");
+const safeJson = require("./lib/safeJson");
 
 function createApp() {
   const app = express();
@@ -33,6 +34,9 @@ function createApp() {
   app.use(csrf.ensureToken);
   app.use((req, res, next) => {
     res.locals.currentPath = req.path;
+    // Views inline server-fetched data into <script> tags; that data contains chat-derived
+    // strings, so it must never go through a bare JSON.stringify(). See lib/safeJson.js.
+    res.locals.safeJson = safeJson;
     next();
   });
 

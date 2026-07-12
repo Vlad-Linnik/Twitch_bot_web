@@ -26,6 +26,11 @@ const env = {
   twitchClientSecret: process.env.TWITCH_CLIENT_SECRET || "",
   twitchRedirectUri: process.env.TWITCH_REDIRECT_URI || "http://localhost:3000/auth/callback",
 
+  // The bot's author, credited on /about with their real Twitch chat colour and a link to their
+  // channel. A login, not a user ID: the numeric ID is resolved from the Channels collection at
+  // request time, so this stays readable and there's one less magic number to keep in sync.
+  creatorLogin: (process.env.CREATOR_LOGIN || "vlad_261").toLowerCase(),
+
   adminUserIds: new Set(
     (process.env.ADMIN_USER_IDS || "")
       .split(",")

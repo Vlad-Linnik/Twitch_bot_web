@@ -6,22 +6,23 @@
 // correctly on the very next request.
 const channelsRepo = require("../db/channelsRepo");
 const modsRepo = require("../db/modsRepo");
-const userPreferencesRepo = require("../db/userPreferencesRepo");
-const profileCacheRepo = require("../db/profileCacheRepo");
+// One owner for "how is this user displayed" - the colour policy used to be spelled out here AND
+// in routes/about.js, and skipped entirely in routes/userDashboard.js. See db/userProfileService.js.
+const userProfileService = require("../db/userProfileService");
 
 async function navMenuMiddleware(req, res, next) {
   if (!req.user) {
     res.locals.navMenu = null;
     res.locals.userDisplayColor = null;
+    res.locals.userAvatarUrl = null;
     return next();
   }
 
   try {
-    const [ownedChannel, moderatedChannelIds, prefs, profile] = await Promise.all([
+    const [ownedChannel, moderatedChannelIds, display] = await Promise.all([
       channelsRepo.findByOwnerId(req.user.userId),
       modsRepo.getChannelsModeratedBy(req.user.userId),
-      userPreferencesRepo.getPreferences(req.user.userId),
-      profileCacheRepo.getOrFetchProfile(req.user.userId),
+      userProfileService.getDisplayProfile(req.user.userId),
     ]);
     const ownedChannelId = ownedChannel?.channelId;
     const moderatedChannels = (await channelsRepo.findManyByIds(moderatedChannelIds)).filter(
@@ -29,12 +30,16 @@ async function navMenuMiddleware(req, res, next) {
     );
 
     res.locals.navMenu = { ownedChannel, moderatedChannels, channelConnected: !!ownedChannel };
-    res.locals.userDisplayColor =
-      (prefs?.chatColorMode === "custom" && prefs.customChatColor) || profile?.chatColor || null;
+    res.locals.userDisplayColor = display.color;
+    // Prefer the cached profile's avatar (refreshed every 7 days) over the copy frozen into the
+    // session at login - a user who changes their Twitch avatar shouldn't have to log out and back
+    // in to see it. The session value is the fallback so a cache miss still renders something.
+    res.locals.userAvatarUrl = display.avatarUrl || req.user.avatarUrl || null;
   } catch (err) {
     console.error("[navMenu] Failed to compute nav menu, failing closed:", err.message);
     res.locals.navMenu = { ownedChannel: null, moderatedChannels: [], channelConnected: false };
     res.locals.userDisplayColor = null;
+    res.locals.userAvatarUrl = req.user.avatarUrl || null;
   }
 
   next();

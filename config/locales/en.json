@@ -15,7 +15,8 @@
     "settingsLink": "Settings",
     "settings": "Settings",
     "channelNotConnected": "Your channel isn't connected to the bot yet",
-    "noModeratedChannels": "You don't moderate any channels yet"
+    "noModeratedChannels": "You don't moderate any channels yet",
+    "logoutConfirmBody": "You will need to sign in with Twitch again to manage your channel."
   },
   "home": {
     "title": "ChatWizardBot",
@@ -218,5 +219,75 @@
     "serverErrorTitle": "Something went wrong",
     "serverErrorMessage": "An unexpected error occurred. Please try again.",
     "backToHome": "Back to home"
+  },
+  "userDashboard": {
+    "nicknameHistory": "Previous nicknames",
+    "rank": "Rank",
+    "messages": "messages",
+    "noMessages": "No messages in this channel yet",
+    "messageVolume": "Message volume",
+    "wordCloud": "Word cloud",
+    "emoteCloud": "Emote cloud",
+    "mentions": "@mentions",
+    "mentionsTotal": "Times mentioned",
+    "heatmap": "Chat activity",
+    "heatmapCap": "Last 5 months",
+    "modLogs": "Chat logs",
+    "modOnly": "Moderators only",
+    "searchPlaceholder": "Search this user's messages…",
+    "fuzzy": "Typo-tolerant",
+    "noData": "No data for this period",
+    "noTrackedEmotes": "This channel has no tracked 7TV emotes",
+    "sampled": "Showing the most recent messages in this period, not all of them",
+    "period": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "all": "All time"
+    }
+  },
+  "channelDashboard": {
+    "wordCloud": "Channel word cloud",
+    "topChatters": "Top chatters",
+    "topEmotes": "Top tracked emotes",
+    "trackedEmotes": "Tracked emotes",
+    "noTrackedEmotes": "No tracked emotes yet — this channel has no 7TV set synced",
+    "noChatters": "No chatters yet",
+    "logSearch": "Log search",
+    "searchPlaceholder": "Keyword…",
+    "usersPlaceholder": "Users (comma-separated, optional)",
+    "cloudCapNote": "Emotes are excluded — they have their own board"
+  },
+  "customCommands": {
+    "title": "Custom commands",
+    "subtitle": "Created here or with !addcommand in chat — same commands, same bot",
+    "create": "Create or edit",
+    "existing": "Commands",
+    "none": "No custom commands yet",
+    "name": "Command",
+    "response": "Response",
+    "timer": "Auto-post (sec)",
+    "timerOff": "off",
+    "pin": "Pin to chat when posted (moderators only)",
+    "pinned": "pinned",
+    "every": "every",
+    "countersHint": "Use #counterName to insert a counter's current value",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "saved": "Saved — live in chat within a few seconds",
+    "deleted": "Command deleted",
+    "errors": {
+      "name_required": "Command name is required",
+      "name_invalid": "Only letters and digits, no spaces or symbols",
+      "name_too_long": "Command name is too long",
+      "result_required": "Response text is required",
+      "result_too_long": "Response is too long for a Twitch message",
+      "timer_invalid": "Auto-post interval must be a number of seconds",
+      "timer_too_short": "Auto-post interval is too short (minimum 60 seconds)",
+      "timer_too_long": "Auto-post interval is too long",
+      "timer_and_pin": "A command can have an auto-post timer or auto-pin, not both — Twitch allows only one pinned message per channel"
+    }
   }
 }

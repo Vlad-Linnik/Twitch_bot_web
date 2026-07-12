@@ -1,0 +1,122 @@
+<%- include('partials/head', { title: channel.channelLogin }) %>
+<%- include('partials/nav') %>
+
+<%
+  const bootstrap = {
+    channel: channel.channelLogin,
+    period,
+    wordCloud,
+    emoteCloud,
+    canModerate,
+  };
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12">
+
+  <header class="flex items-baseline justify-between gap-4 mb-8 flex-wrap">
+    <h1 class="text-3xl font-bold text-neutral-100"><%= channel.channelLogin %></h1>
+    <a href="https://twitch.tv/<%= channel.channelLogin %>" target="_blank" rel="noopener noreferrer"
+       class="text-sm text-purple-400 hover:text-purple-300">twitch.tv/<%= channel.channelLogin %> ↗</a>
+  </header>
+
+  <section class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-12">
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.totalMessages') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.totalMessages.toLocaleString() %></p>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.uniqueChatters') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.uniqueChatters.toLocaleString() %></p>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('channelDashboard.trackedEmotes') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= emoteCloud.emotes.length %></p>
+    </div>
+  </section>
+
+  <!-- Channel word cloud -->
+  <section class="mb-12" data-component="wordcloud">
+    <div class="flex items-center justify-between mb-3 gap-4">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelDashboard.wordCloud') %></h2>
+      <%- include('partials/periodToggle', { periods, period, component: 'wordcloud' }) %>
+    </div>
+    <div id="channel-word-cloud"
+         class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 min-h-48 flex flex-wrap gap-x-4 gap-y-1.5 items-center content-start justify-center"></div>
+    <p class="text-xs text-neutral-600 mt-2"><%= t('channelDashboard.cloudCapNote') %></p>
+  </section>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
+
+    <!-- Top 10 chatters. Crown / silver / bronze for 1-3 only; 4-10 get no icon, per spec. -->
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('channelDashboard.topChatters') %></h2>
+      <ol class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+        <% leaderboard.forEach(function(u) { %>
+          <%
+            // Only the podium is decorated. Rendering an icon for 4th-10th would flatten the
+            // distinction the medals exist to draw.
+            const medal = u.rank === 1 ? '👑' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : null;
+          %>
+          <li class="flex items-center gap-3 px-4 py-2.5">
+            <span class="w-6 shrink-0 text-center <%= medal ? 'text-base' : 'text-xs text-neutral-600 tabular-nums' %>"><%= medal || u.rank %></span>
+            <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(u.userName) %>"
+               class="text-neutral-200 hover:text-purple-400 transition-colors truncate flex-1 min-w-0 <%= u.rank <= 3 ? 'font-medium' : '' %>"><%= u.userName %></a>
+            <span class="text-neutral-500 text-sm tabular-nums shrink-0"><%= u.messageCount.toLocaleString() %></span>
+          </li>
+        <% }) %>
+        <% if (leaderboard.length === 0) { %>
+          <li class="px-4 py-6 text-center text-neutral-600 text-sm"><%= t('channelDashboard.noChatters') %></li>
+        <% } %>
+      </ol>
+    </section>
+
+    <!-- Top tracked emotes -->
+    <section data-component="emotes">
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelDashboard.topEmotes') %></h2>
+        <%- include('partials/periodToggle', { periods, period, component: 'emotes' }) %>
+      </div>
+      <ol id="emote-board" class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70"></ol>
+      <p id="emote-board-empty" class="text-xs text-neutral-600 mt-2" hidden><%= t('channelDashboard.noTrackedEmotes') %></p>
+    </section>
+  </div>
+
+  <!-- Universal log search (moderator-only) -->
+  <% if (canModerate) { %>
+    <section class="mb-10" id="universal-search">
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100">
+          <%= t('channelDashboard.logSearch') %>
+          <span class="ml-2 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('userDashboard.modOnly') %></span>
+        </h2>
+        <%- include('partials/periodToggle', { periods, period, component: 'search' }) %>
+      </div>
+
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+        <div class="p-3 border-b border-neutral-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input type="search" id="search-term" autocomplete="off"
+                 placeholder="<%= t('channelDashboard.searchPlaceholder') %>"
+                 class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+          <input type="text" id="search-users" autocomplete="off"
+                 placeholder="<%= t('channelDashboard.usersPlaceholder') %>"
+                 class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+        </div>
+        <div class="px-3 py-2 border-b border-neutral-800 flex items-center gap-4">
+          <label class="flex items-center gap-1.5 text-xs text-neutral-500 cursor-pointer">
+            <input type="checkbox" id="search-fuzzy" class="accent-purple-600" />
+            <%= t('userDashboard.fuzzy') %>
+          </label>
+          <p id="search-status" class="text-xs text-neutral-600 flex-1 truncate"></p>
+        </div>
+        <ul id="search-results" class="divide-y divide-neutral-900 max-h-[28rem] overflow-y-auto text-sm"></ul>
+      </div>
+    </section>
+  <% } %>
+
+</main>
+
+<%# Chat-derived strings - must not go through a bare JSON.stringify(). See lib/safeJson.js. %>
+<script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
+<script src="/js/channel-dashboard.js" defer></script>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,168 @@
+<%- include('partials/head', { title: identity.currentUserName + ' · ' + channel.channelLogin }) %>
+<%- include('partials/nav') %>
+
+<%
+  // Data handed to the client as JSON rather than re-fetched on load: the server already paid for
+  // these queries to render the page, so making the browser ask again would double the cost of
+  // every page view on a 2GB box. Period switches DO re-fetch (stats.json) - only the initial
+  // state is inlined.
+  const bootstrap = {
+    channel: channel.channelLogin,
+    username: identity.currentUserName,
+    period,
+    maxHeatmapDays,
+    activity,
+    clouds,
+    mentions,
+    canModerate,
+  };
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12">
+
+  <!-- Header: avatar, name, nickname-history dropdown -->
+  <header class="flex items-start gap-4 mb-10">
+    <% if (profile && profile.avatarUrl) { %>
+      <img src="<%= profile.avatarUrl %>" alt="" width="72" height="72"
+           class="w-18 h-18 rounded-full border border-neutral-800 shrink-0" style="width:72px;height:72px" />
+    <% } else { %>
+      <%# No cached avatar (Twitch lookup failed or the user is gone) - a monogram beats a broken image. %>
+      <div class="rounded-full border border-neutral-800 bg-neutral-900 shrink-0 grid place-items-center text-2xl font-semibold text-neutral-500"
+           style="width:72px;height:72px">
+        <%= identity.currentUserName.charAt(0).toUpperCase() %>
+      </div>
+    <% } %>
+
+    <div class="min-w-0">
+      <div class="flex items-center gap-1.5">
+        <%# One class attribute, colour applied as an optional style - emitting a second `class`
+            in an else-branch would be invalid HTML and silently drop the styling. %>
+        <h1 class="text-3xl font-bold truncate text-neutral-100"
+            <% if (profile && profile.color) { %>style="color: <%= profile.color %>"<% } %>>
+          <%= identity.currentUserName %>
+        </h1>
+
+        <% if (nicknames.length > 0) { %>
+          <%# <details> gives a keyboard-accessible, JS-free disclosure. Names only, no dates, per spec. %>
+          <details class="relative" id="nickname-history">
+            <summary class="list-none cursor-pointer p-1 rounded text-neutral-500 hover:text-neutral-200 transition-colors"
+                     aria-label="<%= t('userDashboard.nicknameHistory') %>">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M5.5 7.5L10 12l4.5-4.5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </summary>
+            <div class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/40 py-2">
+              <p class="px-3 pb-1.5 text-neutral-500 text-xs uppercase tracking-wide"><%= t('userDashboard.nicknameHistory') %></p>
+              <ul class="max-h-64 overflow-y-auto">
+                <% nicknames.forEach(function(name) { %>
+                  <li class="px-3 py-1 text-sm text-neutral-300 truncate"><%= name %></li>
+                <% }) %>
+              </ul>
+            </div>
+          </details>
+        <% } %>
+      </div>
+
+      <p class="text-sm text-neutral-500 mt-1">
+        <% if (standing.rank) { %>
+          <%= t('userDashboard.rank') %> #<%= standing.rank.toLocaleString() %>
+          <span class="text-neutral-700">/</span> <%= standing.totalChatters.toLocaleString() %>
+          <span class="text-neutral-700">·</span>
+          <%= standing.totalMessages.toLocaleString() %> <%= t('userDashboard.messages') %>
+        <% } else { %>
+          <%= t('userDashboard.noMessages') %>
+        <% } %>
+      </p>
+    </div>
+  </header>
+
+  <!-- Message count over time (visual !countmsg) -->
+  <section class="mb-10" data-component="activity">
+    <div class="flex items-center justify-between mb-3 gap-4">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.messageVolume') %></h2>
+      <%- include('partials/periodToggle', { periods, period, component: 'activity' }) %>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <svg id="activity-chart" class="w-full" viewBox="0 0 800 200" preserveAspectRatio="none" role="img"
+           aria-label="<%= t('userDashboard.messageVolume') %>"></svg>
+      <p class="text-xs text-neutral-600 mt-2" data-empty hidden><%= t('userDashboard.noData') %></p>
+    </div>
+  </section>
+
+  <!-- Word + emote clouds -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10" data-component="clouds">
+    <div>
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.wordCloud') %></h2>
+        <%- include('partials/periodToggle', { periods, period, component: 'clouds' }) %>
+      </div>
+      <div id="word-cloud" class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 min-h-40 flex flex-wrap gap-x-3 gap-y-1 items-center content-start"></div>
+      <p id="cloud-sampled" class="text-xs text-amber-600/80 mt-2" hidden><%= t('userDashboard.sampled') %></p>
+    </div>
+    <div>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('userDashboard.emoteCloud') %></h2>
+      <div id="emote-cloud" class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 min-h-40 flex flex-wrap gap-x-3 gap-y-1 items-center content-start"></div>
+      <p class="text-xs text-neutral-600 mt-2" id="emote-empty" hidden><%= t('userDashboard.noTrackedEmotes') %></p>
+    </div>
+  </section>
+
+  <!-- @mentions -->
+  <section class="mb-10" data-component="mentions">
+    <div class="flex items-center justify-between mb-3 gap-4">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.mentions') %></h2>
+      <%- include('partials/periodToggle', { periods, period, component: 'mentions' }) %>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex items-center gap-6">
+      <div class="shrink-0">
+        <p class="text-3xl font-semibold text-neutral-100" id="mention-total"><%= mentions.total.toLocaleString() %></p>
+        <p class="text-xs text-neutral-500 uppercase tracking-wide"><%= t('userDashboard.mentionsTotal') %></p>
+      </div>
+      <svg id="mention-spark" class="flex-1 h-12" viewBox="0 0 400 48" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+  </section>
+
+  <!-- Activity heatmap (GitHub-style, capped at MAX_HEATMAP_DAYS) -->
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('userDashboard.heatmap') %></h2>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 overflow-x-auto">
+      <svg id="heatmap" role="img" aria-label="<%= t('userDashboard.heatmap') %>"></svg>
+      <p class="text-xs text-neutral-600 mt-2"><%= t('userDashboard.heatmapCap') %></p>
+    </div>
+  </section>
+
+  <!-- Moderator-only: this user's chat logs, with live keyword search -->
+  <% if (canModerate) { %>
+    <section class="mb-10" id="mod-logs">
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100">
+          <%= t('userDashboard.modLogs') %>
+          <span class="ml-2 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('userDashboard.modOnly') %></span>
+        </h2>
+        <%- include('partials/periodToggle', { periods, period, component: 'logs' }) %>
+      </div>
+
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+        <div class="p-3 border-b border-neutral-800 flex items-center gap-3">
+          <input type="search" id="log-search" autocomplete="off"
+                 placeholder="<%= t('userDashboard.searchPlaceholder') %>"
+                 class="flex-1 bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+          <label class="flex items-center gap-1.5 text-xs text-neutral-500 shrink-0 cursor-pointer">
+            <input type="checkbox" id="log-fuzzy" class="accent-purple-600" />
+            <%= t('userDashboard.fuzzy') %>
+          </label>
+        </div>
+        <p id="log-status" class="px-3 py-2 text-xs text-neutral-600 border-b border-neutral-800"></p>
+        <ul id="log-results" class="divide-y divide-neutral-900 max-h-96 overflow-y-auto text-sm"></ul>
+      </div>
+    </section>
+  <% } %>
+
+</main>
+
+<%# NOT JSON.stringify() - this payload carries chat-derived strings (cloud words, nickname
+    history, raw message bodies), so it must be escaped against a "</script>" breakout.
+    See lib/safeJson.js. %>
+<script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
+<script src="/js/user-dashboard.js" defer></script>
+
+<%- include('partials/foot') %>

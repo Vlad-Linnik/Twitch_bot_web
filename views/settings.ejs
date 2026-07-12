@@ -16,7 +16,7 @@
     </div>
   <% } %>
 
-  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="none" id="settings-form" class="space-y-10">
+  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" id="settings-form" class="space-y-10">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
     <section class="grid sm:grid-cols-2 gap-4">

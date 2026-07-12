@@ -12,4 +12,15 @@ router.use("/", require("./commands"));
 router.use("/", require("./games"));
 router.use("/", require("./about"));
 
+// Channel-scoped routes go LAST, and channelDashboard goes last of all.
+//
+// Their first path segment is a wildcard, so mounting them ahead of the static pages above would
+// let "/commands" or "/settings" be read as a CHANNEL named "commands"/"settings". userDashboard's
+// paths are 3 segments deep ("/:channel/user/:username") so they can't collide, but
+// channelDashboard owns a bare one-segment "/:channel" and would swallow every static page above
+// it. Keep it the final mount.
+router.use("/", require("./customCommands"));
+router.use("/", require("./userDashboard"));
+router.use("/", require("./channelDashboard"));
+
 module.exports = router;

@@ -53,11 +53,15 @@ document.addEventListener("submit", (event) => {
 const NAV_ORDER = ["/", "/commands", "/games", "/about"];
 
 window.addEventListener("pagereveal", (event) => {
+  // Consume the stash unconditionally: it was set for THIS navigation, so if
+  // this one turns out to have no view transition at all it must not linger
+  // and get picked up by some later, unrelated navigation.
+  const stashed = sessionStorage.getItem(STORAGE_KEY);
+  if (stashed) sessionStorage.removeItem(STORAGE_KEY);
+
   if (!event.viewTransition) return;
 
-  const stashed = sessionStorage.getItem(STORAGE_KEY);
   if (stashed) {
-    sessionStorage.removeItem(STORAGE_KEY);
     event.viewTransition.types.add(stashed);
     return;
   }
@@ -68,7 +72,7 @@ window.addEventListener("pagereveal", (event) => {
   // Same-pathname reload with no explicit transition marker (e.g. a settings
   // form's ?saved=1 redirect) - no transition, it's not a page change.
   if (from.pathname === location.pathname) {
-    event.viewTransition.types.add("none");
+    event.viewTransition.types.add("instant");
     return;
   }
 

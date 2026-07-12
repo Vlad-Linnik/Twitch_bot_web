@@ -5,7 +5,7 @@
   class="w-full mb-3 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
 />
 
-<form method="post" action="<%= baseAction %>/add" data-transition="none" id="word-add-form" class="hidden mb-4">
+<form method="post" action="<%= baseAction %>/add" data-transition="instant" id="word-add-form" class="hidden mb-4">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
   <div class="flex items-center gap-2 rounded-md border border-purple-800 bg-purple-950/30 px-3 py-2">
     <span class="text-sm text-neutral-400"><%= t('channelSettings.wordAddPrefix') %></span>
@@ -17,7 +17,7 @@
 <div class="rounded-lg border border-neutral-800 divide-y divide-neutral-800" id="word-list">
   <% words.forEach(function(word, index) { %>
     <% if (editIndex === index) { %>
-      <form method="post" action="<%= baseAction %>/edit" data-transition="none" class="flex items-center gap-2 px-4 py-2">
+      <form method="post" action="<%= baseAction %>/edit" data-transition="instant" class="flex items-center gap-2 px-4 py-2">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <input type="hidden" name="index" value="<%= index %>" />
         <input type="text" name="word" value="<%= word %>" autofocus class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-100 focus:outline-none focus:border-purple-500" />
@@ -31,7 +31,7 @@
           <a href="<%= baseAction %>?edit=<%= index %>" class="p-1.5 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordEdit') %>">
             <%- include('iconPencil') %>
           </a>
-          <form method="post" action="<%= baseAction %>/delete" data-transition="none" data-confirm-delete="<%= t('channelSettings.wordDeleteConfirm') %>">
+          <form method="post" action="<%= baseAction %>/delete" data-transition="instant" data-confirm-delete="<%= t('channelSettings.wordDeleteConfirm') %>">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
             <input type="hidden" name="index" value="<%= index %>" />
             <button type="submit" class="p-1.5 rounded-md text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordDelete') %>">

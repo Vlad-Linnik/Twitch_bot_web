@@ -37,6 +37,53 @@ async function getTopChatters(channelLogin, limit = 10) {
     .toArray();
 }
 
+// Leaderboard rows carrying a display NAME, not just a userId - the existing getTopChatters()
+// returns raw UserLifetimeStats docs, which have no name in them, and rendering numeric IDs to
+// viewers is useless.
+//
+// $lookup rather than N round-trips: the leaderboard is 10 rows, but the lookup is against
+// UserIdentities' unique {userId} index and runs after $limit, so it touches exactly `limit`
+// documents. Sorting is served by the {channel, messageCount} index.
+async function getLeaderboard(channelLogin, limit = 10) {
+  const { userLifetimeStats } = await ensureInitialized();
+
+  const rows = await userLifetimeStats
+    .aggregate(
+      [
+        { $match: { channel: withHash(channelLogin) } },
+        { $sort: { messageCount: -1 } },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: "UserIdentities",
+            localField: "userId",
+            foreignField: "userId",
+            as: "identity",
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            userId: 1,
+            messageCount: 1,
+            lastSeen: 1,
+            userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+          },
+        },
+      ],
+      { allowDiskUse: false }
+    )
+    .toArray();
+
+  // A chatter with no UserIdentities row (possible for very old rows predating that collection)
+  // still deserves a place on the board - fall back to the id rather than dropping them.
+  return rows.map((row, index) => ({
+    ...row,
+    userName: row.userName || row.userId,
+    rank: index + 1,
+  }));
+}
+
 async function getTopWords(channelLogin, limit = 10) {
   const { wordLifetimeStats } = await ensureInitialized();
   return wordLifetimeStats
@@ -87,6 +134,7 @@ async function getModStats(channelId, limit = 25) {
 
 module.exports = {
   getTopChatters,
+  getLeaderboard,
   getTopWords,
   getChannelTotals,
   getRecentModActions,

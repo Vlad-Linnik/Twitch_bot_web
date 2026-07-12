@@ -49,8 +49,12 @@ html:active-view-transition-type(fade) {
   }
 }
 
-/* Same-page reload (e.g. a settings save redirect) - no visible transition. */
-html:active-view-transition-type(none) {
+/* Same-page reload (e.g. a settings save redirect) - no visible transition.
+   The type is deliberately NOT called "none": `none` is the reserved keyword
+   the `types: none | <custom-ident>+` grammar uses to mean "no types at all",
+   so :active-view-transition-type(none) parses happily but can never match,
+   leaving the slide above in force on every save. */
+html:active-view-transition-type(instant) {
   &::view-transition-old(root),
   &::view-transition-new(root) {
     animation: none;
