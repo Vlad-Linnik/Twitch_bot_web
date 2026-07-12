@@ -46,11 +46,12 @@ router.get("/:channel", async (req, res, next) => {
 
     const period = limits.resolvePeriod(req.query.period, { max: limits.MAX_CLOUD_PERIOD });
 
-    const [totals, leaderboard, wordCloud, emoteCloud, permission] = await Promise.all([
+    const [totals, leaderboard, wordCloud, emoteCloud, trackedEmoteCount, permission] = await Promise.all([
       statsRepo.getChannelTotals(channel.channelLogin),
       statsRepo.getLeaderboard(channel.channelLogin, limits.DEFAULT_LEADERBOARD),
       wordStatsRepo.getChannelWordCloud(channel.channelLogin, period),
       wordStatsRepo.getChannelEmoteCloud(channel.channelLogin, period, limits.DEFAULT_LEADERBOARD),
+      wordStatsRepo.getTrackedEmoteCount(channel.channelLogin),
       computePermission(req.user?.userId ?? null, channel.channelLogin),
     ]);
 
@@ -62,6 +63,7 @@ router.get("/:channel", async (req, res, next) => {
       leaderboard,
       wordCloud,
       emoteCloud,
+      trackedEmoteCount,
       canModerate: permission <= 2,
       maxCloudPeriod: limits.MAX_CLOUD_PERIOD,
     });

@@ -162,6 +162,18 @@ async function getChannelEmoteCloud(channelLogin, requestedPeriod, requestedLimi
   return cacheSet(key, { period, emotes: rows });
 }
 
+// Size of the channel's whiteList - every emote the bot is currently configured to track (7TV
+// set + Twitch global), whether or not it's been typed in chat yet. NOT the same as
+// getChannelEmoteCloud(...).emotes.length (capped at whatever leaderboard limit the caller
+// passed, 10 on the channel dashboard) or WordLifetimeStats.countDocuments() (usage: only
+// emotes actually seen at least once - always <= whiteList size, since a newly-synced global
+// emote nobody has typed yet has no WordLifetimeStats row). whiteList is small, so this is cheap.
+async function getTrackedEmoteCount(channelLogin) {
+  const { whiteList } = await ensureInitialized();
+  const channel = withHash(channelLogin);
+  return whiteList.countDocuments({ channel });
+}
+
 // ---------------------------------------------------------------------------------------
 // Per-user clouds - one pass over that user's messages produces both.
 // ---------------------------------------------------------------------------------------
@@ -240,6 +252,7 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
 module.exports = {
   getChannelWordCloud,
   getChannelEmoteCloud,
+  getTrackedEmoteCount,
   getUserClouds,
   periodStart,
   _cache: cache, // exposed for tests

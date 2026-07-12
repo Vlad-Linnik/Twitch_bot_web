@@ -10,6 +10,7 @@ async function ensureInitialized() {
   collections = {
     commandStats: db.collection("CommandExecutionStats"),
     wordLifetimeStats: db.collection("WordLifetimeStats"),
+    whiteList: db.collection("whiteList"),
     userIdentities: db.collection("UserIdentities"),
   };
   return collections;
@@ -23,16 +24,20 @@ async function getGlobalCommandCount() {
   return result[0]?.total ?? 0;
 }
 
-// Read live from WordLifetimeStats rather than the bot's GlobalEmoteStats running-total doc:
-// that doc's totalEntriesAdded only counts pairs inserted AFTER the counter was introduced, so
-// it undercounts (reads as 0 for a channel whose emote set was already fully populated before
-// this feature shipped) and never catches up. WordLifetimeStats itself is small - "tracked
-// emotes" is a few hundred rows per channel, not the ~1.9M-row `messages` collection - so a live
-// countDocuments()/$group here is cheap, and unlike a running counter it can't drift.
+// Read live rather than the bot's GlobalEmoteStats running-total doc, which only counted pairs
+// inserted AFTER the counter was introduced (undercounts, never catches up, can drift). Both
+// source collections are small - a few hundred rows per channel, not the ~1.9M-row `messages`
+// collection - so live reads here are cheap.
+//
+// totalEntriesAdded = whiteList size (config: every emote the bot is set up to track - 7TV set +
+// Twitch global - whether or not it's been typed in chat yet), NOT WordLifetimeStats.countDocuments()
+// (usage: only emotes actually seen at least once). "Tracked" means configured, not observed -
+// same {channel, word} pair in two channels correctly counts as two separate entries.
+// totalUsageCount is genuinely a usage measure, so it stays on WordLifetimeStats (sum of `count`).
 async function getGlobalEmoteStats() {
-  const { wordLifetimeStats } = await ensureInitialized();
+  const { wordLifetimeStats, whiteList } = await ensureInitialized();
   const [totalEntriesAdded, usageResult] = await Promise.all([
-    wordLifetimeStats.countDocuments(),
+    whiteList.countDocuments(),
     wordLifetimeStats.aggregate([{ $group: { _id: null, total: { $sum: "$count" } } }]).toArray(),
   ]);
   return { totalUsageCount: usageResult[0]?.total ?? 0, totalEntriesAdded };
