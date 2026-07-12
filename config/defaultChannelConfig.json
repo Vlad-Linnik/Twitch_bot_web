@@ -4,6 +4,7 @@
     "timeoutReason": ""
   },
   "spamSignatures": [],
+  "spamBanReason": "spam bot",
   "sevenTv": {
     "emoteSetUrl": ""
   },

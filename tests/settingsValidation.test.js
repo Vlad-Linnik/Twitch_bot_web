@@ -6,6 +6,8 @@ const {
   sanitizeStringList,
   sanitizeWord,
   sanitizeSignatureWord,
+  parseCooldownSeconds,
+  parseMinMessages,
   isValidHttpUrl,
   parseSubmittedConfig,
 } = require("../lib/settingsValidation");
@@ -98,18 +100,55 @@ describe("isValidHttpUrl", () => {
   });
 });
 
+describe("parseCooldownSeconds", () => {
+  test("accepts whole seconds within range", () => {
+    assert.equal(parseCooldownSeconds("15"), 15);
+    assert.equal(parseCooldownSeconds(0), 0);
+    assert.equal(parseCooldownSeconds("86400"), 86400);
+  });
+
+  test("returns null (keep existing) for invalid or out-of-range input", () => {
+    assert.equal(parseCooldownSeconds(""), null);
+    assert.equal(parseCooldownSeconds(undefined), null);
+    assert.equal(parseCooldownSeconds("abc"), null);
+    assert.equal(parseCooldownSeconds("-5"), null);
+    assert.equal(parseCooldownSeconds("86401"), null);
+  });
+});
+
+describe("parseMinMessages", () => {
+  test("accepts integers within range", () => {
+    assert.equal(parseMinMessages("10"), 10);
+    assert.equal(parseMinMessages("0"), 0);
+  });
+
+  test("returns null (keep existing) for invalid or out-of-range input", () => {
+    assert.equal(parseMinMessages(""), null);
+    assert.equal(parseMinMessages("-1"), null);
+    assert.equal(parseMinMessages("1001"), null);
+  });
+});
+
 describe("parseSubmittedConfig", () => {
   const existing = {
     bannedWords: { words: ["badword"], timeoutReason: "no spam" },
     spamSignatures: ["sig1"],
+    spamBanReason: "spam bot",
     commands: {
-      topchatters: { enabled: true, signature: "!topchatters" },
-      question: { enabled: true },
+      topchatters: { enabled: true, cooldownMs: 15000, signature: "!topchatters" },
+      question: { enabled: true, cooldownMs: 30000 },
+      insult: { enabled: true, cumulativeDelayMs: 150000 },
+      customCommandTimer: { minMessagesBetween: 10 },
+    },
+    responses: {
+      insultModExempt: ["("],
+      insufficientPermissions: "no mod rights",
     },
   };
 
   test("auto-prepends ! to a bare signature submission", () => {
     const body = {
+      "commands.topchatters.present": "1",
       "commands.topchatters.enabled": "on",
       "commands.topchatters.signature": "renamedcommand",
     };
@@ -119,6 +158,7 @@ describe("parseSubmittedConfig", () => {
 
   test("a blank signature submission keeps the existing signature (never wipes it)", () => {
     const body = {
+      "commands.topchatters.present": "1",
       "commands.topchatters.enabled": "on",
       "commands.topchatters.signature": "   ",
     };
@@ -132,16 +172,50 @@ describe("parseSubmittedConfig", () => {
     assert.equal(result.commands.question.signature, undefined);
   });
 
-  test("enabled reflects the checkbox's presence, not just truthiness", () => {
-    const body = {}; // checkbox omitted entirely = unchecked
+  test("an unchecked toggle disables the command only when its .present marker was submitted", () => {
+    const body = { "commands.topchatters.present": "1" }; // checkbox omitted = unchecked
     const result = parseSubmittedConfig(body, existing);
     assert.equal(result.commands.topchatters.enabled, false);
   });
 
-  test("bannedWords and spamSignatures are carried over unchanged, not parsed from the body", () => {
+  test("a toggle NOT on the form (no .present marker) keeps its stored enabled flag", () => {
+    // insult's toggle lives on the Banned Words page - saving the main settings form
+    // must never flip it off just because it wasn't submitted.
     const result = parseSubmittedConfig({}, existing);
+    assert.equal(result.commands.insult.enabled, true);
+  });
+
+  test("cooldown is edited in seconds, stored in ms; invalid input keeps the stored value", () => {
+    const good = parseSubmittedConfig({ "commands.question.cooldownSeconds": "45" }, existing);
+    assert.equal(good.commands.question.cooldownMs, 45000);
+
+    const bad = parseSubmittedConfig({ "commands.question.cooldownSeconds": "nope" }, existing);
+    assert.equal(bad.commands.question.cooldownMs, 30000);
+  });
+
+  test("customCommandTimer.minMessagesBetween is editable; invalid input keeps the stored value", () => {
+    const good = parseSubmittedConfig({ "commands.customCommandTimer.minMessagesBetween": "25" }, existing);
+    assert.equal(good.commands.customCommandTimer.minMessagesBetween, 25);
+
+    const bad = parseSubmittedConfig({ "commands.customCommandTimer.minMessagesBetween": "-3" }, existing);
+    assert.equal(bad.commands.customCommandTimer.minMessagesBetween, 10);
+  });
+
+  test("bannedWords, spamSignatures, and spamBanReason are carried over unchanged, not parsed from the body", () => {
+    const result = parseSubmittedConfig({ spamBanReason: "attacker-controlled" }, existing);
     assert.equal(result.bannedWords, existing.bannedWords);
     assert.equal(result.spamSignatures, existing.spamSignatures);
+    assert.equal(result.spamBanReason, "spam bot");
+  });
+
+  test("system responses (insultModExempt, insufficientPermissions) are preserved, never form-editable", () => {
+    const body = {
+      insultModExempt: "malicious\nlines",
+      insufficientPermissions: "malicious",
+    };
+    const result = parseSubmittedConfig(body, existing);
+    assert.deepEqual(result.responses.insultModExempt, ["("]);
+    assert.equal(result.responses.insufficientPermissions, "no mod rights");
   });
 
   test("response textareas are split into sanitized lists", () => {

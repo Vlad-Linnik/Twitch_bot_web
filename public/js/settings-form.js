@@ -1,6 +1,9 @@
-// Progressive enhancement: the Save button starts visible in the server-rendered
-// HTML (so it always works with JS disabled) - this only hides it until the form
-// actually differs from what was loaded, so there's nothing to lose by clicking it.
+// Progressive enhancement: the Save button always works with JS disabled (the html.js CSS
+// guard never hides it there) - with JS it stays hidden until the form actually differs from
+// what was loaded, so there's nothing to lose by clicking it. Visibility is purely CSS-driven
+// (.save-fab / .save-visible in input.css): the button is hidden from the very first paint by
+// the inline html.js stamp in head.ejs, so this deferred script never causes the old
+// flash-then-vanish glitch, and the class swap here just triggers the scale/fade animation.
 // Not named `form` - logout-confirm.js (loaded on every page via nav.ejs) already
 // declares a top-level `const form`, and separate classic <script> tags on the same
 // page share one global lexical scope, so a duplicate const/let name throws instead
@@ -11,15 +14,14 @@ const unsavedDialog = document.getElementById("unsaved-changes-dialog");
 
 if (settingsForm && saveButton) {
   const initialState = new URLSearchParams(new FormData(settingsForm)).toString();
-  saveButton.classList.add("hidden");
 
   // Cleared once the user picks "leave without saving", so the very next
   // navigation attempt (the one that action itself triggers) isn't re-blocked.
   let bypassGuard = false;
   const isDirty = () => !bypassGuard && new URLSearchParams(new FormData(settingsForm)).toString() !== initialState;
 
-  settingsForm.addEventListener("input", () => saveButton.classList.toggle("hidden", !isDirty()));
-  settingsForm.addEventListener("change", () => saveButton.classList.toggle("hidden", !isDirty()));
+  settingsForm.addEventListener("input", () => saveButton.classList.toggle("save-visible", isDirty()));
+  settingsForm.addEventListener("change", () => saveButton.classList.toggle("save-visible", isDirty()));
 
   // Hooks page-transitions.js's link handler and logout-confirm.js's logout
   // flow check before navigating away - optional chaining makes both no-ops

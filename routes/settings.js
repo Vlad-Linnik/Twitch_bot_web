@@ -140,4 +140,38 @@ router.post("/:channel/settings/banned-words/timeout-reason", settingsWriteLimit
   }
 });
 
+// The banned-word detection feature switch (the bot's commands.insult.enabled flag). It lives
+// on the Banned Words page, next to the word list it gates, not in the commands table - it has
+// no chat signature and never behaved like a command.
+router.post("/:channel/settings/banned-words/detection-toggle", settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    config.commands.insult = { ...config.commands.insult, enabled: req.body.detectionEnabled === "on" };
+    await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+
+    res.redirect(`/${req.params.channel}/settings/banned-words`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Ban reason shown to users caught by a spam signature - mirrors banned-words' timeout reason.
+router.post("/:channel/settings/spam-signatures/reason", settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    config.spamBanReason = sanitizeWord(req.body.spamBanReason);
+    await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+
+    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

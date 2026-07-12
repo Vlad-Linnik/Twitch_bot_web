@@ -1,0 +1,46 @@
+<%#
+  One row of a commands table on the channel settings page.
+  Expects: name (internal command key), cmd (its config object), t, plus csrf-less form context.
+  The hidden `.present` marker tells parseSubmittedConfig this toggle was actually rendered -
+  see lib/settingsValidation.js.
+%>
+<%
+  const friendly = t('channelSettings.commandName.' + name);
+  const label = friendly === 'channelSettings.commandName.' + name ? name : friendly;
+  const descKey = 'channelSettings.commandDesc.' + name;
+  const desc = t(descKey) === descKey ? '' : t(descKey);
+%>
+<tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+  <td class="px-4 py-2 text-neutral-200 whitespace-nowrap align-top"><%= label %></td>
+  <td class="px-4 py-2 text-neutral-400 align-top"><%= desc %></td>
+  <td class="px-4 py-2 align-top">
+    <% if (cmd.signature !== undefined) { %>
+      <div class="flex items-center w-32 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 focus-within:border-purple-500">
+        <span class="text-sm font-mono text-neutral-500 select-none">!</span>
+        <input type="text" name="commands.<%= name %>.signature" value="<%= cmd.signature.replace(/^!/, '') %>" class="w-full bg-transparent text-sm font-mono text-purple-300 focus:outline-none" />
+      </div>
+    <% } else { %>
+      <span class="text-neutral-600">—</span>
+    <% } %>
+  </td>
+  <td class="px-4 py-2 align-top">
+    <% if (cmd.cooldownMs !== undefined) { %>
+      <input type="number" min="0" max="86400" step="1" name="commands.<%= name %>.cooldownSeconds"
+             value="<%= Math.round(cmd.cooldownMs / 1000) %>"
+             class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+    <% } else { %>
+      <span class="text-neutral-600">—</span>
+    <% } %>
+  </td>
+  <td class="px-4 py-2 align-top">
+    <% if (cmd.enabled !== undefined) { %>
+      <input type="hidden" name="commands.<%= name %>.present" value="1" />
+      <label class="toggle-switch">
+        <input type="checkbox" name="commands.<%= name %>.enabled" <%= cmd.enabled ? 'checked' : '' %> class="sr-only" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+    <% } else { %>
+      <span class="text-neutral-600">—</span>
+    <% } %>
+  </td>
+</tr>

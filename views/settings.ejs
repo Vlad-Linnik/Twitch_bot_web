@@ -16,7 +16,29 @@
     </div>
   <% } %>
 
-  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" id="settings-form" class="space-y-10">
+  <%
+    // The bot's command map, grouped into human sections. Anything in config.commands not
+    // claimed here (a future bot command) lands in the trailing "other" group instead of
+    // silently disappearing from the form. question/directmsg/insult/customCommandTimer/
+    // counterUpdate are deliberately NOT in these tables - they aren't chat commands, and
+    // each is rendered next to the setting it actually belongs to (insult lives on the
+    // Banned Words page).
+    const groups = [
+      { key: 'chatStats',      names: ['topchatters', 'topsmiles', 'countword', 'countmsg', 'countunique', 'addword', 'update7tv', 'botinfo'] },
+      { key: 'customCommands', names: ['addcommand', 'settimer', 'setpin'] },
+      { key: 'counters',       names: ['exception'] },
+      { key: 'miniGames',      names: ['muteduel'] },
+    ];
+    const placedElsewhere = new Set(['question', 'directmsg', 'insult', 'customCommandTimer', 'counterUpdate']);
+    const claimed = new Set(placedElsewhere);
+    groups.forEach(g => g.names.forEach(n => claimed.add(n)));
+    const other = Object.keys(config.commands).filter(n => !claimed.has(n));
+    if (other.length) groups.push({ key: 'other', names: other });
+
+    function commandTable(names) { return names.filter(n => config.commands[n]); }
+  %>
+
+  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" id="settings-form" class="space-y-12">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
     <section class="grid sm:grid-cols-2 gap-4">
@@ -36,72 +58,119 @@
       <input type="text" name="emoteSetUrl" value="<%= config.sevenTv.emoteSetUrl %>" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
     </section>
 
+    <% groups.forEach(function(group) { %>
+      <% const names = commandTable(group.names); if (names.length === 0 && group.key !== 'customCommands' && group.key !== 'counters') return; %>
+      <section>
+        <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('channelSettings.group.' + group.key) %></h2>
+        <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.groupIntro.' + group.key) %></p>
+
+        <% if (names.length > 0) { %>
+          <div class="rounded-lg border border-neutral-800 overflow-hidden">
+            <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-neutral-900 text-neutral-400">
+                <tr>
+                  <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colCommand') %></th>
+                  <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colDescription') %></th>
+                  <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colSignature') %></th>
+                  <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colCooldown') %></th>
+                  <th class="text-left font-medium px-4 py-2 w-16"><%= t('channelSettings.colEnabled') %></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-neutral-800">
+                <% names.forEach(function(name) { %>
+                  <%- include('partials/commandRow', { name, cmd: config.commands[name] }) %>
+                <% }) %>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (group.key === 'customCommands') { %>
+          <a href="/<%= channel.channelLogin %>/commands" class="inline-block mt-3 text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.manageCustomCommands') %> →</a>
+          <% if (config.commands.customCommandTimer) { %>
+            <div class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+              <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.autoPostPacingLabel') %></label>
+              <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.autoPostPacingHint') %></p>
+              <input type="number" min="0" max="1000" step="1" name="commands.customCommandTimer.minMessagesBetween"
+                     value="<%= config.commands.customCommandTimer.minMessagesBetween %>"
+                     class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+            </div>
+          <% } %>
+        <% } %>
+
+        <% if (group.key === 'counters' && config.commands.counterUpdate) { %>
+          <div class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+            <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.counterCooldownLabel') %></label>
+            <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.counterCooldownHint') %></p>
+            <input type="number" min="0" max="86400" step="1" name="commands.counterUpdate.cooldownSeconds"
+                   value="<%= Math.round(config.commands.counterUpdate.cooldownMs / 1000) %>"
+                   class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+          </div>
+        <% } %>
+      </section>
+    <% }) %>
+
+    <!-- Bot mentions: what happens when someone pings @ChatWizardBot. question/directmsg are
+         features, not chat commands - each toggle sits right next to the responses it uses. -->
     <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('channelSettings.commandsHeading') %></h2>
-      <div class="rounded-lg border border-neutral-800 overflow-hidden">
-        <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-neutral-900 text-neutral-400">
-            <tr>
-              <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colCommand') %></th>
-              <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colDescription') %></th>
-              <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colSignature') %></th>
-              <th class="text-left font-medium px-4 py-2 w-16"><%= t('channelSettings.colEnabled') %></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-neutral-800">
-            <% Object.keys(config.commands).forEach(function(name) { %>
-              <% const cmd = config.commands[name]; %>
-              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
-                <td class="px-4 py-2 text-neutral-200 whitespace-nowrap align-top"><%= name %></td>
-                <td class="px-4 py-2 text-neutral-400 align-top"><%= t('channelSettings.commandDesc.' + name) %></td>
-                <td class="px-4 py-2 align-top">
-                  <% if (cmd.signature !== undefined) { %>
-                    <div class="flex items-center w-32 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 focus-within:border-purple-500">
-                      <span class="text-sm font-mono text-neutral-500 select-none">!</span>
-                      <input type="text" name="commands.<%= name %>.signature" value="<%= cmd.signature.replace(/^!/, '') %>" class="w-full bg-transparent text-sm font-mono text-purple-300 focus:outline-none" />
-                    </div>
-                  <% } else { %>
-                    <span class="text-neutral-600">—</span>
-                  <% } %>
-                </td>
-                <td class="px-4 py-2 align-top">
-                  <label class="toggle-switch">
-                    <input type="checkbox" name="commands.<%= name %>.enabled" <%= cmd.enabled ? 'checked' : '' %> class="sr-only" />
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                  </label>
-                </td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('channelSettings.group.mentions') %></h2>
+      <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.responsesIntro') %></p>
+
+      <% if (config.commands.question) { %>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 mb-4">
+          <div class="flex items-center justify-between gap-4 mb-1">
+            <span class="text-sm font-medium text-neutral-200"><%= t('channelSettings.commandName.question') %></span>
+            <div class="flex items-center gap-4">
+              <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+                <%= t('channelSettings.colCooldown') %>
+                <input type="number" min="0" max="86400" step="1" name="commands.question.cooldownSeconds"
+                       value="<%= Math.round(config.commands.question.cooldownMs / 1000) %>"
+                       class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+              </label>
+              <input type="hidden" name="commands.question.present" value="1" />
+              <label class="toggle-switch">
+                <input type="checkbox" name="commands.question.enabled" <%= config.commands.question.enabled ? 'checked' : '' %> class="sr-only" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+          <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.question') %></p>
+          <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.yesNoResponsesLabel') %></label>
+          <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.yesNoResponsesHint') %></p>
+          <textarea name="yesNoResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.yesNo.join('\n') %></textarea>
         </div>
-      </div>
-    </section>
+      <% } %>
 
-    <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('channelSettings.responsesHeading') %></h2>
-      <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.responsesIntro') %></p>
-
-      <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.busyResponsesLabel') %></label>
-      <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.busyResponsesHint') %></p>
-      <textarea name="busyResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.busy.join('\n') %></textarea>
-
-      <label class="block text-sm text-neutral-400 mt-3 mb-1"><%= t('channelSettings.yesNoResponsesLabel') %></label>
-      <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.yesNoResponsesHint') %></p>
-      <textarea name="yesNoResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.yesNo.join('\n') %></textarea>
-
-      <label class="block text-sm text-neutral-400 mt-3 mb-1"><%= t('channelSettings.insultModExemptLabel') %></label>
-      <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.insultModExemptHint') %></p>
-      <textarea name="insultModExempt" rows="2" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.insultModExempt.join('\n') %></textarea>
-
-      <label class="block text-sm text-neutral-400 mt-3 mb-1"><%= t('channelSettings.insufficientPermissionsLabel') %></label>
-      <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.insufficientPermissionsHint') %></p>
-      <input type="text" name="insufficientPermissions" value="<%= config.responses.insufficientPermissions %>" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      <% if (config.commands.directmsg) { %>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+          <div class="flex items-center justify-between gap-4 mb-1">
+            <span class="text-sm font-medium text-neutral-200"><%= t('channelSettings.commandName.directmsg') %></span>
+            <div class="flex items-center gap-4">
+              <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+                <%= t('channelSettings.colCooldown') %>
+                <input type="number" min="0" max="86400" step="1" name="commands.directmsg.cooldownSeconds"
+                       value="<%= Math.round(config.commands.directmsg.cooldownMs / 1000) %>"
+                       class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+              </label>
+              <input type="hidden" name="commands.directmsg.present" value="1" />
+              <label class="toggle-switch">
+                <input type="checkbox" name="commands.directmsg.enabled" <%= config.commands.directmsg.enabled ? 'checked' : '' %> class="sr-only" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+          <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.directmsg') %></p>
+          <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.busyResponsesLabel') %></label>
+          <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.busyResponsesHint') %></p>
+          <textarea name="busyResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.busy.join('\n') %></textarea>
+        </div>
+      <% } %>
     </section>
 
     <div class="sticky bottom-6 flex justify-center pointer-events-none">
-      <button type="submit" id="save-button" class="pointer-events-auto px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium shadow-lg shadow-black/40 transition-colors">
+      <button type="submit" id="save-button" class="save-fab pointer-events-auto px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium shadow-lg shadow-black/40 transition-colors">
         <%= t('channelSettings.save') %>
       </button>
     </div>

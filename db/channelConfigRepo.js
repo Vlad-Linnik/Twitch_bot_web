@@ -24,13 +24,14 @@ async function getConfig(channelLogin) {
 async function saveConfig(channelLogin, config, updatedBy) {
   const col = await ensureInitialized();
   const login = channelLogin.toLowerCase();
-  const { bannedWords, spamSignatures, sevenTv, commands, responses } = config;
+  const { bannedWords, spamSignatures, spamBanReason, sevenTv, commands, responses } = config;
   await col.updateOne(
     { channelLogin: login },
     {
       $set: {
         bannedWords,
         spamSignatures,
+        spamBanReason: spamBanReason ?? "",
         sevenTv,
         commands,
         responses,

@@ -93,3 +93,7 @@ async function i18nMiddleware(req, res, next) {
 }
 
 module.exports = i18nMiddleware;
+// The /settings form saves the locale to UserPreferences, but the cookie outranks the saved
+// preference in resolveLocale() above - so any save MUST also rewrite the cookie, or the old
+// cookie keeps winning and the language never appears to change.
+module.exports.persistLocaleCookie = persistCookie;

@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= typeof title !== "undefined" ? title + " · ChatWizardBot" : "ChatWizardBot" %></title>
+  <%# Stamped before ANY content renders, so CSS can hide JS-managed elements (e.g. the
+      dirty-tracked Save buttons) from the very first paint - hiding them from a deferred
+      script instead paints them for a split second, then blinks them away. Without JS the
+      class never appears and those elements stay visible/usable. %>
+  <script>document.documentElement.classList.add("js");</script>
   <link rel="stylesheet" href="/css/output.css" />
 </head>
 <body class="bg-neutral-950 text-neutral-200 min-h-screen">

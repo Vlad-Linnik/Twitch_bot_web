@@ -35,9 +35,10 @@
     <% } else { %>
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <% channels.forEach(function(ch) { %>
-          <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-            <h3 class="font-medium text-neutral-100"><%= ch.channelLogin %></h3>
-          </div>
+          <a href="/<%= ch.channelLogin %>" class="block rounded-lg border border-neutral-800 hover:border-purple-600/60 bg-neutral-900 hover:bg-neutral-900/70 p-5 transition-colors group">
+            <h3 class="font-medium text-neutral-100 group-hover:text-purple-300 transition-colors"><%= ch.channelLogin %></h3>
+            <p class="text-xs text-neutral-500 mt-1"><%= t('home.viewStatistics') %> →</p>
+          </a>
         <% }) %>
       </div>
     <% } %>

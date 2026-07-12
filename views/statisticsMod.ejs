@@ -1,0 +1,116 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('statistics.titleSuffix') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-6"><%= channel.channelLogin %> <%= t('statistics.titleSuffix') %></h1>
+
+  <%- include('partials/statsTabs', { channel, tab }) %>
+
+  <!-- Per-moderator statistics (ModeratorStatistics rollup), sortable by every metric -->
+  <section class="mb-12">
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.modStatsHeading') %></h2>
+      <label class="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none">
+        <input type="checkbox" id="show-empty-mods" class="accent-purple-600" />
+        <%= t('statistics.showEmptyMods') %>
+      </label>
+    </div>
+    <p class="text-neutral-600 text-xs mb-3"><%= t('statistics.modStatsHint') %></p>
+
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table id="mod-stats-table" class="w-full text-sm"
+             data-label-chat="<%= t('statistics.axisChat') %>"
+             data-label-presence="<%= t('statistics.axisPresence') %>"
+             data-label-reaction="<%= t('statistics.axisReaction') %>"
+             data-label-severity="<%= t('statistics.axisSeverity') %>"
+             data-label-actions="<%= t('statistics.axisActions') %>">
+        <thead class="bg-neutral-900 text-neutral-400">
+          <tr>
+            <th data-sort="name" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colModerator') %></th>
+            <th data-sort="chat" class="text-right font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colChatActivity') %></th>
+            <th data-sort="presence" class="text-right font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colStreamPresence') %></th>
+            <th data-sort="reaction" class="text-right font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colReactionSpeed') %></th>
+            <th data-sort="severity" class="text-right font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colSeverity') %></th>
+            <th data-sort="actions" class="text-right font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colModActions') %></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800">
+          <% moderators.forEach(function(m) { %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 hover:bg-purple-950/20"
+                data-name="<%= m.userName %>"
+                data-chat="<%= m.chatActivity %>"
+                data-presence="<%= m.streamPresence %>"
+                data-reaction="<%= m.reactionSpeed ?? '' %>"
+                data-severity="<%= m.severity %>"
+                data-actions="<%= m.moderationActivity %>">
+              <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= m.userName %></td>
+              <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.chatActivity.toLocaleString() %></td>
+              <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.streamPresence.toFixed(1) %></td>
+              <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.reactionSpeed != null ? (m.reactionSpeed / 1000).toFixed(1) + 's' : '—' %></td>
+              <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.severity.toFixed(2) %></td>
+              <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.moderationActivity.toLocaleString() %></td>
+            </tr>
+          <% }) %>
+          <% inactiveMods.forEach(function(m) { %>
+            <%# Registered moderator with no recorded stats yet - dimmed, hidden behind the toggle %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 opacity-40" data-empty="1" hidden
+                data-name="<%= m.userName %>" data-chat="" data-presence="" data-reaction="" data-severity="" data-actions="">
+              <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= m.userName %></td>
+              <td class="px-4 py-2 text-neutral-600 text-right">—</td>
+              <td class="px-4 py-2 text-neutral-600 text-right">—</td>
+              <td class="px-4 py-2 text-neutral-600 text-right">—</td>
+              <td class="px-4 py-2 text-neutral-600 text-right">—</td>
+              <td class="px-4 py-2 text-neutral-600 text-right">—</td>
+            </tr>
+          <% }) %>
+          <% if (moderators.length === 0 && inactiveMods.length === 0) { %>
+            <tr><td colspan="6" class="px-4 py-6 text-center text-neutral-500"><%= t('statistics.noModStats') %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Floating skill pentagon, driven by mod-stats.js on row hover -->
+  <div id="skill-polygon" hidden
+       class="fixed z-50 pointer-events-none rounded-lg border border-neutral-700 bg-neutral-900/95 shadow-xl shadow-black/50 p-3"></div>
+
+  <!-- Recent moderator actions (ModeratorActionLogs), ids resolved to nicknames -->
+  <section>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.recentModActions') %></h2>
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-neutral-900 text-neutral-400">
+          <tr>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colAction') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colModerator') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colTarget') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('statistics.colReason') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colWhen') %></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800">
+          <% actions.forEach(function(a) { %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+              <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= a.action %></td>
+              <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= a.modName %></td>
+              <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= a.targetName %></td>
+              <td class="px-4 py-2 text-neutral-400"><%= a.reason || t('statistics.noReason') %></td>
+              <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(a.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
+            </tr>
+          <% }) %>
+          <% if (actions.length === 0) { %>
+            <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('statistics.noModActions') %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/js/mod-stats.js" defer></script>
+<%- include('partials/foot') %>

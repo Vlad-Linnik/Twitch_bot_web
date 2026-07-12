@@ -21,6 +21,7 @@ async function ensureInitialized() {
     modLogs: db.collection("ModeratorActionLogs"),
     modStats: db.collection("ModeratorStatistics"),
     modUpTime: db.collection("ModUpTimeStats"),
+    userIdentities: db.collection("UserIdentities"),
   };
   return collections;
 }
@@ -28,18 +29,8 @@ async function ensureInitialized() {
 const withHash = (channelLogin) => `#${channelLogin.toLowerCase().replace(/^#/, "")}`;
 const bareLogin = (channelLogin) => channelLogin.toLowerCase().replace(/^#/, "");
 
-async function getTopChatters(channelLogin, limit = 10) {
-  const { userLifetimeStats } = await ensureInitialized();
-  return userLifetimeStats
-    .find({ channel: withHash(channelLogin) })
-    .sort({ messageCount: -1 })
-    .limit(limit)
-    .toArray();
-}
-
-// Leaderboard rows carrying a display NAME, not just a userId - the existing getTopChatters()
-// returns raw UserLifetimeStats docs, which have no name in them, and rendering numeric IDs to
-// viewers is useless.
+// Leaderboard rows carrying a display NAME, not just a userId - raw UserLifetimeStats docs
+// have no name in them, and rendering numeric IDs to viewers is useless.
 //
 // $lookup rather than N round-trips: the leaderboard is 10 rows, but the lookup is against
 // UserIdentities' unique {userId} index and runs after $limit, so it touches exactly `limit`
@@ -84,7 +75,11 @@ async function getLeaderboard(channelLogin, limit = 10) {
   }));
 }
 
-async function getTopWords(channelLogin, limit = 10) {
+// Top EMOTES, not words: WordLifetimeStats only ever holds whitelisted (7TV/Twitch-global)
+// emotes despite its name - see the shared CLAUDE.md's "Words vs emotes". Named accordingly
+// here so no caller mistakes it for a word-frequency index (that's ChatWordStats, via
+// wordStatsRepo.getChannelWordCloud).
+async function getTopEmotes(channelLogin, limit = 10) {
   const { wordLifetimeStats } = await ensureInitialized();
   return wordLifetimeStats
     .find({ channel: withHash(channelLogin) })
@@ -132,12 +127,75 @@ async function getModStats(channelId, limit = 25) {
     .toArray();
 }
 
+// One row per moderator, rolled up across all of ModeratorStatistics' per-day rows: totals for
+// the count-like metrics, day-weighted averages for the rate-like ones (reactionSpeed averages
+// only over days that HAD a measured reaction, so quiet days don't drag it toward zero).
+// Display name comes from the same UserIdentities $lookup the leaderboard uses; a moderator
+// predating that collection still gets a row, keyed by their id.
+async function getModeratorSummary(channelId) {
+  const { modStats } = await ensureInitialized();
+  return modStats
+    .aggregate([
+      { $match: { channelId: String(channelId) } },
+      {
+        $group: {
+          _id: "$userId",
+          chatActivity: { $sum: "$chatActivity" },
+          streamPresence: { $sum: "$streamPresence" },
+          reactionSpeed: { $avg: "$reactionSpeed" }, // $avg ignores null days by design
+          severity: { $avg: "$severity" },
+          moderationActivity: { $sum: "$moderationActivity" },
+          days: { $sum: 1 },
+          lastDate: { $max: "$date" },
+        },
+      },
+      {
+        $lookup: {
+          from: "UserIdentities",
+          localField: "_id",
+          foreignField: "userId",
+          as: "identity",
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+          chatActivity: 1,
+          streamPresence: 1,
+          reactionSpeed: 1,
+          severity: 1,
+          moderationActivity: 1,
+          days: 1,
+          lastDate: 1,
+          userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+        },
+      },
+      { $sort: { moderationActivity: -1 } },
+    ])
+    .toArray();
+}
+
+// Batch userId -> current display name, for tables that render ids from bot-owned collections
+// (mod action logs, ModsList). Returns a Map; callers fall back to the raw id for users with
+// no UserIdentities row rather than dropping them.
+async function getUserNames(userIds) {
+  const ids = [...new Set(userIds.map(String).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const { userIdentities } = await ensureInitialized();
+  const docs = await userIdentities
+    .find({ userId: { $in: ids } }, { projection: { _id: 0, userId: 1, currentUserName: 1 } })
+    .toArray();
+  return new Map(docs.map((doc) => [doc.userId, doc.currentUserName]));
+}
+
 module.exports = {
-  getTopChatters,
   getLeaderboard,
-  getTopWords,
+  getTopEmotes,
   getChannelTotals,
   getRecentModActions,
   getModUpTime,
   getModStats,
+  getModeratorSummary,
+  getUserNames,
 };

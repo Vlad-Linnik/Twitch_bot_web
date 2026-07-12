@@ -7,6 +7,7 @@ const profileCacheRepo = require("../db/profileCacheRepo");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { isSupportedLocale } = require("../config/i18n");
+const { persistLocaleCookie } = require("../middleware/i18n");
 
 const router = express.Router();
 
@@ -38,6 +39,10 @@ router.post("/settings", settingsWriteLimiter, requireLogin, verifyToken, async 
     const customChatColor = HEX_COLOR_RE.test(req.body.customChatColor || "") ? req.body.customChatColor : null;
 
     await userPreferencesRepo.savePreferences(req.user.userId, { locale, chatColorMode, customChatColor });
+
+    // The "lang" cookie outranks the saved preference in middleware/i18n.js's resolveLocale(),
+    // so without rewriting it here the language choice saves but never takes effect.
+    persistLocaleCookie(res, locale);
 
     res.redirect("/settings?saved=1");
   } catch (err) {

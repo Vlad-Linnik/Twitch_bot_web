@@ -7,10 +7,22 @@
   <p class="text-neutral-500 text-sm mb-2"><%= t('channelSettings.spamSignaturesIntro') %></p>
   <p class="text-neutral-600 text-sm mb-8 italic"><%= t('channelSettings.spamSignaturesExample') %></p>
 
+  <!-- Ban reason - same pattern as banned-words' timeout reason -->
+  <section class="mb-10">
+    <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.spamBanReasonLabel') %></h2>
+    <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.spamBanReasonHint') %></p>
+    <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/reason" data-transition="instant" data-dirty-save class="flex gap-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="text" name="spamBanReason" value="<%= config.spamBanReason || '' %>" class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      <button type="submit" class="save-fab px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
+    </form>
+  </section>
+
   <section>
     <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.wordsLabel') %></h2>
     <%- include('partials/wordListEditor', { words: config.spamSignatures, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/spam-signatures', editIndex, csrfToken }) %>
   </section>
 </main>
 
+<script src="/js/dirty-save.js" defer></script>
 <%- include('partials/foot') %>

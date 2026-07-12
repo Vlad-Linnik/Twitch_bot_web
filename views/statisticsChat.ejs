@@ -1,0 +1,63 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('statistics.titleSuffix') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-6"><%= channel.channelLogin %> <%= t('statistics.titleSuffix') %></h1>
+
+  <%- include('partials/statsTabs', { channel, tab }) %>
+
+  <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12">
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.uniqueChatters') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.uniqueChatters.toLocaleString() %></p>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.totalMessages') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.totalMessages.toLocaleString() %></p>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+    <!-- Top 5 chatters, name in the chatter's real Twitch chat color -->
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.topChatters') %></h2>
+      <ol class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+        <% topChatters.forEach(function(u) { %>
+          <% const medal = u.rank === 1 ? '👑' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : null; %>
+          <li class="flex items-center gap-3 px-4 py-2.5">
+            <span class="w-6 shrink-0 text-center <%= medal ? 'text-base' : 'text-xs text-neutral-600 tabular-nums' %>"><%= medal || u.rank %></span>
+            <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(u.userName) %>"
+               class="hover:underline truncate flex-1 min-w-0 <%= u.rank <= 3 ? 'font-medium' : '' %> <%= u.color ? '' : 'text-neutral-200' %>"
+               <% if (u.color) { %>style="color: <%= u.color %>"<% } %>><%= u.userName %></a>
+            <span class="text-neutral-500 text-sm tabular-nums shrink-0"><%= u.messageCount.toLocaleString() %></span>
+          </li>
+        <% }) %>
+        <% if (topChatters.length === 0) { %>
+          <li class="px-4 py-6 text-center text-neutral-600 text-sm"><%= t('channelDashboard.noChatters') %></li>
+        <% } %>
+      </ol>
+    </section>
+
+    <!-- Emote cloud: real emote images (7TV / Twitch global), sized by usage -->
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.topEmotes') %></h2>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 min-h-48 flex flex-wrap gap-x-3 gap-y-2 items-center content-center justify-center">
+        <% emoteCloud.forEach(function(e) { %>
+          <% if (e.imageUrl) { %>
+            <img src="<%= e.imageUrl %>" alt="<%= e.word %>" title="<%= e.word %> × <%= e.count.toLocaleString() %>"
+                 loading="lazy" style="height: <%= e.size %>px" class="w-auto inline-block hover:scale-110 transition-transform" />
+          <% } else { %>
+            <%# No longer resolvable to an image (removed from the set) - keep it as text rather than dropping history %>
+            <span title="<%= e.word %> × <%= e.count.toLocaleString() %>" class="text-neutral-400 font-medium"
+                  style="font-size: <%= Math.max(12, Math.round(e.size * 0.45)) %>px"><%= e.word %></span>
+          <% } %>
+        <% }) %>
+        <% if (emoteCloud.length === 0) { %>
+          <p class="text-neutral-600 text-sm"><%= t('channelDashboard.noTrackedEmotes') %></p>
+        <% } %>
+      </div>
+    </section>
+  </div>
+</main>
+
+<%- include('partials/foot') %>
