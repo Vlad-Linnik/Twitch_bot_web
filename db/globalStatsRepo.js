@@ -9,7 +9,7 @@ async function ensureInitialized() {
   const db = await connect();
   collections = {
     commandStats: db.collection("CommandExecutionStats"),
-    globalEmoteStats: db.collection("GlobalEmoteStats"),
+    wordLifetimeStats: db.collection("WordLifetimeStats"),
     userIdentities: db.collection("UserIdentities"),
   };
   return collections;
@@ -23,13 +23,19 @@ async function getGlobalCommandCount() {
   return result[0]?.total ?? 0;
 }
 
-// Reads the bot's running-total doc (TwitchBot/db/chatStats.js maintains this
-// incrementally) instead of summing WordLifetimeStats, which would get
-// expensive as the number of tracked {channel, word} pairs grows.
+// Read live from WordLifetimeStats rather than the bot's GlobalEmoteStats running-total doc:
+// that doc's totalEntriesAdded only counts pairs inserted AFTER the counter was introduced, so
+// it undercounts (reads as 0 for a channel whose emote set was already fully populated before
+// this feature shipped) and never catches up. WordLifetimeStats itself is small - "tracked
+// emotes" is a few hundred rows per channel, not the ~1.9M-row `messages` collection - so a live
+// countDocuments()/$group here is cheap, and unlike a running counter it can't drift.
 async function getGlobalEmoteStats() {
-  const { globalEmoteStats } = await ensureInitialized();
-  const doc = await globalEmoteStats.findOne({ _id: "global" });
-  return { totalUsageCount: doc?.totalUsageCount ?? 0, totalEntriesAdded: doc?.totalEntriesAdded ?? 0 };
+  const { wordLifetimeStats } = await ensureInitialized();
+  const [totalEntriesAdded, usageResult] = await Promise.all([
+    wordLifetimeStats.countDocuments(),
+    wordLifetimeStats.aggregate([{ $group: { _id: null, total: { $sum: "$count" } } }]).toArray(),
+  ]);
+  return { totalUsageCount: usageResult[0]?.total ?? 0, totalEntriesAdded };
 }
 
 // UserIdentities already has one doc per distinct Twitch userId across every
