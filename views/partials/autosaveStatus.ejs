@@ -1,0 +1,17 @@
+<%#
+  Sticky bottom slot shared by every full-page autosave settings form: the no-JS fallback
+  Save button (hidden from first paint for JS users via html.js .save-fab in input.css -
+  autosave.js never reveals it) and the status pill autosave.js drives through
+  .is-saving / .is-saved / .is-error. Localized texts ride on data attributes so the
+  script stays locale-free.
+%>
+<div class="sticky bottom-6 flex justify-center pointer-events-none">
+  <button type="submit" class="save-fab pointer-events-auto px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium shadow-lg shadow-black/40 transition-colors">
+    <%= t('channelSettings.save') %>
+  </button>
+  <span data-autosave-status aria-live="polite"
+        data-saving-text="<%= t('channelSettings.autosaveSaving') %>"
+        data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
+        data-error-text="<%= t('channelSettings.autosaveError') %>"
+        class="autosave-status px-4 py-2 rounded-md text-sm font-medium shadow-lg shadow-black/40"></span>
+</div>

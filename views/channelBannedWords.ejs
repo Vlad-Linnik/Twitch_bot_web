@@ -8,13 +8,18 @@
 
   <!-- Feature switch (the bot's banned-word detection, formerly the cryptic "insult" command row) -->
   <section class="mb-8">
-    <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/detection-toggle" data-transition="instant" data-dirty-save class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 flex items-center justify-between gap-4">
+    <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/detection-toggle" data-transition="instant" data-autosave class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 flex items-center justify-between gap-4">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <div>
         <p class="text-sm font-medium text-neutral-200"><%= t('channelSettings.detectionToggleLabel') %></p>
         <p class="text-neutral-600 text-xs mt-0.5"><%= t('channelSettings.detectionToggleHint') %></p>
       </div>
       <div class="flex items-center gap-3 shrink-0">
+        <span data-autosave-status aria-live="polite"
+              data-saving-text="<%= t('channelSettings.autosaveSaving') %>"
+              data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
+              data-error-text="<%= t('channelSettings.autosaveError') %>"
+              class="autosave-status px-2 py-1 rounded-md text-xs font-medium"></span>
         <label class="toggle-switch">
           <input type="checkbox" name="detectionEnabled" <%= config.commands.insult && config.commands.insult.enabled ? 'checked' : '' %> class="sr-only" />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -28,10 +33,15 @@
   <section class="mb-10">
     <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.timeoutReasonLabel') %></h2>
     <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.timeoutReasonHint') %></p>
-    <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/timeout-reason" data-transition="instant" data-dirty-save class="flex gap-2">
+    <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/timeout-reason" data-transition="instant" data-autosave class="flex gap-2 items-center">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="text" name="timeoutReason" value="<%= config.bannedWords.timeoutReason %>" class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
       <button type="submit" class="save-fab px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
+      <span data-autosave-status aria-live="polite"
+            data-saving-text="<%= t('channelSettings.autosaveSaving') %>"
+            data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
+            data-error-text="<%= t('channelSettings.autosaveError') %>"
+            class="autosave-status px-2 py-1 rounded-md text-xs font-medium shrink-0"></span>
     </form>
   </section>
 
@@ -41,5 +51,5 @@
   </section>
 </main>
 
-<script src="/js/dirty-save.js" defer></script>
+<script src="/js/autosave.js" defer></script>
 <%- include('partials/foot') %>

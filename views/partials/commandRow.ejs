@@ -3,6 +3,8 @@
   Expects: name (internal command key), cmd (its config object), t, plus csrf-less form context.
   The hidden `.present` marker tells parseSubmittedConfig this toggle was actually rendered -
   see lib/settingsValidation.js.
+  Signature-family fields (signature, remSignature, acceptSignature) all follow the same
+  blank-keeps rule server-side; rem/accept render as smaller labeled inputs under the main one.
 %>
 <%
   const friendly = t('channelSettings.commandName.' + name);
@@ -11,14 +13,32 @@
   const desc = t(descKey) === descKey ? '' : t(descKey);
 %>
 <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
-  <td class="px-4 py-2 text-neutral-200 whitespace-nowrap align-top"><%= label %></td>
+  <td class="px-4 py-2 text-neutral-200 align-top min-w-24"><%= label %></td>
   <td class="px-4 py-2 text-neutral-400 align-top"><%= desc %></td>
   <td class="px-4 py-2 align-top">
     <% if (cmd.signature !== undefined) { %>
-      <div class="flex items-center w-32 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 focus-within:border-purple-500">
+      <div class="flex items-center w-full min-w-24 max-w-40 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 focus-within:border-purple-500">
         <span class="text-sm font-mono text-neutral-500 select-none">!</span>
-        <input type="text" name="commands.<%= name %>.signature" value="<%= cmd.signature.replace(/^!/, '') %>" class="w-full bg-transparent text-sm font-mono text-purple-300 focus:outline-none" />
+        <input type="text" name="commands.<%= name %>.signature" value="<%= cmd.signature.replace(/^!/, '') %>" class="w-full min-w-0 bg-transparent text-sm font-mono text-purple-300 focus:outline-none" />
       </div>
+      <% if (cmd.remSignature !== undefined) { %>
+        <label class="block mt-2">
+          <span class="block text-xs text-neutral-500 mb-0.5"><%= t('channelSettings.remSignatureLabel') %></span>
+          <span class="flex items-center w-full min-w-24 max-w-40 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 focus-within:border-purple-500">
+            <span class="text-sm font-mono text-neutral-500 select-none">!</span>
+            <input type="text" name="commands.<%= name %>.remSignature" value="<%= cmd.remSignature.replace(/^!/, '') %>" class="w-full min-w-0 bg-transparent text-sm font-mono text-purple-300 focus:outline-none" />
+          </span>
+        </label>
+      <% } %>
+      <% if (cmd.acceptSignature !== undefined) { %>
+        <label class="block mt-2">
+          <span class="block text-xs text-neutral-500 mb-0.5"><%= t('channelSettings.acceptSignatureLabel') %></span>
+          <span class="flex items-center w-full min-w-24 max-w-40 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 focus-within:border-purple-500">
+            <span class="text-sm font-mono text-neutral-500 select-none">!</span>
+            <input type="text" name="commands.<%= name %>.acceptSignature" value="<%= cmd.acceptSignature.replace(/^!/, '') %>" class="w-full min-w-0 bg-transparent text-sm font-mono text-purple-300 focus:outline-none" />
+          </span>
+        </label>
+      <% } %>
     <% } else { %>
       <span class="text-neutral-600">—</span>
     <% } %>

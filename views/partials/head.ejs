@@ -8,7 +8,57 @@
       dirty-tracked Save buttons) from the very first paint - hiding them from a deferred
       script instead paints them for a split second, then blinks them away. Without JS the
       class never appears and those elements stay visible/usable. %>
-  <script>document.documentElement.classList.add("js");</script>
+  <script nonce="<%= cspNonce %>">document.documentElement.classList.add("js");</script>
+  <%# View-transition type resolution (the READER half of public/js/page-transitions.js -
+      the click/submit listeners there WRITE the sessionStorage stash). Inline and not
+      deferred on purpose: pagereveal fires at the incoming page's first render
+      opportunity, and on a slow connection a deferred script loses that race and the
+      event goes unheard - the slide then played with the wrong direction (or the
+      "instant" suppression on save-redirects didn't apply). STORAGE_KEY is duplicated
+      in page-transitions.js - keep the two in sync. Note browsers also cap the
+      cross-document snapshot wait (~4s): on a very slow load the browser itself skips
+      the transition, which no script placement can prevent. %>
+  <script nonce="<%= cspNonce %>">
+    (() => {
+      const STORAGE_KEY = "pageTransitionType";
+      // Ordered left-to-right position of the main nav links, used to pick a slide
+      // direction that matches which side of the nav bar the destination sits on.
+      const NAV_ORDER = ["/", "/commands", "/games", "/about"];
+
+      window.addEventListener("pagereveal", (event) => {
+        // Consume the stash unconditionally: it was set for THIS navigation, so if
+        // this one turns out to have no view transition at all it must not linger
+        // and get picked up by some later, unrelated navigation.
+        const stashed = sessionStorage.getItem(STORAGE_KEY);
+        if (stashed) sessionStorage.removeItem(STORAGE_KEY);
+
+        if (!event.viewTransition) return;
+
+        if (stashed) {
+          event.viewTransition.types.add(stashed);
+          return;
+        }
+
+        const from = document.referrer ? new URL(document.referrer) : null;
+        if (!from) return;
+
+        // Same-pathname reload with no explicit transition marker (e.g. a settings
+        // form's ?saved=1 redirect) - no transition, it's not a page change.
+        if (from.pathname === location.pathname) {
+          event.viewTransition.types.add("instant");
+          return;
+        }
+
+        const fromIndex = NAV_ORDER.indexOf(from.pathname);
+        const toIndex = NAV_ORDER.indexOf(location.pathname);
+        if (fromIndex !== -1 && toIndex !== -1 && toIndex < fromIndex) {
+          event.viewTransition.types.add("backward");
+        }
+        // toIndex > fromIndex, or either page unordered: falls through to the CSS
+        // default (slide-in-from-right), so no type needs adding.
+      });
+    })();
+  </script>
   <link rel="stylesheet" href="/css/output.css" />
 </head>
 <body class="bg-neutral-950 text-neutral-200 min-h-screen">

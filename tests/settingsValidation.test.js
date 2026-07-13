@@ -134,13 +134,18 @@ describe("parseSubmittedConfig", () => {
     bannedWords: { words: ["badword"], timeoutReason: "no spam" },
     spamSignatures: ["sig1"],
     spamBanReason: "spam bot",
+    sevenTv: { emoteSetUrl: "https://7tv.app/emote-sets/abc" },
     commands: {
       topchatters: { enabled: true, cooldownMs: 15000, signature: "!topchatters" },
       question: { enabled: true, cooldownMs: 30000 },
       insult: { enabled: true, cumulativeDelayMs: 150000 },
       customCommandTimer: { minMessagesBetween: 10 },
+      muteduel: { enabled: true, cooldownMs: 50000, signature: "!muteduel", acceptSignature: "!muteaccept" },
+      exception: { enabled: true, signature: "!addexception", remSignature: "!remexception" },
     },
     responses: {
+      busy: ["I am busy"],
+      yesNo: ["Yes", "No"],
       insultModExempt: ["("],
       insufficientPermissions: "no mod rights",
     },
@@ -222,5 +227,47 @@ describe("parseSubmittedConfig", () => {
     const body = { busyResponses: "one\ntwo\n\nthree  " };
     const result = parseSubmittedConfig(body, existing);
     assert.deepEqual(result.responses.busy, ["one", "two", "three"]);
+  });
+
+  // Partial-form safety: the custom-commands/counters sub-pages submit only the
+  // fields they render. Anything absent from the body must carry over unchanged -
+  // a sub-page save must never wipe the 7TV URL or the response lists.
+  test("a partial body (sub-page save) preserves emoteSetUrl and response lists", () => {
+    const body = { "commands.topchatters.present": "1" };
+    const result = parseSubmittedConfig(body, existing);
+    assert.equal(result.sevenTv.emoteSetUrl, "https://7tv.app/emote-sets/abc");
+    assert.deepEqual(result.responses.busy, ["I am busy"]);
+    assert.deepEqual(result.responses.yesNo, ["Yes", "No"]);
+  });
+
+  test("a present-but-empty emoteSetUrl deliberately clears it", () => {
+    const result = parseSubmittedConfig({ emoteSetUrl: "" }, existing);
+    assert.equal(result.sevenTv.emoteSetUrl, "");
+  });
+
+  test("acceptSignature and remSignature are sanitized and !-prefixed like signature", () => {
+    const body = {
+      "commands.muteduel.acceptSignature": "acceptduel",
+      "commands.exception.remSignature": "!removeexception",
+    };
+    const result = parseSubmittedConfig(body, existing);
+    assert.equal(result.commands.muteduel.acceptSignature, "!acceptduel");
+    assert.equal(result.commands.exception.remSignature, "!removeexception");
+  });
+
+  test("a blank acceptSignature/remSignature submission keeps the existing value", () => {
+    const body = {
+      "commands.muteduel.acceptSignature": "  ",
+      "commands.exception.remSignature": "",
+    };
+    const result = parseSubmittedConfig(body, existing);
+    assert.equal(result.commands.muteduel.acceptSignature, "!muteaccept");
+    assert.equal(result.commands.exception.remSignature, "!remexception");
+  });
+
+  test("commands absent from the body come through unchanged", () => {
+    const result = parseSubmittedConfig({}, existing);
+    assert.deepEqual(result.commands.muteduel, existing.commands.muteduel);
+    assert.deepEqual(result.commands.topchatters, existing.commands.topchatters);
   });
 });

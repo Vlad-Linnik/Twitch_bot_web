@@ -11,10 +11,15 @@
   <section class="mb-10">
     <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.spamBanReasonLabel') %></h2>
     <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.spamBanReasonHint') %></p>
-    <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/reason" data-transition="instant" data-dirty-save class="flex gap-2">
+    <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/reason" data-transition="instant" data-autosave class="flex gap-2 items-center">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="text" name="spamBanReason" value="<%= config.spamBanReason || '' %>" class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
       <button type="submit" class="save-fab px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
+      <span data-autosave-status aria-live="polite"
+            data-saving-text="<%= t('channelSettings.autosaveSaving') %>"
+            data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
+            data-error-text="<%= t('channelSettings.autosaveError') %>"
+            class="autosave-status px-2 py-1 rounded-md text-xs font-medium shrink-0"></span>
     </form>
   </section>
 
@@ -24,5 +29,5 @@
   </section>
 </main>
 
-<script src="/js/dirty-save.js" defer></script>
+<script src="/js/autosave.js" defer></script>
 <%- include('partials/foot') %>

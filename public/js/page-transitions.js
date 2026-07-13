@@ -1,7 +1,12 @@
 // Cross-document view transitions (public/css/input.css) apply a directional
-// slide to every same-origin navigation by default. This adds two refinements
-// on top, both progressive enhancement - a browser without the View
-// Transition API (or with JS disabled) just keeps the CSS-only default.
+// slide to every same-origin navigation by default. This deferred script only
+// WRITES the transition-type stash for the next navigation (click/submit
+// listeners below); the READER - the pagereveal handler that applies the type
+// on the incoming page - lives inline in views/partials/head.ejs, because a
+// deferred script can lose the race against the first render on a slow
+// connection and miss the pagereveal event entirely (the slide then fired
+// with the wrong direction or not at all). STORAGE_KEY is duplicated there
+// on purpose - keep the two in sync.
 
 const STORAGE_KEY = "pageTransitionType";
 
@@ -11,14 +16,6 @@ document.addEventListener("click", (event) => {
 
   const link = event.target.closest("a[href]");
   if (!link || link.target) return;
-
-  // A page with a dirty form (settings-form.js) gets first say on any outgoing
-  // link click - re-clicks itself via pendingLeaveAction once confirmed.
-  if (window.hasUnsavedFormChanges?.()) {
-    event.preventDefault();
-    window.confirmLeaveUnsaved(() => link.click());
-    return;
-  }
 
   // Bug fix: clicking a nav link for the page you're already on still fires
   // a (pointless) navigation + transition. Prevent it outright.
@@ -48,39 +45,5 @@ document.addEventListener("submit", (event) => {
   if (transition) sessionStorage.setItem(STORAGE_KEY, transition);
 });
 
-// Ordered left-to-right position of the main nav links, used to pick a slide
-// direction that matches which side of the nav bar the destination sits on.
-const NAV_ORDER = ["/", "/commands", "/games", "/about"];
-
-window.addEventListener("pagereveal", (event) => {
-  // Consume the stash unconditionally: it was set for THIS navigation, so if
-  // this one turns out to have no view transition at all it must not linger
-  // and get picked up by some later, unrelated navigation.
-  const stashed = sessionStorage.getItem(STORAGE_KEY);
-  if (stashed) sessionStorage.removeItem(STORAGE_KEY);
-
-  if (!event.viewTransition) return;
-
-  if (stashed) {
-    event.viewTransition.types.add(stashed);
-    return;
-  }
-
-  const from = document.referrer ? new URL(document.referrer) : null;
-  if (!from) return;
-
-  // Same-pathname reload with no explicit transition marker (e.g. a settings
-  // form's ?saved=1 redirect) - no transition, it's not a page change.
-  if (from.pathname === location.pathname) {
-    event.viewTransition.types.add("instant");
-    return;
-  }
-
-  const fromIndex = NAV_ORDER.indexOf(from.pathname);
-  const toIndex = NAV_ORDER.indexOf(location.pathname);
-  if (fromIndex !== -1 && toIndex !== -1 && toIndex < fromIndex) {
-    event.viewTransition.types.add("backward");
-  }
-  // toIndex > fromIndex, or either page unordered: falls through to the CSS
-  // default (slide-in-from-right), so no type needs adding.
-});
+// The pagereveal handler that used to live here moved inline into
+// views/partials/head.ejs - see the comment at the top of this file.

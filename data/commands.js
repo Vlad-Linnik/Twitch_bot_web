@@ -43,8 +43,6 @@ module.exports = [
   {
     categoryKey: "commands.category.moderation",
     commands: [
-      { signature: "!addword <word>", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addword", useCaseKey: "commands.useCase.addword" },
-      { signature: "!remword <word>", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.remword", useCaseKey: "commands.useCase.remword" },
       { signature: "!update7tv", accessKey: "commands.access.mod", cooldown: "30s", descriptionKey: "commands.desc.update7tv", useCaseKey: "commands.useCase.update7tv" },
     ],
   },

@@ -155,13 +155,13 @@ input[type="radio"].radio-custom:checked::after {
   outline-offset: 2px;
 }
 
-/* Dirty-tracked Save buttons (.save-fab): hidden until the form differs from its loaded
-   state, with a springy scale-up on appear and a scale-down on hide. The `html.js` guard is
-   what kills the flash-then-vanish glitch: the class is stamped by an inline <script> in
-   head.ejs BEFORE first paint, so the button starts hidden without waiting for the deferred
-   form script - and with JS disabled the class never appears, leaving the button usable.
-   `visibility` is transitioned with a delay so the hide animation is visible before the
-   element stops hit-testing. */
+/* No-JS fallback Save buttons (.save-fab): settings forms autosave (public/js/autosave.js),
+   so with JS these buttons stay hidden permanently - autosave.js never adds .save-visible
+   (kept below for the click-feedback rule and any future opt-in reveal). The `html.js`
+   guard is what kills the flash-then-vanish glitch: the class is stamped by an inline
+   <script> in head.ejs BEFORE first paint, so the button starts hidden without waiting for
+   a deferred script - and with JS disabled the class never appears, leaving the button
+   visible and the classic POST -> redirect path usable. */
 html.js .save-fab {
   opacity: 0;
   scale: 0.8;
@@ -185,6 +185,30 @@ html.js .save-fab.save-visible {
 }
 .save-fab:active {
   scale: 0.92;
+}
+
+/* Autosave status pill ([data-autosave-status], driven by public/js/autosave.js):
+   invisible until a save starts, then "Saving…" -> "Saved" (fades back out) or a sticky
+   error. pointer-events stays off - it's purely an indicator, never a control. */
+.autosave-status {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+.autosave-status.is-saving {
+  opacity: 1;
+  background-color: var(--color-neutral-800, #262626);
+  color: var(--color-neutral-300, #d4d4d4);
+}
+.autosave-status.is-saved {
+  opacity: 1;
+  background-color: color-mix(in srgb, var(--color-green-900, #14532d) 45%, transparent);
+  color: var(--color-green-400, #4ade80);
+}
+.autosave-status.is-error {
+  opacity: 1;
+  background-color: color-mix(in srgb, var(--color-red-900, #7f1d1d) 45%, transparent);
+  color: var(--color-red-400, #f87171);
 }
 
 /* Logout confirmation dialog: scale/fade in on open instead of appearing

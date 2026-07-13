@@ -22,14 +22,18 @@
     // silently disappearing from the form. question/directmsg/insult/customCommandTimer/
     // counterUpdate are deliberately NOT in these tables - they aren't chat commands, and
     // each is rendered next to the setting it actually belongs to (insult lives on the
-    // Banned Words page).
+    // Banned Words page). The custom-commands and counters command groups moved to their
+    // own sub-pages (channelCustomCommandsSettings / channelCountersSettings), linked from
+    // the cards below - their names stay claimed so they don't resurface under "other".
     const groups = [
-      { key: 'chatStats',      names: ['topchatters', 'topsmiles', 'countword', 'countmsg', 'countunique', 'addword', 'update7tv', 'botinfo'] },
-      { key: 'customCommands', names: ['addcommand', 'settimer', 'setpin'] },
-      { key: 'counters',       names: ['exception'] },
-      { key: 'miniGames',      names: ['muteduel'] },
+      { key: 'chatStats', names: ['topchatters', 'topsmiles', 'countword', 'countmsg', 'countunique', 'update7tv', 'botinfo'] },
+      { key: 'miniGames', names: ['muteduel'] },
     ];
-    const placedElsewhere = new Set(['question', 'directmsg', 'insult', 'customCommandTimer', 'counterUpdate']);
+    const placedElsewhere = new Set([
+      'question', 'directmsg', 'insult', 'customCommandTimer', 'counterUpdate',
+      'addcommand', 'settimer', 'setpin', 'delcommand',
+      'addcounter', 'delcounter', 'exception',
+    ]);
     const claimed = new Set(placedElsewhere);
     groups.forEach(g => g.names.forEach(n => claimed.add(n)));
     const other = Object.keys(config.commands).filter(n => !claimed.has(n));
@@ -38,7 +42,7 @@
     function commandTable(names) { return names.filter(n => config.commands[n]); }
   %>
 
-  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" id="settings-form" class="space-y-12">
+  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" data-autosave id="settings-form" class="space-y-12">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
     <section class="grid sm:grid-cols-2 gap-4">
@@ -50,6 +54,14 @@
         <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.spamSignaturesHeading') %></h2>
         <p class="text-neutral-500 text-sm mt-1"><%= config.spamSignatures.length %> <%= t('channelSettings.wordCountSuffix') %></p>
       </a>
+      <a href="/<%= channel.channelLogin %>/settings/custom-commands" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.customCommands') %></h2>
+        <p class="text-neutral-500 text-sm mt-1"><%= customCommandCount %> <%= t('channelSettings.commandCountSuffix') %></p>
+      </a>
+      <a href="/<%= channel.channelLogin %>/settings/counters" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.counters') %></h2>
+        <p class="text-neutral-500 text-sm mt-1"><%= counterCount %> <%= t('channelSettings.counterCountSuffix') %></p>
+      </a>
     </section>
 
     <section>
@@ -59,56 +71,11 @@
     </section>
 
     <% groups.forEach(function(group) { %>
-      <% const names = commandTable(group.names); if (names.length === 0 && group.key !== 'customCommands' && group.key !== 'counters') return; %>
+      <% const names = commandTable(group.names); if (names.length === 0) return; %>
       <section>
         <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('channelSettings.group.' + group.key) %></h2>
         <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.groupIntro.' + group.key) %></p>
-
-        <% if (names.length > 0) { %>
-          <div class="rounded-lg border border-neutral-800 overflow-hidden">
-            <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead class="bg-neutral-900 text-neutral-400">
-                <tr>
-                  <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colCommand') %></th>
-                  <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colDescription') %></th>
-                  <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colSignature') %></th>
-                  <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('channelSettings.colCooldown') %></th>
-                  <th class="text-left font-medium px-4 py-2 w-16"><%= t('channelSettings.colEnabled') %></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-neutral-800">
-                <% names.forEach(function(name) { %>
-                  <%- include('partials/commandRow', { name, cmd: config.commands[name] }) %>
-                <% }) %>
-              </tbody>
-            </table>
-            </div>
-          </div>
-        <% } %>
-
-        <% if (group.key === 'customCommands') { %>
-          <a href="/<%= channel.channelLogin %>/commands" class="inline-block mt-3 text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.manageCustomCommands') %> →</a>
-          <% if (config.commands.customCommandTimer) { %>
-            <div class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-              <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.autoPostPacingLabel') %></label>
-              <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.autoPostPacingHint') %></p>
-              <input type="number" min="0" max="1000" step="1" name="commands.customCommandTimer.minMessagesBetween"
-                     value="<%= config.commands.customCommandTimer.minMessagesBetween %>"
-                     class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-            </div>
-          <% } %>
-        <% } %>
-
-        <% if (group.key === 'counters' && config.commands.counterUpdate) { %>
-          <div class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-            <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.counterCooldownLabel') %></label>
-            <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.counterCooldownHint') %></p>
-            <input type="number" min="0" max="86400" step="1" name="commands.counterUpdate.cooldownSeconds"
-                   value="<%= Math.round(config.commands.counterUpdate.cooldownMs / 1000) %>"
-                   class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-          </div>
-        <% } %>
+        <%- include('partials/commandTable', { names, config }) %>
       </section>
     <% }) %>
 
@@ -169,21 +136,9 @@
       <% } %>
     </section>
 
-    <div class="sticky bottom-6 flex justify-center pointer-events-none">
-      <button type="submit" id="save-button" class="save-fab pointer-events-auto px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium shadow-lg shadow-black/40 transition-colors">
-        <%= t('channelSettings.save') %>
-      </button>
-    </div>
+    <%- include('partials/autosaveStatus') %>
   </form>
 </main>
 
-<dialog id="unsaved-changes-dialog" class="rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 p-6 m-auto backdrop:bg-black/60">
-  <p class="text-sm mb-5"><%= t('channelSettings.unsavedChangesWarning') %></p>
-  <div class="flex justify-end gap-3 text-sm">
-    <button type="button" command="close" commandfor="unsaved-changes-dialog" class="px-3 py-1.5 rounded-md text-neutral-400 hover:text-neutral-100 transition-colors"><%= t('channelSettings.unsavedChangesStay') %></button>
-    <button type="button" id="unsaved-changes-leave" class="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors"><%= t('channelSettings.unsavedChangesLeave') %></button>
-  </div>
-</dialog>
-
-<script src="/js/settings-form.js" defer></script>
+<script src="/js/autosave.js" defer></script>
 <%- include('partials/foot') %>

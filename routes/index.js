@@ -20,6 +20,7 @@ router.use("/", require("./about"));
 // channelDashboard owns a bare one-segment "/:channel" and would swallow every static page above
 // it. Keep it the final mount.
 router.use("/", require("./customCommands"));
+router.use("/", require("./counters"));
 router.use("/", require("./userDashboard"));
 router.use("/", require("./channelDashboard"));
 

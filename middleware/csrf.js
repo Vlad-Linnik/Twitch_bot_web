@@ -19,6 +19,11 @@ function ensureToken(req, res, next) {
 function verifyToken(req, res, next) {
   const submitted = req.body && req.body._csrf;
   if (!submitted || !req.session.csrfToken || submitted !== req.session.csrfToken) {
+    // Autosave fetches (public/js/autosave.js) ask for JSON - an HTML error page
+    // would be useless to them, and the client needs the status to show its error state.
+    if ((req.get("accept") || "").includes("application/json")) {
+      return res.status(403).json({ ok: false, error: "csrf" });
+    }
     return res.status(403).render("errors/403", {
       requiredLevel: null,
       message: "Form expired or invalid. Please refresh and try again.",

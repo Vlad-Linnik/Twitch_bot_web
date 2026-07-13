@@ -1,0 +1,40 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.group.customCommands') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-3xl mx-auto px-6 py-16">
+  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+  <h1 class="text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.group.customCommands') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('channelSettings.groupIntro.customCommands') %></p>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('channelSettings.saved') %>
+    </div>
+  <% } %>
+
+  <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands" data-transition="instant" data-autosave class="space-y-6">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <%
+      const names = ['addcommand', 'settimer', 'setpin', 'delcommand'].filter(n => config.commands[n]);
+    %>
+    <%- include('partials/commandTable', { names, config }) %>
+
+    <% if (config.commands.customCommandTimer) { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+        <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.autoPostPacingLabel') %></label>
+        <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.autoPostPacingHint') %></p>
+        <input type="number" min="0" max="1000" step="1" name="commands.customCommandTimer.minMessagesBetween"
+               value="<%= config.commands.customCommandTimer.minMessagesBetween %>"
+               class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+      </div>
+    <% } %>
+
+    <%- include('partials/autosaveStatus') %>
+  </form>
+
+  <a href="/<%= channel.channelLogin %>/commands" class="inline-block mt-6 text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.manageCustomCommands') %> →</a>
+</main>
+
+<script src="/js/autosave.js" defer></script>
+<%- include('partials/foot') %>

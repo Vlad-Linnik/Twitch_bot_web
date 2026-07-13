@@ -1,0 +1,28 @@
+<%#
+  One bordered command-settings table. Expects: names (command keys, already filtered to
+  ones present in config.commands), config, t. Used by settings.ejs's group loop and the
+  custom-commands / counters settings sub-pages.
+  Headers deliberately wrap (no whitespace-nowrap): long Russian labels used to force the
+  table wider than its container and produce a horizontal scrollbar - the overflow-x-auto
+  wrapper stays only as a safety net for extreme viewports.
+%>
+<div class="rounded-lg border border-neutral-800 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead class="bg-neutral-900 text-neutral-400">
+      <tr>
+        <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colCommand') %></th>
+        <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colDescription') %></th>
+        <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colSignature') %></th>
+        <th class="text-left font-medium px-4 py-2"><%= t('channelSettings.colCooldown') %></th>
+        <th class="text-left font-medium px-4 py-2 w-16"><%= t('channelSettings.colEnabled') %></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-neutral-800">
+      <% names.forEach(function(name) { %>
+        <%- include('commandRow', { name, cmd: config.commands[name] }) %>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
