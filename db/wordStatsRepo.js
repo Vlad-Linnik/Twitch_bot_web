@@ -1,5 +1,5 @@
-// Word + emote clouds, for both the channel dashboard (/<channel>) and the user dashboard
-// (/<channel>/user/<name>).
+// Word + emote clouds, for both the channel statistics page (/<channel>/statistics/chat) and the
+// user dashboard (/<channel>/user/<name>).
 //
 // Four clouds, and they are NOT the same query - the difference is the whole design:
 //
@@ -17,7 +17,7 @@
 // Channel-field convention: `messages`, `words`, `WordLifetimeStats` and the new ChatWordStats
 // all store `channel` WITH a leading "#". statsRepo.js documents the wider inconsistency.
 const { connect } = require("./connection");
-const { extractWords, dayBucket, LIFETIME_BUCKET } = require("../lib/textStats");
+const { extractWords, LIFETIME_BUCKET } = require("../lib/textStats");
 const limits = require("../config/statsLimits");
 
 let collections;
@@ -31,20 +31,18 @@ async function ensureInitialized() {
     words: db.collection("words"), // tracked emotes, per-day
     messages: db.collection("messages"),
     whiteList: db.collection("whiteList"),
+    // Bot-written tombstones for emotes whose words/WordLifetimeStats rows were pruned after
+    // un-tracking - the third member of the emote-exclusion union in getUserClouds().
+    emoteExclusions: db.collection("EmoteExclusions"),
   };
   return collections;
 }
 
 const withHash = (channelLogin) => `#${channelLogin.toLowerCase().replace(/^#/, "")}`;
 
-// Start of the window for a named period, bucketed the same way the bot buckets its daily rows
-// (textStats.dayBucket). Returns null for `all`, which is a signal to read the precomputed
-// all-time row instead of scanning any range at all.
-function periodStart(period) {
-  if (period === "all") return null;
-  const days = { day: 1, week: 7, month: 30 }[period] ?? 7;
-  return dayBucket(new Date(Date.now() - days * 86400000));
-}
+// periodStart moved to config/statsLimits.js - statsRepo's period-switchable reads need the
+// identical window computation, and there it's unit-testable without Mongo.
+const { periodStart } = limits;
 
 // ---------------------------------------------------------------------------------------
 // Cache. The month-range $group is ~495ms even fully covered; without this, two viewers on the
@@ -187,18 +185,22 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
   const cached = cacheGet(key);
   if (cached) return cached;
 
-  const { messages, whiteList, wordLifetimeStats } = await ensureInitialized();
+  const { messages, whiteList, wordLifetimeStats, emoteExclusions } = await ensureInitialized();
 
-  // Emotes the channel tracks now, UNION emotes it has ever tracked - mirroring the bot's
-  // ChatStats.emoteExclusionCache so a user's cloud classifies a token exactly the way the
-  // channel's precomputed cloud did. Matched case-insensitively: #mistercop's whiteList is empty
-  // while WordLifetimeStats still holds 488 of its emotes, and without the union those emotes
-  // reappear in this cloud as if they were words.
-  const [current, historical] = await Promise.all([
+  // Emotes the channel tracks now (whiteList), UNION emotes it has ever tracked - mirroring the
+  // bot's ChatStats.emoteExclusionCache so a user's cloud classifies a token exactly the way the
+  // channel's precomputed cloud did. "Ever tracked" is itself two sources: WordLifetimeStats
+  // (usage counts) plus the bot's EmoteExclusions tombstones, because the bot now PRUNES the
+  // words/WordLifetimeStats rows of un-tracked emotes and only the tombstone survives. Matched
+  // case-insensitively; without the union, un-tracked emotes reappear in this cloud as "words".
+  const [current, historical, tombstones] = await Promise.all([
     whiteList.find({ channel }, { projection: { word: 1 } }).toArray(),
     wordLifetimeStats.find({ channel }, { projection: { word: 1 } }).toArray(),
+    emoteExclusions.find({ channel }, { projection: { word: 1 } }).toArray(),
   ]);
-  const emoteSet = new Set([...current, ...historical].map((w) => String(w.word).toLowerCase()));
+  const emoteSet = new Set(
+    [...current, ...historical, ...tombstones].map((w) => String(w.word).toLowerCase())
+  );
   const isEmote = (token) => emoteSet.has(String(token).toLowerCase());
 
   const query = { channel, userId: String(userId) };

@@ -14,8 +14,6 @@
     "statisticsLink": "Statistics",
     "settingsLink": "Settings",
     "settings": "Settings",
-    "channelNotConnected": "Your channel isn't connected to the bot yet",
-    "noModeratedChannels": "You don't moderate any channels yet",
     "logoutConfirmBody": "You will need to sign in with Twitch again to manage your channel."
   },
   "home": {
@@ -143,7 +141,10 @@
     "colReason": "Reason",
     "colWhen": "When",
     "noModActions": "No moderator actions recorded yet.",
-    "noReason": "—"
+    "noReason": "—",
+    "filterActionLabel": "Action",
+    "filterModeratorLabel": "Moderator",
+    "filterAll": "All"
   },
   "channelSettings": {
     "titleSuffix": "settings",
@@ -257,10 +258,6 @@
     "subtitle": "Personal preferences for your account on this site.",
     "saved": "Preferences saved.",
     "languageHeading": "Language",
-    "chatColorHeading": "Chat name color",
-    "chatColorTwitch": "Use my Twitch chat color",
-    "chatColorCustom": "Use a custom color",
-    "chatColorPreview": "Preview",
     "save": "Save preferences"
   },
   "errors": {

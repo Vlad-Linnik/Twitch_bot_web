@@ -1,27 +1,61 @@
 <%- include('partials/head', { title: channel.channelLogin + ' ' + t('statistics.titleSuffix') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-6"><%= channel.channelLogin %> <%= t('statistics.titleSuffix') %></h1>
+<%
+  const bootstrap = {
+    channel: channel.channelLogin,
+    period,
+    wordCloud,
+    emoteCloud,
+  };
+%>
 
-  <%- include('partials/statsTabs', { channel, tab }) %>
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12">
 
-  <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12">
-    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.uniqueChatters') %></p>
-      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.uniqueChatters.toLocaleString() %></p>
-    </div>
+  <%- include('partials/statsHeader', { channel, broadcaster }) %>
+
+  <%# Chat/Moderators switcher only for visitors who can actually open the mod page. %>
+  <% if (canModerate) { %>
+    <%- include('partials/statsTabs', { channel, tab }) %>
+  <% } %>
+
+  <section class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-12">
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
       <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.totalMessages') %></p>
       <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.totalMessages.toLocaleString() %></p>
     </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('statistics.uniqueChatters') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= totals.uniqueChatters.toLocaleString() %></p>
+    </div>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('channelDashboard.trackedEmotes') %></p>
+      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= trackedEmoteCount.toLocaleString() %></p>
+    </div>
   </section>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
-    <!-- Top 5 chatters, name in the chatter's real Twitch chat color -->
-    <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.topChatters') %></h2>
-      <ol class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+  <!-- Channel word cloud -->
+  <section class="mb-12" data-component="wordcloud">
+    <div class="flex items-center justify-between mb-3 gap-4">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelDashboard.wordCloud') %></h2>
+      <%- include('partials/periodToggle', { periods, period, component: 'wordcloud' }) %>
+    </div>
+    <div id="channel-word-cloud"
+         class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 min-h-48 flex flex-wrap gap-x-4 gap-y-1.5 items-center content-start justify-center"></div>
+    <p class="text-xs text-neutral-600 mt-2"><%= t('channelDashboard.cloudCapNote') %></p>
+  </section>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
+
+    <!-- Top 5 chatters, name in the chatter's real Twitch chat color, period-switchable -->
+    <section data-component="topchatters">
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.topChatters') %></h2>
+        <%- include('partials/periodToggle', { periods, period: topChattersPeriod, component: 'topchatters' }) %>
+      </div>
+      <ol id="top-chatters"
+          data-empty-text="<%= t('channelDashboard.noChatters') %>"
+          class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
         <% topChatters.forEach(function(u) { %>
           <% const medal = u.rank === 1 ? '👑' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : null; %>
           <li class="flex items-center gap-3 px-4 py-2.5">
@@ -38,26 +72,54 @@
       </ol>
     </section>
 
-    <!-- Emote cloud: real emote images (7TV / Twitch global), sized by usage -->
-    <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.topEmotes') %></h2>
-      <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 min-h-48 flex flex-wrap gap-x-3 gap-y-2 items-center content-center justify-center">
-        <% emoteCloud.forEach(function(e) { %>
-          <% if (e.imageUrl) { %>
-            <img src="<%= e.imageUrl %>" alt="<%= e.word %>" title="<%= e.word %> × <%= e.count.toLocaleString() %>"
-                 loading="lazy" style="height: <%= e.size %>px" class="w-auto inline-block hover:scale-110 transition-transform" />
-          <% } else { %>
-            <%# No longer resolvable to an image (removed from the set) - keep it as text rather than dropping history %>
-            <span title="<%= e.word %> × <%= e.count.toLocaleString() %>" class="text-neutral-400 font-medium"
-                  style="font-size: <%= Math.max(12, Math.round(e.size * 0.45)) %>px"><%= e.word %></span>
-          <% } %>
-        <% }) %>
-        <% if (emoteCloud.length === 0) { %>
-          <p class="text-neutral-600 text-sm"><%= t('channelDashboard.noTrackedEmotes') %></p>
-        <% } %>
+    <!-- Emote cloud: real emote images (7TV / Twitch global), sized by usage, period-switchable -->
+    <section data-component="emotes">
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.topEmotes') %></h2>
+        <%- include('partials/periodToggle', { periods, period, component: 'emotes' }) %>
       </div>
+      <div id="emote-cloud"
+           class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 min-h-48 flex flex-wrap gap-x-3 gap-y-2 items-center content-center justify-center"></div>
+      <p id="emote-cloud-empty" class="text-xs text-neutral-600 mt-2" hidden><%= t('channelDashboard.noTrackedEmotes') %></p>
     </section>
   </div>
+
+  <!-- Universal log search (moderator-only) -->
+  <% if (canModerate) { %>
+    <section class="mb-10" id="universal-search">
+      <div class="flex items-center justify-between mb-3 gap-4">
+        <h2 class="text-lg font-semibold text-neutral-100">
+          <%= t('channelDashboard.logSearch') %>
+          <span class="ml-2 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('userDashboard.modOnly') %></span>
+        </h2>
+        <%- include('partials/periodToggle', { periods, period, component: 'search' }) %>
+      </div>
+
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900">
+        <div class="p-3 border-b border-neutral-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input type="search" id="search-term" autocomplete="off"
+                 placeholder="<%= t('channelDashboard.searchPlaceholder') %>"
+                 class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+          <input type="text" id="search-users" autocomplete="off"
+                 placeholder="<%= t('channelDashboard.usersPlaceholder') %>"
+                 class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+        </div>
+        <div class="px-3 py-2 border-b border-neutral-800 flex items-center gap-4">
+          <label class="flex items-center gap-1.5 text-xs text-neutral-500 cursor-pointer">
+            <input type="checkbox" id="search-fuzzy" class="accent-purple-600" />
+            <%= t('userDashboard.fuzzy') %>
+          </label>
+          <p id="search-status" class="text-xs text-neutral-600 flex-1 truncate"></p>
+        </div>
+        <ul id="search-results" class="divide-y divide-neutral-900 max-h-[28rem] overflow-y-auto text-sm"></ul>
+      </div>
+    </section>
+  <% } %>
+
 </main>
+
+<%# Chat-derived strings - must not go through a bare JSON.stringify(). See lib/safeJson.js. %>
+<script id="stats-chat-data" type="application/json"><%- safeJson(bootstrap) %></script>
+<script src="/js/statistics-chat.js" defer></script>
 
 <%- include('partials/foot') %>

@@ -15,6 +15,19 @@ nav.site-nav {
   contain: layout;
 }
 
+/* Same pinning for the streamer header (avatar + nick) and the Chat/Moderators tab bar on the
+   /:channel/statistics pages (views/partials/statsHeader.ejs / statsTabs.ejs): when navigating
+   between the two statistics sub-pages they stay put instead of sliding with the page. On a
+   navigation where only one side has them (e.g. home -> statistics) they fade, like the nav. */
+header.stats-header {
+  view-transition-name: stats-header;
+  contain: layout;
+}
+nav.stats-tabs {
+  view-transition-name: stats-tabs;
+  contain: layout;
+}
+
 /* Directional slide instead of the default cross-fade: the outgoing page
    slides left off-screen while the incoming page slides in from the right.
    This is the fallback for any navigation public/js/page-transitions.js

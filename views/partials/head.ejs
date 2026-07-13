@@ -39,6 +39,18 @@
           return;
         }
 
+        // Browser back/forward (history traversal): no link was clicked, so no stash exists.
+        // Slide in the direction the user is travelling through history - back plays the
+        // reverse slide, forward keeps the default. navigation.activation is Chromium-only;
+        // elsewhere this falls through to the referrer heuristic below.
+        const activation = window.navigation && navigation.activation;
+        if (activation && activation.navigationType === "traverse") {
+          if (activation.from && activation.entry && activation.from.index > activation.entry.index) {
+            event.viewTransition.types.add("backward");
+          }
+          return;
+        }
+
         const from = document.referrer ? new URL(document.referrer) : null;
         if (!from) return;
 

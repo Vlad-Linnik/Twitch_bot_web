@@ -1,9 +1,14 @@
-// Personal /settings - language + chat-color preference. Distinct from the
-// per-channel /:channel/settings (routes/settings.js): login-required only,
-// no permission-tier gate, since these are the visitor's own preferences.
+// Personal /settings - language preference. Distinct from the per-channel
+// /:channel/settings (routes/settings.js): login-required only, no
+// permission-tier gate, since these are the visitor's own preferences.
+//
+// The chat-name-color preference (chatColorMode/customChatColor) is temporarily
+// NOT editable here (section removed from the view, 2026-07). The handler must
+// not touch those fields: savePreferences $sets only what it's given, so
+// already-saved colors survive every locale save and keep applying site-wide
+// via middleware/navMenu.js.
 const express = require("express");
 const userPreferencesRepo = require("../db/userPreferencesRepo");
-const profileCacheRepo = require("../db/profileCacheRepo");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { isSupportedLocale } = require("../config/i18n");
@@ -18,15 +23,10 @@ function requireLogin(req, res, next) {
   next();
 }
 
-const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
-
 router.get("/settings", requireLogin, async (req, res, next) => {
   try {
-    const [prefs, profile] = await Promise.all([
-      userPreferencesRepo.getPreferences(req.user.userId),
-      profileCacheRepo.getOrFetchProfile(req.user.userId),
-    ]);
-    res.render("accountSettings", { prefs: prefs || {}, profile, saved: req.query.saved === "1" });
+    const prefs = await userPreferencesRepo.getPreferences(req.user.userId);
+    res.render("accountSettings", { prefs: prefs || {}, saved: req.query.saved === "1" });
   } catch (err) {
     next(err);
   }
@@ -35,10 +35,8 @@ router.get("/settings", requireLogin, async (req, res, next) => {
 router.post("/settings", settingsWriteLimiter, requireLogin, verifyToken, async (req, res, next) => {
   try {
     const locale = isSupportedLocale(req.body.locale) ? req.body.locale : "en";
-    const chatColorMode = req.body.chatColorMode === "custom" ? "custom" : "twitch";
-    const customChatColor = HEX_COLOR_RE.test(req.body.customChatColor || "") ? req.body.customChatColor : null;
 
-    await userPreferencesRepo.savePreferences(req.user.userId, { locale, chatColorMode, customChatColor });
+    await userPreferencesRepo.savePreferences(req.user.userId, { locale });
 
     // The "lang" cookie outranks the saved preference in middleware/i18n.js's resolveLocale(),
     // so without rewriting it here the language choice saves but never takes effect.

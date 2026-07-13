@@ -1,0 +1,23 @@
+<%#
+  Streamer identity header for the /:channel/statistics pages. Included by BOTH the chat and mod
+  sub-pages with the same data, and pinned via view-transition-name: stats-header
+  (public/css/input.css) so it stays put during the page slide instead of travelling with it -
+  same technique as the site nav (see partials/nav.ejs).
+
+  The whole block links to the streamer's Twitch channel; the nick renders in their real Twitch
+  chat color. Expects: channel, broadcaster ({avatarUrl, chatColor} | null - fail-soft to a
+  monogram and the default text color).
+%>
+<header class="stats-header flex items-center gap-4 mb-8">
+  <a href="https://twitch.tv/<%= channel.channelLogin %>" target="_blank" rel="noopener noreferrer"
+     class="flex items-center gap-4 group min-w-0">
+    <% if (broadcaster && broadcaster.avatarUrl) { %>
+      <img src="<%= broadcaster.avatarUrl %>" alt="" width="56" height="56"
+           class="w-14 h-14 rounded-full ring-1 ring-neutral-700 group-hover:ring-neutral-500 transition-shadow shrink-0" />
+    <% } else { %>
+      <span class="w-14 h-14 rounded-full grid place-items-center bg-neutral-800 text-neutral-300 text-xl font-semibold ring-1 ring-neutral-700 shrink-0"><%= channel.channelLogin.charAt(0).toUpperCase() %></span>
+    <% } %>
+    <h1 class="text-3xl font-bold truncate group-hover:underline decoration-2 underline-offset-4 <%= broadcaster && broadcaster.chatColor ? '' : 'text-neutral-100' %>"
+        <% if (broadcaster && broadcaster.chatColor) { %>style="color: <%= broadcaster.chatColor %>"<% } %>><%= channel.channelLogin %></h1>
+  </a>
+</header>

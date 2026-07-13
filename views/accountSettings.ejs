@@ -26,21 +26,9 @@
       </label>
     </section>
 
-    <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('accountSettings.chatColorHeading') %></h2>
-      <label class="flex items-center gap-2 text-sm text-neutral-300 mb-2">
-        <input type="radio" name="chatColorMode" value="twitch" <%= prefs.chatColorMode !== 'custom' ? 'checked' : '' %> class="radio-custom" />
-        <%= t('accountSettings.chatColorTwitch') %>
-        <% if (profile && profile.chatColor) { %>
-          <span class="inline-block w-3 h-3 rounded-full border border-neutral-700" style="background-color: <%= profile.chatColor %>"></span>
-        <% } %>
-      </label>
-      <label class="flex items-center gap-2 text-sm text-neutral-300">
-        <input type="radio" name="chatColorMode" value="custom" <%= prefs.chatColorMode === 'custom' ? 'checked' : '' %> class="radio-custom" />
-        <%= t('accountSettings.chatColorCustom') %>
-        <input type="color" name="customChatColor" value="<%= prefs.customChatColor || '#a855f7' %>" class="w-8 h-8 rounded border border-neutral-800 bg-neutral-900" />
-      </label>
-    </section>
+    <%# The "Chat name color" section was removed 2026-07 (temporarily disabled): editing the
+        preference is off, but already-saved chatColorMode/customChatColor values stay in
+        UserPreferences and keep applying site-wide - the POST handler no longer touches them. %>
 
     <button type="submit" class="px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
       <%= t('accountSettings.save') %>

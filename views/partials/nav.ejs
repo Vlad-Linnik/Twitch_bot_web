@@ -48,37 +48,35 @@
                  <% if (typeof userDisplayColor !== "undefined" && userDisplayColor) { %>style="color: <%= userDisplayColor %>"<% } %>><%= user.displayName %></p>
             </div>
 
-            <p class="px-4 pb-1 text-neutral-500 text-xs uppercase tracking-wide"><%= t('nav.creatorDashboard') %></p>
+            <%# Both channel sections render NOTHING when empty - a visitor with no connected
+                channel / no moderated channels has no use for the heading or an empty-state
+                notice, so each section (heading + rows + its trailing divider) sits entirely
+                inside its own if-block. The dropdown always keeps name / Settings / Logout. %>
             <% if (typeof navMenu !== "undefined" && navMenu && navMenu.channelConnected) { %>
+              <p class="px-4 pb-1 text-neutral-500 text-xs uppercase tracking-wide"><%= t('nav.creatorDashboard') %></p>
               <div class="px-4 pb-2 flex items-center justify-between">
                 <span class="text-neutral-300 truncate"><%= navMenu.ownedChannel.channelLogin %></span>
                 <span class="flex gap-3 shrink-0">
-                  <a href="/<%= navMenu.ownedChannel.channelLogin %>" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
+                  <a href="/<%= navMenu.ownedChannel.channelLogin %>/statistics/chat" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
                   <a href="/<%= navMenu.ownedChannel.channelLogin %>/settings" class="text-purple-400 hover:text-purple-300"><%= t('nav.settingsLink') %></a>
                 </span>
               </div>
-            <% } else { %>
-              <p class="px-4 pb-2 text-neutral-600 text-xs"><%= t('nav.channelNotConnected') %></p>
+              <div class="border-t border-neutral-800 my-1"></div>
             <% } %>
 
-            <div class="border-t border-neutral-800 my-1"></div>
-
-            <p class="px-4 pt-1 pb-1 text-neutral-500 text-xs uppercase tracking-wide"><%= t('nav.channelsIModerate') %></p>
             <% if (typeof navMenu !== "undefined" && navMenu && navMenu.moderatedChannels.length > 0) { %>
+              <p class="px-4 pt-1 pb-1 text-neutral-500 text-xs uppercase tracking-wide"><%= t('nav.channelsIModerate') %></p>
               <% navMenu.moderatedChannels.forEach(function(ch) { %>
                 <div class="px-4 py-1 flex items-center justify-between">
                   <span class="text-neutral-300 truncate"><%= ch.channelLogin %></span>
                   <span class="flex gap-3 shrink-0">
-                    <a href="/<%= ch.channelLogin %>" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
+                    <a href="/<%= ch.channelLogin %>/statistics/chat" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
                     <a href="/<%= ch.channelLogin %>/settings" class="text-purple-400 hover:text-purple-300"><%= t('nav.settingsLink') %></a>
                   </span>
                 </div>
               <% }) %>
-            <% } else { %>
-              <p class="px-4 py-1 text-neutral-600 text-xs"><%= t('nav.noModeratedChannels') %></p>
+              <div class="border-t border-neutral-800 my-1"></div>
             <% } %>
-
-            <div class="border-t border-neutral-800 my-1"></div>
 
             <a href="/settings" class="block px-4 py-2 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"><%= t('nav.settings') %></a>
 

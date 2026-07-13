@@ -1,19 +1,30 @@
 <%- include('partials/head', { title: channel.channelLogin + ' ' + t('statistics.titleSuffix') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-6"><%= channel.channelLogin %> <%= t('statistics.titleSuffix') %></h1>
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12">
+  <%- include('partials/statsHeader', { channel, broadcaster }) %>
 
   <%- include('partials/statsTabs', { channel, tab }) %>
 
-  <!-- Per-moderator statistics (ModeratorStatistics rollup), sortable by every metric -->
+  <!-- Per-moderator statistics (ModeratorStatistics rollup), sortable by every metric,
+       period-switchable (?period= - server-rendered, mod-stats.js just navigates) -->
   <section class="mb-12">
     <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.modStatsHeading') %></h2>
-      <label class="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none">
-        <input type="checkbox" id="show-empty-mods" class="accent-purple-600" />
-        <%= t('statistics.showEmptyMods') %>
-      </label>
+      <div class="flex items-center gap-4 flex-wrap">
+        <%# The toggle only exists when there are hidden rows for it to reveal - with every
+            registered mod already in the stats, it would be a control that does nothing. %>
+        <% if (inactiveMods.length > 0) { %>
+          <label class="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none">
+            <span class="toggle-switch">
+              <input type="checkbox" id="show-empty-mods" class="sr-only" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+            <%= t('statistics.showEmptyMods') %>
+          </label>
+        <% } %>
+        <%- include('partials/periodToggle', { periods, period, component: 'modstats' }) %>
+      </div>
     </div>
     <p class="text-neutral-600 text-xs mb-3"><%= t('statistics.modStatsHint') %></p>
 
@@ -44,7 +55,8 @@
                 data-reaction="<%= m.reactionSpeed ?? '' %>"
                 data-severity="<%= m.severity %>"
                 data-actions="<%= m.moderationActivity %>">
-              <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= m.userName %></td>
+              <td class="px-4 py-2 whitespace-nowrap <%= m.color ? '' : 'text-neutral-200' %>"
+                  <% if (m.color) { %>style="color: <%= m.color %>"<% } %>><%= m.userName %></td>
               <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.chatActivity.toLocaleString() %></td>
               <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.streamPresence.toFixed(1) %></td>
               <td class="px-4 py-2 text-neutral-400 text-right tabular-nums"><%= m.reactionSpeed != null ? (m.reactionSpeed / 1000).toFixed(1) + 's' : '—' %></td>
@@ -56,7 +68,9 @@
             <%# Registered moderator with no recorded stats yet - dimmed, hidden behind the toggle %>
             <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 opacity-40" data-empty="1" hidden
                 data-name="<%= m.userName %>" data-chat="" data-presence="" data-reaction="" data-severity="" data-actions="">
-              <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= m.userName %></td>
+              <%# opacity-40 on the row keeps the color muted, matching the old dimming %>
+              <td class="px-4 py-2 whitespace-nowrap <%= m.color ? '' : 'text-neutral-500' %>"
+                  <% if (m.color) { %>style="color: <%= m.color %>"<% } %>><%= m.userName %></td>
               <td class="px-4 py-2 text-neutral-600 text-right">—</td>
               <td class="px-4 py-2 text-neutral-600 text-right">—</td>
               <td class="px-4 py-2 text-neutral-600 text-right">—</td>
@@ -77,27 +91,60 @@
   <div id="skill-polygon" hidden
        class="fixed z-50 pointer-events-none rounded-lg border border-neutral-700 bg-neutral-900/95 shadow-xl shadow-black/50 p-3"></div>
 
-  <!-- Recent moderator actions (ModeratorActionLogs), ids resolved to nicknames -->
+  <!-- Recent moderator actions (ModeratorActionLogs), ids resolved to nicknames.
+       Sortable headers + action/moderator filters, all client-side over the rendered rows. -->
   <section>
-    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('statistics.recentModActions') %></h2>
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.recentModActions') %></h2>
+      <% if (actions.length > 0) { %>
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+            <%= t('statistics.filterActionLabel') %>
+            <select id="action-filter"
+                    class="bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:border-purple-600">
+              <option value=""><%= t('statistics.filterAll') %></option>
+              <% [...new Set(actions.map(a => a.action))].forEach(function(name) { %>
+                <option value="<%= name %>"><%= name %></option>
+              <% }) %>
+            </select>
+          </label>
+          <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+            <%= t('statistics.filterModeratorLabel') %>
+            <select id="mod-filter"
+                    class="bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:border-purple-600">
+              <option value=""><%= t('statistics.filterAll') %></option>
+              <% [...new Set(actions.map(a => a.modName))].forEach(function(name) { %>
+                <option value="<%= name %>"><%= name %></option>
+              <% }) %>
+            </select>
+          </label>
+        </div>
+      <% } %>
+    </div>
     <div class="rounded-lg border border-neutral-800 overflow-hidden">
       <div class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table id="mod-actions-table" class="w-full text-sm">
         <thead class="bg-neutral-900 text-neutral-400">
           <tr>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colAction') %></th>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colModerator') %></th>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colTarget') %></th>
+            <th data-sort="action" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colAction') %></th>
+            <th data-sort="mod" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colModerator') %></th>
+            <th data-sort="target" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colTarget') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('statistics.colReason') %></th>
-            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('statistics.colWhen') %></th>
+            <th data-sort="when" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colWhen') %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-neutral-800">
           <% actions.forEach(function(a) { %>
-            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40"
+                data-action="<%= a.action %>"
+                data-mod="<%= a.modName %>"
+                data-target="<%= a.targetName %>"
+                data-ts="<%= new Date(a.timestamp).getTime() %>">
               <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= a.action %></td>
-              <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= a.modName %></td>
-              <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= a.targetName %></td>
+              <td class="px-4 py-2 whitespace-nowrap <%= a.modColor ? '' : 'text-neutral-400' %>"
+                  <% if (a.modColor) { %>style="color: <%= a.modColor %>"<% } %>><%= a.modName %></td>
+              <td class="px-4 py-2 whitespace-nowrap <%= a.targetColor ? '' : 'text-neutral-400' %>"
+                  <% if (a.targetColor) { %>style="color: <%= a.targetColor %>"<% } %>><%= a.targetName %></td>
               <td class="px-4 py-2 text-neutral-400"><%= a.reason || t('statistics.noReason') %></td>
               <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(a.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
             </tr>

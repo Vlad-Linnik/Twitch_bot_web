@@ -1,7 +1,8 @@
-// Caches Twitch profile display data (avatar URL, chat color) so pages that
-// show a user's identity don't hit Helix on every request. Lives in the
-// web-only database (connectWeb) - purely a display-caching concern, the bot
-// never reads this. Refreshed if stale, purged if unused - see sweepStaleAndUnused().
+// Caches Twitch profile display data (avatar URL, chat color, display name,
+// login) so pages that show a user's identity don't hit Helix on every request.
+// Lives in the web-only database (connectWeb) - purely a display-caching
+// concern, the bot never reads this. Refreshed if stale, purged if unused -
+// see sweepStaleAndUnused().
 const { connectWeb } = require("./connection");
 const helixUsers = require("../twitch/helixUsers");
 const { getChatColors } = require("../twitch/chatColor");
@@ -19,15 +20,41 @@ async function ensureInitialized() {
   return collection;
 }
 
-async function fetchFromTwitch(userId) {
-  const [[user], colors] = await Promise.all([
-    helixUsers.getUsersById([userId]),
-    getChatColors([userId]),
+// A cached doc written before displayName/login were part of the schema must count as a miss
+// (one-time refetch wave, bounded by actual page usage) - otherwise pages that need names would
+// keep reading name-less docs for up to 7 days.
+function isFresh(doc, now) {
+  return doc && doc.displayName !== undefined && now - doc.lastCheckedAt < STALE_AFTER_MS;
+}
+
+// ONE Helix "Get Users" call + ONE "Get User Chat Color" call for the whole batch (both chunk
+// at 100 ids/request internally). An id Helix doesn't return (deleted/banned account) still gets
+// a doc with null fields, so it won't be re-fetched on every page view.
+async function fetchManyFromTwitch(userIds) {
+  const [users, colors] = await Promise.all([
+    helixUsers.getUsersById(userIds),
+    getChatColors(userIds),
   ]);
-  return {
-    avatarUrl: user?.profile_image_url ?? null,
-    chatColor: colors.get(String(userId)) ?? null,
-  };
+  const usersById = new Map(users.map((u) => [String(u.id), u]));
+  return new Map(
+    userIds.map((id) => {
+      const user = usersById.get(String(id));
+      return [
+        String(id),
+        {
+          avatarUrl: user?.profile_image_url ?? null,
+          chatColor: colors.get(String(id)) ?? null,
+          displayName: user?.display_name ?? null,
+          login: user?.login ?? null,
+        },
+      ];
+    })
+  );
+}
+
+async function fetchFromTwitch(userId) {
+  const fetched = await fetchManyFromTwitch([String(userId)]);
+  return fetched.get(String(userId));
 }
 
 // Reads the cache, transparently refreshing if missing/stale, and always bumps
@@ -39,7 +66,7 @@ async function getOrFetchProfile(userId) {
   const now = new Date();
   const existing = await col.findOne({ userId: id });
 
-  if (existing && now - existing.lastCheckedAt < STALE_AFTER_MS) {
+  if (isFresh(existing, now)) {
     await col.updateOne({ userId: id }, { $set: { lastUsedAt: now } });
     return existing;
   }
@@ -57,6 +84,63 @@ async function getOrFetchProfile(userId) {
     }
     return null;
   }
+}
+
+// Batch getOrFetchProfile for pages that render many identities at once (the mod statistics
+// page needs ~30: every moderator plus both nick columns of the action log). One $in read, one
+// batched Helix fetch for the misses, one bulk upsert. Returns Map<userId(String), doc>; ids
+// that could not be resolved at all (Helix down, never cached) are simply absent - callers
+// fall back the same way they do for a null getOrFetchProfile.
+async function getOrFetchProfiles(userIds) {
+  const col = await ensureInitialized();
+  // Twitch user ids are numeric strings. A stray non-numeric value (old ModeratorActionLogs
+  // rows exist with a LOGIN in modID) can never resolve via Helix's id= lookup - and worse,
+  // one malformed id 400s the whole batched request, killing everyone else's names too.
+  const ids = [...new Set(userIds.map((id) => String(id)).filter((id) => /^[0-9]+$/.test(id)))];
+  const result = new Map();
+  if (ids.length === 0) return result;
+  const now = new Date();
+
+  const cachedDocs = await col.find({ userId: { $in: ids } }).toArray();
+  const cachedById = new Map(cachedDocs.map((doc) => [doc.userId, doc]));
+
+  const freshIds = [];
+  const missIds = [];
+  for (const id of ids) {
+    const doc = cachedById.get(id);
+    if (isFresh(doc, now)) {
+      freshIds.push(id);
+      result.set(id, doc);
+    } else {
+      missIds.push(id);
+    }
+  }
+
+  if (freshIds.length > 0) {
+    await col.updateMany({ userId: { $in: freshIds } }, { $set: { lastUsedAt: now } });
+  }
+
+  if (missIds.length > 0) {
+    try {
+      const fetched = await fetchManyFromTwitch(missIds);
+      const ops = [];
+      for (const id of missIds) {
+        const doc = { userId: id, ...fetched.get(id), lastCheckedAt: now, lastUsedAt: now };
+        ops.push({ updateOne: { filter: { userId: id }, update: { $set: doc }, upsert: true } });
+        result.set(id, doc);
+      }
+      await col.bulkWrite(ops, { ordered: false });
+    } catch (err) {
+      // Fail-soft, mirroring the single-id path: serve whatever stale docs exist.
+      console.error(`[profileCacheRepo] batch Twitch fetch failed (${missIds.length} ids):`, err.message);
+      for (const id of missIds) {
+        const doc = cachedById.get(id);
+        if (doc) result.set(id, doc);
+      }
+    }
+  }
+
+  return result;
 }
 
 // Refreshes stale entries and deletes long-unused ones - called on a daily
@@ -79,4 +163,4 @@ async function sweepStaleAndUnused() {
   return { refreshed: staleDocs.length, deleted: deleted.deletedCount };
 }
 
-module.exports = { getOrFetchProfile, sweepStaleAndUnused };
+module.exports = { getOrFetchProfile, getOrFetchProfiles, sweepStaleAndUnused };

@@ -45,6 +45,11 @@ const MAX_CLOUD_WORDS = 200;
 const DEFAULT_LEADERBOARD = 10;
 const MAX_LEADERBOARD = 100;
 
+// The image-based emote cloud on /<channel>/statistics/chat. Cheap regardless of period:
+// the all-time read is WordLifetimeStats (~500 rows/channel) and ranges group the small
+// `words` collection, not ChatWordStats.
+const EMOTE_CLOUD_SIZE = 40;
+
 // Log search: the search is only affordable because the {channel, userId, timestamp} index
 // narrows the candidate set BEFORE any text matching happens. Channel is therefore always
 // mandatory, and the result set is hard-capped.
@@ -68,6 +73,18 @@ const CLOUD_CACHE_TTL_MS = 10 * 60 * 1000;
 // Guards the cache itself from becoming the memory leak it exists to prevent. Keys are
 // {channel, period, kind}, so this bounds us to a few hundred KB.
 const CLOUD_CACHE_MAX_ENTRIES = 200;
+
+// Start of the window for a named period, bucketed the same way the bot buckets its daily rows
+// (textStats.dayBucket). Returns null for `all`, which is a signal to read the precomputed
+// all-time row instead of scanning any range at all. Lives here (not in a repo) because every
+// period-switchable read path - clouds, top chatters, moderator summary - needs the same window.
+const { dayBucket } = require("../lib/textStats");
+
+function periodStart(period) {
+  if (period === "all") return null;
+  const days = { day: 1, week: 7, month: 30 }[period] ?? 7;
+  return dayBucket(new Date(Date.now() - days * 86400000));
+}
 
 function resolvePeriod(requested, { max = null } = {}) {
   const period = PERIODS.includes(requested) ? requested : DEFAULT_PERIOD;
@@ -94,6 +111,7 @@ module.exports = {
   MAX_CLOUD_WORDS,
   DEFAULT_LEADERBOARD,
   MAX_LEADERBOARD,
+  EMOTE_CLOUD_SIZE,
   MAX_SEARCH_RESULTS,
   MAX_SEARCH_USERS,
   MAX_SEARCH_TERM_LENGTH,
@@ -102,4 +120,5 @@ module.exports = {
   CLOUD_CACHE_MAX_ENTRIES,
   resolvePeriod,
   clampLimit,
+  periodStart,
 };

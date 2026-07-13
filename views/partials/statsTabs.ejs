@@ -1,6 +1,14 @@
-<%# Sub-page switcher for /:channel/statistics/{chat,mod}. Expects: channel, tab ("chat"|"mod"). %>
-<nav class="flex gap-1 mb-10 border-b border-neutral-800">
-  <a href="/<%= channel.channelLogin %>/statistics/chat"
+<%#
+  Sub-page switcher for /:channel/statistics/{chat,mod}. Expects: channel, tab ("chat"|"mod").
+  Only rendered for visitors who can open the mod page (canModerate) - a visitor who can't
+  moderate sees no tabs at all, since chat is the only page they can reach.
+
+  Pinned via view-transition-name: stats-tabs (public/css/input.css) so it doesn't slide with
+  the page. The Chat link opts into the backward slide: from the mod tab, "Chat" reads as going
+  back one level.
+%>
+<nav class="stats-tabs flex gap-1 mb-10 border-b border-neutral-800">
+  <a href="/<%= channel.channelLogin %>/statistics/chat" data-transition="backward"
      class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'chat' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
     <%= t('statistics.tabChat') %>
   </a>

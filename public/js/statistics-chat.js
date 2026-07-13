@@ -1,19 +1,24 @@
-// /<channel> - channel word cloud, top tracked emotes, universal multi-user log search.
+// /<channel>/statistics/chat - channel word cloud, emote-image cloud, universal log search.
 //
 // Same shape as user-dashboard.js: vanilla + no charting library, boots from the data the server
 // already inlined, and only a PERIOD CHANGE re-fetches. The channel clouds are the most expensive
 // reads on the site (they aggregate across every chatter), so not re-requesting them on load is
 // not a micro-optimisation - it halves the cost of a page view.
+//
+// The search markup only exists for moderators (the server gates it); every binding below
+// null-checks, so the same script serves both audiences.
 (function () {
   "use strict";
 
-  const dataEl = document.getElementById("dashboard-data");
+  const dataEl = document.getElementById("stats-chat-data");
   if (!dataEl) return;
   const boot = JSON.parse(dataEl.textContent);
 
   const $ = (id) => document.getElementById(id);
   const base = `/${encodeURIComponent(boot.channel)}`;
-  const periods = { wordcloud: boot.period, emotes: boot.period, search: boot.period };
+  // Top chatters is server-rendered all-time on first paint (see routes/statistics.js), so its
+  // toggle starts at "all" regardless of the page-level cloud period.
+  const periods = { wordcloud: boot.period, emotes: boot.period, search: boot.period, topchatters: "all" };
 
   // ---------------------------------------------------------------------------------------
   // Word cloud - sqrt scaling, so AREA rather than height tracks frequency (a word used 50x more
@@ -53,37 +58,93 @@
   }
 
   // ---------------------------------------------------------------------------------------
-  // Top tracked emotes
+  // Emote cloud - real emote images (the server resolves imageUrl from the channel's 7TV set +
+  // Twitch globals). sqrt scale so mid-list emotes stay legible instead of the leader dwarfing
+  // everything. An emote with no image (removed from the set since it was counted) keeps its
+  // text form rather than dropping history.
   // ---------------------------------------------------------------------------------------
-  function renderEmotes(payload) {
-    const board = $("emote-board");
-    const empty = $("emote-board-empty");
-    if (!board) return;
+  function renderEmoteCloud(payload) {
+    const node = $("emote-cloud");
+    const empty = $("emote-cloud-empty");
+    if (!node) return;
 
     const emotes = payload.emotes || [];
-    board.textContent = "";
-    // An empty board is a real, explainable state (the channel has no tracked 7TV set and no
+    node.textContent = "";
+    // An empty cloud is a real, explainable state (the channel has no tracked 7TV set and no
     // global-emote sync has run yet), not an error - say so rather than showing a blank box.
     if (empty) empty.hidden = emotes.length > 0;
 
-    emotes.forEach((emote, index) => {
+    const max = Math.max(...emotes.map((e) => e.count), 1);
+
+    emotes.forEach((emote) => {
+      const size = Math.round(24 + Math.sqrt(emote.count / max) * 40);
+      const title = `${emote.word} × ${emote.count.toLocaleString()}`;
+
+      if (emote.imageUrl) {
+        const img = document.createElement("img");
+        img.src = emote.imageUrl;
+        img.alt = emote.word;
+        img.title = title;
+        img.loading = "lazy";
+        img.style.height = `${size}px`;
+        img.className = "w-auto inline-block hover:scale-110 transition-transform";
+        node.appendChild(img);
+      } else {
+        const span = document.createElement("span");
+        span.textContent = emote.word; // chat-derived - textContent only
+        span.title = title;
+        span.style.fontSize = `${Math.max(12, Math.round(size * 0.45))}px`;
+        span.className = "text-neutral-400 font-medium";
+        node.appendChild(span);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Top chatters - rebuilt on period change, mirroring the exact markup statisticsChat.ejs
+  // renders on first paint (same classes) so a toggled list is indistinguishable from a fresh
+  // page load. Names come from chat - textContent only, never innerHTML.
+  // ---------------------------------------------------------------------------------------
+  function renderTopChatters(payload) {
+    const node = $("top-chatters");
+    if (!node) return;
+    node.textContent = "";
+
+    const chatters = payload.chatters || [];
+    if (chatters.length === 0) {
+      const li = document.createElement("li");
+      li.className = "px-4 py-6 text-center text-neutral-600 text-sm";
+      li.textContent = node.dataset.emptyText || "";
+      node.appendChild(li);
+      return;
+    }
+
+    chatters.forEach((u) => {
+      const medal = u.rank === 1 ? "👑" : u.rank === 2 ? "🥈" : u.rank === 3 ? "🥉" : null;
+
       const li = document.createElement("li");
       li.className = "flex items-center gap-3 px-4 py-2.5";
 
       const rank = document.createElement("span");
-      rank.className = "w-6 shrink-0 text-center text-xs text-neutral-600 tabular-nums";
-      rank.textContent = String(index + 1);
+      rank.className =
+        "w-6 shrink-0 text-center " + (medal ? "text-base" : "text-xs text-neutral-600 tabular-nums");
+      rank.textContent = medal || String(u.rank);
 
-      const name = document.createElement("span");
-      name.className = "text-neutral-200 truncate flex-1 min-w-0 font-medium";
-      name.textContent = emote.word;
+      const name = document.createElement("a");
+      name.href = `${base}/user/${encodeURIComponent(u.userName)}`;
+      name.className =
+        "hover:underline truncate flex-1 min-w-0" +
+        (u.rank <= 3 ? " font-medium" : "") +
+        (u.color ? "" : " text-neutral-200");
+      if (u.color) name.style.color = u.color;
+      name.textContent = u.userName;
 
       const count = document.createElement("span");
       count.className = "text-neutral-500 text-sm tabular-nums shrink-0";
-      count.textContent = emote.count.toLocaleString();
+      count.textContent = Number(u.messageCount).toLocaleString();
 
       li.append(rank, name, count);
-      board.appendChild(li);
+      node.appendChild(li);
     });
   }
 
@@ -101,7 +162,8 @@
     const data = await res.json();
 
     if (component === "wordcloud") renderCloud($("channel-word-cloud"), data.words);
-    if (component === "emotes") renderEmotes(data);
+    if (component === "emotes") renderEmoteCloud(data);
+    if (component === "topchatters") renderTopChatters(data);
   }
 
   document.querySelectorAll("[data-period-toggle]").forEach((group) => {
@@ -220,5 +282,5 @@
   // First paint, from the inlined server data.
   // ---------------------------------------------------------------------------------------
   renderCloud($("channel-word-cloud"), boot.wordCloud.words);
-  renderEmotes(boot.emoteCloud);
+  renderEmoteCloud(boot.emoteCloud);
 })();

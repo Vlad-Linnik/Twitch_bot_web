@@ -14,8 +14,6 @@
     "statisticsLink": "Статистика",
     "settingsLink": "Настройки",
     "settings": "Настройки",
-    "channelNotConnected": "Ваш канал ещё не подключён к боту",
-    "noModeratedChannels": "Вы пока не модерируете ни один канал",
     "logoutConfirmBody": "Чтобы снова управлять каналом, потребуется заново войти через Twitch."
   },
   "home": {
@@ -143,7 +141,10 @@
     "colReason": "Причина",
     "colWhen": "Когда",
     "noModActions": "Действий модераторов пока не зафиксировано.",
-    "noReason": "—"
+    "noReason": "—",
+    "filterActionLabel": "Действие",
+    "filterModeratorLabel": "Модератор",
+    "filterAll": "Все"
   },
   "channelSettings": {
     "titleSuffix": "настройки",
@@ -257,10 +258,6 @@
     "subtitle": "Личные настройки вашего аккаунта на этом сайте.",
     "saved": "Настройки сохранены.",
     "languageHeading": "Язык",
-    "chatColorHeading": "Цвет имени в чате",
-    "chatColorTwitch": "Использовать мой цвет чата Twitch",
-    "chatColorCustom": "Использовать свой цвет",
-    "chatColorPreview": "Предпросмотр",
     "save": "Сохранить настройки"
   },
   "errors": {

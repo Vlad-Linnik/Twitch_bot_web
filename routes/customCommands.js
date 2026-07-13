@@ -5,7 +5,7 @@
 // POST + CSRF + rate-limited, matching routes/settings.js - the other place this app writes
 // config the bot acts on.
 //
-// This route must be mounted BEFORE routes/channelDashboard.js, whose bare "/:channel" would
+// This route must be mounted BEFORE routes/channelRedirect.js, whose bare "/:channel" would
 // otherwise not conflict (this is 2 segments) - but keep it above anyway so the ordering intent
 // stays obvious.
 const express = require("express");

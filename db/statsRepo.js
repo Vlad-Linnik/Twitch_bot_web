@@ -9,6 +9,7 @@
 // Every function below takes a bare `channelLogin` (matching this repo's
 // Channels.channelLogin convention) and applies the right prefix internally.
 const { connect } = require("./connection");
+const limits = require("../config/statsLimits");
 
 let collections;
 
@@ -17,7 +18,10 @@ async function ensureInitialized() {
   const db = await connect();
   collections = {
     userLifetimeStats: db.collection("UserLifetimeStats"),
-    wordLifetimeStats: db.collection("WordLifetimeStats"),
+    // Per-user daily message counts written by the bot (epoch-sentinel all-time row, daily rows
+    // at local noon - same convention as ChatWordStats). Backs the ranged top-chatters periods;
+    // `all` keeps reading UserLifetimeStats.
+    userDailyMessageStats: db.collection("UserDailyMessageStats"),
     modLogs: db.collection("ModeratorActionLogs"),
     modStats: db.collection("ModeratorStatistics"),
     modUpTime: db.collection("ModUpTimeStats"),
@@ -75,17 +79,50 @@ async function getLeaderboard(channelLogin, limit = 10) {
   }));
 }
 
-// Top EMOTES, not words: WordLifetimeStats only ever holds whitelisted (7TV/Twitch-global)
-// emotes despite its name - see the shared CLAUDE.md's "Words vs emotes". Named accordingly
-// here so no caller mistakes it for a word-frequency index (that's ChatWordStats, via
-// wordStatsRepo.getChannelWordCloud).
-async function getTopEmotes(channelLogin, limit = 10) {
-  const { wordLifetimeStats } = await ensureInitialized();
-  return wordLifetimeStats
-    .find({ channel: withHash(channelLogin) })
-    .sort({ count: -1 })
-    .limit(limit)
+// Period-switchable top chatters. `all` delegates to getLeaderboard (UserLifetimeStats is the
+// all-time source of truth and already carries the $lookup); ranges $group the bot's
+// pre-aggregated UserDailyMessageStats - a handful of rows per active user per day, covered by
+// its {channel, date, count, userId} index, never a scan over raw `messages`.
+async function getTopChatters(channelLogin, period, limit = 10) {
+  if (period === "all") return getLeaderboard(channelLogin, limit);
+
+  const { userDailyMessageStats } = await ensureInitialized();
+  const start = limits.periodStart(period);
+
+  const rows = await userDailyMessageStats
+    .aggregate(
+      [
+        // $gte start excludes the epoch all-time row automatically (1970 < any real window).
+        { $match: { channel: withHash(channelLogin), date: { $gte: start } } },
+        { $group: { _id: "$userId", messageCount: { $sum: "$count" } } },
+        { $sort: { messageCount: -1 } },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: "UserIdentities",
+            localField: "_id",
+            foreignField: "userId",
+            as: "identity",
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            userId: "$_id",
+            messageCount: 1,
+            userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+          },
+        },
+      ],
+      { allowDiskUse: false }
+    )
     .toArray();
+
+  return rows.map((row, index) => ({
+    ...row,
+    userName: row.userName || row.userId,
+    rank: index + 1,
+  }));
 }
 
 async function getChannelTotals(channelLogin) {
@@ -127,16 +164,21 @@ async function getModStats(channelId, limit = 25) {
     .toArray();
 }
 
-// One row per moderator, rolled up across all of ModeratorStatistics' per-day rows: totals for
+// One row per moderator, rolled up across ModeratorStatistics' per-day rows: totals for
 // the count-like metrics, day-weighted averages for the rate-like ones (reactionSpeed averages
 // only over days that HAD a measured reaction, so quiet days don't drag it toward zero).
 // Display name comes from the same UserIdentities $lookup the leaderboard uses; a moderator
 // predating that collection still gets a row, keyed by their id.
-async function getModeratorSummary(channelId) {
+// `period` narrows the roll-up window ("all" = every row, the previous behavior). No epoch
+// sentinel here - the collection is small (days x mods), a full $group is fine.
+async function getModeratorSummary(channelId, period = "all") {
   const { modStats } = await ensureInitialized();
+  const match = { channelId: String(channelId) };
+  const start = limits.periodStart(period);
+  if (start !== null) match.date = { $gte: start };
   return modStats
     .aggregate([
-      { $match: { channelId: String(channelId) } },
+      { $match: match },
       {
         $group: {
           _id: "$userId",
@@ -191,7 +233,7 @@ async function getUserNames(userIds) {
 
 module.exports = {
   getLeaderboard,
-  getTopEmotes,
+  getTopChatters,
   getChannelTotals,
   getRecentModActions,
   getModUpTime,

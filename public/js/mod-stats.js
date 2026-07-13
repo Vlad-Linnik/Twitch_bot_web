@@ -1,6 +1,84 @@
-// Moderator statistics table: column sorting, the "show moderators with no data" toggle, and
-// the skill-pentagon hover chart. Wrapped in an IIFE - classic <script> tags on a page share one
-// global lexical scope (logout-confirm.js already owns top-level names like `form`).
+// Moderator statistics table: column sorting, the "show moderators with no data" toggle, the
+// skill-pentagon hover chart, the ?period= toggle, and the recent-actions table's sort/filters.
+// Wrapped in IIFEs - classic <script> tags on a page share one global lexical scope
+// (logout-confirm.js already owns top-level names like `form`).
+
+// --- Period toggle: unlike the chat page's fetch-based toggles, this one NAVIGATES. The mod
+// table is server-rendered (sort data-attrs, pentagon hookup, inactive rows), so a reload keeps
+// EJS the single source of its markup.
+(() => {
+  const group = document.querySelector('[data-period-toggle="modstats"]');
+  if (!group) return;
+  group.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-period]");
+    if (!button) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("period", button.dataset.period);
+    window.location.assign(url.toString());
+  });
+})();
+
+// --- Recent moderator actions: header sorting + action/moderator filters, purely client-side
+// over the (at most 25) server-rendered rows.
+(() => {
+  const table = document.getElementById("mod-actions-table");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+
+  let currentSort = { key: "when", dir: -1 }; // server order: newest first
+
+  function applySort(key, dir) {
+    currentSort = { key, dir };
+    const rows = [...tbody.querySelectorAll("tr[data-action]")];
+    rows.sort((a, b) => {
+      if (key === "when") return (Number(a.dataset.ts) - Number(b.dataset.ts)) * dir;
+      const map = { action: "action", mod: "mod", target: "target" };
+      const va = (a.dataset[map[key]] || "").toLowerCase();
+      const vb = (b.dataset[map[key]] || "").toLowerCase();
+      return va.localeCompare(vb) * dir;
+    });
+    rows.forEach((row) => tbody.appendChild(row));
+
+    for (const th of table.querySelectorAll("th[data-sort]")) {
+      const marker = th.dataset.sort === key ? (dir === 1 ? " ▲" : " ▼") : "";
+      th.querySelector(".sort-marker")?.remove();
+      if (marker) {
+        const span = document.createElement("span");
+        span.className = "sort-marker text-purple-400";
+        span.textContent = marker;
+        th.appendChild(span);
+      }
+    }
+  }
+
+  for (const th of table.querySelectorAll("th[data-sort]")) {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      // Time starts newest-first, text columns ascending; a second click flips it.
+      const firstDir = key === "when" ? -1 : 1;
+      const dir = currentSort.key === key ? -currentSort.dir : firstDir;
+      applySort(key, dir);
+    });
+  }
+
+  const actionFilter = document.getElementById("action-filter");
+  const modFilter = document.getElementById("mod-filter");
+
+  function applyFilters() {
+    const action = actionFilter?.value || "";
+    const mod = modFilter?.value || "";
+    for (const row of tbody.querySelectorAll("tr[data-action]")) {
+      row.hidden =
+        (action !== "" && row.dataset.action !== action) || (mod !== "" && row.dataset.mod !== mod);
+    }
+  }
+
+  actionFilter?.addEventListener("change", applyFilters);
+  modFilter?.addEventListener("change", applyFilters);
+
+  applySort(currentSort.key, currentSort.dir);
+})();
+
 (() => {
   const table = document.getElementById("mod-stats-table");
   if (!table) return;
