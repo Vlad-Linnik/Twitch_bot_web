@@ -74,8 +74,11 @@ router.get("/:channel/user/:username", async (req, res, next) => {
     // Fails soft: the header falls back to a monogram and an undecorated name.
     const profile = await userProfileService.getDisplayProfile(identity.userId);
 
-    const [standing, activity, mentions, clouds, permission] = await Promise.all([
+    const [standing, activity, heatmap, mentions, clouds, permission] = await Promise.all([
       userStatsRepo.getLifetimeStanding(channel.channelLogin, identity.userId),
+      // Two reads of the same index range on purpose: the chart needs period-shaped buckets
+      // (getMessageVolume), the heatmap always needs the full day-bucketed window.
+      userStatsRepo.getMessageVolume(channel.channelLogin, identity.userId, period),
       userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId),
       userStatsRepo.getMentionStats(channel.channelLogin, identity, period),
       wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period),
@@ -92,6 +95,7 @@ router.get("/:channel/user/:username", async (req, res, next) => {
       periods: limits.PERIODS,
       standing,
       activity,
+      heatmap,
       mentions,
       clouds,
       nicknames: userStatsRepo.nicknameHistory(identity),
@@ -124,11 +128,8 @@ router.get("/:channel/user/:username/stats.json", statsReadLimiter, async (req, 
         return res.json(await wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period));
       case "mentions":
         return res.json(await userStatsRepo.getMentionStats(channel.channelLogin, identity, period));
-      case "activity": {
-        // The chart and the heatmap read the same day-bucketed series; the chart just windows it.
-        const days = { day: 1, week: 7, month: 30, all: limits.MAX_HEATMAP_DAYS }[period] ?? 7;
-        return res.json(await userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId, days));
-      }
+      case "activity":
+        return res.json(await userStatsRepo.getMessageVolume(channel.channelLogin, identity.userId, period));
       default:
         return res.status(400).json({ error: "unknown_component" });
     }

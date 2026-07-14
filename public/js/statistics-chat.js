@@ -23,20 +23,21 @@
   // ---------------------------------------------------------------------------------------
   // Word cloud - sqrt scaling, so AREA rather than height tracks frequency (a word used 50x more
   // than another must not render 50x taller; it would blow the container and drown the rest).
+  // Placement is CloudLayout's center-out spiral (cloud-layout.js): the most frequent words sit
+  // in the middle, rarer ones drift outward.
   // ---------------------------------------------------------------------------------------
   const MIN_FONT = 13;
   const MAX_FONT = 52;
 
   function renderCloud(node, items) {
     if (!node) return;
-    node.textContent = "";
-    if (!items || items.length === 0) return;
 
-    const max = Math.max(...items.map((i) => i.count), 1);
-    const min = Math.min(...items.map((i) => i.count));
+    const list = items || [];
+    const max = Math.max(...list.map((i) => i.count), 1);
+    const min = list.length ? Math.min(...list.map((i) => i.count)) : 0;
     const span = Math.sqrt(max) - Math.sqrt(min) || 1;
 
-    items.forEach((item, index) => {
+    CloudLayout.render(node, list, (item) => {
       const scale = (Math.sqrt(item.count) - Math.sqrt(min)) / span;
       const size = MIN_FONT + scale * (MAX_FONT - MIN_FONT);
 
@@ -48,55 +49,56 @@
       word.className =
         "font-medium cursor-default " +
         (scale > 0.66 ? "text-purple-300" : scale > 0.33 ? "text-neutral-300" : "text-neutral-500");
-
-      word.style.opacity = "0";
-      word.style.transition = "opacity 300ms ease";
-      setTimeout(() => (word.style.opacity = "1"), Math.min(index * 8, 350));
-
-      node.appendChild(word);
+      return word;
     });
   }
 
   // ---------------------------------------------------------------------------------------
   // Emote cloud - real emote images (the server resolves imageUrl from the channel's 7TV set +
-  // Twitch globals). sqrt scale so mid-list emotes stay legible instead of the leader dwarfing
-  // everything. An emote with no image (removed from the set since it was counted) keeps its
-  // text form rather than dropping history.
+  // Twitch globals), laid out on the same center-out spiral as the word cloud. Sizes span the
+  // min..max counts IN VIEW (not 0..max like before, which parked everything near the floor) so
+  // the frequency difference is actually visible. An emote with no image (removed from the set
+  // since it was counted) keeps its text form rather than dropping history.
   // ---------------------------------------------------------------------------------------
+  const EMOTE_MIN = 18;
+  const EMOTE_MAX = 72;
+
   function renderEmoteCloud(payload) {
     const node = $("emote-cloud");
     const empty = $("emote-cloud-empty");
     if (!node) return;
 
     const emotes = payload.emotes || [];
-    node.textContent = "";
     // An empty cloud is a real, explainable state (the channel has no tracked 7TV set and no
     // global-emote sync has run yet), not an error - say so rather than showing a blank box.
     if (empty) empty.hidden = emotes.length > 0;
 
     const max = Math.max(...emotes.map((e) => e.count), 1);
+    const min = emotes.length ? Math.min(...emotes.map((e) => e.count)) : 0;
+    const span = Math.sqrt(max) - Math.sqrt(min) || 1;
 
-    emotes.forEach((emote) => {
-      const size = Math.round(24 + Math.sqrt(emote.count / max) * 40);
+    CloudLayout.render(node, emotes, (emote) => {
+      const scale = (Math.sqrt(emote.count) - Math.sqrt(min)) / span;
+      const size = Math.round(EMOTE_MIN + scale * (EMOTE_MAX - EMOTE_MIN));
       const title = `${emote.word} × ${emote.count.toLocaleString()}`;
 
       if (emote.imageUrl) {
+        // No loading="lazy" here: CloudLayout must know every image's width up front to place
+        // it, so deferring the fetch would only delay the whole cloud.
         const img = document.createElement("img");
         img.src = emote.imageUrl;
         img.alt = emote.word;
         img.title = title;
-        img.loading = "lazy";
         img.style.height = `${size}px`;
-        img.className = "w-auto inline-block hover:scale-110 transition-transform";
-        node.appendChild(img);
-      } else {
-        const span = document.createElement("span");
-        span.textContent = emote.word; // chat-derived - textContent only
-        span.title = title;
-        span.style.fontSize = `${Math.max(12, Math.round(size * 0.45))}px`;
-        span.className = "text-neutral-400 font-medium";
-        node.appendChild(span);
+        img.className = "w-auto hover:scale-110 transition-transform";
+        return img;
       }
+      const text = document.createElement("span");
+      text.textContent = emote.word; // chat-derived - textContent only
+      text.title = title;
+      text.style.fontSize = `${Math.max(12, Math.round(size * 0.45))}px`;
+      text.className = "text-neutral-400 font-medium";
+      return text;
     });
   }
 

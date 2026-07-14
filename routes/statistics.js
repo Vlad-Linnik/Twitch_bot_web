@@ -20,10 +20,27 @@ const { getEmoteImageMap } = require("../twitch/emoteImages");
 const { requireLevel, computePermission } = require("../middleware/permissions");
 const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters");
 const limits = require("../config/statsLimits");
+const { isKnownBotName } = require("../config/knownBots");
 
 const router = express.Router();
 
-const TOP_CHATTERS = 5;
+const TOP_CHATTERS = 10;
+const MOD_ACTIONS_PER_PAGE = 25;
+
+// Compact duration for the mod-actions table (replaces the old free-text reason column):
+// the two most significant units of d/h/m/s, e.g. "1h 30m". Language-neutral on purpose -
+// unit letters read the same in both locales, so no per-locale formatting here.
+function formatDuration(ms) {
+  let seconds = Math.round(ms / 1000);
+  const parts = [];
+  for (const [unit, size] of [["d", 86400], ["h", 3600], ["m", 60], ["s", 1]]) {
+    const value = Math.floor(seconds / size);
+    if (value > 0 || (unit === "s" && parts.length === 0)) parts.push(`${value}${unit}`);
+    seconds %= size;
+    if (parts.length === 2) break;
+  }
+  return parts.join(" ");
+}
 
 // Same rationale as routes/userDashboard.js: requireLevel() renders an HTML error page, which is
 // useless inside a fetch(). Same tier semantics, JSON body.
@@ -77,8 +94,8 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
         computePermission(req.user?.userId ?? null, channel.channelLogin),
       ]);
 
-    // Twitch chat color per top chatter - 5 lookups against the local profile cache (each one
-    // only hits Helix when its entry is missing/stale). Fail-soft: no color, no problem.
+    // Twitch chat color per top chatter - TOP_CHATTERS lookups against the local profile cache
+    // (each one only hits Helix when its entry is missing/stale). Fail-soft: no color, no problem.
     const profiles = await Promise.all(
       leaderboard.map((u) => profileCacheRepo.getOrFetchProfile(u.userId).catch(() => null))
     );
@@ -117,18 +134,35 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
     // full page reload - the table's markup (sort data-attrs, pentagon hookup) is too rich to
     // duplicate as a client-side template for a page this rarely visited.
     const period = req.query.period ? limits.resolvePeriod(req.query.period) : "all";
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
 
-    const [modActions, modSummary, modsListDoc, broadcaster] = await Promise.all([
-      statsRepo.getRecentModActions(channel.channelLogin),
-      statsRepo.getModeratorSummary(channel.channelId, period),
-      modsRepo.getModerators(channel.channelId),
-      profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
-    ]);
+    const [{ actions: modActions, total: actionsTotal }, rawSummary, modsListDoc, broadcaster] =
+      await Promise.all([
+        statsRepo.getRecentModActions(channel.channelLogin, { page, limit: MOD_ACTIONS_PER_PAGE }),
+        statsRepo.getModeratorSummary(channel.channelId, period),
+        modsRepo.getModerators(channel.channelId),
+        profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+      ]);
+
+    // A summary row that aggregates to all zeros is "no data" as far as the viewer is
+    // concerned - it belongs behind the toggle with the ModsList-only mods, not in the table
+    // proper. The bot stopped writing all-zero daily rows (and cleanup deleted the old ones),
+    // so this partition is a safety net for anything that slips through (e.g. prod data
+    // before its cleanup runs).
+    const modSummary = rawSummary.filter(
+      (m) => m.chatActivity !== 0 || m.streamPresence !== 0 || m.moderationActivity !== 0
+    );
+    const zeroSummaryIds = rawSummary
+      .filter((m) => !modSummary.includes(m))
+      .map((m) => m.userId);
 
     // Moderators registered in ModsList but with no ModeratorStatistics rows in the selected
     // period - shown dimmed behind the "show moderators with no data" toggle.
     const withData = new Set(modSummary.map((m) => String(m.userId)));
-    const inactiveIds = (modsListDoc?.moderators || []).filter((id) => !withData.has(String(id)));
+    const inactiveIds = [
+      ...(modsListDoc?.moderators || []),
+      ...zeroSummaryIds,
+    ].filter((id, i, arr) => !withData.has(String(id)) && arr.indexOf(id) === i);
 
     // Every id the page renders: the summary rows, the inactive mods, and both nick columns of
     // the action log. One batch UserIdentities lookup + one batched profile fetch (names, chat
@@ -155,16 +189,41 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
       };
     };
 
-    const inactiveMods = inactiveIds.map((id) => ({ userId: id, ...resolve(id) }));
-    const moderators = modSummary.map((m) => {
-      const { userName, color } = resolve(m.userId);
-      return { ...m, userName: m.userName || userName, color };
-    });
+    // Bot accounts (config/knownBots.js) are not people - they never belong in the moderator
+    // statistics table, active or dimmed. Their recent ACTIONS stay visible below on purpose.
+    const inactiveMods = inactiveIds
+      .map((id) => ({ userId: id, ...resolve(id) }))
+      .filter((m) => !isKnownBotName(m.userName));
+    const moderators = modSummary
+      .map((m) => {
+        const { userName, color } = resolve(m.userId);
+        return { ...m, userName: m.userName || userName, color };
+      })
+      .filter((m) => !isKnownBotName(m.userName));
     const actions = modActions.map((a) => {
       const mod = resolve(a.modID);
       const target = resolve(a.userId);
-      return { ...a, modName: mod.userName, modColor: mod.color, targetName: target.userName, targetColor: target.color };
+      // Duration replaces the old reason column: the actual restriction for timeouts,
+      // "permanent" for bans, nothing for delete/warn (they don't restrict). The reason still
+      // rides along as a hover title. TTA/id feed the target-hover context popup.
+      const durationLabel =
+        a.action === "ban"
+          ? res.locals.t("statistics.durationPermanent")
+          : a.action === "timeout" && a.durationMs != null
+            ? formatDuration(a.durationMs)
+            : null;
+      return {
+        ...a,
+        id: String(a._id),
+        modName: mod.userName,
+        modColor: mod.color,
+        targetName: target.userName,
+        targetColor: target.color,
+        durationLabel,
+      };
     });
+
+    const totalPages = Math.max(1, Math.ceil(actionsTotal / MOD_ACTIONS_PER_PAGE));
 
     res.render("statisticsMod", {
       channel,
@@ -172,6 +231,8 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
       moderators,
       inactiveMods,
       actions,
+      page,
+      totalPages,
       period,
       periods: limits.PERIODS,
       tab: "mod",
@@ -218,6 +279,23 @@ router.get("/:channel/stats.json", statsReadLimiter, async (req, res, next) => {
       default:
         return res.status(400).json({ error: "unknown_component" });
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Mod-action context (moderator-only) ----------------------------------------------------
+// The chat history behind one row of the recent-actions table: the message the target was
+// actioned for + up to 5 of their previous messages. Fetched lazily on hover (mod-stats.js) -
+// per-row queries against `messages` are too expensive to run eagerly for all 25 rows.
+router.get("/:channel/mod-action-context.json", requireLevelJson(2), statsReadLimiter, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).json({ error: "unknown_channel" });
+
+    const context = await statsRepo.getModActionContext(channel.channelLogin, req.query.id);
+    if (!context) return res.status(404).json({ error: "unknown_action" });
+    res.json(context);
   } catch (err) {
     next(err);
   }

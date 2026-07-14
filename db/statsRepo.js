@@ -9,7 +9,14 @@
 // Every function below takes a bare `channelLogin` (matching this repo's
 // Channels.channelLogin convention) and applies the right prefix internally.
 const { connect } = require("./connection");
+const { ObjectId } = require("mongodb");
 const limits = require("../config/statsLimits");
+
+// A ban/timeout context (the message the user was actioned for + their previous messages) is
+// only meaningful when the moderator reacted to something JUST said - past this TTA the last
+// logged message is probably unrelated to why they were actioned.
+const MOD_ACTION_CONTEXT_MAX_TTA_MS = 45000;
+const MOD_ACTION_CONTEXT_MESSAGES = 6; // the flagged message + 5 before it
 
 let collections;
 
@@ -23,6 +30,7 @@ async function ensureInitialized() {
     // `all` keeps reading UserLifetimeStats.
     userDailyMessageStats: db.collection("UserDailyMessageStats"),
     modLogs: db.collection("ModeratorActionLogs"),
+    messages: db.collection("messages"),
     modStats: db.collection("ModeratorStatistics"),
     modUpTime: db.collection("ModUpTimeStats"),
     userIdentities: db.collection("UserIdentities"),
@@ -137,13 +145,71 @@ async function getChannelTotals(channelLogin) {
   return { uniqueChatters, totalMessages: totals[0]?.messages ?? 0 };
 }
 
-async function getRecentModActions(channelLogin, limit = 25) {
+// Paginated, newest first. `page` is 1-based; the count query rides the same
+// {channel, timestamp} index prefix the find does.
+async function getRecentModActions(channelLogin, { page = 1, limit = 25 } = {}) {
   const { modLogs } = await ensureInitialized();
-  return modLogs
-    .find({ channel: bareLogin(channelLogin) })
+  const filter = { channel: bareLogin(channelLogin) };
+  const [actions, total] = await Promise.all([
+    modLogs
+      .find(filter)
+      .sort({ timestamp: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .toArray(),
+    modLogs.countDocuments(filter),
+  ]);
+  return { actions, total };
+}
+
+// The chat context behind one mod action: the message the user was actioned for plus the
+// MOD_ACTION_CONTEXT_MESSAGES-1 messages THEY posted before it (user decision: the offender's
+// own history, not the surrounding channel conversation). Only offered when the moderator
+// reacted within MOD_ACTION_CONTEXT_MAX_TTA_MS of the user's last message - a slower action
+// (or one against a user who never chatted, TTA null) means the logged messages likely aren't
+// what was acted on, so the popup would mislead.
+async function getModActionContext(channelLogin, actionId) {
+  const { modLogs, messages } = await ensureInitialized();
+
+  let _id;
+  try {
+    _id = new ObjectId(String(actionId));
+  } catch {
+    return null; // malformed id = unknown action, same as not found
+  }
+
+  // Channel is part of the filter so a valid ObjectId from ANOTHER channel's log can't be
+  // read through this channel's (tier-2-gated) endpoint.
+  const action = await modLogs.findOne({ _id, channel: bareLogin(channelLogin) });
+  if (!action) return null;
+
+  if (action.TTA == null || action.TTA >= MOD_ACTION_CONTEXT_MAX_TTA_MS) {
+    return { available: false };
+  }
+
+  // Served by the bot's {channel, userId, timestamp} index - at most 6 documents fetched.
+  const docs = await messages
+    .find({
+      channel: withHash(channelLogin),
+      userId: action.userId,
+      timestamp: { $lte: action.timestamp },
+    })
     .sort({ timestamp: -1 })
-    .limit(limit)
+    .limit(MOD_ACTION_CONTEXT_MESSAGES)
     .toArray();
+
+  docs.reverse(); // chronological for display
+
+  // The flagged message is the one the action's TTA was measured against (messageId, recorded
+  // by the bot at action time); older log rows predating that field fall back to "the newest".
+  const flaggedId = action.messageId ? String(action.messageId) : null;
+  const result = docs.map((doc, i) => ({
+    message: doc.message,
+    timestamp: doc.timestamp,
+    flagged: flaggedId ? String(doc._id) === flaggedId : i === docs.length - 1,
+  }));
+
+  return { available: true, messages: result };
 }
 
 async function getModUpTime(channelId, limit = 25) {
@@ -236,6 +302,7 @@ module.exports = {
   getTopChatters,
   getChannelTotals,
   getRecentModActions,
+  getModActionContext,
   getModUpTime,
   getModStats,
   getModeratorSummary,

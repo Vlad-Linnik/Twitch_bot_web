@@ -240,3 +240,33 @@ html.js .save-fab.save-visible {
     scale: 1;
   }
 }
+/* Odometer digits on the home page's stat tiles (public/js/home-stats.js).
+   Every character - digits AND group separators - is wrapped in the same .od-char
+   structure: an inline-block with overflow:hidden gets its baseline moved to its
+   bottom edge, so mixing wrapped digits with bare separator text would misalign
+   them. A changed digit's .od-col holds [old, new] stacked; .od-roll slides the
+   column up one row (-50% of its two-row height), then JS collapses it back to a
+   single row. */
+.od-char {
+  display: inline-block;
+  overflow: hidden;
+  height: 1.2em;
+  vertical-align: bottom;
+}
+.od-char .od-col {
+  display: block;
+}
+.od-char .od-col > span {
+  display: block;
+  height: 1.2em;
+  line-height: 1.2em;
+}
+.od-char .od-col.od-roll {
+  transition: transform 600ms cubic-bezier(0.25, 0.6, 0.2, 1);
+  transform: translateY(-50%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .od-char .od-col.od-roll {
+    transition: none;
+  }
+}

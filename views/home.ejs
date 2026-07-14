@@ -9,23 +9,26 @@
     </p>
   </section>
 
+  <%# data-stat keys match /stats.json's response; data-value carries the raw number so
+      public/js/home-stats.js can rebuild the odometer digits without parsing formatted text.
+      Values are locale-formatted with the SAME locale the client script uses (the page's),
+      so the first poll never "changes" a number that is actually equal. %>
+  <%
+    const statTiles = [
+      { key: 'commandsExecuted', label: t('home.statCommandsExecuted'), value: commandsExecuted },
+      { key: 'emotesUsed', label: t('home.statEmotesUsed'), value: emoteStats.totalUsageCount },
+      { key: 'emotesTracked', label: t('home.statEmotesTracked'), value: emoteStats.totalEntriesAdded },
+      { key: 'uniqueUsers', label: t('home.statUniqueUsers'), value: uniqueUsers },
+    ];
+  %>
   <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-16">
-    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('home.statCommandsExecuted') %></p>
-      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= commandsExecuted.toLocaleString() %></p>
-    </div>
-    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('home.statEmotesUsed') %></p>
-      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= emoteStats.totalUsageCount.toLocaleString() %></p>
-    </div>
-    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('home.statEmotesTracked') %></p>
-      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= emoteStats.totalEntriesAdded.toLocaleString() %></p>
-    </div>
-    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= t('home.statUniqueUsers') %></p>
-      <p class="text-2xl font-semibold text-neutral-100 mt-1"><%= uniqueUsers.toLocaleString() %></p>
-    </div>
+    <% statTiles.forEach(function(tile) { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+        <p class="text-neutral-500 text-xs uppercase tracking-wide"><%= tile.label %></p>
+        <p class="text-2xl font-semibold text-neutral-100 mt-1 tabular-nums"
+           data-stat="<%= tile.key %>" data-value="<%= tile.value %>"><%= tile.value.toLocaleString(locale) %></p>
+      </div>
+    <% }) %>
   </section>
 
   <section class="pb-24">
@@ -45,4 +48,5 @@
   </section>
 </main>
 
+<script src="/js/home-stats.js" defer></script>
 <%- include('partials/foot') %>

@@ -12,17 +12,15 @@
     <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.modStatsHeading') %></h2>
       <div class="flex items-center gap-4 flex-wrap">
-        <%# The toggle only exists when there are hidden rows for it to reveal - with every
-            registered mod already in the stats, it would be a control that does nothing. %>
-        <% if (inactiveMods.length > 0) { %>
-          <label class="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none">
-            <span class="toggle-switch">
-              <input type="checkbox" id="show-empty-mods" class="sr-only" />
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </span>
-            <%= t('statistics.showEmptyMods') %>
-          </label>
-        <% } %>
+        <%# Always rendered, even with nothing to reveal right now - a control that appears and
+            disappears between period switches reads as a glitch, not as a feature. %>
+        <label class="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none">
+          <span class="toggle-switch">
+            <input type="checkbox" id="show-empty-mods" class="sr-only" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </span>
+          <%= t('statistics.showEmptyMods') %>
+        </label>
         <%- include('partials/periodToggle', { periods, period, component: 'modstats' }) %>
       </div>
     </div>
@@ -129,23 +127,31 @@
             <th data-sort="action" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colAction') %></th>
             <th data-sort="mod" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colModerator') %></th>
             <th data-sort="target" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colTarget') %></th>
-            <th class="text-left font-medium px-4 py-2"><%= t('statistics.colReason') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('statistics.colDuration') %></th>
             <th data-sort="when" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colWhen') %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-neutral-800">
           <% actions.forEach(function(a) { %>
+            <%# data-id + data-tta drive the target-hover context popup (mod-stats.js): the
+                popup is only wired up when the moderator reacted within 45s of the target's
+                last message, so the logged history is actually what was acted on. %>
             <tr class="odd:bg-neutral-950 even:bg-neutral-900/40"
                 data-action="<%= a.action %>"
                 data-mod="<%= a.modName %>"
                 data-target="<%= a.targetName %>"
-                data-ts="<%= new Date(a.timestamp).getTime() %>">
+                data-ts="<%= new Date(a.timestamp).getTime() %>"
+                data-id="<%= a.id %>"
+                data-tta="<%= a.TTA ?? '' %>">
               <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= a.action %></td>
               <td class="px-4 py-2 whitespace-nowrap <%= a.modColor ? '' : 'text-neutral-400' %>"
                   <% if (a.modColor) { %>style="color: <%= a.modColor %>"<% } %>><%= a.modName %></td>
-              <td class="px-4 py-2 whitespace-nowrap <%= a.targetColor ? '' : 'text-neutral-400' %>"
+              <td class="px-4 py-2 whitespace-nowrap target-cell <%= a.targetColor ? '' : 'text-neutral-400' %>"
                   <% if (a.targetColor) { %>style="color: <%= a.targetColor %>"<% } %>><%= a.targetName %></td>
-              <td class="px-4 py-2 text-neutral-400"><%= a.reason || t('statistics.noReason') %></td>
+              <%# Reason didn't disappear - it moved into the tooltip of the duration cell %>
+              <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"<% if (a.reason) { %> title="<%= a.reason %>"<% } %>><%= a.durationLabel || t('statistics.noDuration') %></td>
+              <%# Server-side value = SERVER-timezone fallback for no-JS visitors; mod-stats.js
+                  re-renders this cell from data-ts in the viewer's own timezone. %>
               <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(a.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
             </tr>
           <% }) %>
@@ -156,7 +162,33 @@
       </table>
       </div>
     </div>
+
+    <%# Server-side pagination - plain links (period preserved), same full-reload philosophy as
+        the period toggle above. Hidden when everything fits on one page. %>
+    <% if (totalPages > 1) { %>
+      <% const pageUrl = (p) => `?period=${encodeURIComponent(period)}&page=${p}`; %>
+      <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+        <% if (page > 1) { %>
+          <a href="<%= pageUrl(page - 1) %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+        <% } else { %>
+          <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+        <% } %>
+        <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+        <% if (page < totalPages) { %>
+          <a href="<%= pageUrl(page + 1) %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+        <% } else { %>
+          <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+        <% } %>
+      </nav>
+    <% } %>
   </section>
+
+  <!-- Floating ban-context popup (target-hover in the actions table), filled by mod-stats.js.
+       data-* carry the translated strings so the client script stays locale-free. -->
+  <div id="ban-context" hidden
+       data-label-title="<%= t('statistics.ctxTitle') %>"
+       data-label-none="<%= t('statistics.ctxNoMessages') %>"
+       class="fixed z-50 pointer-events-none rounded-lg border border-neutral-700 bg-neutral-900/95 shadow-xl shadow-black/50 p-3 w-80 max-w-[90vw]"></div>
 </main>
 
 <script src="/js/mod-stats.js" defer></script>

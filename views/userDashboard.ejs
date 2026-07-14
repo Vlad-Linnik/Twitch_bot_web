@@ -10,8 +10,10 @@
     channel: channel.channelLogin,
     username: identity.currentUserName,
     period,
+    locale,
     maxHeatmapDays,
     activity,
+    heatmap,
     clouds,
     mentions,
     canModerate,
@@ -83,8 +85,15 @@
       <%- include('partials/periodToggle', { periods, period, component: 'activity' }) %>
     </div>
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <svg id="activity-chart" class="w-full" viewBox="0 0 800 200" preserveAspectRatio="none" role="img"
-           aria-label="<%= t('userDashboard.messageVolume') %>"></svg>
+      <%# Axis labels are HTML, not SVG <text>: the svg stretches (preserveAspectRatio="none"),
+          which would distort glyphs. The Y gutter is a justify-between column matching the svg's
+          height; the X row sits under the plot, inset by the gutter width. Both filled by JS. %>
+      <div class="flex items-stretch gap-2">
+        <div id="activity-yaxis" class="w-10 shrink-0 flex flex-col justify-between items-end text-[10px] leading-none text-neutral-500 tabular-nums py-0.5"></div>
+        <svg id="activity-chart" class="flex-1 min-w-0 h-48" viewBox="0 0 800 200" preserveAspectRatio="none" role="img"
+             aria-label="<%= t('userDashboard.messageVolume') %>"></svg>
+      </div>
+      <div id="activity-xaxis" class="flex justify-between text-[10px] leading-none text-neutral-500 tabular-nums mt-1.5 ml-12"></div>
       <p class="text-xs text-neutral-600 mt-2" data-empty hidden><%= t('userDashboard.noData') %></p>
     </div>
   </section>
@@ -96,12 +105,14 @@
         <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.wordCloud') %></h2>
         <%- include('partials/periodToggle', { periods, period, component: 'clouds' }) %>
       </div>
-      <div id="word-cloud" class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 min-h-40 flex flex-wrap gap-x-3 gap-y-1 items-center content-start"></div>
+      <%# relative + no padding: cloud-layout.js positions children absolutely (padding is baked
+          into its own PAD constant) and grows the height past min-h as the cloud fills in. %>
+      <div id="word-cloud" class="relative overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 min-h-40"></div>
       <p id="cloud-sampled" class="text-xs text-amber-600/80 mt-2" hidden><%= t('userDashboard.sampled') %></p>
     </div>
     <div>
       <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('userDashboard.emoteCloud') %></h2>
-      <div id="emote-cloud" class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 min-h-40 flex flex-wrap gap-x-3 gap-y-1 items-center content-start"></div>
+      <div id="emote-cloud" class="relative overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 min-h-40"></div>
       <p class="text-xs text-neutral-600 mt-2" id="emote-empty" hidden><%= t('userDashboard.noTrackedEmotes') %></p>
     </div>
   </section>
@@ -114,19 +125,38 @@
     </div>
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex items-center gap-6">
       <div class="shrink-0">
-        <p class="text-3xl font-semibold text-neutral-100" id="mention-total"><%= mentions.total.toLocaleString() %></p>
+        <%# Follows the period toggle (the repo scopes `total` to the selected range). %>
+        <p class="text-3xl font-semibold text-neutral-100 tabular-nums" id="mention-total"><%= mentions.total.toLocaleString(locale) %></p>
         <p class="text-xs text-neutral-500 uppercase tracking-wide"><%= t('userDashboard.mentionsTotal') %></p>
       </div>
-      <svg id="mention-spark" class="flex-1 h-12" viewBox="0 0 400 48" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-stretch gap-2">
+          <div id="mention-yaxis" class="w-8 shrink-0 flex flex-col justify-between items-end text-[10px] leading-none text-neutral-500 tabular-nums py-0.5"></div>
+          <svg id="mention-spark" class="flex-1 min-w-0 h-24" viewBox="0 0 400 96" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
+        <div id="mention-xaxis" class="flex justify-between text-[10px] leading-none text-neutral-500 tabular-nums mt-1.5 ml-10"></div>
+      </div>
     </div>
   </section>
 
   <!-- Activity heatmap (GitHub-style, capped at MAX_HEATMAP_DAYS) -->
   <section class="mb-10">
     <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('userDashboard.heatmap') %></h2>
-    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 overflow-x-auto">
+    <%# w-fit + mx-auto: the card hugs the calendar and centers instead of stretching to the
+        section width; max-w-full + overflow keep it scrollable on narrow screens. %>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-5 w-fit max-w-full mx-auto overflow-x-auto">
       <svg id="heatmap" role="img" aria-label="<%= t('userDashboard.heatmap') %>"></svg>
-      <p class="text-xs text-neutral-600 mt-2"><%= t('userDashboard.heatmapCap') %></p>
+      <div class="flex items-center gap-4 mt-3 text-xs text-neutral-600">
+        <span><%= t('userDashboard.heatmapCap') %></span>
+        <span class="flex items-center gap-1 ml-auto">
+          <%= t('userDashboard.heatmapLess') %>
+          <%# Same ramp renderHeatmap uses (user-dashboard.js `shade()`) - keep in sync. %>
+          <% ['#171717', '#3b1d52', '#5b2a80', '#7e3ab8', '#a855f7'].forEach(function(color) { %>
+            <span class="inline-block w-2.5 h-2.5 rounded-[2px]" style="background:<%= color %>"></span>
+          <% }) %>
+          <%= t('userDashboard.heatmapMore') %>
+        </span>
+      </div>
     </div>
   </section>
 
@@ -163,6 +193,7 @@
     history, raw message bodies), so it must be escaped against a "</script>" breakout.
     See lib/safeJson.js. %>
 <script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
+<script src="/js/cloud-layout.js" defer></script>
 <script src="/js/user-dashboard.js" defer></script>
 
 <%- include('partials/foot') %>

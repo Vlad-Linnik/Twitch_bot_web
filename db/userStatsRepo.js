@@ -95,8 +95,8 @@ function nicknameHistory(identity) {
 }
 
 /**
- * Message counts bucketed by day - backs both the !countmsg chart and the activity heatmap
- * (same data, two renderings), so it is fetched once.
+ * Message counts bucketed by day - backs the activity heatmap (the volume chart uses
+ * getMessageVolume below, which re-buckets per period).
  *
  * Bucketing is done with $dateTrunc in Mongo rather than by reading every message into Node:
  * the server returns at most `days` rows regardless of whether the user sent 10 messages or
@@ -122,6 +122,60 @@ async function getDailyMessageCounts(channelLogin, userId, days = limits.MAX_HEA
     .toArray();
 
   return { days: cappedDays, start, buckets: rows };
+}
+
+/**
+ * Message counts for the volume chart, with a FIXED number of buckets per period.
+ *
+ * Day-bucketing alone (getDailyMessageCounts) made the short periods useless as charts: a
+ * "day" chart had at most 2 points, "week" 7, while "all" had ~155 - so the line's density
+ * said more about the toggle than about the user. Instead each period picks a bucket width
+ * that lands every period at the same ~24-31 points, and the series is ZERO-FILLED so a quiet
+ * stretch draws as a flat line at 0 rather than being silently skipped (the old behaviour,
+ * which also made the x-axis non-linear: consecutive points could be a day or a month apart).
+ *
+ * Grouping is by integer bucket index relative to `start` - not $dateTrunc - so the bucket
+ * boundaries are exactly the ones the zero-fill loop generates, with no timezone/anchor
+ * mismatch between Mongo and Node. Windows are rolling (now - N) rather than calendar-aligned:
+ * "day" means the last 24 hours.
+ */
+const VOLUME_BUCKETS = {
+  day: { bucketMs: 3600000, count: 24 }, //  1h x 24  = 24h
+  week: { bucketMs: 6 * 3600000, count: 28 }, //  6h x 28  = 7d
+  month: { bucketMs: 86400000, count: 30 }, //  1d x 30  = 30d
+  all: { bucketMs: 5 * 86400000, count: 31 }, //  5d x 31  = 155d = MAX_HEATMAP_DAYS
+};
+
+async function getMessageVolume(channelLogin, userId, requestedPeriod) {
+  const { messages } = await ensureInitialized();
+  const period = limits.resolvePeriod(requestedPeriod);
+  const { bucketMs, count } = VOLUME_BUCKETS[period];
+
+  const end = new Date();
+  const start = new Date(end.getTime() - bucketMs * count);
+
+  const rows = await messages
+    .aggregate(
+      [
+        { $match: { channel: withHash(channelLogin), userId: String(userId), timestamp: { $gte: start } } },
+        {
+          $group: {
+            _id: { $floor: { $divide: [{ $subtract: ["$timestamp", start] }, bucketMs] } },
+            count: { $sum: 1 },
+          },
+        },
+      ],
+      { allowDiskUse: false }
+    )
+    .toArray();
+
+  const byIndex = new Map(rows.map((r) => [Math.min(Math.max(r._id, 0), count - 1), r.count]));
+  const buckets = [];
+  for (let i = 0; i < count; i++) {
+    buckets.push({ date: new Date(start.getTime() + i * bucketMs), count: byIndex.get(i) ?? 0 });
+  }
+
+  return { period, bucketMs, start, buckets };
 }
 
 /**
@@ -155,7 +209,12 @@ async function getLifetimeStanding(channelLogin, userId) {
  * Summing across every known nickname is what makes the number correct, and is precisely why
  * UserIdentities keeps the history.
  *
- * `total` comes from the precomputed all-time rows (epoch bucket); `daily` is the trend line.
+ * `total` FOLLOWS THE PERIOD: the sum of the ranged days for day/week/month, and the precomputed
+ * all-time row (epoch bucket) for `all` - so the headline number always describes the same window
+ * the trend next to it draws. `daily` is zero-filled (a day with no mentions is a 0 point, not a
+ * missing one), and `all` is re-binned to 5-day bins so its point count (~31) stays in the same
+ * range as the other periods instead of ~155. Mentions only exist at day granularity
+ * (UserMentionStats is the bot's daily rollup), so `day` is honestly short: 2 points.
  */
 async function getMentionStats(channelLogin, identity, requestedPeriod) {
   const { userMentionStats } = await ensureInitialized();
@@ -168,32 +227,57 @@ async function getMentionStats(channelLogin, identity, requestedPeriod) {
   const known = [...new Set(logins)];
   if (known.length === 0) return { period, total: 0, daily: [], aliasesCounted: 0 };
 
-  const allTime = await userMentionStats
-    .aggregate([
-      { $match: { channel, mentionedLogin: { $in: known }, date: LIFETIME_BUCKET } },
-      { $group: { _id: null, total: { $sum: "$count" } } },
-    ])
-    .toArray();
-
   const days = { day: 1, week: 7, month: 30, all: limits.MAX_HEATMAP_DAYS }[period] ?? 7;
   const start = dayBucket(new Date(Date.now() - days * 86400000));
 
-  const daily = await userMentionStats
-    .aggregate(
-      [
-        // $gte start also excludes the epoch row, so the all-time total never leaks into the trend.
-        { $match: { channel, mentionedLogin: { $in: known }, date: { $gte: start } } },
-        { $group: { _id: "$date", count: { $sum: "$count" } } },
-        { $sort: { _id: 1 } },
-        { $project: { _id: 0, date: "$_id", count: 1 } },
-      ],
-      { allowDiskUse: false }
-    )
-    .toArray();
+  const [allTime, rows] = await Promise.all([
+    userMentionStats
+      .aggregate([
+        { $match: { channel, mentionedLogin: { $in: known }, date: LIFETIME_BUCKET } },
+        { $group: { _id: null, total: { $sum: "$count" } } },
+      ])
+      .toArray(),
+    userMentionStats
+      .aggregate(
+        [
+          // $gte start also excludes the epoch row, so the all-time total never leaks into the trend.
+          { $match: { channel, mentionedLogin: { $in: known }, date: { $gte: start } } },
+          { $group: { _id: "$date", count: { $sum: "$count" } } },
+          { $sort: { _id: 1 } },
+          { $project: { _id: 0, date: "$_id", count: 1 } },
+        ],
+        { allowDiskUse: false }
+      )
+      .toArray(),
+  ]);
+
+  // Zero-fill: one point per calendar day from `start` through today. Stepping with setDate
+  // (not += 86400000) keeps the cursor at the same local noon dayBucket() writes, even across
+  // a DST change, so the map keys always line up.
+  const byDay = new Map(rows.map((r) => [new Date(r.date).getTime(), r.count]));
+  let daily = [];
+  const cursor = new Date(start);
+  const last = dayBucket(new Date());
+  while (cursor.getTime() <= last.getTime()) {
+    daily.push({ date: new Date(cursor), count: byDay.get(cursor.getTime()) ?? 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const rangedTotal = daily.reduce((sum, d) => sum + d.count, 0);
+
+  if (period === "all") {
+    const BIN_DAYS = 5; // mirrors VOLUME_BUCKETS.all, so both charts land at ~31 points
+    const binned = [];
+    for (let i = 0; i < daily.length; i += BIN_DAYS) {
+      const slice = daily.slice(i, i + BIN_DAYS);
+      binned.push({ date: slice[0].date, count: slice.reduce((sum, d) => sum + d.count, 0) });
+    }
+    daily = binned;
+  }
 
   return {
     period,
-    total: allTime[0]?.total ?? 0,
+    total: period === "all" ? allTime[0]?.total ?? 0 : rangedTotal,
     daily,
     aliasesCounted: known.length,
   };
@@ -204,6 +288,7 @@ module.exports = {
   resolveUserIds,
   nicknameHistory,
   getDailyMessageCounts,
+  getMessageVolume,
   getLifetimeStanding,
   getMentionStats,
 };
