@@ -3,12 +3,40 @@ const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
 const countersRepo = require("../db/countersRepo");
-const { requireLevel } = require("../middleware/permissions");
+const modsRepo = require("../db/modsRepo");
+const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
+const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
+const profileCacheRepo = require("../db/profileCacheRepo");
+const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { MAX_LIST_ITEMS, sanitizeWord, isValidHttpUrl, parseSubmittedConfig } = require("../lib/settingsValidation");
+const { diffConfig } = require("../lib/settingsDiff");
 
 const router = express.Router();
+
+const CHANGE_LOG_PER_PAGE = 25;
+
+// Writes one SettingsChangeLog row per changed top-level (or per-command) field - called after
+// every successful channelConfigRepo.saveConfig() so "before" must be the config snapshot taken
+// BEFORE that save (the main POST and the config sub-pages already fetch `existing` for
+// parseSubmittedConfig; the word-list/standalone routes must snapshot it themselves first).
+async function logConfigChanges(channelLogin, user, before, after) {
+  const changes = diffConfig(before, after);
+  await Promise.all(
+    changes.map((c) =>
+      settingsChangeLogRepo.logChange({
+        channelLogin,
+        user,
+        category: "settings",
+        action: "update",
+        target: c.field,
+        before: c.before,
+        after: c.after,
+      })
+    )
+  );
+}
 
 // Settings-type forms are saved two ways: public/js/autosave.js fetches with
 // `Accept: application/json` and needs a JSON status back, while the no-JS
@@ -36,13 +64,14 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
       customCommandCount: customCommands.length,
       counterCount: counters.length,
       saved: req.query.saved === "1",
+      canManageModerators: req.permissionLevel <= 1,
     });
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/:channel/settings", autosaveLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -68,6 +97,7 @@ router.post("/:channel/settings", autosaveLimiter, requireLevel(2), verifyToken,
     }
 
     await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
+    await logConfigChanges(req.params.channel, req.user, existing, parsed);
 
     respondSaved(req, res, `/${req.params.channel}/settings?saved=1`);
   } catch (err) {
@@ -93,7 +123,7 @@ function registerConfigSubPage(basePath, viewName, getExtras = null) {
     }
   });
 
-  router.post(`/:channel${basePath}`, autosaveLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}`, autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -101,6 +131,7 @@ function registerConfigSubPage(basePath, viewName, getExtras = null) {
       const existing = await channelConfigRepo.getConfig(req.params.channel);
       const parsed = parseSubmittedConfig(req.body, existing);
       await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
+      await logConfigChanges(req.params.channel, req.user, existing, parsed);
 
       respondSaved(req, res, `/${req.params.channel}${basePath}?saved=1`);
     } catch (err) {
@@ -116,7 +147,10 @@ registerConfigSubPage("/settings/counters", "channelCountersSettings");
 // their own sub-pages (search + add/edit/delete instead of one big textarea
 // blob) - both are just a flat string array on the config, so the add/edit/
 // delete routes share this factory instead of tripling the same CRUD logic.
-function registerWordListRoutes(basePath, viewName, getList) {
+// targetLabel names the list in SettingsChangeLog entries (e.g. "bannedWords.words") -
+// derived once per registration rather than from basePath, since the two aren't always
+// the same shape as the underlying config field.
+function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
   router.get(`/:channel${basePath}`, requireLevel(2), async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
@@ -133,17 +167,22 @@ function registerWordListRoutes(basePath, viewName, getList) {
     }
   });
 
-  router.post(`/:channel${basePath}/add`, settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}/add`, settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
 
       const config = await channelConfigRepo.getConfig(req.params.channel);
       const words = getList(config);
+      const before = [...words];
       const word = sanitizeWord(req.body.word);
       if (word && !words.includes(word) && words.length < MAX_LIST_ITEMS) {
         words.push(word);
         await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+        await settingsChangeLogRepo.logChange({
+          channelLogin: req.params.channel, user: req.user, category: "settings",
+          action: "add", target: targetLabel, before, after: [...words],
+        });
       }
       res.redirect(`/${req.params.channel}${basePath}`);
     } catch (err) {
@@ -151,18 +190,23 @@ function registerWordListRoutes(basePath, viewName, getList) {
     }
   });
 
-  router.post(`/:channel${basePath}/edit`, settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}/edit`, settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
 
       const config = await channelConfigRepo.getConfig(req.params.channel);
       const words = getList(config);
+      const before = [...words];
       const index = parseInt(req.body.index, 10);
       const word = sanitizeWord(req.body.word);
       if (word && Number.isInteger(index) && index >= 0 && index < words.length) {
         words[index] = word;
         await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+        await settingsChangeLogRepo.logChange({
+          channelLogin: req.params.channel, user: req.user, category: "settings",
+          action: "update", target: targetLabel, before, after: [...words],
+        });
       }
       res.redirect(`/${req.params.channel}${basePath}`);
     } catch (err) {
@@ -170,17 +214,22 @@ function registerWordListRoutes(basePath, viewName, getList) {
     }
   });
 
-  router.post(`/:channel${basePath}/delete`, settingsWriteLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}/delete`, settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
 
       const config = await channelConfigRepo.getConfig(req.params.channel);
       const words = getList(config);
+      const before = [...words];
       const index = parseInt(req.body.index, 10);
       if (Number.isInteger(index) && index >= 0 && index < words.length) {
         words.splice(index, 1);
         await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+        await settingsChangeLogRepo.logChange({
+          channelLogin: req.params.channel, user: req.user, category: "settings",
+          action: "delete", target: targetLabel, before, after: [...words],
+        });
       }
       res.redirect(`/${req.params.channel}${basePath}`);
     } catch (err) {
@@ -189,17 +238,24 @@ function registerWordListRoutes(basePath, viewName, getList) {
   });
 }
 
-registerWordListRoutes("/settings/banned-words", "channelBannedWords", (config) => config.bannedWords.words);
-registerWordListRoutes("/settings/spam-signatures", "channelSpamSignatures", (config) => config.spamSignatures);
+registerWordListRoutes("/settings/banned-words", "channelBannedWords", (config) => config.bannedWords.words, "bannedWords.words");
+registerWordListRoutes("/settings/spam-signatures", "channelSpamSignatures", (config) => config.spamSignatures, "spamSignatures");
 
-router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
     const config = await channelConfigRepo.getConfig(req.params.channel);
+    const before = config.bannedWords.timeoutReason;
     config.bannedWords.timeoutReason = sanitizeWord(req.body.timeoutReason);
     await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+    if (before !== config.bannedWords.timeoutReason) {
+      await settingsChangeLogRepo.logChange({
+        channelLogin: req.params.channel, user: req.user, category: "settings",
+        action: "update", target: "bannedWords.timeoutReason", before, after: config.bannedWords.timeoutReason,
+      });
+    }
 
     respondSaved(req, res, `/${req.params.channel}/settings/banned-words`);
   } catch (err) {
@@ -210,14 +266,21 @@ router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, r
 // The banned-word detection feature switch (the bot's commands.insult.enabled flag). It lives
 // on the Banned Words page, next to the word list it gates, not in the commands table - it has
 // no chat signature and never behaved like a command.
-router.post("/:channel/settings/banned-words/detection-toggle", autosaveLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/banned-words/detection-toggle", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
     const config = await channelConfigRepo.getConfig(req.params.channel);
+    const before = !!config.commands.insult?.enabled;
     config.commands.insult = { ...config.commands.insult, enabled: req.body.detectionEnabled === "on" };
     await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+    if (before !== config.commands.insult.enabled) {
+      await settingsChangeLogRepo.logChange({
+        channelLogin: req.params.channel, user: req.user, category: "settings",
+        action: "update", target: "commands.insult.enabled", before, after: config.commands.insult.enabled,
+      });
+    }
 
     respondSaved(req, res, `/${req.params.channel}/settings/banned-words`);
   } catch (err) {
@@ -226,16 +289,110 @@ router.post("/:channel/settings/banned-words/detection-toggle", autosaveLimiter,
 });
 
 // Ban reason shown to users caught by a spam signature - mirrors banned-words' timeout reason.
-router.post("/:channel/settings/spam-signatures/reason", autosaveLimiter, requireLevel(2), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/spam-signatures/reason", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
     const config = await channelConfigRepo.getConfig(req.params.channel);
+    const before = config.spamBanReason;
     config.spamBanReason = sanitizeWord(req.body.spamBanReason);
     await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+    if (before !== config.spamBanReason) {
+      await settingsChangeLogRepo.logChange({
+        channelLogin: req.params.channel, user: req.user, category: "settings",
+        action: "update", target: "spamBanReason", before, after: config.spamBanReason,
+      });
+    }
 
     respondSaved(req, res, `/${req.params.channel}/settings/spam-signatures`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Read-only: who changed what and when (db/settingsChangeLogRepo.js). Any tier <= 2 (owner,
+// admin, or moderator) can view - the moderator identity was already snapshotted at write time,
+// so no extra profile lookups are needed to render it.
+router.get("/:channel/settings/change-log", requireLevel(2), async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const requestedPage = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const { entries, totalPages, page } = await settingsChangeLogRepo.listRecent(req.params.channel, {
+      page: requestedPage,
+      limit: CHANGE_LOG_PER_PAGE,
+    });
+
+    res.render("channelSettingsChangeLog", { channel, entries, page, totalPages });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Owner-only: per-moderator toggle for whether that moderator may EDIT settings/commands/
+// counters (db/modPermissionOverridesRepo.js) - viewing is unaffected. requireLevel(1), not (2):
+// only the owner (or admin) should get to reassign another moderator's permissions.
+router.get("/:channel/settings/moderators", requireLevel(1), async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const modsListDoc = await modsRepo.getModerators(channel.channelId);
+    const moderatorIds = modsListDoc?.moderators || [];
+
+    const [profiles, overrides] = await Promise.all([
+      profileCacheRepo.getOrFetchProfiles(moderatorIds).catch(() => new Map()),
+      modPermissionOverridesRepo.listForChannel(channel.channelId),
+    ]);
+
+    const moderators = moderatorIds.map((id) => {
+      const profile = profiles.get(String(id));
+      const override = overrides.get(String(id));
+      return {
+        userId: id,
+        userName: profile?.displayName || id,
+        canEditSettings: override?.canEditSettings !== false,
+      };
+    });
+
+    res.render("channelModeratorPermissions", { channel, moderators, saved: req.query.saved === "1" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:channel/settings/moderators", settingsWriteLimiter, requireLevel(1), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const modsListDoc = await modsRepo.getModerators(channel.channelId);
+    const moderatorIds = modsListDoc?.moderators || [];
+    const overrides = await modPermissionOverridesRepo.listForChannel(channel.channelId);
+    const allowedIds = new Set(
+      moderatorIds.filter((id) => req.body[`allow.${id}`] === "on")
+    );
+
+    for (const id of moderatorIds) {
+      const wasAllowed = overrides.get(String(id))?.canEditSettings !== false;
+      const nowAllowed = allowedIds.has(id);
+      if (wasAllowed === nowAllowed) continue;
+
+      if (nowAllowed) {
+        await modPermissionOverridesRepo.allow(channel.channelId, id);
+      } else {
+        await modPermissionOverridesRepo.deny(channel.channelId, id, req.user.userId);
+      }
+      await settingsChangeLogRepo.logChange({
+        channelLogin: req.params.channel, user: req.user, category: "settings",
+        action: "update", target: `moderator-permission:${id}`,
+        before: wasAllowed, after: nowAllowed,
+      });
+    }
+
+    res.redirect(`/${req.params.channel}/settings/moderators?saved=1`);
   } catch (err) {
     next(err);
   }

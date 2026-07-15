@@ -1,0 +1,51 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('moderatorPermissions.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+  <h1 class="text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('moderatorPermissions.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('moderatorPermissions.intro') %></p>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('moderatorPermissions.saved') %>
+    </div>
+  <% } %>
+
+  <form method="post" action="/<%= channel.channelLogin %>/settings/moderators" data-transition="instant">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-neutral-900 text-neutral-400">
+          <tr>
+            <th class="text-left font-medium px-4 py-2"><%= t('moderatorPermissions.colModerator') %></th>
+            <th class="text-right font-medium px-4 py-2"><%= t('moderatorPermissions.colCanEdit') %></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800">
+          <% moderators.forEach(function(m) { %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+              <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= m.userName %></td>
+              <td class="px-4 py-2 text-right">
+                <label class="toggle-switch">
+                  <input type="checkbox" name="allow.<%= m.userId %>" <%= m.canEditSettings ? 'checked' : '' %> class="sr-only" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (moderators.length === 0) { %>
+            <tr><td colspan="2" class="px-4 py-6 text-center text-neutral-500"><%= t('moderatorPermissions.empty') %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (moderators.length > 0) { %>
+      <button type="submit" class="mt-6 px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('moderatorPermissions.save') %></button>
+    <% } %>
+  </form>
+</main>
+
+<%- include('partials/foot') %>

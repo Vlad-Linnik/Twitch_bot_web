@@ -227,10 +227,14 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
       .map((m) => m.userId);
 
     // Moderators registered in ModsList but with no ModeratorStatistics rows in the selected
-    // period - shown dimmed behind the "show moderators with no data" toggle.
+    // period - shown dimmed behind the "show moderators with no data" toggle. The channel owner
+    // is never in ModsList (Twitch's channel.moderate never grants the broadcaster "mod" status),
+    // so they're unioned in here explicitly - they still moderate their own channel and should
+    // always appear, dimmed until the bot's next activity cycle gives them a real summary row.
     const withData = new Set(modSummary.map((m) => String(m.userId)));
     const inactiveIds = [
       ...(modsListDoc?.moderators || []),
+      String(channel.channelId),
       ...zeroSummaryIds,
     ].filter((id, i, arr) => !withData.has(String(id)) && arr.indexOf(id) === i);
 

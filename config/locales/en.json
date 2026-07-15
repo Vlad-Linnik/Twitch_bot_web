@@ -276,6 +276,10 @@
     },
     "manageCustomCommands": "Manage this channel's custom commands",
     "manageCounters": "Manage this channel's counters",
+    "changeLogHeading": "Change log",
+    "changeLogIntro": "See who changed what",
+    "moderatorsHeading": "Moderator permissions",
+    "moderatorsIntro": "Choose who can edit settings",
     "commandCountSuffix": "custom commands",
     "counterCountSuffix": "counters",
     "remSignatureLabel": "Removal signature",
@@ -293,6 +297,37 @@
     "autosaveSaving": "Saving…",
     "autosaveSaved": "Saved",
     "autosaveError": "Failed to save — check the values or reload the page"
+  },
+  "settingsChangeLog": {
+    "title": "Change log",
+    "intro": "Every settings, command, and counter change made here, newest first.",
+    "empty": "No changes yet.",
+    "colWhen": "When",
+    "colModerator": "Moderator",
+    "colCategory": "Area",
+    "colAction": "Action",
+    "colTarget": "Changed",
+    "colBefore": "Before",
+    "colAfter": "After",
+    "category": {
+      "settings": "Settings",
+      "custom_command": "Custom command",
+      "counter": "Counter"
+    },
+    "action": {
+      "add": "Added",
+      "update": "Updated",
+      "delete": "Deleted"
+    }
+  },
+  "moderatorPermissions": {
+    "title": "Moderator permissions",
+    "intro": "Choose which moderators may edit this channel's bot settings, custom commands, and counters. Everyone can still view them regardless of this setting.",
+    "colModerator": "Moderator",
+    "colCanEdit": "Can edit settings",
+    "empty": "No moderators registered for this channel yet.",
+    "save": "Save",
+    "saved": "Permissions updated."
   },
   "accountSettings": {
     "title": "Settings",

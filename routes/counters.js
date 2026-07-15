@@ -8,7 +8,8 @@
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const countersRepo = require("../db/countersRepo");
-const { requireLevel } = require("../middleware/permissions");
+const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
+const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const { parseCounter, normalizeName, MAX_COUNT } = require("../lib/counterValidation");
@@ -50,7 +51,7 @@ router.get("/:channel/counters", requireLevel(2), async (req, res, next) => {
 router.post(
   "/:channel/counters",
   settingsWriteLimiter,
-  requireLevel(2),
+  requireSettingsEditAccess(),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -62,7 +63,14 @@ router.post(
       if (req.body.action === "delete") {
         const name = normalizeName(req.body.name);
         if (!name) return res.redirect(`${back}?error=name_required`);
+        const before = await countersRepo.findOne(channel.channelLogin, name);
         await countersRepo.remove(channel.channelLogin, name);
+        if (before) {
+          await settingsChangeLogRepo.logChange({
+            channelLogin: channel.channelLogin, user: req.user, category: "counter",
+            action: "delete", target: name, before, after: null,
+          });
+        }
         return res.redirect(`${back}?saved=deleted`);
       }
 
@@ -74,7 +82,12 @@ router.post(
       });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
 
-      await countersRepo.save(channel.channelLogin, parsed.counter);
+      const before = await countersRepo.findOne(channel.channelLogin, parsed.counter.counter_name);
+      const after = await countersRepo.save(channel.channelLogin, parsed.counter);
+      await settingsChangeLogRepo.logChange({
+        channelLogin: channel.channelLogin, user: req.user, category: "counter",
+        action: before ? "update" : "add", target: parsed.counter.counter_name, before, after,
+      });
       // The running bot re-reads counters every 10s (CustomCommands.REFRESH_INTERVAL_MS ->
       // Counter.refreshFromDatabase), so this is live in chat within seconds - no restart needed.
       res.redirect(`${back}?saved=1`);

@@ -62,6 +62,16 @@
         <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.counters') %></h2>
         <p class="text-neutral-500 text-sm mt-1"><%= counterCount %> <%= t('channelSettings.counterCountSuffix') %></p>
       </a>
+      <a href="/<%= channel.channelLogin %>/settings/change-log" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.changeLogHeading') %></h2>
+        <p class="text-neutral-500 text-sm mt-1"><%= t('channelSettings.changeLogIntro') %></p>
+      </a>
+      <% if (canManageModerators) { %>
+        <a href="/<%= channel.channelLogin %>/settings/moderators" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+          <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.moderatorsHeading') %></h2>
+          <p class="text-neutral-500 text-sm mt-1"><%= t('channelSettings.moderatorsIntro') %></p>
+        </a>
+      <% } %>
     </section>
 
     <section>

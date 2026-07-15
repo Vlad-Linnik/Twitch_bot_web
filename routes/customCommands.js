@@ -11,7 +11,8 @@
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
-const { requireLevel } = require("../middleware/permissions");
+const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
+const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const { parseCommand, normalizeName, MIN_TIMER_SECONDS, MAX_RESULT_LENGTH } = require("../lib/commandValidation");
@@ -59,7 +60,7 @@ router.get("/:channel/commands", requireLevel(2), async (req, res, next) => {
 router.post(
   "/:channel/commands",
   settingsWriteLimiter,
-  requireLevel(2),
+  requireSettingsEditAccess(),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -71,7 +72,14 @@ router.post(
       if (req.body.action === "delete") {
         const name = normalizeName(req.body.name);
         if (!name) return res.redirect(`${back}?error=name_required`);
+        const before = await customCommandsRepo.findOne(channel.channelLogin, name);
         await customCommandsRepo.remove(channel.channelLogin, name);
+        if (before) {
+          await settingsChangeLogRepo.logChange({
+            channelLogin: channel.channelLogin, user: req.user, category: "custom_command",
+            action: "delete", target: name, before, after: null,
+          });
+        }
         return res.redirect(`${back}?saved=deleted`);
       }
 
@@ -84,7 +92,12 @@ router.post(
       });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
 
-      await customCommandsRepo.save(channel.channelLogin, parsed.command);
+      const before = await customCommandsRepo.findOne(channel.channelLogin, parsed.command.command);
+      const after = await customCommandsRepo.save(channel.channelLogin, parsed.command);
+      await settingsChangeLogRepo.logChange({
+        channelLogin: channel.channelLogin, user: req.user, category: "custom_command",
+        action: before ? "update" : "add", target: parsed.command.command, before, after,
+      });
       // The running bot re-reads custom_commands every 10s (CustomCommands.REFRESH_INTERVAL_MS),
       // so this is live in chat within seconds - no restart, no extra signal to send.
       res.redirect(`${back}?saved=1`);

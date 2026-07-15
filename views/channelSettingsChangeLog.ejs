@@ -1,0 +1,70 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('settingsChangeLog.title') }) %>
+<%- include('partials/nav') %>
+
+<%
+  // before/after can be any JSON value (string, array, object, boolean, null) - render it
+  // compactly and cap the length so a long word list or command blob doesn't blow up the row.
+  function fmt(value) {
+    if (value === null || value === undefined) return '—';
+    const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return text.length > 120 ? text.slice(0, 120) + '…' : text;
+  }
+%>
+
+<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
+  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+  <h1 class="text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('settingsChangeLog.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('settingsChangeLog.intro') %></p>
+
+  <div class="rounded-lg border border-neutral-800 overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-neutral-900 text-neutral-400">
+        <tr>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colWhen') %></th>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colModerator') %></th>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colCategory') %></th>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colAction') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colTarget') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colBefore') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAfter') %></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-neutral-800">
+        <% entries.forEach(function(e) { %>
+          <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+            <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(e.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
+            <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= e.moderatorDisplayName || e.moderatorLogin || e.moderatorId %></td>
+            <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t('settingsChangeLog.category.' + e.category) %></td>
+            <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t('settingsChangeLog.action.' + e.action) %></td>
+            <td class="px-4 py-2 text-neutral-300 font-mono text-xs whitespace-nowrap"><%= e.target %></td>
+            <td class="px-4 py-2 text-neutral-500 text-xs max-w-xs truncate" title="<%= fmt(e.before) %>"><%= fmt(e.before) %></td>
+            <td class="px-4 py-2 text-neutral-500 text-xs max-w-xs truncate" title="<%= fmt(e.after) %>"><%= fmt(e.after) %></td>
+          </tr>
+        <% }) %>
+        <% if (entries.length === 0) { %>
+          <tr><td colspan="7" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
+        <% } %>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <% if (totalPages > 1) { %>
+    <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+      <% if (page > 1) { %>
+        <a href="?page=<%= page - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+      <% } %>
+      <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %>
+        <a href="?page=<%= page + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+      <% } %>
+    </nav>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>
