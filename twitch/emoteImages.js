@@ -13,6 +13,7 @@
 const axios = require("axios");
 const env = require("../config/env");
 const { ensureAppAccessToken } = require("./appToken");
+const channelConfigRepo = require("../db/channelConfigRepo");
 
 const GLOBAL_EMOTES_URL = "https://api.twitch.tv/helix/chat/emotes/global";
 const SEVEN_TV_API = "https://7tv.io/v3";
@@ -103,4 +104,14 @@ async function getEmoteImageMap(emoteSetUrl) {
   return new Map([...global, ...sevenTv]);
 }
 
-module.exports = { getEmoteImageMap, getGlobalEmoteImages, getSevenTvEmoteImages };
+// Join emote usage counts (text names) to real images from the channel's 7TV set + Twitch's
+// global emotes. An emote that resolves to no image (e.g. removed from the set since it was
+// counted) keeps imageUrl: null so the UI can fall back to its text form instead of dropping it.
+// Returns a NEW array - callers pass repo results that may be cached, never mutate them.
+async function withEmoteImages(channelLogin, emotes) {
+  const config = await channelConfigRepo.getConfig(channelLogin);
+  const imageMap = await getEmoteImageMap(config.sevenTv?.emoteSetUrl);
+  return emotes.map((e) => ({ ...e, imageUrl: imageMap.get(e.word) ?? null }));
+}
+
+module.exports = { getEmoteImageMap, getGlobalEmoteImages, getSevenTvEmoteImages, withEmoteImages };

@@ -11,12 +11,11 @@ const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const statsRepo = require("../db/statsRepo");
 const modsRepo = require("../db/modsRepo");
-const channelConfigRepo = require("../db/channelConfigRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const wordStatsRepo = require("../db/wordStatsRepo");
 const userStatsRepo = require("../db/userStatsRepo");
 const searchRepo = require("../db/searchRepo");
-const { getEmoteImageMap } = require("../twitch/emoteImages");
+const { withEmoteImages } = require("../twitch/emoteImages");
 const { requireLevel, computePermission } = require("../middleware/permissions");
 const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters");
 const limits = require("../config/statsLimits");
@@ -60,13 +59,68 @@ function requireLevelJson(maxLevel) {
   };
 }
 
-// Join emote usage counts (text names) to real images from the channel's 7TV set + Twitch's
-// global emotes. An emote that resolves to no image (e.g. removed from the set since it was
-// counted) keeps imageUrl: null so the UI can fall back to its text form instead of dropping it.
-async function withEmoteImages(channelLogin, emotes) {
-  const config = await channelConfigRepo.getConfig(channelLogin);
-  const imageMap = await getEmoteImageMap(config.sevenTv?.emoteSetUrl);
-  return emotes.map((e) => ({ ...e, imageUrl: imageMap.get(e.word) ?? null }));
+// --- Mod-action log filters --------------------------------------------------------------
+// Shared by the page render (bookmarks / first load / no-JS) and mod-actions.json (the
+// client's in-place pagination + filtering). Comma-separated multi-value params, the same
+// idiom the log search uses for its `users` param.
+const MOD_ACTION_TYPES = ["ban", "timeout", "delete", "warn"];
+const MOD_FILTER_MAX_IDS = 50;
+
+function parseModActionFilters(query) {
+  const csv = (value) => (typeof value === "string" && value ? value.split(",") : []);
+  const idList = (value) =>
+    [...new Set(csv(value).filter((id) => /^\d+$/.test(id)))].slice(0, MOD_FILTER_MAX_IDS);
+
+  const actions = [...new Set(csv(query.actions).filter((a) => MOD_ACTION_TYPES.includes(a)))];
+  const modIds = idList(query.mods);
+  // Include wins over exclude - the UI's include/exclude radio makes both-at-once impossible,
+  // this is just the server holding the same line for hand-built URLs.
+  const excludeModIds = modIds.length > 0 ? [] : idList(query.excludeMods);
+  return { actions, modIds, excludeModIds };
+}
+
+// One batched UserIdentities lookup + one batched profile fetch for a set of ids, returning
+// the same resolve() the mod page always used: UserIdentities name -> Helix display name ->
+// the raw id; color = Twitch chat color, fail-soft.
+async function buildNameResolver(ids) {
+  const [nameMap, profiles] = await Promise.all([
+    statsRepo.getUserNames(ids),
+    profileCacheRepo.getOrFetchProfiles(ids).catch(() => new Map()),
+  ]);
+  return (id) => {
+    const key = String(id);
+    const profile = profiles.get(key);
+    return {
+      userName: nameMap.get(key) || profile?.displayName || key,
+      color: profile?.chatColor ?? null,
+    };
+  };
+}
+
+// Raw ModeratorActionLogs docs -> the display rows both the EJS table and the JSON endpoint
+// serve. Duration replaces the old reason column: the actual restriction for timeouts,
+// "permanent" for bans, nothing for delete/warn (they don't restrict). The reason still rides
+// along as a hover title; TTA/id feed the target-hover context popup.
+function shapeActionRows(modActions, resolve, t) {
+  return modActions.map((a) => {
+    const mod = resolve(a.modID);
+    const target = resolve(a.userId);
+    const durationLabel =
+      a.action === "ban"
+        ? t("statistics.durationPermanent")
+        : a.action === "timeout" && a.durationMs != null
+          ? formatDuration(a.durationMs)
+          : null;
+    return {
+      ...a,
+      id: String(a._id),
+      modName: mod.userName,
+      modColor: mod.color,
+      targetName: target.userName,
+      targetColor: target.color,
+      durationLabel,
+    };
+  });
 }
 
 // The old single page split into two sub-pages; the bare URL stays alive as an entry point.
@@ -134,15 +188,31 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
     // full page reload - the table's markup (sort data-attrs, pentagon hookup) is too rich to
     // duplicate as a client-side template for a page this rarely visited.
     const period = req.query.period ? limits.resolvePeriod(req.query.period) : "all";
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const requestedPage = Math.max(1, parseInt(req.query.page, 10) || 1);
+    // The server render honors the same filter params the JSON endpoint takes, so a filtered
+    // URL survives refresh/bookmarks and works without JS.
+    const filters = parseModActionFilters(req.query);
 
-    const [{ actions: modActions, total: actionsTotal }, rawSummary, modsListDoc, broadcaster] =
-      await Promise.all([
-        statsRepo.getRecentModActions(channel.channelLogin, { page, limit: MOD_ACTIONS_PER_PAGE }),
-        statsRepo.getModeratorSummary(channel.channelId, period),
-        modsRepo.getModerators(channel.channelId),
-        profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
-      ]);
+    const [
+      { actions: modActions, totalPages, page },
+      rawSummary,
+      modsListDoc,
+      broadcaster,
+      actionModIds,
+    ] = await Promise.all([
+      statsRepo.getRecentModActions(channel.channelLogin, {
+        page: requestedPage,
+        limit: MOD_ACTIONS_PER_PAGE,
+        ...filters,
+      }),
+      statsRepo.getModeratorSummary(channel.channelId, period),
+      modsRepo.getModerators(channel.channelId),
+      profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+      // The moderator filter's option list: everyone who ever acted, not just the current
+      // ModsList - options built from the rendered page's 25 rows (the old way) made
+      // cross-page filtering impossible.
+      statsRepo.getModActionModIds(channel.channelLogin),
+    ]);
 
     // A summary row that aggregates to all zeros is "no data" as far as the viewer is
     // concerned - it belongs behind the toggle with the ModsList-only mods, not in the table
@@ -164,30 +234,25 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
       ...zeroSummaryIds,
     ].filter((id, i, arr) => !withData.has(String(id)) && arr.indexOf(id) === i);
 
-    // Every id the page renders: the summary rows, the inactive mods, and both nick columns of
-    // the action log. One batch UserIdentities lookup + one batched profile fetch (names, chat
-    // colors) - getOrFetchProfiles makes at most one Helix round-trip pair for the misses.
+    // The moderator filter's options: ModsList ∪ everyone in the action log's history.
+    const modOptionIds = [
+      ...new Set([...(modsListDoc?.moderators || []).map(String), ...actionModIds.map(String)]),
+    ];
+
+    // Every id the page renders: the summary rows, the inactive mods, both nick columns of
+    // the action log, and the filter options. One batch UserIdentities lookup + one batched
+    // profile fetch (names, chat colors) - getOrFetchProfiles makes at most one Helix
+    // round-trip pair for the misses.
     const allIds = [
       ...modSummary.map((m) => m.userId),
       ...inactiveIds,
       ...modActions.flatMap((a) => [a.modID, a.userId]),
+      ...modOptionIds,
     ];
-    const [nameMap, profiles] = await Promise.all([
-      statsRepo.getUserNames(allIds),
-      profileCacheRepo.getOrFetchProfiles(allIds).catch(() => new Map()),
-    ]);
-
     // Name precedence: UserIdentities (what the rest of the site shows) -> Helix display name
     // (fixes the raw numeric IDs that used to render for users the bot never saw chat from) ->
     // the id itself as a last resort. Color is the user's Twitch chat color, fail-soft.
-    const resolve = (id) => {
-      const key = String(id);
-      const profile = profiles.get(key);
-      return {
-        userName: nameMap.get(key) || profile?.displayName || key,
-        color: profile?.chatColor ?? null,
-      };
-    };
+    const resolve = await buildNameResolver(allIds);
 
     // Bot accounts (config/knownBots.js) are not people - they never belong in the moderator
     // statistics table, active or dimmed. Their recent ACTIONS stay visible below on purpose.
@@ -200,30 +265,12 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
         return { ...m, userName: m.userName || userName, color };
       })
       .filter((m) => !isKnownBotName(m.userName));
-    const actions = modActions.map((a) => {
-      const mod = resolve(a.modID);
-      const target = resolve(a.userId);
-      // Duration replaces the old reason column: the actual restriction for timeouts,
-      // "permanent" for bans, nothing for delete/warn (they don't restrict). The reason still
-      // rides along as a hover title. TTA/id feed the target-hover context popup.
-      const durationLabel =
-        a.action === "ban"
-          ? res.locals.t("statistics.durationPermanent")
-          : a.action === "timeout" && a.durationMs != null
-            ? formatDuration(a.durationMs)
-            : null;
-      return {
-        ...a,
-        id: String(a._id),
-        modName: mod.userName,
-        modColor: mod.color,
-        targetName: target.userName,
-        targetColor: target.color,
-        durationLabel,
-      };
-    });
+    const actions = shapeActionRows(modActions, resolve, res.locals.t);
 
-    const totalPages = Math.max(1, Math.ceil(actionsTotal / MOD_ACTIONS_PER_PAGE));
+    // Sorted by display name so the dropdown reads like a roster, not an id dump.
+    const modOptions = modOptionIds
+      .map((id) => ({ id, name: resolve(id).userName }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     res.render("statisticsMod", {
       channel,
@@ -235,12 +282,45 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
       totalPages,
       period,
       periods: limits.PERIODS,
+      actionTypes: MOD_ACTION_TYPES,
+      modOptions,
+      filterState: filters,
       tab: "mod",
     });
   } catch (err) {
     next(err);
   }
 });
+
+// The mod-actions table's in-place pagination + filtering. Same tier gate as the page
+// (requireLevel(2) there, JSON body here), same filter parsing, same row shape - the client
+// rebuilds exactly what the server rendered.
+router.get(
+  "/:channel/mod-actions.json",
+  requireLevelJson(2),
+  statsReadLimiter,
+  async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.channel);
+      if (!channel) return res.status(404).json({ error: "unknown_channel" });
+
+      const filters = parseModActionFilters(req.query);
+      const requestedPage = Math.max(1, parseInt(req.query.page, 10) || 1);
+
+      const { actions: modActions, total, totalPages, page } = await statsRepo.getRecentModActions(
+        channel.channelLogin,
+        { page: requestedPage, limit: MOD_ACTIONS_PER_PAGE, ...filters }
+      );
+
+      const resolve = await buildNameResolver(modActions.flatMap((a) => [a.modID, a.userId]));
+      const actions = shapeActionRows(modActions, resolve, res.locals.t);
+
+      res.json({ actions, total, totalPages, page });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // --- Period switches (JSON) ---------------------------------------------------------------
 

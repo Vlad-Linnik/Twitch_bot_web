@@ -5,7 +5,8 @@
   // Data handed to the client as JSON rather than re-fetched on load: the server already paid for
   // these queries to render the page, so making the browser ask again would double the cost of
   // every page view on a 2GB box. Period switches DO re-fetch (stats.json) - only the initial
-  // state is inlined.
+  // state is inlined. Privacy-hidden data arrives here as null (the route skips the query) -
+  // hiding only the markup while inlining the numbers would hide nothing.
   const bootstrap = {
     channel: channel.channelLogin,
     username: identity.currentUserName,
@@ -65,20 +66,39 @@
         <% } %>
       </div>
 
-      <p class="text-sm text-neutral-500 mt-1">
-        <% if (standing.rank) { %>
-          <%= t('userDashboard.rank') %> #<%= standing.rank.toLocaleString() %>
-          <span class="text-neutral-700">/</span> <%= standing.totalChatters.toLocaleString() %>
-          <span class="text-neutral-700">·</span>
-          <%= standing.totalMessages.toLocaleString() %> <%= t('userDashboard.messages') %>
-        <% } else { %>
-          <%= t('userDashboard.noMessages') %>
-        <% } %>
-      </p>
+      <% if (!profileHidden) { %>
+        <p class="text-sm text-neutral-500 mt-1">
+          <% if (standing.rank) { %>
+            <%= t('userDashboard.rank') %> #<%= standing.rank.toLocaleString() %>
+            <span class="text-neutral-700">/</span> <%= standing.totalChatters.toLocaleString() %>
+            <span class="text-neutral-700">·</span>
+            <%= standing.totalMessages.toLocaleString() %> <%= t('userDashboard.messages') %>
+          <% } else { %>
+            <%= t('userDashboard.noMessages') %>
+          <% } %>
+        </p>
+      <% } %>
     </div>
   </header>
 
-  <!-- Message count over time (visual !countmsg) -->
+  <% if (profileHidden) { %>
+    <section class="mb-10">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900 px-6 py-12 text-center">
+        <p class="text-lg font-semibold text-neutral-300 mb-1"><%= t('userDashboard.profileHiddenTitle') %></p>
+        <p class="text-sm text-neutral-500"><%= t('userDashboard.profileHiddenBody') %></p>
+        <%# Only the profile's owner learns WHERE to undo this - everyone else just sees the stub. %>
+        <% if (isOwner) { %>
+          <p class="text-sm text-neutral-500 mt-4">
+            <a href="/settings" class="text-purple-400 hover:text-purple-300 underline decoration-dotted transition-colors"><%= t('userDashboard.profileHiddenOwnerHint') %></a>
+          </p>
+        <% } %>
+      </div>
+    </section>
+  <% } else { %>
+
+  <!-- Message count over time (visual !countmsg). Absent entirely (markup AND bootstrap data)
+       when the profile owner keeps hideMessageVolume on - the route passes activity: null. -->
+  <% if (activity) { %>
   <section class="mb-10" data-component="activity">
     <div class="flex items-center justify-between mb-3 gap-4">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.messageVolume') %></h2>
@@ -97,6 +117,7 @@
       <p class="text-xs text-neutral-600 mt-2" data-empty hidden><%= t('userDashboard.noData') %></p>
     </div>
   </section>
+  <% } %>
 
   <!-- Word + emote clouds -->
   <section class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10" data-component="clouds">
@@ -139,7 +160,9 @@
     </div>
   </section>
 
-  <!-- Activity heatmap (GitHub-style, capped at MAX_HEATMAP_DAYS) -->
+  <!-- Activity heatmap (GitHub-style, capped at MAX_HEATMAP_DAYS). Absent entirely when the
+       profile owner keeps hideChatActivity on - the route passes heatmap: null. -->
+  <% if (heatmap) { %>
   <section class="mb-10">
     <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('userDashboard.heatmap') %></h2>
     <%# w-fit + mx-auto: the card hugs the calendar and centers instead of stretching to the
@@ -159,6 +182,7 @@
       </div>
     </div>
   </section>
+  <% } %>
 
   <!-- Moderator-only: this user's chat logs, with live keyword search -->
   <% if (canModerate) { %>
@@ -187,13 +211,17 @@
     </section>
   <% } %>
 
+  <% } /* end !profileHidden */ %>
+
 </main>
 
-<%# NOT JSON.stringify() - this payload carries chat-derived strings (cloud words, nickname
-    history, raw message bodies), so it must be escaped against a "</script>" breakout.
-    See lib/safeJson.js. %>
-<script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
-<script src="/js/cloud-layout.js" defer></script>
-<script src="/js/user-dashboard.js" defer></script>
+<% if (!profileHidden) { %>
+  <%# NOT JSON.stringify() - this payload carries chat-derived strings (cloud words, nickname
+      history, raw message bodies), so it must be escaped against a "</script>" breakout.
+      See lib/safeJson.js. The hidden stub inlines no data and loads no dashboard scripts. %>
+  <script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
+  <script src="/js/cloud-layout.js" defer></script>
+  <script src="/js/user-dashboard.js" defer></script>
+<% } %>
 
 <%- include('partials/foot') %>

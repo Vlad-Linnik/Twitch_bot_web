@@ -1,3 +1,9 @@
+<%# The site-wide footer - foot.ejs is included at the end of every page, so this is the
+    one place footer content lives. Not view-transition-pinned (unlike the nav): it scrolls
+    and slides with the page content, which is fine for a one-line footer. %>
+<footer class="mt-16 pb-8 text-center text-xs text-neutral-600">
+  <a href="/privacy" class="hover:text-neutral-400 transition-colors"><%= t('footer.privacy') %></a>
+</footer>
 <script src="/js/page-transitions.js" defer></script>
 </body>
 </html>

@@ -187,12 +187,24 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
 
   const { messages, whiteList, wordLifetimeStats, emoteExclusions } = await ensureInitialized();
 
-  // Emotes the channel tracks now (whiteList), UNION emotes it has ever tracked - mirroring the
-  // bot's ChatStats.emoteExclusionCache so a user's cloud classifies a token exactly the way the
-  // channel's precomputed cloud did. "Ever tracked" is itself two sources: WordLifetimeStats
-  // (usage counts) plus the bot's EmoteExclusions tombstones, because the bot now PRUNES the
-  // words/WordLifetimeStats rows of un-tracked emotes and only the tombstone survives. Matched
-  // case-insensitively; without the union, un-tracked emotes reappear in this cloud as "words".
+  // Two DIFFERENT emote sets, and the difference is the contract with the channel-wide clouds:
+  //
+  //   EXCLUSION (emoteSet) - emotes the channel tracks now (whiteList) UNION emotes it has ever
+  //   tracked (WordLifetimeStats + the bot's EmoteExclusions tombstones, which survive the bot
+  //   pruning un-tracked emotes' rows). Mirrors the bot's ChatStats.emoteExclusionCache; matched
+  //   case-insensitively. Without the union, un-tracked emotes reappear in the WORD cloud as
+  //   fake "words".
+  //
+  //   DISPLAY (trackedCanonical) - CURRENTLY tracked emotes only, lowercased token -> canonical
+  //   whiteList name. The user's emote cloud must show the same population the channel's Top
+  //   emotes can show (WordLifetimeStats holds only tracked emotes after pruning) - counting the
+  //   whole union here used to surface long-removed emotes that exist nowhere on the channel
+  //   page. Canonical casing also makes counts merge across "AROLF"/"arolf" as typed AND lets
+  //   the emote-image join resolve (the 7TV/Helix image map is keyed by canonical names).
+  //
+  // A token in the union but NOT currently tracked lands in NEITHER cloud - exactly like the
+  // channel pages, where pruning removes an emote from the emote cloud without letting it back
+  // into the word cloud.
   const [current, historical, tombstones] = await Promise.all([
     whiteList.find({ channel }, { projection: { word: 1 } }).toArray(),
     wordLifetimeStats.find({ channel }, { projection: { word: 1 } }).toArray(),
@@ -202,6 +214,7 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
     [...current, ...historical, ...tombstones].map((w) => String(w.word).toLowerCase())
   );
   const isEmote = (token) => emoteSet.has(String(token).toLowerCase());
+  const trackedCanonical = new Map(current.map((w) => [String(w.word).toLowerCase(), String(w.word)]));
 
   const query = { channel, userId: String(userId) };
   const start = periodStart(period);
@@ -226,9 +239,16 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
     for (const word of extractWords(doc.message, isEmote)) {
       wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
     }
-    if (emoteSet.size > 0) {
-      for (const token of new Set(String(doc.message || "").trim().split(/\s+/))) {
-        if (isEmote(token)) emoteFreq.set(token, (emoteFreq.get(token) || 0) + 1);
+    if (trackedCanonical.size > 0) {
+      // Dedupe per message on the CANONICAL name (not the raw token), so "4head 4Head" in one
+      // message counts once - same message-presence semantics the raw-token Set always had.
+      const seenCanonical = new Set();
+      for (const token of String(doc.message || "").trim().split(/\s+/)) {
+        const canonical = trackedCanonical.get(String(token).toLowerCase());
+        if (canonical) seenCanonical.add(canonical);
+      }
+      for (const canonical of seenCanonical) {
+        emoteFreq.set(canonical, (emoteFreq.get(canonical) || 0) + 1);
       }
     }
   }

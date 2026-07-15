@@ -15,6 +15,8 @@ const userStatsRepo = require("../db/userStatsRepo");
 const wordStatsRepo = require("../db/wordStatsRepo");
 const searchRepo = require("../db/searchRepo");
 const userProfileService = require("../db/userProfileService");
+const userPreferencesRepo = require("../db/userPreferencesRepo");
+const { withEmoteImages } = require("../twitch/emoteImages");
 const { computePermission } = require("../middleware/permissions");
 const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters");
 const limits = require("../config/statsLimits");
@@ -67,6 +69,14 @@ router.get("/:channel/user/:username", async (req, res, next) => {
 
     const period = limits.resolvePeriod(req.query.period);
 
+    // The TARGET user's privacy flags (not the viewer's) decide what this page shows; the
+    // owner check is plain identity equality, deliberately outside the channel tier system -
+    // a profile belongs to its user, not to the channel's owner or moderators. The flags
+    // themselves are edited on the personal /settings page (routes/accountSettings.js);
+    // isOwner only decides whether the hidden stub points there.
+    const privacy = await userPreferencesRepo.getPrivacy(identity.userId);
+    const isOwner = !!req.user && String(req.user.userId) === String(identity.userId);
+
     // Goes through the shared display service, NOT profileCacheRepo directly. Reading the cached
     // Twitch colour straight off the profile - which this route used to do - ignores the user's
     // own custom colour from /settings, so the same person rendered in one colour in the nav bar
@@ -74,12 +84,43 @@ router.get("/:channel/user/:username", async (req, res, next) => {
     // Fails soft: the header falls back to a monogram and an undecorated name.
     const profile = await userProfileService.getDisplayProfile(identity.userId);
 
+    // Hidden profile: a stub for EVERYONE - channel owner, mods and admins included (the
+    // channel-wide tools on /statistics/chat are unaffected; this hides the per-user showcase).
+    // The owner gets the same stub plus a link to /settings, where they can turn it off.
+    // No stats are fetched at all - hiding in the view while inlining the data into the
+    // bootstrap JSON would hide nothing.
+    if (privacy.hideProfile) {
+      return res.render("userDashboard", {
+        channel,
+        identity,
+        profile,
+        period,
+        periods: limits.PERIODS,
+        profileHidden: true,
+        isOwner,
+        standing: null,
+        activity: null,
+        heatmap: null,
+        mentions: null,
+        clouds: null,
+        nicknames: [],
+        canModerate: false,
+        maxHeatmapDays: limits.MAX_HEATMAP_DAYS,
+      });
+    }
+
     const [standing, activity, heatmap, mentions, clouds, permission] = await Promise.all([
       userStatsRepo.getLifetimeStanding(channel.channelLogin, identity.userId),
       // Two reads of the same index range on purpose: the chart needs period-shaped buckets
       // (getMessageVolume), the heatmap always needs the full day-bucketed window.
-      userStatsRepo.getMessageVolume(channel.channelLogin, identity.userId, period),
-      userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId),
+      // Sections hidden by the privacy flags skip their query entirely - the data must be
+      // absent from the response, not just undrawn.
+      privacy.hideMessageVolume
+        ? null
+        : userStatsRepo.getMessageVolume(channel.channelLogin, identity.userId, period),
+      privacy.hideChatActivity
+        ? null
+        : userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId),
       userStatsRepo.getMentionStats(channel.channelLogin, identity, period),
       wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period),
       // This page is public, so no requireLevel() has run and req.permissionLevel is unset -
@@ -93,11 +134,15 @@ router.get("/:channel/user/:username", async (req, res, next) => {
       profile,
       period,
       periods: limits.PERIODS,
+      profileHidden: false,
+      isOwner,
       standing,
       activity,
       heatmap,
       mentions,
-      clouds,
+      // Spread, don't mutate: getUserClouds results are cached inside wordStatsRepo, and
+      // withEmoteImages returns a new array (same contract as the statistics page).
+      clouds: { ...clouds, emotes: await withEmoteImages(channel.channelLogin, clouds.emotes) },
       nicknames: userStatsRepo.nicknameHistory(identity),
       // Only decides whether the moderator panel is DRAWN. It is not the security boundary -
       // logs.json independently re-checks the tier on every request - but there is no point
@@ -121,11 +166,25 @@ router.get("/:channel/user/:username/stats.json", statsReadLimiter, async (req, 
     const identity = await userStatsRepo.findUserByName(req.params.username);
     if (!identity) return res.status(404).json({ error: "unknown_user" });
 
+    // Enforced server-side, not just in the page render: the privacy flags must hold for
+    // someone hitting the JSON directly, regardless of viewer tier.
+    const privacy = await userPreferencesRepo.getPrivacy(identity.userId);
+    if (privacy.hideProfile) return res.status(403).json({ error: "profile_hidden" });
+    if (req.query.component === "activity" && privacy.hideMessageVolume) {
+      return res.status(403).json({ error: "profile_hidden" });
+    }
+
     const period = limits.resolvePeriod(req.query.period);
 
     switch (req.query.component) {
-      case "clouds":
-        return res.json(await wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period));
+      case "clouds": {
+        const clouds = await wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period);
+        // Same image join the page render does - spread, never mutate the repo's cached object.
+        return res.json({
+          ...clouds,
+          emotes: await withEmoteImages(channel.channelLogin, clouds.emotes),
+        });
+      }
       case "mentions":
         return res.json(await userStatsRepo.getMentionStats(channel.channelLogin, identity, period));
       case "activity":
@@ -150,6 +209,12 @@ router.get(
       if (!channel) return res.status(404).json({ error: "unknown_channel" });
       const identity = await userStatsRepo.findUserByName(req.params.username);
       if (!identity) return res.status(404).json({ error: "unknown_user" });
+
+      // hideProfile blocks this endpoint even for tier <= 2 - "hidden from everyone" includes
+      // moderators, per the feature's contract. The channel-wide log search on /statistics/chat
+      // is deliberately unaffected (it is a channel tool, not this user's profile).
+      const privacy = await userPreferencesRepo.getPrivacy(identity.userId);
+      if (privacy.hideProfile) return res.status(403).json({ error: "profile_hidden" });
 
       // Scoping to this one user is what makes the search cheap: the {channel, userId, timestamp}
       // index narrows the candidate set to one person's history before any text matching, which

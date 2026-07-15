@@ -60,8 +60,8 @@
   // the frequency difference is actually visible. An emote with no image (removed from the set
   // since it was counted) keeps its text form rather than dropping history.
   // ---------------------------------------------------------------------------------------
-  const EMOTE_MIN = 18;
-  const EMOTE_MAX = 72;
+  const EMOTE_MIN = 20;
+  const EMOTE_MAX = 96;
 
   function renderEmoteCloud(payload) {
     const node = $("emote-cloud");

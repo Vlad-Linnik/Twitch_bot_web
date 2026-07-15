@@ -1,6 +1,10 @@
 // One-off CLI: register a Channels doc (and implicitly allow the settings
 // page to seed ChannelConfig from the default template on first save).
 // Usage: node scripts/seedChannel.js <channelLogin> <ownerTwitchUserId>
+//
+// Run this ONLY at the channel owner's request - first registration stamps
+// Channels.consentedAt (see channelsRepo.upsertChannel), the consent record
+// backing the /privacy page's claim that channels are added by owner request.
 const { connect, getClient } = require("../db/connection");
 const channelsRepo = require("../db/channelsRepo");
 

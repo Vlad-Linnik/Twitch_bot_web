@@ -1,0 +1,63 @@
+<%- include('partials/head', { title: t('privacy.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('privacy.title') %></h1>
+  <p class="text-neutral-600 text-sm mb-10"><%= t('privacy.updated') %></p>
+
+  <div class="space-y-8 text-neutral-400 leading-relaxed text-sm">
+    <p><%= t('privacy.intro') %></p>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-2"><%= t('privacy.collectHeading') %></h2>
+      <p class="mb-2"><%= t('privacy.collectIntro') %></p>
+      <ul class="list-disc pl-5 space-y-2 mb-4">
+        <li><%= t('privacy.collectChat') %></li>
+        <li><%= t('privacy.collectMod') %></li>
+        <li><%= t('privacy.collectNames') %></li>
+      </ul>
+      <p class="mb-2"><%= t('privacy.collectAccountIntro') %></p>
+      <ul class="list-disc pl-5 space-y-2">
+        <li><%= t('privacy.collectAccount') %></li>
+        <li><%= t('privacy.collectProfile') %></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-2"><%= t('privacy.whyHeading') %></h2>
+      <p class="mb-2"><%= t('privacy.why1') %></p>
+      <p><%= t('privacy.why2') %></p>
+    </section>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-2"><%= t('privacy.cookiesHeading') %></h2>
+      <p><%= t('privacy.cookies1') %></p>
+    </section>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-2"><%= t('privacy.visibilityHeading') %></h2>
+      <ul class="list-disc pl-5 space-y-2">
+        <li><%= t('privacy.visibility1') %></li>
+        <li><%= t('privacy.visibility2') %></li>
+        <li><%= t('privacy.visibility3') %></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-2"><%= t('privacy.rightsHeading') %></h2>
+      <p class="mb-2"><%= t('privacy.rights1') %></p>
+      <p>
+        <%# Same hardcoded support address as about.ejs - the one public contact. %>
+        <%= t('privacy.rightsContact') %>
+        <a href="mailto:chatwizardbot.help@gmail.com" class="text-purple-400 hover:text-purple-300">chatwizardbot.help@gmail.com</a>.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-2"><%= t('privacy.changesHeading') %></h2>
+      <p><%= t('privacy.changes1') %></p>
+    </section>
+  </div>
+</main>
+
+<%- include('partials/foot') %>

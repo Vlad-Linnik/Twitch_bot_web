@@ -126,7 +126,10 @@
     return d;
   }
 
-  let prevBucketCount = (boot.activity.buckets || []).length;
+  // boot.activity is null when the profile owner hides the message-volume chart - this runs at
+  // module top level, so without the ?. one hidden section used to throw here and take the
+  // whole page's rendering (clouds, heatmap, period toggles) down with it.
+  let prevBucketCount = (boot.activity?.buckets || []).length;
 
   function renderChart(activity, animate) {
     const svg = $("activity-chart");
@@ -223,9 +226,49 @@
     });
   }
 
+  // Emote cloud - real emote images (the server joins imageUrl from the channel's 7TV set +
+  // Twitch globals, same as the statistics page). Sized for this page's narrower half-width
+  // column - the statistics page's 96px top end would drown a min-h-40 card. An emote with no
+  // image (removed from the set since it was counted) keeps its text form.
+  const EMOTE_MIN = 16;
+  const EMOTE_MAX = 56;
+
+  function renderEmoteCloud(node, items) {
+    if (!node) return;
+
+    const list = items || [];
+    const max = Math.max(...list.map((i) => i.count), 1);
+    const min = list.length ? Math.min(...list.map((i) => i.count)) : 0;
+    const span = Math.sqrt(max) - Math.sqrt(min) || 1;
+
+    CloudLayout.render(node, list, (item) => {
+      const scale = (Math.sqrt(item.count) - Math.sqrt(min)) / span;
+      const size = Math.round(EMOTE_MIN + scale * (EMOTE_MAX - EMOTE_MIN));
+      const title = `${item.word} — ${item.count.toLocaleString()}`;
+
+      if (item.imageUrl) {
+        // No loading="lazy": CloudLayout must know every image's width up front to place it
+        // (it awaits img.decode()), so deferring the fetch would only delay the whole cloud.
+        const img = document.createElement("img");
+        img.src = item.imageUrl;
+        img.alt = item.word;
+        img.title = title;
+        img.style.height = `${size}px`;
+        img.className = "w-auto hover:scale-110 transition-transform";
+        return img;
+      }
+      const text = document.createElement("span");
+      text.textContent = item.word; // chat-derived - textContent only
+      text.title = title;
+      text.style.fontSize = `${Math.max(12, Math.round(size * 0.45))}px`;
+      text.className = "text-neutral-400 font-medium";
+      return text;
+    });
+  }
+
   function renderClouds(clouds) {
     renderCloud($("word-cloud"), clouds.words);
-    renderCloud($("emote-cloud"), clouds.emotes);
+    renderEmoteCloud($("emote-cloud"), clouds.emotes);
 
     const sampled = $("cloud-sampled");
     if (sampled) sampled.hidden = !clouds.sampled;
@@ -508,11 +551,12 @@
   if (fuzzyInput) fuzzyInput.addEventListener("change", runSearch);
 
   // ---------------------------------------------------------------------------------------
-  // First paint, from the inlined server data.
+  // First paint, from the inlined server data. activity/heatmap arrive as null when the
+  // profile owner hides them (the server omits both the data and the section markup).
   // ---------------------------------------------------------------------------------------
-  renderChart(boot.activity, false);
+  if (boot.activity) renderChart(boot.activity, false);
   renderClouds(boot.clouds);
   renderMentions(boot.mentions);
-  renderHeatmap(boot.heatmap);
+  if (boot.heatmap) renderHeatmap(boot.heatmap);
   if (boot.canModerate) runSearch();
 })();

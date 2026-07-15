@@ -94,34 +94,81 @@
   <section>
     <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.recentModActions') %></h2>
-      <% if (actions.length > 0) { %>
-        <div class="flex items-center gap-2 flex-wrap">
-          <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+      <%# Server-side filters (they narrow the find AND the page count, not just the rendered
+          rows): two checkbox-dropdowns, changes fetched in place via mod-actions.json by
+          mod-stats.js. Rendered even when the current page is empty - an empty FILTERED page
+          is exactly where the controls to clear the filter must still exist. %>
+      <div class="flex items-center gap-2 flex-wrap" id="mod-actions-filters"
+           data-label-all="<%= t('statistics.filterAll') %>"
+           data-label-selected="<%= t('statistics.filterSelected') %>">
+        <details class="relative" id="action-filter-dropdown">
+          <summary class="list-none cursor-pointer flex items-center gap-1.5 text-xs text-neutral-500 bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 hover:border-neutral-600 transition-colors select-none">
             <%= t('statistics.filterActionLabel') %>
-            <select id="action-filter"
-                    class="bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:border-purple-600">
-              <option value=""><%= t('statistics.filterAll') %></option>
-              <% [...new Set(actions.map(a => a.action))].forEach(function(name) { %>
-                <option value="<%= name %>"><%= name %></option>
-              <% }) %>
-            </select>
-          </label>
-          <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+            <span class="text-neutral-300" data-filter-summary>
+              <%= filterState.actions.length > 0 ? filterState.actions.length + ' ' + t('statistics.filterSelected') : t('statistics.filterAll') %>
+            </span>
+            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5.5 7.5L10 12l4.5-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </summary>
+          <div class="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/40 py-2">
+            <% actionTypes.forEach(function(name) { %>
+              <label class="flex items-center gap-2 px-3 py-1 text-xs text-neutral-300 cursor-pointer hover:bg-neutral-800/60">
+                <input type="checkbox" name="actions" value="<%= name %>" class="accent-purple-600"
+                       <%= filterState.actions.includes(name) ? 'checked' : '' %> />
+                <%= name %>
+              </label>
+            <% }) %>
+            <button type="button" data-filter-clear
+                    class="mt-1 mx-3 text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"><%= t('statistics.filterClear') %></button>
+          </div>
+        </details>
+
+        <details class="relative" id="mod-filter-dropdown">
+          <summary class="list-none cursor-pointer flex items-center gap-1.5 text-xs text-neutral-500 bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 hover:border-neutral-600 transition-colors select-none">
             <%= t('statistics.filterModeratorLabel') %>
-            <select id="mod-filter"
-                    class="bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:border-purple-600">
-              <option value=""><%= t('statistics.filterAll') %></option>
-              <% [...new Set(actions.map(a => a.modName))].forEach(function(name) { %>
-                <option value="<%= name %>"><%= name %></option>
+            <span class="text-neutral-300" data-filter-summary>
+              <% const modSelCount = filterState.modIds.length || filterState.excludeModIds.length; %>
+              <%= modSelCount > 0 ? modSelCount + ' ' + t('statistics.filterSelected') : t('statistics.filterAll') %>
+            </span>
+            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5.5 7.5L10 12l4.5-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </summary>
+          <div class="absolute right-0 top-full mt-1 z-20 w-56 rounded-lg border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/40 py-2">
+            <%# One list, one mode: include or exclude the checked moderators. A radio pair
+                beats tri-state checkboxes - the mode is explicit and both-at-once is
+                impossible to express. %>
+            <div class="flex items-center gap-3 px-3 pb-2 border-b border-neutral-800 text-[11px] text-neutral-400">
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="mod-filter-mode" value="include" class="accent-purple-600"
+                       <%= filterState.excludeModIds.length > 0 ? '' : 'checked' %> />
+                <%= t('statistics.filterInclude') %>
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="mod-filter-mode" value="exclude" class="accent-purple-600"
+                       <%= filterState.excludeModIds.length > 0 ? 'checked' : '' %> />
+                <%= t('statistics.filterExclude') %>
+              </label>
+            </div>
+            <div class="max-h-56 overflow-y-auto pt-1">
+              <% const checkedModIds = filterState.modIds.length > 0 ? filterState.modIds : filterState.excludeModIds; %>
+              <% modOptions.forEach(function(m) { %>
+                <label class="flex items-center gap-2 px-3 py-1 text-xs text-neutral-300 cursor-pointer hover:bg-neutral-800/60">
+                  <input type="checkbox" name="mods" value="<%= m.id %>" class="accent-purple-600"
+                         <%= checkedModIds.includes(String(m.id)) ? 'checked' : '' %> />
+                  <span class="truncate"><%= m.name %></span>
+                </label>
               <% }) %>
-            </select>
-          </label>
-        </div>
-      <% } %>
+            </div>
+            <button type="button" data-filter-clear
+                    class="mt-1 mx-3 text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"><%= t('statistics.filterClear') %></button>
+          </div>
+        </details>
+      </div>
     </div>
     <div class="rounded-lg border border-neutral-800 overflow-hidden">
       <div class="overflow-x-auto">
-      <table id="mod-actions-table" class="w-full text-sm">
+      <table id="mod-actions-table" class="w-full text-sm"
+             data-label-noduration="<%= t('statistics.noDuration') %>"
+             data-label-noactions="<%= t('statistics.noModActions') %>"
+             data-label-nofiltered="<%= t('statistics.noFilteredActions') %>">
         <thead class="bg-neutral-900 text-neutral-400">
           <tr>
             <th data-sort="action" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colAction') %></th>
@@ -131,14 +178,17 @@
             <th data-sort="when" class="text-left font-medium px-4 py-2 whitespace-nowrap cursor-pointer hover:text-neutral-200 transition-colors"><%= t('statistics.colWhen') %></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-neutral-800">
+        <tbody class="divide-y divide-neutral-800" id="mod-actions-tbody">
           <% actions.forEach(function(a) { %>
             <%# data-id + data-tta drive the target-hover context popup (mod-stats.js): the
                 popup is only wired up when the moderator reacted within 45s of the target's
-                last message, so the logged history is actually what was acted on. %>
+                last message, so the logged history is actually what was acted on.
+                mod-stats.js rebuilds these rows from mod-actions.json - keep its buildRow()
+                in sync with this markup. %>
             <tr class="odd:bg-neutral-950 even:bg-neutral-900/40"
                 data-action="<%= a.action %>"
                 data-mod="<%= a.modName %>"
+                data-modid="<%= a.modID %>"
                 data-target="<%= a.targetName %>"
                 data-ts="<%= new Date(a.timestamp).getTime() %>"
                 data-id="<%= a.id %>"
@@ -163,24 +213,38 @@
       </div>
     </div>
 
-    <%# Server-side pagination - plain links (period preserved), same full-reload philosophy as
-        the period toggle above. Hidden when everything fits on one page. %>
-    <% if (totalPages > 1) { %>
-      <% const pageUrl = (p) => `?period=${encodeURIComponent(period)}&page=${p}`; %>
-      <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
-        <% if (page > 1) { %>
-          <a href="<%= pageUrl(page - 1) %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
-        <% } else { %>
-          <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
-        <% } %>
-        <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
-        <% if (page < totalPages) { %>
-          <a href="<%= pageUrl(page + 1) %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
-        <% } else { %>
-          <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
-        <% } %>
-      </nav>
-    <% } %>
+    <%# Server-side pagination. The links are the no-JS fallback (filters preserved, so a
+        filtered page 2 survives a refresh); mod-stats.js intercepts them and re-fetches the
+        table in place instead - no navigation, no scroll jump. The slot always exists so the
+        client can rebuild the nav after a filter change alters totalPages. %>
+    <%
+      const filterParams = [];
+      if (filterState.actions.length > 0) filterParams.push(`actions=${encodeURIComponent(filterState.actions.join(','))}`);
+      if (filterState.modIds.length > 0) filterParams.push(`mods=${encodeURIComponent(filterState.modIds.join(','))}`);
+      else if (filterState.excludeModIds.length > 0) filterParams.push(`excludeMods=${encodeURIComponent(filterState.excludeModIds.join(','))}`);
+      const filterSuffix = filterParams.length > 0 ? `&${filterParams.join('&')}` : '';
+    %>
+    <div id="mod-actions-pagination"
+         data-label-prev="<%= t('statistics.pagePrev') %>"
+         data-label-next="<%= t('statistics.pageNext') %>"
+         data-label-page="<%= t('statistics.pageLabel') %>">
+      <% if (totalPages > 1) { %>
+        <% const pageUrl = (p) => `?period=${encodeURIComponent(period)}&page=${p}${filterSuffix}`; %>
+        <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+          <% if (page > 1) { %>
+            <a href="<%= pageUrl(page - 1) %>" data-page="<%= page - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+          <% } else { %>
+            <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+          <% } %>
+          <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+          <% if (page < totalPages) { %>
+            <a href="<%= pageUrl(page + 1) %>" data-page="<%= page + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+          <% } else { %>
+            <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+          <% } %>
+        </nav>
+      <% } %>
+    </div>
   </section>
 
   <!-- Floating ban-context popup (target-hover in the actions table), filled by mod-stats.js.

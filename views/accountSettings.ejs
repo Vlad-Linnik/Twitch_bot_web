@@ -30,6 +30,41 @@
         preference is off, but already-saved chatColorMode/customChatColor values stay in
         UserPreferences and keep applying site-wide - the POST handler no longer touches them. %>
 
+    <%# Profile privacy (global per account, applies on every channel's /user/<name> page).
+        Defaults come from lib/privacy.js: message-volume + activity-calendar are hidden until
+        the user opts in; hideProfile hides the whole profile page from everyone, mods included. %>
+    <section>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('accountSettings.privacyHeading') %></h2>
+      <p class="text-xs text-neutral-600 mb-4"><%= t('accountSettings.privacyHint') %></p>
+
+      <label class="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer select-none mb-3">
+        <span class="toggle-switch">
+          <input type="checkbox" name="hideMessageVolume" class="sr-only" <%= privacy.hideMessageVolume ? 'checked' : '' %> />
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </span>
+        <%= t('accountSettings.privacyHideMessageVolume') %>
+      </label>
+
+      <label class="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer select-none mb-3">
+        <span class="toggle-switch">
+          <input type="checkbox" name="hideChatActivity" class="sr-only" <%= privacy.hideChatActivity ? 'checked' : '' %> />
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </span>
+        <%= t('accountSettings.privacyHideChatActivity') %>
+      </label>
+
+      <label class="flex items-start gap-2 text-sm text-neutral-300 cursor-pointer select-none">
+        <span class="toggle-switch mt-0.5">
+          <input type="checkbox" name="hideProfile" class="sr-only" <%= privacy.hideProfile ? 'checked' : '' %> />
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </span>
+        <span>
+          <%= t('accountSettings.privacyHideProfile') %>
+          <span class="block text-xs text-neutral-600 mt-0.5"><%= t('accountSettings.privacyHideProfileHint') %></span>
+        </span>
+      </label>
+    </section>
+
     <button type="submit" class="px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
       <%= t('accountSettings.save') %>
     </button>

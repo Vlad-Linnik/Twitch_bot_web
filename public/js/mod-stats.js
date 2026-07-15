@@ -19,12 +19,19 @@
   });
 })();
 
-// --- Recent moderator actions: header sorting + action/moderator filters, purely client-side
-// over the (at most 25) server-rendered rows.
+// --- Recent moderator actions: header sorting (client-side over the current page) + the
+// server-side filters and pagination. Filters/page changes fetch mod-actions.json and rebuild
+// the table body + pagination IN PLACE - no navigation, so the viewer's scroll position (this
+// section sits at the bottom of a long page) survives, and the page count reflects the
+// FILTERED total (the old client-side row-hiding could only ever filter the 25 rendered rows).
+// The URL is kept in sync via history.replaceState so refresh/bookmarks reproduce the state
+// through the server render, which parses the same params.
 (() => {
   const table = document.getElementById("mod-actions-table");
   if (!table) return;
-  const tbody = table.querySelector("tbody");
+  const tbody = document.getElementById("mod-actions-tbody") || table.querySelector("tbody");
+  const filters = document.getElementById("mod-actions-filters");
+  const paginationSlot = document.getElementById("mod-actions-pagination");
 
   // The server renders the "when" column in ITS OWN timezone (a no-JS fallback - EJS has no
   // access to the viewer's clock). Re-render it here from the row's epoch-ms data-ts so the
@@ -74,20 +81,214 @@
     });
   }
 
-  const actionFilter = document.getElementById("action-filter");
-  const modFilter = document.getElementById("mod-filter");
+  if (!filters || !paginationSlot) {
+    applySort(currentSort.key, currentSort.dir);
+    return;
+  }
 
-  function applyFilters() {
-    const action = actionFilter?.value || "";
-    const mod = modFilter?.value || "";
-    for (const row of tbody.querySelectorAll("tr[data-action]")) {
-      row.hidden =
-        (action !== "" && row.dataset.action !== action) || (mod !== "" && row.dataset.mod !== mod);
+  // --- Filter state, read live from the dropdown inputs -----------------------------------
+
+  function collectFilters() {
+    const actions = [...filters.querySelectorAll('input[name="actions"]:checked')].map((i) => i.value);
+    const mode = filters.querySelector('input[name="mod-filter-mode"]:checked')?.value || "include";
+    const mods = [...filters.querySelectorAll('input[name="mods"]:checked')].map((i) => i.value);
+    return {
+      actions,
+      mods: mode === "include" ? mods : [],
+      excludeMods: mode === "exclude" ? mods : [],
+    };
+  }
+
+  function anyFilterActive() {
+    const f = collectFilters();
+    return f.actions.length > 0 || f.mods.length > 0 || f.excludeMods.length > 0;
+  }
+
+  // "N selected" / "All" chips on the dropdown summaries.
+  function updateSummaries() {
+    const f = collectFilters();
+    const set = (dropdownId, count) => {
+      const el = document.querySelector(`#${dropdownId} [data-filter-summary]`);
+      if (el) {
+        el.textContent = count > 0 ? `${count} ${filters.dataset.labelSelected}` : filters.dataset.labelAll;
+      }
+    };
+    set("action-filter-dropdown", f.actions.length);
+    set("mod-filter-dropdown", f.mods.length || f.excludeMods.length);
+  }
+
+  // Query for both mod-actions.json and the address bar - the server render accepts the same
+  // params, so a replaceState'd URL survives refresh and copy/paste.
+  function buildQuery(page) {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("actions");
+    params.delete("mods");
+    params.delete("excludeMods");
+    const f = collectFilters();
+    if (f.actions.length > 0) params.set("actions", f.actions.join(","));
+    if (f.mods.length > 0) params.set("mods", f.mods.join(","));
+    else if (f.excludeMods.length > 0) params.set("excludeMods", f.excludeMods.join(","));
+    if (page > 1) params.set("page", String(page));
+    else params.delete("page");
+    return params;
+  }
+
+  // --- In-place rendering ------------------------------------------------------------------
+
+  function cellEl(className, text) {
+    const td = document.createElement("td");
+    td.className = className;
+    td.textContent = text; // chat-derived names/reasons - textContent only, never innerHTML
+    return td;
+  }
+
+  // Mirrors the EJS row markup in statisticsMod.ejs - keep the two in sync.
+  function renderRows(actions) {
+    tbody.textContent = "";
+
+    if (actions.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.className = "px-4 py-6 text-center text-neutral-500";
+      td.textContent = anyFilterActive() ? table.dataset.labelNofiltered : table.dataset.labelNoactions;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+
+    for (const a of actions) {
+      const tr = document.createElement("tr");
+      tr.className = "odd:bg-neutral-950 even:bg-neutral-900/40";
+      tr.dataset.action = a.action;
+      tr.dataset.mod = a.modName;
+      tr.dataset.modid = String(a.modID ?? "");
+      tr.dataset.target = a.targetName;
+      tr.dataset.ts = String(new Date(a.timestamp).getTime());
+      tr.dataset.id = a.id;
+      tr.dataset.tta = a.TTA ?? "";
+
+      const modCell = cellEl(`px-4 py-2 whitespace-nowrap${a.modColor ? "" : " text-neutral-400"}`, a.modName);
+      if (a.modColor) modCell.style.color = a.modColor;
+      const targetCell = cellEl(
+        `px-4 py-2 whitespace-nowrap target-cell${a.targetColor ? "" : " text-neutral-400"}`,
+        a.targetName
+      );
+      if (a.targetColor) targetCell.style.color = a.targetColor;
+      const durationCell = cellEl(
+        "px-4 py-2 text-neutral-400 whitespace-nowrap",
+        a.durationLabel || table.dataset.labelNoduration
+      );
+      if (a.reason) durationCell.title = a.reason;
+
+      tr.append(
+        cellEl("px-4 py-2 text-neutral-200 whitespace-nowrap", a.action),
+        modCell,
+        targetCell,
+        durationCell,
+        cellEl("px-4 py-2 text-neutral-500 whitespace-nowrap", new Date(a.timestamp).toLocaleString(pageLocale))
+      );
+      tbody.appendChild(tr);
     }
   }
 
-  actionFilter?.addEventListener("change", applyFilters);
-  modFilter?.addEventListener("change", applyFilters);
+  // Mirrors the EJS pagination markup (the server-rendered version doubles as the no-JS
+  // fallback; this rebuild takes over after the first in-place fetch).
+  function renderPagination(page, totalPages) {
+    paginationSlot.textContent = "";
+    if (totalPages <= 1) return;
+
+    const nav = document.createElement("nav");
+    nav.className = "flex items-center justify-center gap-3 mt-4 text-xs";
+
+    const item = (label, targetPage) => {
+      if (targetPage === null) {
+        const span = document.createElement("span");
+        span.className = "px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none";
+        span.textContent = label;
+        return span;
+      }
+      const a = document.createElement("a");
+      a.href = `?${buildQuery(targetPage)}`;
+      a.dataset.page = String(targetPage);
+      a.className =
+        "px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors";
+      a.textContent = label;
+      return a;
+    };
+
+    const label = document.createElement("span");
+    label.className = "text-neutral-500 tabular-nums";
+    label.textContent = `${paginationSlot.dataset.labelPage} ${page} / ${totalPages}`;
+
+    nav.append(
+      item(paginationSlot.dataset.labelPrev, page > 1 ? page - 1 : null),
+      label,
+      item(paginationSlot.dataset.labelNext, page < totalPages ? page + 1 : null)
+    );
+    paginationSlot.appendChild(nav);
+  }
+
+  // --- Fetch + wire-up ----------------------------------------------------------------------
+
+  const endpoint = window.location.pathname.replace(/\/statistics\/mod\/?$/, "/mod-actions.json");
+  let seq = 0; // responses can land out of order; only the newest may paint
+  let debounceTimer = null;
+
+  async function refresh(page) {
+    const mine = ++seq;
+    const res = await fetch(`${endpoint}?${buildQuery(page)}`, {
+      headers: { Accept: "application/json" },
+    }).catch(() => null);
+    if (mine !== seq || !res || !res.ok) return;
+    const data = await res.json();
+    if (mine !== seq) return;
+
+    renderRows(data.actions);
+    // The server clamps the page (a filter change can shrink the set below the requested
+    // page), so render pagination and the URL from ITS page, not the requested one.
+    renderPagination(data.page, data.totalPages);
+    history.replaceState(null, "", `${window.location.pathname}?${buildQuery(data.page)}`);
+    applySort(currentSort.key, currentSort.dir);
+    // The ban-context IIFE below re-binds its hover handlers to the fresh rows on this event.
+    table.dispatchEvent(new CustomEvent("mod-actions:rendered"));
+  }
+
+  filters.addEventListener("change", () => {
+    updateSummaries();
+    clearTimeout(debounceTimer);
+    // Debounced: checking three boxes in a row should cost one fetch, not three. A filter
+    // change always restarts from page 1 - the old page number is meaningless in the new set.
+    debounceTimer = setTimeout(() => refresh(1), 300);
+  });
+
+  for (const button of filters.querySelectorAll("[data-filter-clear]")) {
+    button.addEventListener("click", () => {
+      const dropdown = button.closest("details");
+      dropdown?.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.checked = false;
+      });
+      updateSummaries();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => refresh(1), 100);
+    });
+  }
+
+  // Close an open dropdown when clicking anywhere else - <details> has no built-in light-dismiss.
+  document.addEventListener("click", (event) => {
+    for (const dropdown of filters.querySelectorAll("details[open]")) {
+      if (!dropdown.contains(event.target)) dropdown.removeAttribute("open");
+    }
+  });
+
+  // Pagination clicks fetch in place instead of navigating (the hrefs stay as the no-JS
+  // fallback). Delegated: the nav is rebuilt on every refresh.
+  paginationSlot.addEventListener("click", (event) => {
+    const link = event.target.closest("a[data-page]");
+    if (!link) return;
+    event.preventDefault();
+    refresh(Number(link.dataset.page));
+  });
 
   applySort(currentSort.key, currentSort.dir);
 })();
@@ -358,34 +559,41 @@
     panel.style.top = `${y}px`;
   }
 
-  for (const row of table.querySelectorAll("tbody tr[data-id]")) {
-    const tta = Number(row.dataset.tta);
-    if (row.dataset.tta === "" || !(tta < MAX_TTA_MS)) continue;
-    const cell = row.querySelector(".target-cell");
-    if (!cell) continue;
-    cell.classList.add("underline", "decoration-dotted", "cursor-help");
+  function bindRows() {
+    for (const row of table.querySelectorAll("tbody tr[data-id]")) {
+      const tta = Number(row.dataset.tta);
+      if (row.dataset.tta === "" || !(tta < MAX_TTA_MS)) continue;
+      const cell = row.querySelector(".target-cell");
+      if (!cell) continue;
+      cell.classList.add("underline", "decoration-dotted", "cursor-help");
 
-    cell.addEventListener("mouseenter", (event) => {
-      const id = row.dataset.id;
-      activeId = id;
-      renderLoading(row.dataset.target);
-      panel.hidden = false;
-      positionPanel(event);
-      fetchContext(id)
-        .then((context) => {
-          if (activeId !== id || panel.hidden) return; // cursor moved on - stale response
-          renderContext(row.dataset.target, context);
-          positionPanel(event);
-        })
-        .catch(() => {
-          if (activeId !== id || panel.hidden) return;
-          renderContext(row.dataset.target, null); // renders the "no messages" fallback
-        });
-    });
-    cell.addEventListener("mousemove", positionPanel);
-    cell.addEventListener("mouseleave", () => {
-      activeId = null;
-      panel.hidden = true;
-    });
+      cell.addEventListener("mouseenter", (event) => {
+        const id = row.dataset.id;
+        activeId = id;
+        renderLoading(row.dataset.target);
+        panel.hidden = false;
+        positionPanel(event);
+        fetchContext(id)
+          .then((context) => {
+            if (activeId !== id || panel.hidden) return; // cursor moved on - stale response
+            renderContext(row.dataset.target, context);
+            positionPanel(event);
+          })
+          .catch(() => {
+            if (activeId !== id || panel.hidden) return;
+            renderContext(row.dataset.target, null); // renders the "no messages" fallback
+          });
+      });
+      cell.addEventListener("mousemove", positionPanel);
+      cell.addEventListener("mouseleave", () => {
+        activeId = null;
+        panel.hidden = true;
+      });
+    }
   }
+
+  bindRows();
+  // In-place filter/pagination refreshes replace every row wholesale - re-bind the fresh
+  // nodes (the fetch cache above persists across renders, so revisited rows stay instant).
+  table.addEventListener("mod-actions:rendered", bindRows);
 })();

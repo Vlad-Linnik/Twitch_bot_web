@@ -45,7 +45,10 @@ async function upsertChannel({ channelLogin, channelId, ownerId }) {
     { channelLogin: login },
     {
       $set: { channelId: String(channelId), ownerId: String(ownerId), enabled: true, updatedAt: now },
-      $setOnInsert: { channelLogin: login, createdAt: now },
+      // consentedAt is the consent trail behind the /privacy page's "channels are added only
+      // at the owner's request" claim: seedChannel.js is only ever run on such a request.
+      // $setOnInsert so re-seeding an existing channel can't rewrite the original date.
+      $setOnInsert: { channelLogin: login, createdAt: now, consentedAt: now },
     },
     { upsert: true }
   );

@@ -145,21 +145,46 @@ async function getChannelTotals(channelLogin) {
   return { uniqueChatters, totalMessages: totals[0]?.messages ?? 0 };
 }
 
-// Paginated, newest first. `page` is 1-based; the count query rides the same
-// {channel, timestamp} index prefix the find does.
-async function getRecentModActions(channelLogin, { page = 1, limit = 25 } = {}) {
+// Paginated, newest first. `page` is 1-based. Filters apply to the find AND the count - a
+// page count computed from the unfiltered total is exactly the bug this replaced. Included
+// moderators ($in on modID) ride the bot's {channel, modID, timestamp} index; the exclude
+// ($nin) and action-type filters ride the {channel, timestamp} prefix and post-filter, which
+// is fine at this collection's size. Include wins over exclude when both are sent (the UI
+// makes them mutually exclusive anyway).
+//
+// Count-then-find: the page is clamped to the real totalPages BEFORE the find, so a stale
+// bookmark (or a filter change that shrank the set) lands on the last page instead of an
+// empty one.
+async function getRecentModActions(
+  channelLogin,
+  { page = 1, limit = 25, actions: actionTypes = [], modIds = [], excludeModIds = [] } = {}
+) {
   const { modLogs } = await ensureInitialized();
   const filter = { channel: bareLogin(channelLogin) };
-  const [actions, total] = await Promise.all([
-    modLogs
-      .find(filter)
-      .sort({ timestamp: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .toArray(),
-    modLogs.countDocuments(filter),
-  ]);
-  return { actions, total };
+  if (actionTypes.length > 0) filter.action = { $in: actionTypes };
+  if (modIds.length > 0) filter.modID = { $in: modIds };
+  else if (excludeModIds.length > 0) filter.modID = { $nin: excludeModIds };
+
+  const total = await modLogs.countDocuments(filter);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const clampedPage = Math.min(Math.max(1, page), totalPages);
+
+  const actions = await modLogs
+    .find(filter)
+    .sort({ timestamp: -1 })
+    .skip((clampedPage - 1) * limit)
+    .limit(limit)
+    .toArray();
+
+  return { actions, total, totalPages, page: clampedPage };
+}
+
+// Every moderator id that ever appears in this channel's action log - the filter dropdown's
+// option list. Broader than the current ModsList on purpose: ex-mods and bot accounts have
+// history worth filtering by. Rides the {channel, modID, timestamp} index.
+async function getModActionModIds(channelLogin) {
+  const { modLogs } = await ensureInitialized();
+  return modLogs.distinct("modID", { channel: bareLogin(channelLogin) });
 }
 
 // The chat context behind one mod action: the message the user was actioned for plus the
@@ -302,6 +327,7 @@ module.exports = {
   getTopChatters,
   getChannelTotals,
   getRecentModActions,
+  getModActionModIds,
   getModActionContext,
   getModUpTime,
   getModStats,

@@ -1,6 +1,7 @@
-// Per-user site preferences (language, chat-color override) - purely a web
+// Per-user site preferences (language, chat-color override, profile privacy) - purely a web
 // concern, lives in the web-only database (connectWeb), never read by the bot.
 const { connectWeb } = require("./connection");
+const { resolvePrivacy } = require("../lib/privacy");
 
 let collection;
 
@@ -17,7 +18,8 @@ async function getPreferences(userId) {
   return col.findOne({ userId: String(userId) });
 }
 
-// `updates` may include any of: locale, chatColorMode ('twitch'|'custom'), customChatColor.
+// `updates` may include any of: locale, chatColorMode ('twitch'|'custom'), customChatColor,
+// hideMessageVolume, hideChatActivity, hideProfile.
 async function savePreferences(userId, updates) {
   const col = await ensureInitialized();
   await col.updateOne(
@@ -28,4 +30,10 @@ async function savePreferences(userId, updates) {
   return getPreferences(userId);
 }
 
-module.exports = { getPreferences, savePreferences };
+// The TARGET user's profile privacy flags (defaults resolved in lib/privacy.js - a user with
+// no doc still gets meaningful values). Callers pass the profile owner's id, not the viewer's.
+async function getPrivacy(userId) {
+  return resolvePrivacy(await getPreferences(userId));
+}
+
+module.exports = { getPreferences, savePreferences, getPrivacy };

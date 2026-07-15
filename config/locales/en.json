@@ -35,6 +35,36 @@
     "supportHeading": "Support",
     "supportText": "For bugs, feature requests, or access issues, contact"
   },
+  "footer": {
+    "privacy": "Privacy Policy"
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: July 15, 2026",
+    "intro": "ChatWizardBot is a Twitch chat bot, and this website is its companion statistics panel for the channels the bot serves. This page explains what data the service stores, why it stores it, and what you can do about it.",
+    "collectHeading": "What data is stored",
+    "collectIntro": "The bot joins only channels whose owners asked for it — it does not monitor Twitch at large. For those channels it stores:",
+    "collectChat": "Public chat messages (text, Twitch username and user ID, channel, time) and statistics derived from them: message counts, word and emote frequencies, @mention counts.",
+    "collectMod": "Moderation actions (bans, timeouts, deleted messages, warnings) with the acting moderator, the affected user and the time, plus moderator activity statistics.",
+    "collectNames": "Username history — the usernames a Twitch account has previously used in tracked channels.",
+    "collectAccountIntro": "If you log in to this site with your Twitch account, the site additionally stores:",
+    "collectAccount": "Your Twitch ID, login, display name and avatar (received from Twitch when you log in), your login session, and your site preferences (language, profile privacy settings).",
+    "collectProfile": "A cache of public Twitch profile data (avatar, chat color, display name) used to render pages; entries unused for 30 days are deleted automatically.",
+    "whyHeading": "Why it is stored",
+    "why1": "The data exists solely to provide channel statistics: leaderboards, word and emote clouds, chat activity, and moderation analytics for channel owners and their moderators. Channels are added only at the owner's request, and the date of that request is recorded.",
+    "why2": "Nothing is sold or shared with third parties. The site has no advertising and no third-party analytics.",
+    "cookiesHeading": "Cookies",
+    "cookies1": "The site uses only technical cookies: a session cookie that keeps you logged in with Twitch and a cookie that remembers your language choice. There are no tracking or advertising cookies, which is why the site shows no cookie consent banner.",
+    "visibilityHeading": "Who can see what",
+    "visibility1": "Aggregated channel statistics (top chatters, word clouds, emote boards) are public.",
+    "visibility2": "Raw chat logs and a channel's moderation history are visible only to that channel's owner and moderators.",
+    "visibility3": "On your personal profile page, the message-volume chart and the activity calendar are hidden by default until you opt in; in your account settings you can also hide the entire profile from everyone — moderators included.",
+    "rightsHeading": "Your rights",
+    "rights1": "You can control what your profile page shows in your account settings at any time.",
+    "rightsContact": "To ask what data is stored about you, or to request its correction or deletion, email",
+    "changesHeading": "Changes to this policy",
+    "changes1": "If this policy changes, the updated version will be published on this page with a new date."
+  },
   "commands": {
     "title": "Available Commands",
     "subtitle": "Signatures shown are defaults - each channel owner can rename them via that channel's settings page.",
@@ -150,7 +180,12 @@
     "ctxNoMessages": "No messages logged",
     "filterActionLabel": "Action",
     "filterModeratorLabel": "Moderator",
-    "filterAll": "All"
+    "filterAll": "All",
+    "filterInclude": "Include",
+    "filterExclude": "Exclude",
+    "filterSelected": "selected",
+    "filterClear": "Clear",
+    "noFilteredActions": "No actions match the filters."
   },
   "channelSettings": {
     "titleSuffix": "settings",
@@ -264,6 +299,12 @@
     "subtitle": "Personal preferences for your account on this site.",
     "saved": "Preferences saved.",
     "languageHeading": "Language",
+    "privacyHeading": "Privacy",
+    "privacyHint": "These settings apply to your profile page on every channel of this site.",
+    "privacyHideMessageVolume": "Hide the message volume chart",
+    "privacyHideChatActivity": "Hide the chat activity calendar",
+    "privacyHideProfile": "Hide my profile",
+    "privacyHideProfileHint": "Hides your entire profile page from everyone, including channel owners and moderators.",
     "save": "Save preferences"
   },
   "errors": {
@@ -285,7 +326,7 @@
     "noMessages": "No messages in this channel yet",
     "messageVolume": "Message volume",
     "wordCloud": "Word cloud",
-    "emoteCloud": "Emote cloud",
+    "emoteCloud": "Top emotes",
     "mentions": "@mentions",
     "mentionsTotal": "Times mentioned",
     "heatmap": "Chat activity",
@@ -299,6 +340,9 @@
     "noData": "No data for this period",
     "noTrackedEmotes": "This channel has no tracked 7TV emotes",
     "sampled": "Showing the most recent messages in this period, not all of them",
+    "profileHiddenTitle": "This profile is hidden",
+    "profileHiddenBody": "The user has chosen to keep their chat statistics private.",
+    "profileHiddenOwnerHint": "You can turn this off in your settings",
     "period": {
       "day": "Day",
       "week": "Week",
