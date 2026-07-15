@@ -82,7 +82,11 @@ const { dayBucket } = require("../lib/textStats");
 
 function periodStart(period) {
   if (period === "all") return null;
-  const days = { day: 1, week: 7, month: 30 }[period] ?? 7;
+  // 'day' means the current calendar day, not a rolling 24h window: chatStats.js buckets every
+  // row's `date` field to dayBucket(the message's own timestamp), so "today" is exactly
+  // dayBucket(now) - anything else would pull in part of yesterday's bucket too.
+  if (period === "day") return dayBucket(new Date());
+  const days = { week: 7, month: 30 }[period] ?? 7;
   return dayBucket(new Date(Date.now() - days * 86400000));
 }
 

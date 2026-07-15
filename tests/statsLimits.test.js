@@ -12,11 +12,17 @@ test("periodStart: 'all' is null - the signal to read the precomputed all-time r
 });
 
 test("periodStart: named periods land on the local-noon day bucket, matching the bot's rows", () => {
-  for (const [period, days] of [["day", 1], ["week", 7], ["month", 30]]) {
+  for (const [period, days] of [["week", 7], ["month", 30]]) {
     const start = periodStart(period);
     assert.deepEqual(start, dayBucket(new Date(Date.now() - days * 86400000)), period);
     assert.equal(start.getHours(), 12, `${period} must bucket at local noon`);
   }
+});
+
+test("periodStart: 'day' is today's calendar bucket, not a rolling 24h window", () => {
+  const start = periodStart("day");
+  assert.deepEqual(start, dayBucket(new Date()));
+  assert.equal(start.getHours(), 12, "day must bucket at local noon");
 });
 
 test("periodStart: any real window starts after the epoch, so the all-time sentinel is excluded", () => {
