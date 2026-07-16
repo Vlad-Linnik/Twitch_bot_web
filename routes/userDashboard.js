@@ -1,10 +1,8 @@
 // /<channel>/user/<username> - per-user analytics.
 //
-// Gating follows the "public showcase, private tooling" split:
-//   the PAGE and its stats (message chart, clouds, heatmap, mentions) are public - they are the
-//   channel's shop window, and they expose nothing a viewer could not have read in chat;
-//   the LOG endpoints are requireLevel(2) - a moderator reading back an individual user's
-//   messages is a moderation tool, not a stat.
+// Login-required: the PAGE and its stats (message chart, clouds, heatmap, mentions) need a
+// logged-in visitor (any tier), while the LOG endpoints stay requireLevel(2) - a moderator
+// reading back an individual user's messages is a moderation tool, not a stat.
 //
 // Every handler is thin, per this repo's convention: resolve channel -> resolve user -> hand off
 // to a db/*Repo.js module -> render. All the memory discipline lives in the repos and in
@@ -22,6 +20,23 @@ const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters"
 const limits = require("../config/statsLimits");
 
 const router = express.Router();
+
+// Same pattern as routes/accountSettings.js's local requireLogin: no permission-tier check, just
+// "is anyone logged in at all". Kept local rather than shared since it's a two-line check and
+// each route file that needs it renders its own errors/403 the same way.
+function requireLogin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).render("errors/403", { requiredLevel: null });
+  }
+  next();
+}
+
+function requireLoginJson(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: "unauthenticated" });
+  }
+  next();
+}
 
 // middleware/permissions.js's requireLevel() renders the errors/403 HTML page on denial, which is
 // right for a page and useless inside a fetch() - the browser would parse an HTML document as the
@@ -61,7 +76,7 @@ async function resolveTarget(req, res) {
 
 // --- Page -------------------------------------------------------------------------------
 
-router.get("/:channel/user/:username", async (req, res, next) => {
+router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
   try {
     const target = await resolveTarget(req, res);
     if (!target) return;
@@ -123,8 +138,9 @@ router.get("/:channel/user/:username", async (req, res, next) => {
         : userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId),
       userStatsRepo.getMentionStats(channel.channelLogin, identity, period),
       wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period),
-      // This page is public, so no requireLevel() has run and req.permissionLevel is unset -
-      // compute the tier explicitly just to decide whether to render the moderator panel.
+      // requireLogin only checks that someone is signed in, not their tier, so
+      // req.permissionLevel is unset here - compute it explicitly to decide whether to render
+      // the moderator panel.
       computePermission(req.user?.userId ?? null, channel.channelLogin),
     ]);
 
@@ -159,7 +175,7 @@ router.get("/:channel/user/:username", async (req, res, next) => {
 // One endpoint, one component, so a period change re-fetches only what actually changed rather
 // than re-rendering the page.
 
-router.get("/:channel/user/:username/stats.json", statsReadLimiter, async (req, res, next) => {
+router.get("/:channel/user/:username/stats.json", requireLoginJson, statsReadLimiter, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).json({ error: "unknown_channel" });
