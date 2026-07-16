@@ -41,11 +41,16 @@
     class="w-full mb-10 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
   />
 
-  <div class="lg:flex lg:items-start lg:gap-10">
+  <div class="lg:flex lg:gap-10">
     <%# Left reference nav, Twitch-API-docs style: sticky, section headings over the
         per-category anchors, active link highlighted as the matching section scrolls
         into view (public/js/commands-nav.js). Hidden below lg - the reordered
-        everyone-first/moderators-last page flow is enough to navigate on mobile. %>
+        everyone-first/moderators-last page flow is enough to navigate on mobile.
+        No lg:items-start here on purpose: the row must stretch (the default) so
+        <nav> spans the same height as the long content column - position:sticky
+        only has room to visibly follow the scroll within its own container's
+        height, and items-start would cap that container at the sidebar's own
+        (much shorter) content height. %>
     <nav class="hidden lg:block w-56 shrink-0" aria-label="<%= t('commands.title') %>">
       <div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto space-y-6 text-sm pr-2">
         <% sections.forEach(function(section) { %>

@@ -18,8 +18,12 @@ document.addEventListener("click", (event) => {
   if (!link || link.target) return;
 
   // Bug fix: clicking a nav link for the page you're already on still fires
-  // a (pointless) navigation + transition. Prevent it outright.
-  if (link.pathname === location.pathname && link.search === location.search) {
+  // a (pointless) navigation + transition. Prevent it outright - but only when
+  // there's no fragment: an in-page "#section" anchor (e.g. the /commands
+  // sidebar) has the same pathname/search as the current page by definition,
+  // and must fall through to the browser's native scroll-to-anchor instead of
+  // being swallowed here.
+  if (link.pathname === location.pathname && link.search === location.search && !link.hash) {
     event.preventDefault();
     return;
   }
