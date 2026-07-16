@@ -30,5 +30,5 @@ if (navLinks.length) {
     { rootMargin: "-5rem 0px -70% 0px", threshold: 0 }
   );
 
-  document.querySelectorAll("[data-command-group]").forEach((section) => observer.observe(section));
+  document.querySelectorAll("[data-command-group], h2[id^='section-']").forEach((section) => observer.observe(section));
 }
