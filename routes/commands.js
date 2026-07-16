@@ -9,7 +9,10 @@ const router = express.Router();
 
 router.get("/commands", async (req, res, next) => {
   try {
-    const channels = await channelsRepo.listEnabled();
+    // Not listEnabled(): a channel's command docs (including its real custom_commands
+    // rows) should stay reachable here regardless of whether the bot is currently
+    // joining it - `enabled` only gates the bot's join list, not this reference page.
+    const channels = await channelsRepo.listAll();
 
     // An unknown/malformed ?channel= just falls back to the defaults (same
     // fail-closed convention as middleware/permissions.js) rather than a 404 -

@@ -21,6 +21,14 @@ async function listEnabled() {
   return col.find({ enabled: true }).sort({ channelLogin: 1 }).toArray();
 }
 
+// Unlike listEnabled(), not filtered by `enabled` - used by the public /commands reference
+// page, where a channel's command docs (including its real custom_commands rows) should stay
+// visible regardless of whether the bot is currently joining that channel.
+async function listAll() {
+  const col = await ensureInitialized();
+  return col.find({}).sort({ channelLogin: 1 }).toArray();
+}
+
 // A Twitch user can own at most one channel - ownerId doubles as that
 // channel's channelId (see upsertChannel/seedChannel.js), so this is a
 // single-doc lookup, not a list. Used by the nav dropdown's "Creator Dashboard".
@@ -55,4 +63,4 @@ async function upsertChannel({ channelLogin, channelId, ownerId }) {
   return findByLogin(login);
 }
 
-module.exports = { findByLogin, listEnabled, upsertChannel, findByOwnerId, findManyByIds };
+module.exports = { findByLogin, listEnabled, listAll, upsertChannel, findByOwnerId, findManyByIds };

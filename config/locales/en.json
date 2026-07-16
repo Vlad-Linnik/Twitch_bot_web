@@ -99,12 +99,12 @@
       "allExceptionListed": "all (or mod/exception-listed)"
     },
     "category": {
-      "customCommands": "Custom commands (mod-managed)",
+      "customCommands": "Managing custom commands",
       "counters": "Counters",
       "chatStats": "Chat stats",
       "moderation": "Moderation",
       "miniGames": "Mini-games",
-      "channelCustom": "This channel's custom commands"
+      "channelCustom": "Custom commands added on this channel"
     },
     "desc": {
       "addcommand": "Create a custom command, or edit its text if it already exists.",

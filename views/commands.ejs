@@ -9,10 +9,11 @@
 
   <form method="get" action="/commands" class="flex flex-wrap items-center gap-3 mb-3">
     <label for="commands-channel" class="text-sm text-neutral-400"><%= t('commands.channelSelectLabel') %></label>
+    <%# Auto-submit on change lives in commands-search.js, not an inline onchange -
+        helmet's CSP ships script-src-attr 'none', which blocks inline handlers. %>
     <select
       id="commands-channel"
       name="channel"
-      onchange="this.form.submit()"
       class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
     >
       <option value=""<%= !selectedChannel ? ' selected' : '' %>><%= t('commands.channelSelectDefault') %></option>
