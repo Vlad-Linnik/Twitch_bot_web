@@ -9,7 +9,7 @@
 //
 // The month query is fully covered by ChatWordStats' {channel, date, count, word} index and
 // still costs ~half a second, because it has to $group ~72k distinct words. That is fine once
-// per cache window and far too expensive per request - which is why CLOUD_CACHE_TTL_MS below
+// per cache window and far too expensive per request - which is why STATS_CACHE_TTL_MS below
 // is load-bearing, not a nicety. Raising MAX_CLOUD_PERIOD without re-measuring is the single
 // easiest way to take the VPS down.
 //
@@ -65,14 +65,16 @@ const MAX_SEARCH_TERM_LENGTH = 100;
 // ~30k docs x ~172B is a few MB of scanning - comfortably inside the budget.
 const MAX_SEARCH_FUZZY_CANDIDATES = 30000;
 
-// How long a computed cloud/leaderboard is reused. Word clouds are not real-time data; nobody
-// can tell a 10-minute-old cloud from a live one, and it converts the ~495ms month query from
-// a per-request cost into a per-10-minutes cost.
-const CLOUD_CACHE_TTL_MS = 10 * 60 * 1000;
+// How long a computed stats result (cloud, leaderboard, per-user standing/heatmap/mentions...) is
+// reused - see lib/queryCache.js, shared by wordStatsRepo/statsRepo/userStatsRepo. None of this is
+// real-time data; nobody can tell a 10-minute-old word cloud or leaderboard from a live one, and
+// it converts a several-hundred-ms aggregation from a per-request cost (serialized across every
+// concurrent viewer of the same page) into a per-10-minutes cost.
+const STATS_CACHE_TTL_MS = 10 * 60 * 1000;
 
-// Guards the cache itself from becoming the memory leak it exists to prevent. Keys are
-// {channel, period, kind}, so this bounds us to a few hundred KB.
-const CLOUD_CACHE_MAX_ENTRIES = 200;
+// Guards each cache instance from becoming the memory leak it exists to prevent. Keys are small
+// strings ({channel, period, kind, ...}), so even a few hundred entries is a few hundred KB.
+const STATS_CACHE_MAX_ENTRIES = 200;
 
 // Start of the window for a named period, bucketed the same way the bot buckets its daily rows
 // (textStats.dayBucket). Returns null for `all`, which is a signal to read the precomputed
@@ -120,8 +122,8 @@ module.exports = {
   MAX_SEARCH_USERS,
   MAX_SEARCH_TERM_LENGTH,
   MAX_SEARCH_FUZZY_CANDIDATES,
-  CLOUD_CACHE_TTL_MS,
-  CLOUD_CACHE_MAX_ENTRIES,
+  STATS_CACHE_TTL_MS,
+  STATS_CACHE_MAX_ENTRIES,
   resolvePeriod,
   clampLimit,
   periodStart,

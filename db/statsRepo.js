@@ -11,6 +11,16 @@
 const { connect } = require("./connection");
 const { ObjectId } = require("mongodb");
 const limits = require("../config/statsLimits");
+const { createCache } = require("../lib/queryCache");
+
+// Leaderboard/top-chatters/totals are the same for every visitor of a channel's public stats
+// page - caching them is what stops N people opening /<channel>/statistics/chat at once from
+// serializing N copies of the same aggregation. See lib/queryCache.js and wordStatsRepo.js
+// (the original of this pattern) for the mechanics; config/statsLimits.js for the TTL/size.
+const { cached: withCache } = createCache({
+  ttlMs: limits.STATS_CACHE_TTL_MS,
+  maxEntries: limits.STATS_CACHE_MAX_ENTRIES,
+});
 
 // A ban/timeout context (the message the user was actioned for + their previous messages) is
 // only meaningful when the moderator reacted to something JUST said - past this TTA the last
@@ -48,43 +58,46 @@ const bareLogin = (channelLogin) => channelLogin.toLowerCase().replace(/^#/, "")
 // UserIdentities' unique {userId} index and runs after $limit, so it touches exactly `limit`
 // documents. Sorting is served by the {channel, messageCount} index.
 async function getLeaderboard(channelLogin, limit = 10) {
-  const { userLifetimeStats } = await ensureInitialized();
+  const key = `leaderboard:${withHash(channelLogin)}:${limit}`;
+  return withCache(key, async () => {
+    const { userLifetimeStats } = await ensureInitialized();
 
-  const rows = await userLifetimeStats
-    .aggregate(
-      [
-        { $match: { channel: withHash(channelLogin) } },
-        { $sort: { messageCount: -1 } },
-        { $limit: limit },
-        {
-          $lookup: {
-            from: "UserIdentities",
-            localField: "userId",
-            foreignField: "userId",
-            as: "identity",
+    const rows = await userLifetimeStats
+      .aggregate(
+        [
+          { $match: { channel: withHash(channelLogin) } },
+          { $sort: { messageCount: -1 } },
+          { $limit: limit },
+          {
+            $lookup: {
+              from: "UserIdentities",
+              localField: "userId",
+              foreignField: "userId",
+              as: "identity",
+            },
           },
-        },
-        {
-          $project: {
-            _id: 0,
-            userId: 1,
-            messageCount: 1,
-            lastSeen: 1,
-            userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+          {
+            $project: {
+              _id: 0,
+              userId: 1,
+              messageCount: 1,
+              lastSeen: 1,
+              userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+            },
           },
-        },
-      ],
-      { allowDiskUse: false }
-    )
-    .toArray();
+        ],
+        { allowDiskUse: false }
+      )
+      .toArray();
 
-  // A chatter with no UserIdentities row (possible for very old rows predating that collection)
-  // still deserves a place on the board - fall back to the id rather than dropping them.
-  return rows.map((row, index) => ({
-    ...row,
-    userName: row.userName || row.userId,
-    rank: index + 1,
-  }));
+    // A chatter with no UserIdentities row (possible for very old rows predating that collection)
+    // still deserves a place on the board - fall back to the id rather than dropping them.
+    return rows.map((row, index) => ({
+      ...row,
+      userName: row.userName || row.userId,
+      rank: index + 1,
+    }));
+  });
 }
 
 // Period-switchable top chatters. `all` delegates to getLeaderboard (UserLifetimeStats is the
@@ -94,55 +107,61 @@ async function getLeaderboard(channelLogin, limit = 10) {
 async function getTopChatters(channelLogin, period, limit = 10) {
   if (period === "all") return getLeaderboard(channelLogin, limit);
 
-  const { userDailyMessageStats } = await ensureInitialized();
-  const start = limits.periodStart(period);
+  const key = `topchatters:${withHash(channelLogin)}:${period}:${limit}`;
+  return withCache(key, async () => {
+    const { userDailyMessageStats } = await ensureInitialized();
+    const start = limits.periodStart(period);
 
-  const rows = await userDailyMessageStats
-    .aggregate(
-      [
-        // $gte start excludes the epoch all-time row automatically (1970 < any real window).
-        { $match: { channel: withHash(channelLogin), date: { $gte: start } } },
-        { $group: { _id: "$userId", messageCount: { $sum: "$count" } } },
-        { $sort: { messageCount: -1 } },
-        { $limit: limit },
-        {
-          $lookup: {
-            from: "UserIdentities",
-            localField: "_id",
-            foreignField: "userId",
-            as: "identity",
+    const rows = await userDailyMessageStats
+      .aggregate(
+        [
+          // $gte start excludes the epoch all-time row automatically (1970 < any real window).
+          { $match: { channel: withHash(channelLogin), date: { $gte: start } } },
+          { $group: { _id: "$userId", messageCount: { $sum: "$count" } } },
+          { $sort: { messageCount: -1 } },
+          { $limit: limit },
+          {
+            $lookup: {
+              from: "UserIdentities",
+              localField: "_id",
+              foreignField: "userId",
+              as: "identity",
+            },
           },
-        },
-        {
-          $project: {
-            _id: 0,
-            userId: "$_id",
-            messageCount: 1,
-            userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+          {
+            $project: {
+              _id: 0,
+              userId: "$_id",
+              messageCount: 1,
+              userName: { $arrayElemAt: ["$identity.currentUserName", 0] },
+            },
           },
-        },
-      ],
-      { allowDiskUse: false }
-    )
-    .toArray();
+        ],
+        { allowDiskUse: false }
+      )
+      .toArray();
 
-  return rows.map((row, index) => ({
-    ...row,
-    userName: row.userName || row.userId,
-    rank: index + 1,
-  }));
+    return rows.map((row, index) => ({
+      ...row,
+      userName: row.userName || row.userId,
+      rank: index + 1,
+    }));
+  });
 }
 
 async function getChannelTotals(channelLogin) {
-  const { userLifetimeStats } = await ensureInitialized();
   const channel = withHash(channelLogin);
-  const [uniqueChatters, totals] = await Promise.all([
-    userLifetimeStats.countDocuments({ channel }),
-    userLifetimeStats
-      .aggregate([{ $match: { channel } }, { $group: { _id: null, messages: { $sum: "$messageCount" } } }])
-      .toArray(),
-  ]);
-  return { uniqueChatters, totalMessages: totals[0]?.messages ?? 0 };
+  const key = `totals:${channel}`;
+  return withCache(key, async () => {
+    const { userLifetimeStats } = await ensureInitialized();
+    const [uniqueChatters, totals] = await Promise.all([
+      userLifetimeStats.countDocuments({ channel }),
+      userLifetimeStats
+        .aggregate([{ $match: { channel } }, { $group: { _id: null, messages: { $sum: "$messageCount" } } }])
+        .toArray(),
+    ]);
+    return { uniqueChatters, totalMessages: totals[0]?.messages ?? 0 };
+  });
 }
 
 // Paginated, newest first. `page` is 1-based. Filters apply to the find AND the count - a

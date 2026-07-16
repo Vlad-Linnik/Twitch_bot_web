@@ -9,6 +9,15 @@
 const { connect } = require("./connection");
 const { dayBucket, LIFETIME_BUCKET } = require("../lib/textStats");
 const limits = require("../config/statsLimits");
+const { createCache } = require("../lib/queryCache");
+
+// A user page's standing/heatmap/volume/mentions are the same for every viewer of that profile
+// (privacy flags are checked by the route before these run, not baked into the query) - cached
+// for the same reason statsRepo.js's channel-wide numbers are. See lib/queryCache.js.
+const { cached: withCache } = createCache({
+  ttlMs: limits.STATS_CACHE_TTL_MS,
+  maxEntries: limits.STATS_CACHE_MAX_ENTRIES,
+});
 
 let collections;
 
@@ -103,25 +112,28 @@ function nicknameHistory(identity) {
  * 100,000.
  */
 async function getDailyMessageCounts(channelLogin, userId, days = limits.MAX_HEATMAP_DAYS) {
-  const { messages } = await ensureInitialized();
   const cappedDays = Math.min(days, limits.MAX_HEATMAP_DAYS);
+  const key = `heatmap:${withHash(channelLogin)}:${userId}:${cappedDays}`;
+  return withCache(key, async () => {
+    const { messages } = await ensureInitialized();
 
-  const start = new Date(Date.now() - cappedDays * 86400000);
-  start.setHours(0, 0, 0, 0);
+    const start = new Date(Date.now() - cappedDays * 86400000);
+    start.setHours(0, 0, 0, 0);
 
-  const rows = await messages
-    .aggregate(
-      [
-        { $match: { channel: withHash(channelLogin), userId: String(userId), timestamp: { $gte: start } } },
-        { $group: { _id: { $dateTrunc: { date: "$timestamp", unit: "day" } }, count: { $sum: 1 } } },
-        { $sort: { _id: 1 } },
-        { $project: { _id: 0, date: "$_id", count: 1 } },
-      ],
-      { allowDiskUse: false }
-    )
-    .toArray();
+    const rows = await messages
+      .aggregate(
+        [
+          { $match: { channel: withHash(channelLogin), userId: String(userId), timestamp: { $gte: start } } },
+          { $group: { _id: { $dateTrunc: { date: "$timestamp", unit: "day" } }, count: { $sum: 1 } } },
+          { $sort: { _id: 1 } },
+          { $project: { _id: 0, date: "$_id", count: 1 } },
+        ],
+        { allowDiskUse: false }
+      )
+      .toArray();
 
-  return { days: cappedDays, start, buckets: rows };
+    return { days: cappedDays, start, buckets: rows };
+  });
 }
 
 /**
@@ -147,35 +159,38 @@ const VOLUME_BUCKETS = {
 };
 
 async function getMessageVolume(channelLogin, userId, requestedPeriod) {
-  const { messages } = await ensureInitialized();
   const period = limits.resolvePeriod(requestedPeriod);
-  const { bucketMs, count } = VOLUME_BUCKETS[period];
+  const key = `volume:${withHash(channelLogin)}:${userId}:${period}`;
+  return withCache(key, async () => {
+    const { messages } = await ensureInitialized();
+    const { bucketMs, count } = VOLUME_BUCKETS[period];
 
-  const end = new Date();
-  const start = new Date(end.getTime() - bucketMs * count);
+    const end = new Date();
+    const start = new Date(end.getTime() - bucketMs * count);
 
-  const rows = await messages
-    .aggregate(
-      [
-        { $match: { channel: withHash(channelLogin), userId: String(userId), timestamp: { $gte: start } } },
-        {
-          $group: {
-            _id: { $floor: { $divide: [{ $subtract: ["$timestamp", start] }, bucketMs] } },
-            count: { $sum: 1 },
+    const rows = await messages
+      .aggregate(
+        [
+          { $match: { channel: withHash(channelLogin), userId: String(userId), timestamp: { $gte: start } } },
+          {
+            $group: {
+              _id: { $floor: { $divide: [{ $subtract: ["$timestamp", start] }, bucketMs] } },
+              count: { $sum: 1 },
+            },
           },
-        },
-      ],
-      { allowDiskUse: false }
-    )
-    .toArray();
+        ],
+        { allowDiskUse: false }
+      )
+      .toArray();
 
-  const byIndex = new Map(rows.map((r) => [Math.min(Math.max(r._id, 0), count - 1), r.count]));
-  const buckets = [];
-  for (let i = 0; i < count; i++) {
-    buckets.push({ date: new Date(start.getTime() + i * bucketMs), count: byIndex.get(i) ?? 0 });
-  }
+    const byIndex = new Map(rows.map((r) => [Math.min(Math.max(r._id, 0), count - 1), r.count]));
+    const buckets = [];
+    for (let i = 0; i < count; i++) {
+      buckets.push({ date: new Date(start.getTime() + i * bucketMs), count: byIndex.get(i) ?? 0 });
+    }
 
-  return { period, bucketMs, start, buckets };
+    return { period, bucketMs, start, buckets };
+  });
 }
 
 /**
@@ -186,19 +201,22 @@ async function getMessageVolume(channelLogin, userId, requestedPeriod) {
  * answers without touching a single document body. Same approach the bot's getUserRank uses.
  */
 async function getLifetimeStanding(channelLogin, userId) {
-  const { userLifetimeStats } = await ensureInitialized();
   const channel = withHash(channelLogin);
+  const key = `standing:${channel}:${userId}`;
+  return withCache(key, async () => {
+    const { userLifetimeStats } = await ensureInitialized();
 
-  const doc = await userLifetimeStats.findOne({ channel, userId: String(userId) });
-  const totalMessages = doc?.messageCount ?? 0;
-  if (totalMessages === 0) return { totalMessages: 0, rank: null, totalChatters: 0 };
+    const doc = await userLifetimeStats.findOne({ channel, userId: String(userId) });
+    const totalMessages = doc?.messageCount ?? 0;
+    if (totalMessages === 0) return { totalMessages: 0, rank: null, totalChatters: 0 };
 
-  const [above, totalChatters] = await Promise.all([
-    userLifetimeStats.countDocuments({ channel, messageCount: { $gt: totalMessages } }),
-    userLifetimeStats.countDocuments({ channel }),
-  ]);
+    const [above, totalChatters] = await Promise.all([
+      userLifetimeStats.countDocuments({ channel, messageCount: { $gt: totalMessages } }),
+      userLifetimeStats.countDocuments({ channel }),
+    ]);
 
-  return { totalMessages, rank: above + 1, totalChatters, lastSeen: doc?.lastSeen ?? null };
+    return { totalMessages, rank: above + 1, totalChatters, lastSeen: doc?.lastSeen ?? null };
+  });
 }
 
 /**
@@ -217,70 +235,73 @@ async function getLifetimeStanding(channelLogin, userId) {
  * (UserMentionStats is the bot's daily rollup), so `day` is honestly short: 2 points.
  */
 async function getMentionStats(channelLogin, identity, requestedPeriod) {
-  const { userMentionStats } = await ensureInitialized();
   const channel = withHash(channelLogin);
   const period = limits.resolvePeriod(requestedPeriod);
+  const key = `mentions:${channel}:${identity.userId}:${period}`;
+  return withCache(key, async () => {
+    const { userMentionStats } = await ensureInitialized();
 
-  const logins = [identity.currentUserName, ...(identity.nicknames || []).map((n) => n.name)]
-    .filter(Boolean)
-    .map((n) => n.toLowerCase());
-  const known = [...new Set(logins)];
-  if (known.length === 0) return { period, total: 0, daily: [], aliasesCounted: 0 };
+    const logins = [identity.currentUserName, ...(identity.nicknames || []).map((n) => n.name)]
+      .filter(Boolean)
+      .map((n) => n.toLowerCase());
+    const known = [...new Set(logins)];
+    if (known.length === 0) return { period, total: 0, daily: [], aliasesCounted: 0 };
 
-  const days = { day: 1, week: 7, month: 30, all: limits.MAX_HEATMAP_DAYS }[period] ?? 7;
-  const start = dayBucket(new Date(Date.now() - days * 86400000));
+    const days = { day: 1, week: 7, month: 30, all: limits.MAX_HEATMAP_DAYS }[period] ?? 7;
+    const start = dayBucket(new Date(Date.now() - days * 86400000));
 
-  const [allTime, rows] = await Promise.all([
-    userMentionStats
-      .aggregate([
-        { $match: { channel, mentionedLogin: { $in: known }, date: LIFETIME_BUCKET } },
-        { $group: { _id: null, total: { $sum: "$count" } } },
-      ])
-      .toArray(),
-    userMentionStats
-      .aggregate(
-        [
-          // $gte start also excludes the epoch row, so the all-time total never leaks into the trend.
-          { $match: { channel, mentionedLogin: { $in: known }, date: { $gte: start } } },
-          { $group: { _id: "$date", count: { $sum: "$count" } } },
-          { $sort: { _id: 1 } },
-          { $project: { _id: 0, date: "$_id", count: 1 } },
-        ],
-        { allowDiskUse: false }
-      )
-      .toArray(),
-  ]);
+    const [allTime, rows] = await Promise.all([
+      userMentionStats
+        .aggregate([
+          { $match: { channel, mentionedLogin: { $in: known }, date: LIFETIME_BUCKET } },
+          { $group: { _id: null, total: { $sum: "$count" } } },
+        ])
+        .toArray(),
+      userMentionStats
+        .aggregate(
+          [
+            // $gte start also excludes the epoch row, so the all-time total never leaks into the trend.
+            { $match: { channel, mentionedLogin: { $in: known }, date: { $gte: start } } },
+            { $group: { _id: "$date", count: { $sum: "$count" } } },
+            { $sort: { _id: 1 } },
+            { $project: { _id: 0, date: "$_id", count: 1 } },
+          ],
+          { allowDiskUse: false }
+        )
+        .toArray(),
+    ]);
 
-  // Zero-fill: one point per calendar day from `start` through today. Stepping with setDate
-  // (not += 86400000) keeps the cursor at the same local noon dayBucket() writes, even across
-  // a DST change, so the map keys always line up.
-  const byDay = new Map(rows.map((r) => [new Date(r.date).getTime(), r.count]));
-  let daily = [];
-  const cursor = new Date(start);
-  const last = dayBucket(new Date());
-  while (cursor.getTime() <= last.getTime()) {
-    daily.push({ date: new Date(cursor), count: byDay.get(cursor.getTime()) ?? 0 });
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  const rangedTotal = daily.reduce((sum, d) => sum + d.count, 0);
-
-  if (period === "all") {
-    const BIN_DAYS = 5; // mirrors VOLUME_BUCKETS.all, so both charts land at ~31 points
-    const binned = [];
-    for (let i = 0; i < daily.length; i += BIN_DAYS) {
-      const slice = daily.slice(i, i + BIN_DAYS);
-      binned.push({ date: slice[0].date, count: slice.reduce((sum, d) => sum + d.count, 0) });
+    // Zero-fill: one point per calendar day from `start` through today. Stepping with setDate
+    // (not += 86400000) keeps the cursor at the same local noon dayBucket() writes, even across
+    // a DST change, so the map keys always line up.
+    const byDay = new Map(rows.map((r) => [new Date(r.date).getTime(), r.count]));
+    let daily = [];
+    const cursor = new Date(start);
+    const last = dayBucket(new Date());
+    while (cursor.getTime() <= last.getTime()) {
+      daily.push({ date: new Date(cursor), count: byDay.get(cursor.getTime()) ?? 0 });
+      cursor.setDate(cursor.getDate() + 1);
     }
-    daily = binned;
-  }
 
-  return {
-    period,
-    total: period === "all" ? allTime[0]?.total ?? 0 : rangedTotal,
-    daily,
-    aliasesCounted: known.length,
-  };
+    const rangedTotal = daily.reduce((sum, d) => sum + d.count, 0);
+
+    if (period === "all") {
+      const BIN_DAYS = 5; // mirrors VOLUME_BUCKETS.all, so both charts land at ~31 points
+      const binned = [];
+      for (let i = 0; i < daily.length; i += BIN_DAYS) {
+        const slice = daily.slice(i, i + BIN_DAYS);
+        binned.push({ date: slice[0].date, count: slice.reduce((sum, d) => sum + d.count, 0) });
+      }
+      daily = binned;
+    }
+
+    return {
+      period,
+      total: period === "all" ? allTime[0]?.total ?? 0 : rangedTotal,
+      daily,
+      aliasesCounted: known.length,
+    };
+  });
 }
 
 module.exports = {
