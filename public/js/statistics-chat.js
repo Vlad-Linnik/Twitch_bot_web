@@ -187,6 +187,117 @@
   });
 
   // ---------------------------------------------------------------------------------------
+  // Find a user - a typeahead so an incomplete or mistyped name still finds the right profile
+  // instead of dead-ending on a 404. Suggestions come from user-search.json (channel-scoped
+  // prefix match); final login/nickname resolution and the 404-on-miss still happen server side
+  // (routes/userDashboard.js's findUserByName) - this is just candidates, not a hard guarantee.
+  // ---------------------------------------------------------------------------------------
+  const userSearchForm = $("user-search-form");
+  const userSearchInput = $("user-search-input");
+  const userSearchSuggestions = $("user-search-suggestions");
+
+  if (userSearchForm && userSearchInput && userSearchSuggestions) {
+    let userSearchTimer = null;
+    let userSearchSeq = 0;
+    let activeIndex = -1;
+
+    const goToUser = (name) => {
+      const trimmed = (name || "").trim();
+      if (!trimmed) return;
+      window.location.href = `${base}/user/${encodeURIComponent(trimmed)}`;
+    };
+
+    const closeSuggestions = () => {
+      userSearchSuggestions.hidden = true;
+      userSearchSuggestions.textContent = "";
+      activeIndex = -1;
+    };
+
+    const highlight = (index) => {
+      const items = userSearchSuggestions.querySelectorAll("li");
+      items.forEach((li, i) => {
+        li.className =
+          "px-3 py-1.5 cursor-pointer " +
+          (i === index ? "bg-neutral-800 text-neutral-100" : "text-neutral-200 hover:bg-neutral-800");
+      });
+      activeIndex = index;
+    };
+
+    function renderSuggestions(users) {
+      userSearchSuggestions.textContent = "";
+      if (!users.length) {
+        closeSuggestions();
+        return;
+      }
+      users.forEach((u) => {
+        const li = document.createElement("li");
+        li.className = "px-3 py-1.5 cursor-pointer text-neutral-200 hover:bg-neutral-800";
+        li.textContent = u.userName; // chat-derived - textContent only
+        li.dataset.userName = u.userName;
+        // mousedown (not click) fires before the input's blur, so goToUser still runs before
+        // closeSuggestions would otherwise remove this element out from under a click.
+        li.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          goToUser(u.userName);
+        });
+        userSearchSuggestions.appendChild(li);
+      });
+      activeIndex = -1;
+      userSearchSuggestions.hidden = false;
+    }
+
+    async function runUserSearch() {
+      const q = userSearchInput.value.trim();
+      if (q.length < 2) {
+        closeSuggestions();
+        return;
+      }
+      const mine = ++userSearchSeq;
+      const res = await fetch(`${base}/user-search.json?q=${encodeURIComponent(q)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (mine !== userSearchSeq || !res.ok) return;
+      const data = await res.json();
+      if (mine !== userSearchSeq) return;
+      renderSuggestions(data.users || []);
+    }
+
+    userSearchInput.addEventListener("input", () => {
+      clearTimeout(userSearchTimer);
+      userSearchTimer = setTimeout(runUserSearch, 200);
+    });
+
+    userSearchInput.addEventListener("keydown", (event) => {
+      const items = userSearchSuggestions.querySelectorAll("li");
+      if (userSearchSuggestions.hidden || items.length === 0) return;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        highlight((activeIndex + 1) % items.length);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        highlight((activeIndex - 1 + items.length) % items.length);
+      } else if (event.key === "Escape") {
+        closeSuggestions();
+      } else if (event.key === "Enter" && activeIndex >= 0) {
+        event.preventDefault();
+        goToUser(items[activeIndex].dataset.userName);
+      }
+    });
+
+    userSearchInput.addEventListener("blur", () => setTimeout(closeSuggestions, 100));
+
+    userSearchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (activeIndex >= 0) {
+        const items = userSearchSuggestions.querySelectorAll("li");
+        if (items[activeIndex]) return goToUser(items[activeIndex].dataset.userName);
+      }
+      goToUser(userSearchInput.value);
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------
   // Universal log search
   //
   // Naming users in the filter does not merely narrow the RESULTS - it narrows the index range

@@ -379,6 +379,22 @@ router.get("/:channel/stats.json", statsReadLimiter, async (req, res, next) => {
   }
 });
 
+// --- Find-a-user typeahead --------------------------------------------------------------
+// Public, like the page itself - the search box exists precisely so an anonymous visitor isn't
+// limited to Top Chatters' top 10. statsReadLimiter (not searchLimiter) because this is a bounded
+// index lookup, not the log search's per-message scan.
+router.get("/:channel/user-search.json", statsReadLimiter, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).json({ error: "unknown_channel" });
+
+    const users = await userStatsRepo.searchUsernames(channel.channelLogin, req.query.q);
+    res.json({ users });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // --- Mod-action context (moderator-only) ----------------------------------------------------
 // The chat history behind one row of the recent-actions table: the message the target was
 // actioned for + up to 5 of their previous messages. Fetched lazily on hover (mod-stats.js) -

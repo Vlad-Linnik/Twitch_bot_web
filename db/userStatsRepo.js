@@ -304,9 +304,50 @@ async function getMentionStats(channelLogin, identity, requestedPeriod) {
   });
 }
 
+/**
+ * Prefix suggestions for the "Find a user" typeahead on /statistics/chat.
+ *
+ * Channel-scoped FIRST, then name-matched - see statsLimits.js's comment on
+ * MAX_USERNAME_SUGGESTION_CANDIDATES for why the reverse order (global name match, narrowed to
+ * the channel after) silently drops real matches. The first read is index-only (no document
+ * fetch, {channel, messageCount: -1}), so ranking by activity before the $in against
+ * UserIdentities costs nothing extra and means the most active matching chatter is always first.
+ */
+async function searchUsernames(channelLogin, rawQuery) {
+  const needle = String(rawQuery || "").toLowerCase().replace(/^@/, "").trim();
+  if (needle.length < limits.MIN_USERNAME_QUERY_LENGTH) return [];
+
+  const { userIdentities, userLifetimeStats } = await ensureInitialized();
+  const channel = withHash(channelLogin);
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const prefixPattern = new RegExp(`^${escaped}`);
+
+  const topChatters = await userLifetimeStats
+    .find({ channel }, { projection: { _id: 0, userId: 1, messageCount: 1 } })
+    .sort({ messageCount: -1 })
+    .limit(limits.MAX_USERNAME_SUGGESTION_CANDIDATES)
+    .toArray();
+  if (topChatters.length === 0) return [];
+
+  const countByUserId = new Map(topChatters.map((c) => [c.userId, c.messageCount]));
+
+  const identities = await userIdentities
+    .find(
+      { userId: { $in: [...countByUserId.keys()] }, currentUserName: prefixPattern },
+      { projection: { _id: 0, userId: 1, currentUserName: 1 } }
+    )
+    .toArray();
+
+  return identities
+    .map((d) => ({ userName: d.currentUserName, messageCount: countByUserId.get(d.userId) }))
+    .sort((a, b) => b.messageCount - a.messageCount)
+    .slice(0, limits.MAX_USERNAME_SUGGESTIONS);
+}
+
 module.exports = {
   findUserByName,
   resolveUserIds,
+  searchUsernames,
   nicknameHistory,
   getDailyMessageCounts,
   getMessageVolume,

@@ -57,6 +57,20 @@ const MAX_SEARCH_RESULTS = 200;
 const MAX_SEARCH_USERS = 25; // multi-user filter ($in) width
 const MAX_SEARCH_TERM_LENGTH = 100;
 
+// "Find a user" typeahead on /statistics/chat. Channel-scoped FIRST: UserLifetimeStats' own
+// {channel, messageCount: -1} index gives this channel's most active chatters as an index-only
+// read (no document fetch), and MAX_USERNAME_SUGGESTION_CANDIDATES bounds how many of them get
+// name-matched against the prefix. Doing it the other way around - matching the prefix against
+// UserIdentities first (global across every channel the bot joins) and narrowing to the channel
+// after - was tried and is wrong: a common prefix can turn up 50+ same-prefix users from OTHER
+// channels before this channel's own top match is ever reached, silently dropping it from the
+// candidate window. MIN_USERNAME_QUERY_LENGTH keeps single-character prefixes (the worst case for
+// the regex filter, which runs in Node over the candidate window rather than via an index) from
+// firing at all.
+const MIN_USERNAME_QUERY_LENGTH = 2;
+const MAX_USERNAME_SUGGESTIONS = 8;
+const MAX_USERNAME_SUGGESTION_CANDIDATES = 500;
+
 // Fuzzy (typo-tolerant) search cannot use an index - it has to look at each candidate message in
 // Node. That is perfectly affordable on a narrow set (one user, one week) and ruinous on a wide
 // one (a whole channel, a whole year). So it is allowed only when the indexed filter has already
@@ -122,6 +136,9 @@ module.exports = {
   MAX_SEARCH_USERS,
   MAX_SEARCH_TERM_LENGTH,
   MAX_SEARCH_FUZZY_CANDIDATES,
+  MIN_USERNAME_QUERY_LENGTH,
+  MAX_USERNAME_SUGGESTIONS,
+  MAX_USERNAME_SUGGESTION_CANDIDATES,
   STATS_CACHE_TTL_MS,
   STATS_CACHE_MAX_ENTRIES,
   resolvePeriod,

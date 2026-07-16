@@ -86,6 +86,26 @@
     </section>
   </div>
 
+  <!-- Find a user: Top Chatters only links the top 10, so this is the only way to reach an
+       arbitrary profile without typing the URL by hand. Suggestions cover partial/mistyped
+       names - see user-search.json / statistics-chat.js. -->
+  <section class="mb-10" id="user-search">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('channelDashboard.findUser') %></h2>
+    <form id="user-search-form" class="flex gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+      <div class="relative flex-1 min-w-0">
+        <input type="text" id="user-search-input" autocomplete="off"
+               placeholder="<%= t('channelDashboard.findUserPlaceholder') %>"
+               class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-1.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+        <ul id="user-search-suggestions" hidden
+            class="absolute left-0 right-0 top-full mt-1 rounded-md border border-neutral-800 bg-neutral-950 divide-y divide-neutral-900 text-sm max-h-64 overflow-y-auto z-10"></ul>
+      </div>
+      <button type="submit"
+              class="px-4 py-1.5 text-sm rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors">
+        <%= t('channelDashboard.findUserButton') %>
+      </button>
+    </form>
+  </section>
+
   <!-- Universal log search (moderator-only) -->
   <% if (canModerate) { %>
     <section class="mb-10" id="universal-search">
