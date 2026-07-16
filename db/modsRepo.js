@@ -48,4 +48,24 @@ async function removeModerator(channelId, userId) {
   );
 }
 
-module.exports = { getModerators, isModerator, addModerator, removeModerator, getChannelsModeratedBy };
+// Full reconciliation against Twitch's canonical moderator list (Get Moderators, only
+// reachable for a channel's own owner - see twitch/channelModerators.js), as opposed to
+// addModerator/removeModerator's incremental EventSub-driven updates. Replaces the array
+// outright rather than $addToSet/$pull, since the source here is authoritative.
+async function setModerators(channelId, moderatorIds) {
+  const col = await ensureInitialized();
+  await col.updateOne(
+    { channelId: String(channelId) },
+    { $set: { moderators: moderatorIds.map(String), updatedAt: new Date() } },
+    { upsert: true }
+  );
+}
+
+module.exports = {
+  getModerators,
+  isModerator,
+  addModerator,
+  removeModerator,
+  setModerators,
+  getChannelsModeratedBy,
+};

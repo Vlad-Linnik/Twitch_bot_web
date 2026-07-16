@@ -40,7 +40,7 @@
   },
   "privacy": {
     "title": "Privacy Policy",
-    "updated": "Last updated: July 15, 2026",
+    "updated": "Last updated: July 16, 2026",
     "intro": "ChatWizardBot is a Twitch chat bot, and this website is its companion statistics panel for the channels the bot serves. This page explains what data the service stores, why it stores it, and what you can do about it.",
     "collectHeading": "What data is stored",
     "collectIntro": "The bot joins only channels whose owners asked for it — it does not monitor Twitch at large. For those channels it stores:",
@@ -50,6 +50,7 @@
     "collectAccountIntro": "If you log in to this site with your Twitch account, the site additionally stores:",
     "collectAccount": "Your Twitch ID, login, display name and avatar (received from Twitch when you log in), your login session, and your site preferences (language, profile privacy settings).",
     "collectProfile": "A cache of public Twitch profile data (avatar, chat color, display name) used to render pages; entries unused for 30 days are deleted automatically.",
+    "collectOwnerToken": "If you own a connected channel: an encrypted copy of your Twitch refresh token, used in the background to keep that channel's moderator list synced with Twitch. It is deleted automatically if you revoke the site's access on Twitch, and you can ask us to delete it sooner (see \"Your rights\" below).",
     "whyHeading": "Why it is stored",
     "why1": "The data exists solely to provide channel statistics: leaderboards, word and emote clouds, chat activity, and moderation analytics for channel owners and their moderators. Channels are added only at the owner's request, and the date of that request is recorded.",
     "why2": "Nothing is sold or shared with third parties. The site has no advertising and no third-party analytics.",

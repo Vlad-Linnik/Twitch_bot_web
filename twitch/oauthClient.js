@@ -18,7 +18,14 @@ function buildAuthorizeUrl(state) {
     client_id: env.twitchClientId,
     redirect_uri: env.twitchRedirectUri,
     response_type: "code",
-    scope: "",
+    // moderation:read backs the owner-triggered ModsList sync (see
+    // twitch/channelModerators.js) - when a channel owner logs in, we use their own
+    // token to pull Twitch's canonical moderator list for their channel. Requested
+    // from every visitor up front (Twitch scopes can't be requested conditionally
+    // at redirect time), but only ever exercised for the subset who own a channel.
+    // (Get Moderators accepts moderation:read OR channel:manage:moderators - the
+    // latter also grants add/remove rights we don't need, so the read-only one wins.)
+    scope: "moderation:read",
     state,
     force_verify: "true",
   });
@@ -33,6 +40,21 @@ async function exchangeCodeForToken(code) {
       code,
       grant_type: "authorization_code",
       redirect_uri: env.twitchRedirectUri,
+    },
+  });
+  return response.data; // { access_token, refresh_token, expires_in, scope, token_type }
+}
+
+// Used by twitch/moderatorSyncScheduler.js to turn a persisted refresh_token into a fresh
+// access_token between logins. Twitch rotates the refresh_token on every use - callers must
+// persist response.data.refresh_token, not reuse the one they passed in.
+async function refreshAccessToken(refreshToken) {
+  const response = await axios.post(TOKEN_URL, null, {
+    params: {
+      client_id: env.twitchClientId,
+      client_secret: env.twitchClientSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
     },
   });
   return response.data; // { access_token, refresh_token, expires_in, scope, token_type }
@@ -55,4 +77,10 @@ async function getAuthenticatedUser(userAccessToken) {
   };
 }
 
-module.exports = { generateState, buildAuthorizeUrl, exchangeCodeForToken, getAuthenticatedUser };
+module.exports = {
+  generateState,
+  buildAuthorizeUrl,
+  exchangeCodeForToken,
+  refreshAccessToken,
+  getAuthenticatedUser,
+};

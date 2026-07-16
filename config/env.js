@@ -21,6 +21,10 @@ const env = {
   webMongoDb: process.env.WEB_MONGODB_DB || "chatwizardbot_web",
 
   sessionSecret: process.env.SESSION_SECRET || "dev_only_insecure_secret",
+  // Encrypts channel owners' persisted Twitch refresh tokens at rest (db/ownerTokensRepo.js,
+  // lib/tokenCrypto.js) - deliberately separate from sessionSecret so one leaking doesn't
+  // compromise the other.
+  tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || "dev_only_insecure_token_key",
 
   twitchClientId: process.env.TWITCH_CLIENT_ID || "",
   twitchClientSecret: process.env.TWITCH_CLIENT_SECRET || "",
