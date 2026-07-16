@@ -170,11 +170,16 @@
 
       const modCell = cellEl(`px-4 py-2 whitespace-nowrap${a.modColor ? "" : " text-neutral-400"}`, a.modName);
       if (a.modColor) modCell.style.color = a.modColor;
-      const targetCell = cellEl(
-        `px-4 py-2 whitespace-nowrap target-cell${a.targetColor ? "" : " text-neutral-400"}`,
-        a.targetName
-      );
-      if (a.targetColor) targetCell.style.color = a.targetColor;
+
+      const targetCell = document.createElement("td");
+      targetCell.className = "px-4 py-2 whitespace-nowrap target-cell";
+      const targetLink = document.createElement("a");
+      targetLink.href = `/${channelLogin}/user/${encodeURIComponent(a.targetName)}`;
+      targetLink.className = `hover:underline${a.targetColor ? "" : " text-neutral-400"}`;
+      if (a.targetColor) targetLink.style.color = a.targetColor;
+      targetLink.textContent = a.targetName; // chat-derived name - textContent only, never innerHTML
+      targetCell.appendChild(targetLink);
+
       const durationCell = cellEl(
         "px-4 py-2 text-neutral-400 whitespace-nowrap",
         a.durationLabel || table.dataset.labelNoduration
@@ -182,7 +187,7 @@
       if (a.reason) durationCell.title = a.reason;
 
       tr.append(
-        cellEl("px-4 py-2 text-neutral-200 whitespace-nowrap", a.action),
+        cellEl(`px-4 py-2 whitespace-nowrap font-medium ${a.actionColorClass || "text-neutral-200"}`, a.action),
         modCell,
         targetCell,
         durationCell,
@@ -231,6 +236,9 @@
 
   // --- Fetch + wire-up ----------------------------------------------------------------------
 
+  // Channel login for building /<channel>/user/<name> links in rebuilt target cells - the
+  // page URL is always /<channel>/statistics/mod, so the first segment is the login.
+  const channelLogin = window.location.pathname.split("/")[1];
   const endpoint = window.location.pathname.replace(/\/statistics\/mod\/?$/, "/mod-actions.json");
   let seq = 0; // responses can land out of order; only the newest may paint
   let debounceTimer = null;

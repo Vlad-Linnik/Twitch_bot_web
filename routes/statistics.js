@@ -66,6 +66,16 @@ function requireLevelJson(maxLevel) {
 const MOD_ACTION_TYPES = ["ban", "timeout", "delete", "warn"];
 const MOD_FILTER_MAX_IDS = 50;
 
+// Action-type -> Tailwind text color, ordered by restriction severity (warn = least severe,
+// nothing restricted; ban = most severe, permanent) so the recent-actions table communicates
+// severity by color at a glance without a legend.
+const ACTION_COLORS = {
+  warn: "text-emerald-400",
+  delete: "text-sky-400",
+  timeout: "text-amber-400",
+  ban: "text-red-400",
+};
+
 function parseModActionFilters(query) {
   const csv = (value) => (typeof value === "string" && value ? value.split(",") : []);
   const idList = (value) =>
@@ -119,6 +129,7 @@ function shapeActionRows(modActions, resolve, t) {
       targetName: target.userName,
       targetColor: target.color,
       durationLabel,
+      actionColorClass: ACTION_COLORS[a.action] || "text-neutral-200",
     };
   });
 }

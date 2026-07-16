@@ -193,11 +193,14 @@
                 data-ts="<%= new Date(a.timestamp).getTime() %>"
                 data-id="<%= a.id %>"
                 data-tta="<%= a.TTA ?? '' %>">
-              <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= a.action %></td>
+              <td class="px-4 py-2 whitespace-nowrap font-medium <%= a.actionColorClass %>"><%= a.action %></td>
               <td class="px-4 py-2 whitespace-nowrap <%= a.modColor ? '' : 'text-neutral-400' %>"
                   <% if (a.modColor) { %>style="color: <%= a.modColor %>"<% } %>><%= a.modName %></td>
-              <td class="px-4 py-2 whitespace-nowrap target-cell <%= a.targetColor ? '' : 'text-neutral-400' %>"
-                  <% if (a.targetColor) { %>style="color: <%= a.targetColor %>"<% } %>><%= a.targetName %></td>
+              <td class="px-4 py-2 whitespace-nowrap target-cell">
+                <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(a.targetName) %>"
+                   class="hover:underline <%= a.targetColor ? '' : 'text-neutral-400' %>"
+                   <% if (a.targetColor) { %>style="color: <%= a.targetColor %>"<% } %>><%= a.targetName %></a>
+              </td>
               <%# Reason didn't disappear - it moved into the tooltip of the duration cell %>
               <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"<% if (a.reason) { %> title="<%= a.reason %>"<% } %>><%= a.durationLabel || t('statistics.noDuration') %></td>
               <%# Server-side value = SERVER-timezone fallback for no-JS visitors; mod-stats.js
