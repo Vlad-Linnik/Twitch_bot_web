@@ -14,7 +14,9 @@
     "statisticsLink": "Statistics",
     "settingsLink": "Settings",
     "settings": "Settings",
-    "logoutConfirmBody": "You will need to sign in with Twitch again to manage your channel."
+    "logoutConfirmBody": "You will need to sign in with Twitch again to manage your channel.",
+    "admin": "Admin",
+    "requestBot": "Get the bot for my channel"
   },
   "home": {
     "title": "ChatWizardBot",
@@ -237,7 +239,8 @@
     "detectionToggleLabel": "Banned-word detection",
     "detectionToggleHint": "When on, the bot times out users who type a banned word while pinging it.",
     "sevenTvHeading": "7TV",
-    "emoteSetUrlLabel": "Emote set URL",
+    "sevenTvLinked": "7TV account linked — emotes tracked",
+    "sevenTvNotLinked": "No 7TV account found for this channel",
     "colCommand": "Command",
     "colDescription": "Description",
     "colSignature": "Signature",
@@ -494,6 +497,90 @@
       "name_too_long": "Counter name is too long",
       "count_invalid": "Value must be a whole number",
       "access_invalid": "Unknown access level"
+    }
+  },
+  "requestBot": {
+    "title": "Request the bot",
+    "subtitle": "Ask for ChatWizardBot to be added to your Twitch channel.",
+    "connectedNotice": "Your channel is already connected to the bot.",
+    "submittedNotice": "Your request has been submitted.",
+    "pendingTitle": "Your request is pending review",
+    "pendingBody": "An administrator will review it soon. Once approved, the bot joins your channel after its next restart.",
+    "pendingSince": "Submitted",
+    "modNoticeTitle": "Grant the bot moderator rights",
+    "modNoticeBody": "The bot needs moderator rights on your channel to work properly (timeouts, spam protection, deleting messages). Type this in your channel's chat:",
+    "rejectedNotice": "Your previous request was declined.",
+    "rejectedReasonLabel": "Reason",
+    "rejectedRetryHint": "You can submit a new request below.",
+    "messageLabel": "Comment (optional)",
+    "messageHint": "Anything the administrator should know about your channel.",
+    "modAckLabel": "I have granted (or will grant) the bot moderator rights on my channel",
+    "submit": "Submit request",
+    "errors": {
+      "mod_ack_required": "Please confirm the moderator-rights checkbox first.",
+      "message_too_long": "The comment is too long."
+    }
+  },
+  "admin": {
+    "title": "Admin panel",
+    "subtitle": "Bot-join requests, channels, and service health.",
+    "tabOverview": "Overview",
+    "tabSettingsLog": "Settings log",
+    "tabActions": "Admin actions",
+    "flash": {
+      "approved": "Request approved and channel registered. The bot joins the channel after its next restart.",
+      "rejected": "Request rejected.",
+      "enabled": "Channel enabled. The bot joins it after its next restart.",
+      "disabled": "Channel disabled. The bot leaves it at its next restart."
+    },
+    "healthHeading": "Service health",
+    "healthMessages": "Messages stored",
+    "healthWords": "Word stat rows",
+    "healthSessions": "Active sessions",
+    "healthChannels": "Channels enabled",
+    "healthNoTokenTitle": "Channels without an owner token",
+    "healthNoTokenHint": "Scheduled moderator sync is off for these channels until their owner logs in to the site:",
+    "requestsHeading": "Bot-join requests",
+    "requestsApproveHint": "Approving registers the channel; the bot joins it after its next restart.",
+    "requestsEmpty": "No pending requests.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectReasonPlaceholder": "Reason (optional)",
+    "resolvedHeading": "Recently resolved",
+    "colUser": "User",
+    "colStatus": "Status",
+    "colResolvedAt": "Resolved",
+    "colResolvedBy": "By",
+    "colReason": "Reason",
+    "statusApproved": "Approved",
+    "statusRejected": "Rejected",
+    "channelsHeading": "Channels",
+    "channelsHint": "Disabling removes the channel from the site's home page and from the bot's join list at its next restart.",
+    "colChannel": "Channel",
+    "colOwnerId": "Owner ID",
+    "colConsented": "Consent date",
+    "colEnabled": "Status",
+    "enabledYes": "Enabled",
+    "enabledNo": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "channelsEmpty": "No channels registered.",
+    "settingsLogIntro": "Settings changes across all channels.",
+    "actionsIntro": "Audit log of admin actions.",
+    "colAdmin": "Admin",
+    "colAction": "Action",
+    "colTarget": "Target",
+    "colDetails": "Details",
+    "actionsEmpty": "No admin actions yet.",
+    "action": {
+      "request": {
+        "approve": "Request approved",
+        "reject": "Request rejected"
+      },
+      "channel": {
+        "enable": "Channel enabled",
+        "disable": "Channel disabled"
+      }
     }
   }
 }

@@ -63,4 +63,15 @@ async function upsertChannel({ channelLogin, channelId, ownerId }) {
   return findByLogin(login);
 }
 
-module.exports = { findByLogin, listEnabled, listAll, upsertChannel, findByOwnerId, findManyByIds };
+// Admin-panel toggle (/admin). A disabled channel disappears from the home page and the
+// bot's join list on its next restart; the doc (and consentedAt) stays intact.
+async function setEnabled(channelLogin, enabled) {
+  const col = await ensureInitialized();
+  const result = await col.updateOne(
+    { channelLogin: channelLogin.toLowerCase() },
+    { $set: { enabled: !!enabled, updatedAt: new Date() } }
+  );
+  return result.matchedCount > 0;
+}
+
+module.exports = { findByLogin, listEnabled, listAll, upsertChannel, findByOwnerId, findManyByIds, setEnabled };

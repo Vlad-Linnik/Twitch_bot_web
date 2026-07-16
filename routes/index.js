@@ -12,6 +12,8 @@ router.use("/", require("./commands"));
 router.use("/", require("./games"));
 router.use("/", require("./about"));
 router.use("/", require("./privacy"));
+router.use("/", require("./requestBot"));
+router.use("/", require("./admin"));
 
 // Channel-scoped routes go LAST, and channelRedirect goes last of all.
 //

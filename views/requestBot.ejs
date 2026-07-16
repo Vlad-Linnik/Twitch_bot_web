@@ -1,0 +1,87 @@
+<%- include('partials/head', { title: t('requestBot.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('requestBot.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-10"><%= t('requestBot.subtitle') %></p>
+
+  <% if (ownedChannel) { %>
+
+    <div class="rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3 mb-6">
+      <%= t('requestBot.connectedNotice') %>
+    </div>
+    <div class="flex gap-4 text-sm">
+      <a href="/<%= ownedChannel.channelLogin %>/settings" class="text-purple-400 hover:text-purple-300"><%= t('nav.settingsLink') %></a>
+      <a href="/<%= ownedChannel.channelLogin %>/statistics/chat" class="text-purple-400 hover:text-purple-300"><%= t('nav.statisticsLink') %></a>
+    </div>
+
+  <% } else if (pending) { %>
+
+    <% if (submitted) { %>
+      <div class="rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3 mb-6">
+        <%= t('requestBot.submittedNotice') %>
+      </div>
+    <% } %>
+
+    <div class="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-4 mb-6">
+      <p class="text-sm text-neutral-200 font-medium mb-1"><%= t('requestBot.pendingTitle') %></p>
+      <p class="text-sm text-neutral-400"><%= t('requestBot.pendingBody') %></p>
+      <p class="text-xs text-neutral-600 mt-2"><%= t('requestBot.pendingSince') %> <%= pending.createdAt.toLocaleDateString(locale) %></p>
+    </div>
+
+    <%# The mod-rights reminder stays visible while the request waits - granting mod rights
+        is the one thing the user can do before approval. %>
+    <div class="rounded-md border border-amber-800/60 bg-amber-950/40 px-4 py-4">
+      <p class="text-sm text-amber-300 font-medium mb-1"><%= t('requestBot.modNoticeTitle') %></p>
+      <p class="text-sm text-amber-200/80"><%= t('requestBot.modNoticeBody') %></p>
+      <code class="inline-block mt-2 px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-sm text-neutral-200">/mod <%= botLogin %></code>
+    </div>
+
+  <% } else { %>
+
+    <% if (rejected) { %>
+      <div class="rounded-md border border-red-900 bg-red-950/40 px-4 py-3 mb-6">
+        <p class="text-sm text-red-300 font-medium"><%= t('requestBot.rejectedNotice') %></p>
+        <% if (rejected.rejectReason) { %>
+          <p class="text-sm text-red-200/80 mt-1"><%= t('requestBot.rejectedReasonLabel') %>: <%= rejected.rejectReason %></p>
+        <% } %>
+        <p class="text-xs text-neutral-500 mt-2"><%= t('requestBot.rejectedRetryHint') %></p>
+      </div>
+    <% } %>
+
+    <% if (error) { %>
+      <div class="rounded-md border border-red-900 bg-red-950/40 text-red-300 text-sm px-4 py-3 mb-6">
+        <%= t('requestBot.errors.' + error) %>
+      </div>
+    <% } %>
+
+    <div class="rounded-md border border-amber-800/60 bg-amber-950/40 px-4 py-4 mb-8">
+      <p class="text-sm text-amber-300 font-medium mb-1"><%= t('requestBot.modNoticeTitle') %></p>
+      <p class="text-sm text-amber-200/80"><%= t('requestBot.modNoticeBody') %></p>
+      <code class="inline-block mt-2 px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-sm text-neutral-200">/mod <%= botLogin %></code>
+    </div>
+
+    <form method="post" action="/request-bot" data-transition="instant" class="space-y-6">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+      <div>
+        <label for="request-message" class="block text-sm font-medium text-neutral-200 mb-1"><%= t('requestBot.messageLabel') %></label>
+        <p class="text-xs text-neutral-600 mb-2"><%= t('requestBot.messageHint') %></p>
+        <textarea id="request-message" name="message" rows="3" maxlength="<%= messageMaxLength %>"
+                  class="w-full rounded-md bg-neutral-900 border border-neutral-700 text-sm text-neutral-200 px-3 py-2 focus:outline-none focus:border-purple-500"></textarea>
+      </div>
+
+      <label class="flex items-start gap-2 text-sm text-neutral-300 cursor-pointer select-none">
+        <input type="checkbox" name="modAcknowledged" required class="mt-0.5 accent-purple-600" />
+        <span><%= t('requestBot.modAckLabel') %></span>
+      </label>
+
+      <button type="submit" class="px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+        <%= t('requestBot.submit') %>
+      </button>
+    </form>
+
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

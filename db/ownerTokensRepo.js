@@ -39,6 +39,14 @@ async function listAll() {
   }));
 }
 
+// Admin health tile: which channels have a stored owner token at all (an enabled channel
+// without one gets no scheduled moderator sync). IDs only - never decrypts anything.
+async function listChannelIds() {
+  const col = await ensureInitialized();
+  const docs = await col.find({}, { projection: { channelId: 1 } }).toArray();
+  return docs.map((doc) => doc.channelId);
+}
+
 // Called when Twitch rejects a stored refresh token (revoked consent, etc.) - stop
 // tracking this owner until they log in again, which re-saves a fresh one.
 async function remove(channelId) {
@@ -46,4 +54,4 @@ async function remove(channelId) {
   await col.deleteOne({ channelId: String(channelId) });
 }
 
-module.exports = { saveRefreshToken, listAll, remove };
+module.exports = { saveRefreshToken, listAll, listChannelIds, remove };

@@ -21,6 +21,9 @@ async function ensureInitialized() {
   const db = await connectWeb();
   collection = db.collection("SettingsChangeLog");
   await collection.createIndex({ channelLogin: 1, timestamp: -1 });
+  // Cross-channel listing for the admin panel (listRecentAll) - the per-channel index
+  // above can't serve a sort with no channelLogin equality prefix.
+  await collection.createIndex({ timestamp: -1 });
   return collection;
 }
 
@@ -84,4 +87,19 @@ async function listRecent(channelLogin, { page = 1, limit = DEFAULT_LIMIT } = {}
   return { entries, total, totalPages: Math.max(1, Math.ceil(total / limit)), page: safePage };
 }
 
-module.exports = { logChange, listRecent };
+// Cross-channel variant of listRecent for the admin panel's site-wide settings log
+// (/admin/settings-log) - same pagination shape, no channel filter.
+async function listRecentAll({ page = 1, limit = DEFAULT_LIMIT } = {}) {
+  const col = await ensureInitialized();
+  const safePage = Math.max(1, page);
+  const skip = (safePage - 1) * limit;
+
+  const [entries, total] = await Promise.all([
+    col.find({}).sort({ timestamp: -1 }).skip(skip).limit(limit).toArray(),
+    col.countDocuments({}),
+  ]);
+
+  return { entries, total, totalPages: Math.max(1, Math.ceil(total / limit)), page: safePage };
+}
+
+module.exports = { logChange, listRecent, listRecentAll };

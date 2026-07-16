@@ -7,7 +7,6 @@ const baseConfig = () => ({
   bannedWords: { words: ["foo"], timeoutReason: "no" },
   spamSignatures: ["bar"],
   spamBanReason: "spam",
-  sevenTv: { emoteSetUrl: "" },
   responses: { busy: [], yesNo: [] },
   commands: {
     topchatters: { enabled: true, cooldownMs: 1000 },

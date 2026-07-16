@@ -35,6 +35,11 @@ const env = {
   // request time, so this stays readable and there's one less magic number to keep in sync.
   creatorLogin: (process.env.CREATOR_LOGIN || "vlad_261").toLowerCase(),
 
+  // The bot account's Twitch login, shown in the /request-bot instructions ("type
+  // /mod <botLogin> in your chat"). Display-only here - the bot's own credentials
+  // live in the bot repo's .env.
+  botLogin: (process.env.BOT_LOGIN || "chatwizardbot").toLowerCase(),
+
   adminUserIds: new Set(
     (process.env.ADMIN_USER_IDS || "")
       .split(",")

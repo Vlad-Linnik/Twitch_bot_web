@@ -10,8 +10,9 @@ const profileCacheRepo = require("../db/profileCacheRepo");
 const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
-const { MAX_LIST_ITEMS, sanitizeWord, isValidHttpUrl, parseSubmittedConfig } = require("../lib/settingsValidation");
+const { MAX_LIST_ITEMS, sanitizeWord, parseSubmittedConfig } = require("../lib/settingsValidation");
 const { diffConfig } = require("../lib/settingsDiff");
+const { getSevenTvLinkStatus } = require("../twitch/emoteImages");
 
 const router = express.Router();
 
@@ -53,16 +54,20 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
-    const [config, customCommands, counters] = await Promise.all([
+    const [config, customCommands, counters, sevenTvStatus] = await Promise.all([
       channelConfigRepo.getConfig(req.params.channel),
       customCommandsRepo.list(req.params.channel),
       countersRepo.list(req.params.channel),
+      // emoteImages.js's getSevenTvLinkStatus is already fail-soft (a 7TV outage resolves to
+      // "not linked" rather than rejecting), so no extra catch needed here.
+      getSevenTvLinkStatus(channel.channelId),
     ]);
     res.render("settings", {
       channel,
       config,
       customCommandCount: customCommands.length,
       counterCount: counters.length,
+      sevenTvStatus,
       saved: req.query.saved === "1",
       canManageModerators: req.permissionLevel <= 1,
     });
@@ -78,23 +83,6 @@ router.post("/:channel/settings", autosaveLimiter, requireSettingsEditAccess(), 
 
     const existing = await channelConfigRepo.getConfig(req.params.channel);
     const parsed = parseSubmittedConfig(req.body, existing);
-
-    if (!isValidHttpUrl(parsed.sevenTv.emoteSetUrl)) {
-      const message = "7TV emote set URL must be a valid http(s) URL.";
-      if (wantsJson(req)) return res.status(400).json({ ok: false, error: message });
-      const [customCommands, counters] = await Promise.all([
-        customCommandsRepo.list(req.params.channel),
-        countersRepo.list(req.params.channel),
-      ]);
-      return res.status(400).render("settings", {
-        channel,
-        config: { ...existing, ...parsed },
-        customCommandCount: customCommands.length,
-        counterCount: counters.length,
-        saved: false,
-        error: message,
-      });
-    }
 
     await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
     await logConfigChanges(req.params.channel, req.user, existing, parsed);

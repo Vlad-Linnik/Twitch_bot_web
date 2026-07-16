@@ -1,0 +1,183 @@
+<%- include('partials/head', { title: t('admin.title') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const fmtNumber = (n) => new Intl.NumberFormat(dateLocale).format(n);
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <% if (flash) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('admin.flash.' + flash) %>
+    </div>
+  <% } %>
+
+  <%# --- Service health ------------------------------------------------- %>
+  <section class="mb-12">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.healthHeading') %></h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.healthMessages') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtNumber(health.messages) %></p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.healthWords') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtNumber(health.chatWordStats) %></p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.healthSessions') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtNumber(health.sessions) %></p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.healthChannels') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= health.channelsEnabled %><span class="text-sm text-neutral-500 font-normal"> / <%= health.channelsEnabled + health.channelsDisabled %></span></p>
+      </div>
+    </div>
+    <% if (health.channelsWithoutToken.length > 0) { %>
+      <div class="mt-3 rounded-md border border-amber-800/60 bg-amber-950/40 px-4 py-3 text-sm">
+        <p class="text-amber-300 font-medium mb-0.5"><%= t('admin.healthNoTokenTitle') %></p>
+        <p class="text-amber-200/80"><%= t('admin.healthNoTokenHint') %> <span class="font-mono text-xs"><%= health.channelsWithoutToken.join(', ') %></span></p>
+      </div>
+    <% } %>
+  </section>
+
+  <%# --- Bot-join requests ---------------------------------------------- %>
+  <section class="mb-12">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.requestsHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.requestsApproveHint') %></p>
+
+    <% if (pendingRequests.length === 0) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.requestsEmpty') %></p>
+    <% } %>
+
+    <div class="space-y-3">
+      <% pendingRequests.forEach(function(r) { const profile = profiles.get(String(r.userId)); %>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <div class="flex items-center gap-3 flex-wrap">
+            <% if (profile && profile.avatarUrl) { %>
+              <img src="<%= profile.avatarUrl %>" alt="" width="32" height="32" class="w-8 h-8 rounded-full" />
+            <% } %>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-neutral-100 truncate"
+                 <% if (profile && profile.color) { %>style="color: <%= profile.color %>"<% } %>><%= r.displayName || r.login %></p>
+              <p class="text-xs text-neutral-500 font-mono"><%= r.login %> · <%= r.userId %> · <%= new Date(r.createdAt).toLocaleString(dateLocale) %></p>
+            </div>
+            <div class="ml-auto flex items-center gap-2">
+              <form method="post" action="/admin/requests/<%= r._id %>/approve" data-transition="instant">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="px-3 py-1.5 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-medium transition-colors"><%= t('admin.approve') %></button>
+              </form>
+              <form method="post" action="/admin/requests/<%= r._id %>/reject" data-transition="instant" class="flex items-center gap-2">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="text" name="reason" maxlength="300" placeholder="<%= t('admin.rejectReasonPlaceholder') %>"
+                       class="w-40 rounded-md bg-neutral-950 border border-neutral-700 text-xs text-neutral-300 px-2 py-1.5 focus:outline-none focus:border-red-700" />
+                <button type="submit" class="px-3 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-white text-xs font-medium transition-colors"><%= t('admin.reject') %></button>
+              </form>
+            </div>
+          </div>
+          <% if (r.message) { %>
+            <p class="mt-2 text-sm text-neutral-400 border-l-2 border-neutral-700 pl-3"><%= r.message %></p>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+
+    <% if (resolvedRequests.length > 0) { %>
+      <h3 class="text-sm font-semibold text-neutral-400 mt-8 mb-3"><%= t('admin.resolvedHeading') %></h3>
+      <div class="rounded-lg border border-neutral-800 overflow-hidden">
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.colUser') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.colStatus') %></th>
+              <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.colResolvedAt') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.colResolvedBy') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.colReason') %></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% resolvedRequests.forEach(function(r) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+                <td class="px-4 py-2 text-neutral-200"><%= r.login %></td>
+                <td class="px-4 py-2">
+                  <% if (r.status === 'approved') { %>
+                    <span class="text-green-400"><%= t('admin.statusApproved') %></span>
+                  <% } else { %>
+                    <span class="text-red-400"><%= t('admin.statusRejected') %></span>
+                  <% } %>
+                </td>
+                <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= r.resolvedAt ? new Date(r.resolvedAt).toLocaleString(dateLocale) : '—' %></td>
+                <td class="px-4 py-2 text-neutral-400"><%= r.resolvedByLogin || r.resolvedById || '—' %></td>
+                <td class="px-4 py-2 text-neutral-500 text-xs max-w-[14rem] truncate" title="<%= r.rejectReason || '' %>"><%= r.rejectReason || '—' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    <% } %>
+  </section>
+
+  <%# --- Channels -------------------------------------------------------- %>
+  <section>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.channelsHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.channelsHint') %></p>
+
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-neutral-900 text-neutral-400">
+          <tr>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.colChannel') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.colOwnerId') %></th>
+            <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.colConsented') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.colEnabled') %></th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800">
+          <% channels.forEach(function(ch) { %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+              <td class="px-4 py-2">
+                <a href="/<%= ch.channelLogin %>/statistics/chat" class="text-purple-400 hover:text-purple-300"><%= ch.channelLogin %></a>
+              </td>
+              <td class="px-4 py-2 text-neutral-500 font-mono text-xs"><%= ch.ownerId %></td>
+              <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= ch.consentedAt ? new Date(ch.consentedAt).toLocaleDateString(dateLocale) : '—' %></td>
+              <td class="px-4 py-2">
+                <% if (ch.enabled) { %>
+                  <span class="text-green-400"><%= t('admin.enabledYes') %></span>
+                <% } else { %>
+                  <span class="text-neutral-500"><%= t('admin.enabledNo') %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle" data-transition="instant">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <input type="hidden" name="enabled" value="<%= ch.enabled ? '0' : '1' %>" />
+                  <% if (ch.enabled) { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors"><%= t('admin.disable') %></button>
+                  <% } else { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.enable') %></button>
+                  <% } %>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (channels.length === 0) { %>
+            <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.channelsEmpty') %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

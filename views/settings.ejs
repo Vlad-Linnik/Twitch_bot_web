@@ -76,8 +76,11 @@
 
     <section>
       <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('channelSettings.sevenTvHeading') %></h2>
-      <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.emoteSetUrlLabel') %></label>
-      <input type="text" name="emoteSetUrl" value="<%= config.sevenTv.emoteSetUrl %>" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      <% if (sevenTvStatus.linked) { %>
+        <p class="text-sm text-green-400">✅ <%= t('channelSettings.sevenTvLinked') %> (<%= sevenTvStatus.emoteCount %>)</p>
+      <% } else { %>
+        <p class="text-sm text-neutral-500">⚠️ <%= t('channelSettings.sevenTvNotLinked') %></p>
+      <% } %>
     </section>
 
     <% groups.forEach(function(group) { %>

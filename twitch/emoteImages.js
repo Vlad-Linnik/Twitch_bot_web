@@ -1,28 +1,36 @@
 // Resolves emote NAMES to image URLs, so stats pages can render the actual emote instead of
 // its text signature. The bot's whiteList/WordLifetimeStats rows carry only {channel, word} -
-// no ids, no images - so the join happens here, against the two sources the bot syncs from:
+// no ids, no images - so the join happens here, against the three sources the bot syncs from:
 //
-//   - the channel's 7TV emote set (ChannelConfig.sevenTv.emoteSetUrl, same link the bot uses)
 //   - Twitch's official global emotes (Helix "Get Global Emotes", app token, no user scope)
+//   - the broadcaster's own Twitch emotes (Helix "Get Channel Emotes", sub tiers/bits/follower)
+//   - the channel's 7TV emote set, auto-resolved from its Twitch broadcaster ID
+//     (GET https://7tv.io/v3/users/twitch/{broadcasterId} - no manual link/config anymore,
+//     same resolution the bot's sevenTv/SevenTvEmotes.js does, duplicated here since the repos
+//     don't share code)
 //
-// Both are fetched lazily and cached in memory: the Twitch global list is identical for every
-// channel and changes rarely (hours-long TTL), the 7TV set is per-channel and editable by the
-// owner (short TTL so a newly added emote shows up without a restart). Everything here is
-// fail-soft - an unreachable 7TV/Helix just means fewer resolved images, never a 500: an emote
-// with no image (e.g. removed from the set since it was counted) falls back to text in the view.
+// All three are fetched lazily and cached in memory: the Twitch global list is identical for
+// every channel and changes rarely (hours-long TTL), the channel/7TV sources are per-channel
+// and owner-editable (short TTL so a newly added emote shows up without a restart). Everything
+// here is fail-soft - an unreachable 7TV/Helix just means fewer resolved images, never a 500:
+// an emote with no image (e.g. removed from the set since it was counted) falls back to text
+// in the view.
 const axios = require("axios");
 const env = require("../config/env");
 const { ensureAppAccessToken } = require("./appToken");
-const channelConfigRepo = require("../db/channelConfigRepo");
+const channelsRepo = require("../db/channelsRepo");
 
 const GLOBAL_EMOTES_URL = "https://api.twitch.tv/helix/chat/emotes/global";
+const CHANNEL_EMOTES_URL = "https://api.twitch.tv/helix/chat/emotes";
 const SEVEN_TV_API = "https://7tv.io/v3";
 
 const GLOBAL_TTL_MS = 12 * 60 * 60 * 1000;
+const CHANNEL_TTL_MS = 10 * 60 * 1000;
 const SEVEN_TV_TTL_MS = 10 * 60 * 1000;
 
 let globalCache = null; // { map, expiresAt }
-const sevenTvCache = new Map(); // emoteSetUrl -> { map, expiresAt }
+const channelEmoteCache = new Map(); // broadcasterId -> { map, expiresAt }
+const sevenTvCache = new Map(); // broadcasterId -> { data, expiresAt } - raw 7TV response, null if not linked
 
 async function fetchGlobalEmoteImages() {
   const headers = {
@@ -41,34 +49,35 @@ async function fetchGlobalEmoteImages() {
   return map;
 }
 
-// Accepts the same links the bot's sevenTv/SevenTvEmotes.js accepts: an emote-set link
-// (7tv.app/emote-sets/<id>) or a user link (7tv.app/users/<id>), resolved to that user's
-// active Twitch emote set.
-function parseSevenTvLink(link) {
-  const match = String(link).match(/7tv\.app\/(emote-sets|users)\/(\w+)/);
-  if (!match) return null;
-  return { type: match[1] === "users" ? "user" : "set", id: match[2] };
-}
-
-async function fetchSevenTvEmoteImages(emoteSetUrl) {
-  const parsed = parseSevenTvLink(emoteSetUrl);
-  if (!parsed) return new Map();
-
-  let setId = parsed.id;
-  if (parsed.type === "user") {
-    const { data: user } = await axios.get(`${SEVEN_TV_API}/users/${parsed.id}`);
-    const twitchConnection = user.connections?.find((c) => c.platform === "TWITCH");
-    setId = twitchConnection?.emote_set_id ?? user.emote_sets?.[0]?.id;
-    if (!setId) return new Map();
-  }
-
-  const { data: emoteSet } = await axios.get(`${SEVEN_TV_API}/emote-sets/${setId}`);
+async function fetchChannelEmoteImages(broadcasterId) {
+  const headers = {
+    Authorization: `Bearer ${await ensureAppAccessToken()}`,
+    "Client-Id": env.twitchClientId,
+  };
+  const { data } = await axios.get(CHANNEL_EMOTES_URL, {
+    params: { broadcaster_id: broadcasterId },
+    headers,
+  });
   const map = new Map();
-  for (const emote of emoteSet.emotes || []) {
-    // Set-local name (the alias actually typed in chat), matching what the bot whitelists.
-    map.set(emote.name, `https://cdn.7tv.app/emote/${emote.id}/2x.webp`);
+  for (const emote of data.data || []) {
+    if (!map.has(emote.name)) {
+      map.set(emote.name, emote.images?.url_2x || emote.images?.url_1x || null);
+    }
   }
   return map;
+}
+
+// Raw 7TV user-connection response for this broadcaster, or null if they have no 7TV account
+// linked to Twitch (404). Cached because both the emote-image map and the settings-page
+// linked/not-linked status need the same fetch.
+async function fetchSevenTvUser(broadcasterId) {
+  try {
+    const { data } = await axios.get(`${SEVEN_TV_API}/users/twitch/${broadcasterId}`);
+    return data;
+  } catch (err) {
+    if (err.response?.status === 404) return null;
+    throw err;
+  }
 }
 
 async function getGlobalEmoteImages() {
@@ -83,35 +92,79 @@ async function getGlobalEmoteImages() {
   }
 }
 
-async function getSevenTvEmoteImages(emoteSetUrl) {
-  if (!emoteSetUrl) return new Map();
-  const cached = sevenTvCache.get(emoteSetUrl);
+async function getChannelEmoteImages(broadcasterId) {
+  if (!broadcasterId) return new Map();
+  const cached = channelEmoteCache.get(broadcasterId);
   if (cached && Date.now() < cached.expiresAt) return cached.map;
   try {
-    const map = await fetchSevenTvEmoteImages(emoteSetUrl);
-    sevenTvCache.set(emoteSetUrl, { map, expiresAt: Date.now() + SEVEN_TV_TTL_MS });
+    const map = await fetchChannelEmoteImages(broadcasterId);
+    channelEmoteCache.set(broadcasterId, { map, expiresAt: Date.now() + CHANNEL_TTL_MS });
     return map;
   } catch (err) {
-    console.error("[emoteImages] 7TV emote set fetch failed:", err.message);
+    console.error("[emoteImages] Twitch channel emotes fetch failed:", err.message);
     return cached?.map ?? new Map();
   }
 }
 
-// name -> image URL for everything resolvable for this channel. The channel's own 7TV alias
-// wins a name collision with a Twitch global - same precedence the bot gives its whiteList.
-async function getEmoteImageMap(emoteSetUrl) {
-  const [global, sevenTv] = await Promise.all([getGlobalEmoteImages(), getSevenTvEmoteImages(emoteSetUrl)]);
-  return new Map([...global, ...sevenTv]);
+async function getSevenTvUser(broadcasterId) {
+  if (!broadcasterId) return null;
+  const cached = sevenTvCache.get(broadcasterId);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+  try {
+    const data = await fetchSevenTvUser(broadcasterId);
+    sevenTvCache.set(broadcasterId, { data, expiresAt: Date.now() + SEVEN_TV_TTL_MS });
+    return data;
+  } catch (err) {
+    console.error("[emoteImages] 7TV lookup failed:", err.message);
+    return cached?.data ?? null;
+  }
 }
 
-// Join emote usage counts (text names) to real images from the channel's 7TV set + Twitch's
-// global emotes. An emote that resolves to no image (e.g. removed from the set since it was
-// counted) keeps imageUrl: null so the UI can fall back to its text form instead of dropping it.
-// Returns a NEW array - callers pass repo results that may be cached, never mutate them.
+async function getSevenTvEmoteImages(broadcasterId) {
+  const user = await getSevenTvUser(broadcasterId);
+  const map = new Map();
+  for (const emote of user?.emote_set?.emotes ?? []) {
+    // Set-local name (the alias actually typed in chat), matching what the bot whitelists.
+    map.set(emote.name, `https://cdn.7tv.app/emote/${emote.id}/2x.webp`);
+  }
+  return map;
+}
+
+// Whether this broadcaster has a 7TV account linked to their Twitch, and how many emotes it
+// carries - for the settings page's read-only status line (no more manual link field).
+async function getSevenTvLinkStatus(broadcasterId) {
+  const user = await getSevenTvUser(broadcasterId);
+  return { linked: !!user?.emote_set, emoteCount: user?.emote_set?.emotes?.length ?? 0 };
+}
+
+// name -> image URL for everything resolvable for this channel. Precedence on a name collision
+// matches the bot's whitelist sync order (global -> channel -> 7TV, last wins): a 7TV emote is
+// the most deliberately curated of the three.
+async function getEmoteImageMap(broadcasterId) {
+  const [global, channel, sevenTv] = await Promise.all([
+    getGlobalEmoteImages(),
+    getChannelEmoteImages(broadcasterId),
+    getSevenTvEmoteImages(broadcasterId),
+  ]);
+  return new Map([...global, ...channel, ...sevenTv]);
+}
+
+// Join emote usage counts (text names) to real images from the channel's own Twitch emotes,
+// its 7TV set, and Twitch's global emotes. An emote that resolves to no image (e.g. removed
+// from the set since it was counted) keeps imageUrl: null so the UI can fall back to its text
+// form instead of dropping it. Returns a NEW array - callers pass repo results that may be
+// cached, never mutate them.
 async function withEmoteImages(channelLogin, emotes) {
-  const config = await channelConfigRepo.getConfig(channelLogin);
-  const imageMap = await getEmoteImageMap(config.sevenTv?.emoteSetUrl);
+  const channelDoc = await channelsRepo.findByLogin(channelLogin);
+  const imageMap = await getEmoteImageMap(channelDoc?.channelId);
   return emotes.map((e) => ({ ...e, imageUrl: imageMap.get(e.word) ?? null }));
 }
 
-module.exports = { getEmoteImageMap, getGlobalEmoteImages, getSevenTvEmoteImages, withEmoteImages };
+module.exports = {
+  getEmoteImageMap,
+  getGlobalEmoteImages,
+  getChannelEmoteImages,
+  getSevenTvEmoteImages,
+  getSevenTvLinkStatus,
+  withEmoteImages,
+};

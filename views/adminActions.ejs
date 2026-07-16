@@ -1,0 +1,57 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabActions') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.actionsIntro') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <div class="rounded-lg border border-neutral-800 overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-neutral-900 text-neutral-400">
+        <tr>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colWhen') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.colAdmin') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.colAction') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.colTarget') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.colDetails') %></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-neutral-800">
+        <% entries.forEach(function(e) { %>
+          <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+            <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(e.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
+            <td class="px-4 py-2 text-neutral-200"><%= e.adminLogin || e.adminId %></td>
+            <td class="px-4 py-2 text-neutral-400"><%= t('admin.action.' + e.action) %></td>
+            <td class="px-4 py-2 text-neutral-300 font-mono text-xs"><%= e.target || '—' %></td>
+            <td class="px-4 py-2 text-neutral-500 text-xs max-w-[18rem] truncate" title="<%= e.details || '' %>"><%= e.details || '—' %></td>
+          </tr>
+        <% }) %>
+        <% if (entries.length === 0) { %>
+          <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.actionsEmpty') %></td></tr>
+        <% } %>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <% if (totalPages > 1) { %>
+    <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+      <% if (page > 1) { %>
+        <a href="?page=<%= page - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+      <% } %>
+      <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %>
+        <a href="?page=<%= page + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+      <% } %>
+    </nav>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

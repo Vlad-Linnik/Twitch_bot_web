@@ -6,6 +6,8 @@
 // correctly on the very next request.
 const channelsRepo = require("../db/channelsRepo");
 const modsRepo = require("../db/modsRepo");
+const adminAllowlist = require("../db/adminAllowlist");
+const botRequestsRepo = require("../db/botRequestsRepo");
 // One owner for "how is this user displayed" - the colour policy used to be spelled out here AND
 // in routes/about.js, and skipped entirely in routes/userDashboard.js. See db/userProfileService.js.
 const userProfileService = require("../db/userProfileService");
@@ -15,15 +17,25 @@ async function navMenuMiddleware(req, res, next) {
     res.locals.navMenu = null;
     res.locals.userDisplayColor = null;
     res.locals.userAvatarUrl = null;
+    res.locals.isAdmin = false;
+    res.locals.pendingRequestCount = 0;
     return next();
   }
 
+  // Env-allowlist lookup, synchronous and free. The pending-request COUNT (the badge on the
+  // nav's Admin tab) is an extra query, so it only ever runs for admins.
+  const isAdmin = adminAllowlist.isAdmin(req.user.userId);
+  res.locals.isAdmin = isAdmin;
+  res.locals.pendingRequestCount = 0;
+
   try {
-    const [ownedChannel, moderatedChannelIds, display] = await Promise.all([
+    const [ownedChannel, moderatedChannelIds, display, pendingRequestCount] = await Promise.all([
       channelsRepo.findByOwnerId(req.user.userId),
       modsRepo.getChannelsModeratedBy(req.user.userId),
       userProfileService.getDisplayProfile(req.user.userId),
+      isAdmin ? botRequestsRepo.countPending() : 0,
     ]);
+    res.locals.pendingRequestCount = pendingRequestCount;
     const ownedChannelId = ownedChannel?.channelId;
     const moderatedChannels = (await channelsRepo.findManyByIds(moderatedChannelIds)).filter(
       (channel) => channel.channelId !== ownedChannelId

@@ -8,7 +8,6 @@ const {
   sanitizeSignatureWord,
   parseCooldownSeconds,
   parseMinMessages,
-  isValidHttpUrl,
   parseSubmittedConfig,
 } = require("../lib/settingsValidation");
 
@@ -82,24 +81,6 @@ describe("sanitizeSignatureWord", () => {
   });
 });
 
-describe("isValidHttpUrl", () => {
-  test("accepts http and https URLs", () => {
-    assert.equal(isValidHttpUrl("http://example.com"), true);
-    assert.equal(isValidHttpUrl("https://7tv.app/users/abc123"), true);
-  });
-
-  test("accepts an empty value (field is optional)", () => {
-    assert.equal(isValidHttpUrl(""), true);
-    assert.equal(isValidHttpUrl(undefined), true);
-  });
-
-  test("rejects non-http(s) protocols and malformed URLs", () => {
-    assert.equal(isValidHttpUrl("javascript:alert(1)"), false);
-    assert.equal(isValidHttpUrl("ftp://example.com"), false);
-    assert.equal(isValidHttpUrl("not a url"), false);
-  });
-});
-
 describe("parseCooldownSeconds", () => {
   test("accepts whole seconds within range", () => {
     assert.equal(parseCooldownSeconds("15"), 15);
@@ -134,7 +115,6 @@ describe("parseSubmittedConfig", () => {
     bannedWords: { words: ["badword"], timeoutReason: "no spam" },
     spamSignatures: ["sig1"],
     spamBanReason: "spam bot",
-    sevenTv: { emoteSetUrl: "https://7tv.app/emote-sets/abc" },
     commands: {
       topchatters: { enabled: true, cooldownMs: 15000, signature: "!topchatters" },
       question: { enabled: true, cooldownMs: 30000 },
@@ -231,18 +211,12 @@ describe("parseSubmittedConfig", () => {
 
   // Partial-form safety: the custom-commands/counters sub-pages submit only the
   // fields they render. Anything absent from the body must carry over unchanged -
-  // a sub-page save must never wipe the 7TV URL or the response lists.
-  test("a partial body (sub-page save) preserves emoteSetUrl and response lists", () => {
+  // a sub-page save must never wipe the response lists.
+  test("a partial body (sub-page save) preserves response lists", () => {
     const body = { "commands.topchatters.present": "1" };
     const result = parseSubmittedConfig(body, existing);
-    assert.equal(result.sevenTv.emoteSetUrl, "https://7tv.app/emote-sets/abc");
     assert.deepEqual(result.responses.busy, ["I am busy"]);
     assert.deepEqual(result.responses.yesNo, ["Yes", "No"]);
-  });
-
-  test("a present-but-empty emoteSetUrl deliberately clears it", () => {
-    const result = parseSubmittedConfig({ emoteSetUrl: "" }, existing);
-    assert.equal(result.sevenTv.emoteSetUrl, "");
   });
 
   test("acceptSignature and remSignature are sanitized and !-prefixed like signature", () => {

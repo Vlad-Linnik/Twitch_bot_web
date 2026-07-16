@@ -5,9 +5,6 @@
   },
   "spamSignatures": [],
   "spamBanReason": "spam bot",
-  "sevenTv": {
-    "emoteSetUrl": ""
-  },
   "commands": {
     "topchatters": { "enabled": true, "cooldownMs": 15000, "signature": "!topchatters" },
     "topsmiles": { "enabled": true, "cooldownMs": 15000, "signature": "!topsmiles" },
