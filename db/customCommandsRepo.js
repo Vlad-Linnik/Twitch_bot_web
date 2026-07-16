@@ -5,10 +5,10 @@
 // collection this repo doesn't have an explicit repo module for" - this module is that explicit
 // module, and it is now a SHARED-WRITE collection. Two consequences worth knowing:
 //
-//   1. The document shape is the bot's, not ours: {channel, command, result, timer, pin}, with
-//      `channel` carrying a leading "#" and `timer` in MILLISECONDS (the chat command takes
-//      seconds and multiplies). Writing a different shape here would produce commands the bot
-//      silently mis-reads.
+//   1. The document shape is the bot's, not ours: {channel, command, result, timer, pin, announce,
+//      announceColor}, with `channel` carrying a leading "#" and `timer` in MILLISECONDS (the chat
+//      command takes seconds and multiplies). Writing a different shape here would produce
+//      commands the bot silently mis-reads.
 //   2. The bot caches these in memory. It re-reads them every
 //      CustomCommands.REFRESH_INTERVAL_MS (10s) precisely so edits made here reach a running bot
 //      without a restart - that refresh was added for this feature. Before it existed, a write
@@ -46,11 +46,11 @@ async function findOne(channelLogin, command) {
 
 // Upsert rather than insert: matches !addcommand's behaviour, which updates a command's text if it
 // already exists instead of erroring.
-async function save(channelLogin, { command, result, timer, pin }) {
+async function save(channelLogin, { command, result, timer, pin, announce, announceColor }) {
   const col = await ensureInitialized();
   await col.updateOne(
     { channel: withHash(channelLogin), command },
-    { $set: { channel: withHash(channelLogin), command, result, timer, pin } },
+    { $set: { channel: withHash(channelLogin), command, result, timer, pin, announce, announceColor } },
     { upsert: true }
   );
   return findOne(channelLogin, command);

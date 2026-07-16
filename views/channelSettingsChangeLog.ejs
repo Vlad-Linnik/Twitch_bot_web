@@ -11,7 +11,7 @@
   }
 %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
   <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
   <h1 class="text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('settingsChangeLog.title') %></h1>
   <p class="text-neutral-500 text-sm mb-8"><%= t('settingsChangeLog.intro') %></p>
@@ -22,9 +22,9 @@
       <thead class="bg-neutral-900 text-neutral-400">
         <tr>
           <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colWhen') %></th>
-          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colModerator') %></th>
-          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colCategory') %></th>
-          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colAction') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colModerator') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colCategory') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAction') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colTarget') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colBefore') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAfter') %></th>
@@ -34,12 +34,12 @@
         <% entries.forEach(function(e) { %>
           <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
             <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(e.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
-            <td class="px-4 py-2 text-neutral-200 whitespace-nowrap"><%= e.moderatorDisplayName || e.moderatorLogin || e.moderatorId %></td>
-            <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t('settingsChangeLog.category.' + e.category) %></td>
-            <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t('settingsChangeLog.action.' + e.action) %></td>
-            <td class="px-4 py-2 text-neutral-300 font-mono text-xs whitespace-nowrap"><%= e.target %></td>
-            <td class="px-4 py-2 text-neutral-500 text-xs max-w-xs truncate" title="<%= fmt(e.before) %>"><%= fmt(e.before) %></td>
-            <td class="px-4 py-2 text-neutral-500 text-xs max-w-xs truncate" title="<%= fmt(e.after) %>"><%= fmt(e.after) %></td>
+            <td class="px-4 py-2 text-neutral-200"><%= e.moderatorDisplayName || e.moderatorLogin || e.moderatorId %></td>
+            <td class="px-4 py-2 text-neutral-400"><%= t('settingsChangeLog.category.' + e.category) %></td>
+            <td class="px-4 py-2 text-neutral-400"><%= t('settingsChangeLog.action.' + e.action) %></td>
+            <td class="px-4 py-2 text-neutral-300 font-mono text-xs break-all"><%= e.target %></td>
+            <td class="px-4 py-2 text-neutral-500 text-xs max-w-[14rem] truncate" title="<%= fmt(e.before) %>"><%= fmt(e.before) %></td>
+            <td class="px-4 py-2 text-neutral-500 text-xs max-w-[14rem] truncate" title="<%= fmt(e.after) %>"><%= fmt(e.after) %></td>
           </tr>
         <% }) %>
         <% if (entries.length === 0) { %>

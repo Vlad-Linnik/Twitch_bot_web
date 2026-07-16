@@ -15,7 +15,7 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
-const { parseCommand, normalizeName, MIN_TIMER_SECONDS, MAX_RESULT_LENGTH } = require("../lib/commandValidation");
+const { parseCommand, normalizeName, MIN_TIMER_SECONDS, MAX_RESULT_LENGTH, ANNOUNCEMENT_COLORS } = require("../lib/commandValidation");
 
 const router = express.Router();
 
@@ -42,6 +42,8 @@ router.get("/:channel/commands", requireLevel(2), async (req, res, next) => {
       result: c.result,
       timerSeconds: toSeconds(c.timer),
       pin: !!c.pin,
+      announce: !!c.announce,
+      announceColor: c.announceColor || "primary",
     }));
 
     res.render("customCommands", {
@@ -49,6 +51,7 @@ router.get("/:channel/commands", requireLevel(2), async (req, res, next) => {
       commands,
       minTimerSeconds: MIN_TIMER_SECONDS,
       maxResultLength: MAX_RESULT_LENGTH,
+      announcementColors: ANNOUNCEMENT_COLORS,
       error: req.query.error || null,
       saved: req.query.saved || null,
     });
@@ -89,6 +92,8 @@ router.post(
         result: req.body.result,
         timerSeconds: req.body.timerSeconds,
         pin: req.body.pin,
+        announce: req.body.announce,
+        announceColor: req.body.announceColor,
       });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
 

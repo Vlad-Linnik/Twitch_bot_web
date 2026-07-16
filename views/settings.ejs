@@ -26,12 +26,12 @@
     // own sub-pages (channelCustomCommandsSettings / channelCountersSettings), linked from
     // the cards below - their names stay claimed so they don't resurface under "other".
     const groups = [
-      { key: 'chatStats', names: ['topchatters', 'topsmiles', 'countword', 'countmsg', 'countunique', 'update7tv', 'botinfo'] },
+      { key: 'chatStats', names: ['topchatters', 'topsmiles', 'countword', 'countmsg', 'countunique', 'update7tv', 'botinfo', 'randomclip'] },
       { key: 'miniGames', names: ['muteduel'] },
     ];
     const placedElsewhere = new Set([
       'question', 'directmsg', 'insult', 'customCommandTimer', 'counterUpdate',
-      'addcommand', 'settimer', 'setpin', 'delcommand',
+      'addcommand', 'settimer', 'setpin', 'setannounce', 'delcommand',
       'addcounter', 'delcounter', 'exception',
     ]);
     const claimed = new Set(placedElsewhere);

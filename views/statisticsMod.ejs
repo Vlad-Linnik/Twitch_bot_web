@@ -181,7 +181,7 @@
         <tbody class="divide-y divide-neutral-800" id="mod-actions-tbody">
           <% actions.forEach(function(a) { %>
             <%# data-id + data-tta drive the target-hover context popup (mod-stats.js): the
-                popup is only wired up when the moderator reacted within 45s of the target's
+                popup is only wired up when the moderator reacted within 2 minutes of the target's
                 last message, so the logged history is actually what was acted on.
                 mod-stats.js rebuilds these rows from mod-actions.json - keep its buildRow()
                 in sync with this markup. %>

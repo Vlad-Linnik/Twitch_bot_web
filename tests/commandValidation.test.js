@@ -14,7 +14,7 @@ test("normalizeName strips a leading ! and lowercases", () => {
 test("accepts a plain command", () => {
   const res = parseCommand({ name: "!discord", result: "https://discord.gg/x" });
   assert.equal(res.ok, true);
-  assert.deepEqual(res.command, { command: "discord", result: "https://discord.gg/x", timer: null, pin: false });
+  assert.deepEqual(res.command, { command: "discord", result: "https://discord.gg/x", timer: null, pin: false, announce: false, announceColor: "primary" });
 });
 
 test("accepts Cyrillic names, like the bot's own matcher does", () => {
@@ -66,4 +66,21 @@ test("refuses timer + pin together, exactly as the bot does", () => {
   // ...but each alone is fine.
   assert.equal(parseCommand({ name: "x", result: "y", timerSeconds: "120" }).ok, true);
   assert.equal(parseCommand({ name: "x", result: "y", pin: "on" }).command.pin, true);
+});
+
+test("refuses announce + pin together, exactly as the bot does", () => {
+  // An announcement is a self-contained Helix send with no message ID to pin -
+  // setCommandAnnounce/setCommandPin both reject this pair in chat.
+  const res = parseCommand({ name: "x", result: "y", pin: "on", announce: "on" });
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "announce_and_pin");
+
+  // ...but a timer + announce together is exactly the point of the feature.
+  assert.equal(parseCommand({ name: "x", result: "y", timerSeconds: "120", announce: "on" }).ok, true);
+});
+
+test("defaults to the primary announcement color and rejects unknown ones", () => {
+  assert.equal(parseCommand({ name: "x", result: "y", announce: "on" }).command.announceColor, "primary");
+  assert.equal(parseCommand({ name: "x", result: "y", announce: "on", announceColor: "blue" }).command.announceColor, "blue");
+  assert.equal(parseCommand({ name: "x", result: "y", announce: "on", announceColor: "not-a-color" }).command.announceColor, "primary");
 });

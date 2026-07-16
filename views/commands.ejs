@@ -1,10 +1,37 @@
 <%- include('partials/head', { title: t('commands.title') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+<main class="pt-14 max-w-7xl mx-auto px-6 py-16">
   <h1 class="text-3xl font-bold text-neutral-100 mb-2"><%= t('commands.title') %></h1>
   <p class="text-neutral-500 text-sm mb-6">
     <%= t('commands.subtitle') %>
+  </p>
+
+  <form method="get" action="/commands" class="flex flex-wrap items-center gap-3 mb-3">
+    <label for="commands-channel" class="text-sm text-neutral-400"><%= t('commands.channelSelectLabel') %></label>
+    <select
+      id="commands-channel"
+      name="channel"
+      onchange="this.form.submit()"
+      class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
+    >
+      <option value=""<%= !selectedChannel ? ' selected' : '' %>><%= t('commands.channelSelectDefault') %></option>
+      <% channels.forEach(function(ch) { %>
+        <option value="<%= ch.channelLogin %>"<%= selectedChannel && selectedChannel.channelLogin === ch.channelLogin ? ' selected' : '' %>><%= ch.channelLogin %></option>
+      <% }) %>
+    </select>
+    <%# No-JS fallback - the select's onchange auto-submits everywhere else. %>
+    <noscript>
+      <button type="submit" class="px-3 py-2 text-sm rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors"><%= t('commands.channelSelectApply') %></button>
+    </noscript>
+  </form>
+
+  <p class="text-xs text-neutral-500 mb-8">
+    <% if (selectedChannel) { %>
+      <%= t('commands.viewingChannelPrefix') %> <span class="text-neutral-300 font-medium"><%= selectedChannel.channelLogin %></span>
+    <% } else { %>
+      <%= t('commands.viewingDefaults') %>
+    <% } %>
   </p>
 
   <input
@@ -14,38 +41,98 @@
     class="w-full mb-10 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
   />
 
-  <% commandGroups.forEach(function(group) { %>
-    <section class="mb-10" data-command-group>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t(group.categoryKey) %></h2>
-      <div class="rounded-lg border border-neutral-800 overflow-hidden">
-        <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-neutral-900 text-neutral-400">
-            <tr>
-              <th class="text-left font-medium px-4 py-2"><%= t('commands.colCommand') %></th>
-              <th class="text-left font-medium px-4 py-2 w-32"><%= t('commands.colAccess') %></th>
-              <th class="text-left font-medium px-4 py-2 w-24"><%= t('commands.colCooldown') %></th>
-              <th class="text-left font-medium px-4 py-2 w-64"><%= t('commands.colDescription') %></th>
-              <th class="text-left font-medium px-4 py-2 w-72"><%= t('commands.colExample') %></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-neutral-800">
-            <% group.commands.forEach(function(cmd) { %>
-              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40" data-command-row data-search-text="<%= (cmd.signature + ' ' + t(cmd.descriptionKey) + ' ' + t(cmd.useCaseKey)).toLowerCase() %>">
-                <td class="px-4 py-2 font-mono text-purple-300 whitespace-nowrap"><%= cmd.signature %></td>
-                <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t(cmd.accessKey) %></td>
-                <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
-                <td class="px-4 py-2 text-neutral-300"><%= t(cmd.descriptionKey) %></td>
-                <td class="px-4 py-2 text-neutral-400"><%= t(cmd.useCaseKey) %></td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-        </div>
+  <div class="lg:flex lg:items-start lg:gap-10">
+    <%# Left reference nav, Twitch-API-docs style: sticky, section headings over the
+        per-category anchors, active link highlighted as the matching section scrolls
+        into view (public/js/commands-nav.js). Hidden below lg - the reordered
+        everyone-first/moderators-last page flow is enough to navigate on mobile. %>
+    <nav class="hidden lg:block w-56 shrink-0" aria-label="<%= t('commands.title') %>">
+      <div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto space-y-6 text-sm pr-2">
+        <% sections.forEach(function(section) { %>
+          <% if (section.groups.length) { %>
+            <div>
+              <p class="text-neutral-500 uppercase text-xs tracking-wide mb-2"><%= t(section.labelKey) %></p>
+              <ul class="space-y-1 border-l border-neutral-800">
+                <% section.groups.forEach(function(group) { %>
+                  <li>
+                    <a href="#<%= group.anchorId %>"
+                       data-commands-nav-link
+                       data-target="<%= group.anchorId %>"
+                       class="block pl-3 -ml-px border-l-2 border-transparent text-neutral-500 hover:text-neutral-200 transition-colors">
+                      <%= t(group.categoryKey) %>
+                    </a>
+                  </li>
+                <% }) %>
+              </ul>
+            </div>
+          <% } %>
+        <% }) %>
       </div>
-    </section>
-  <% }) %>
+    </nav>
+
+    <div class="flex-1 min-w-0">
+      <% sections.forEach(function(section) { %>
+        <% if (section.groups.length) { %>
+          <div data-command-section>
+          <h2 class="text-xl font-bold text-neutral-100 mb-6 mt-2 first:mt-0"><%= t(section.labelKey) %></h2>
+
+          <% section.groups.forEach(function(group) { %>
+            <section class="mb-10 scroll-mt-20" id="<%= group.anchorId %>" data-command-group>
+              <h3 class="text-lg font-semibold text-neutral-100 mb-3"><%= t(group.categoryKey) %></h3>
+              <div class="rounded-lg border border-neutral-800 overflow-hidden">
+                <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-neutral-900 text-neutral-400">
+                    <tr>
+                      <th class="text-left font-medium px-4 py-2"><%= t('commands.colCommand') %></th>
+                      <th class="text-left font-medium px-4 py-2 w-32"><%= t('commands.colAccess') %></th>
+                      <th class="text-left font-medium px-4 py-2 w-24"><%= t('commands.colCooldown') %></th>
+                      <th class="text-left font-medium px-4 py-2 w-64"><%= t('commands.colDescription') %></th>
+                      <th class="text-left font-medium px-4 py-2 w-72"><%= t('commands.colExample') %></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-neutral-800">
+                    <% group.commands.forEach(function(cmd) { %>
+                      <% const searchText = (cmd.signature + ' ' + (cmd.isCustom ? cmd.resultPreview : t(cmd.descriptionKey) + ' ' + t(cmd.useCaseKey))).toLowerCase(); %>
+                      <tr class="odd:bg-neutral-950 even:bg-neutral-900/40<%= cmd.enabled === false ? ' opacity-50' : '' %>" data-command-row data-search-text="<%= searchText %>">
+                        <td class="px-4 py-2 font-mono text-purple-300 whitespace-nowrap">
+                          <%= cmd.signature %>
+                          <% if (cmd.enabled === false) { %>
+                            <span class="ml-2 rounded bg-red-500/10 text-red-400 text-[11px] px-1.5 py-0.5 align-middle whitespace-nowrap"><%= t('commands.disabledBadge') %></span>
+                          <% } %>
+                        </td>
+                        <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t(cmd.accessKey) %></td>
+                        <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
+                        <% if (cmd.isCustom) { %>
+                          <td class="px-4 py-2 text-neutral-300"><%= cmd.resultPreview %></td>
+                          <td class="px-4 py-2 text-neutral-400">
+                            <%
+                              const badges = [];
+                              if (cmd.pin) badges.push(t('commands.customBadge.pinned'));
+                              if (cmd.announce) badges.push(t('commands.customBadge.announced'));
+                              if (cmd.timerSeconds) badges.push(t('commands.customBadge.timerEvery') + ' ' + cmd.timerSeconds + 's');
+                            %>
+                            <%= badges.length ? badges.join(' · ') : t('commands.customBadge.manualOnly') %>
+                          </td>
+                        <% } else { %>
+                          <td class="px-4 py-2 text-neutral-300"><%= t(cmd.descriptionKey) %></td>
+                          <td class="px-4 py-2 text-neutral-400"><%= t(cmd.useCaseKey) %></td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            </section>
+          <% }) %>
+          </div>
+        <% } %>
+      <% }) %>
+    </div>
+  </div>
 </main>
 
 <script src="/js/commands-search.js" defer></script>
+<script src="/js/commands-nav.js" defer></script>
 <%- include('partials/foot') %>

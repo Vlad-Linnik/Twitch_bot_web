@@ -6,6 +6,14 @@ const { connectWeb } = require("./connection");
 
 const DEFAULT_LIMIT = 25;
 
+// Autosave (public/js/autosave.js) saves on every keystroke pause and on every toggle click,
+// so one edit "session" (typing a sentence, double-clicking a switch) can fire several POSTs
+// a few hundred ms to a few seconds apart. Each is a genuine before/after diff at that instant,
+// but logging all of them buries the one meaningful change under a wall of intermediate
+// keystroke states. If the same moderator's most recent row for this exact field is still
+// within this window, logChange() extends it in place instead of inserting a new one.
+const COALESCE_WINDOW_MS = 15000;
+
 let collection;
 
 async function ensureInitialized() {
@@ -16,12 +24,40 @@ async function ensureInitialized() {
   return collection;
 }
 
+function isEqual(a, b) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
 // user is req.user ({userId, login, displayName}) - already resolved on every authenticated
 // request, so a log entry never needs a separate identity lookup at write time.
 async function logChange({ channelLogin, user, category, action, target, before, after }) {
   const col = await ensureInitialized();
+  const login = channelLogin.toLowerCase();
+  const normBefore = before === undefined ? null : before;
+  const normAfter = after === undefined ? null : after;
+
+  // Only "update" actions come from autosave's rapid-fire saves - list add/delete are
+  // discrete button clicks already rate-limited elsewhere, so they're never coalesced.
+  if (action === "update") {
+    const recent = await col.findOne(
+      { channelLogin: login, category, action: "update", target, moderatorId: String(user.userId) },
+      { sort: { timestamp: -1 } }
+    );
+    if (recent && Date.now() - recent.timestamp.getTime() < COALESCE_WINDOW_MS && isEqual(recent.after, normBefore)) {
+      // The session round-tripped back to where it started (e.g. a toggle flipped and flipped
+      // back) - nothing net changed, so drop the row instead of leaving a confusing same-value
+      // entry.
+      if (isEqual(recent.before, normAfter)) {
+        await col.deleteOne({ _id: recent._id });
+      } else {
+        await col.updateOne({ _id: recent._id }, { $set: { after: normAfter, timestamp: new Date() } });
+      }
+      return;
+    }
+  }
+
   await col.insertOne({
-    channelLogin: channelLogin.toLowerCase(),
+    channelLogin: login,
     moderatorId: String(user.userId),
     moderatorLogin: user.login,
     moderatorDisplayName: user.displayName,
@@ -29,8 +65,8 @@ async function logChange({ channelLogin, user, category, action, target, before,
     category,
     action,
     target,
-    before: before === undefined ? null : before,
-    after: after === undefined ? null : after,
+    before: normBefore,
+    after: normAfter,
   });
 }
 

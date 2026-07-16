@@ -14,9 +14,12 @@
   const result = document.getElementById("result");
   const timer = document.getElementById("timerSeconds");
   const pin = document.getElementById("pin");
+  const announce = document.getElementById("announce");
+  const announceColor = document.getElementById("announceColor");
   const heading = document.getElementById("form-heading");
   const cancel = document.getElementById("cancel-edit");
   const conflict = document.getElementById("pin-conflict");
+  const announceConflict = document.getElementById("announce-conflict");
 
   const originalHeading = heading.textContent;
 
@@ -29,6 +32,8 @@
       result.value = button.dataset.result;
       timer.value = button.dataset.timer;
       pin.checked = button.dataset.pin === "1";
+      announce.checked = button.dataset.announce === "1";
+      if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
 
       heading.textContent = `${originalHeading} — !${button.dataset.name}`;
       cancel.hidden = false;
@@ -46,21 +51,25 @@
     setTimeout(updateConflict, 0);
   });
 
-  // --- timer + pin cannot coexist. The bot refuses the combination and so does the server; this
-  // just says so before the round-trip, and stops the submit so the user doesn't lose the form.
+  // --- timer + pin, and announce + pin, cannot coexist. The bot refuses both combinations and
+  // so does the server; this just says so before the round-trip, and stops the submit so the
+  // user doesn't lose the form.
   function updateConflict() {
-    const clash = !!timer.value && pin.checked;
-    conflict.hidden = !clash;
-    return clash;
+    const timerPinClash = !!timer.value && pin.checked;
+    const announcePinClash = announce.checked && pin.checked;
+    conflict.hidden = !timerPinClash;
+    announceConflict.hidden = !announcePinClash;
+    return timerPinClash || announcePinClash;
   }
 
   timer.addEventListener("input", updateConflict);
   pin.addEventListener("change", updateConflict);
+  announce.addEventListener("change", updateConflict);
 
   form.addEventListener("submit", (event) => {
     if (updateConflict()) {
       event.preventDefault();
-      conflict.scrollIntoView({ behavior: "smooth", block: "center" });
+      (conflict.hidden ? announceConflict : conflict).scrollIntoView({ behavior: "smooth", block: "center" });
     }
   });
 

@@ -68,7 +68,7 @@
   },
   "commands": {
     "title": "Available Commands",
-    "subtitle": "Signatures shown are defaults - each channel owner can rename them via that channel's settings page.",
+    "subtitle": "Signatures shown are defaults - each channel owner can rename them via that channel's settings page. Pick a channel below to see its actual setup.",
     "searchPlaceholder": "Search commands...",
     "colCommand": "Command",
     "colAccess": "Access",
@@ -76,6 +76,22 @@
     "colCooldown": "Cooldown",
     "colExample": "Example",
     "noneNoCooldown": "—",
+    "channelSelectLabel": "Channel",
+    "channelSelectDefault": "Standard commands (default)",
+    "channelSelectApply": "Show",
+    "viewingDefaults": "Showing standard, unmodified signatures.",
+    "viewingChannelPrefix": "Showing this channel's actual setup for",
+    "disabledBadge": "disabled on this channel",
+    "section": {
+      "everyone": "For everyone",
+      "moderators": "For moderators"
+    },
+    "customBadge": {
+      "pinned": "pinned",
+      "announced": "announcement",
+      "timerEvery": "every",
+      "manualOnly": "manual only"
+    },
     "access": {
       "mod": "mod",
       "all": "all",
@@ -87,13 +103,15 @@
       "counters": "Counters",
       "chatStats": "Chat stats",
       "moderation": "Moderation",
-      "miniGames": "Mini-games"
+      "miniGames": "Mini-games",
+      "channelCustom": "This channel's custom commands"
     },
     "desc": {
       "addcommand": "Create a custom command, or edit its text if it already exists.",
       "delcommand": "Delete a custom command.",
       "settimer": "Auto-post that command's text on an interval (minimum 60s); off disables it.",
       "setpin": "Toggle auto-pin for that command's sends.",
+      "setannounce": "Toggle sending that command as a colored chat announcement instead of a plain message.",
       "customcommands": "List all custom command names for the channel.",
       "triggerCustom": "Trigger a custom command.",
       "addcounter": "Create a counter starting at 0; add mod to restrict updates to mods.",
@@ -108,6 +126,7 @@
       "countmsg": "Your message count and rank for the period.",
       "countunique": "Count of unique chatters for the period.",
       "botinfo": "Bot uptime and DB stats summary.",
+      "randomclip": "Posts a random clip from the channel's most-viewed clips.",
       "update7tv": "Re-sync the channel's 7TV emote set into the tracked-word whitelist.",
       "muteduel": "Challenge chat or a user to a dice-roll duel; loser gets timed out.",
       "muteaccept": "Accept a pending mute duel.",
@@ -118,6 +137,7 @@
       "delcommand": "Retire a command that's no longer relevant.",
       "settimer": "Auto-remind viewers of a !discord link every 10 minutes without anyone typing it.",
       "setpin": "Keep an important announcement pinned whenever it's sent.",
+      "setannounce": "Make a scheduled reminder actually stand out in a busy chat.",
       "customcommands": "Let viewers discover what commands a channel has set up.",
       "triggerCustom": "Everyday use of any mod-created command.",
       "addcounter": "Track deaths, wins, or any running tally live during a stream.",
@@ -132,6 +152,7 @@
       "countmsg": "Check your own chat activity and rank.",
       "countunique": "Gauge how many different people showed up today.",
       "botinfo": "Mods checking the bot is alive and healthy mid-stream.",
+      "randomclip": "Break up a quiet moment with a blast from the channel's past.",
       "update7tv": "Pick up newly added 7TV emotes without waiting for the next auto-sync.",
       "muteduel": "A fun PvP wager between two chatters, loser gets timed out.",
       "muteaccept": "Accepting a challenge someone sent you.",
@@ -244,10 +265,12 @@
       "countmsg": "My message count",
       "countunique": "Unique chatters",
       "botinfo": "Bot info",
+      "randomclip": "Random clip",
       "addcommand": "Add / edit command",
       "delcommand": "Delete command",
       "settimer": "Auto-post timer",
       "setpin": "Auto-pin",
+      "setannounce": "Announcement",
       "addcounter": "Create counter",
       "delcounter": "Delete counter",
       "exception": "Counter permissions",
@@ -263,10 +286,12 @@
       "countmsg": "Reports a user's own message count and rank.",
       "countunique": "Reports how many unique chatters have spoken.",
       "botinfo": "Shows bot uptime and database stats (mods only).",
+      "randomclip": "Posts a random clip from the channel's most-viewed clips.",
       "addcommand": "Lets mods create and edit custom commands from chat.",
       "delcommand": "Lets mods delete a custom command from chat.",
       "settimer": "Lets mods set a custom command to auto-post on an interval.",
       "setpin": "Lets mods toggle auto-pinning a custom command's sends.",
+      "setannounce": "Lets mods toggle sending a custom command as a colored chat announcement.",
       "addcounter": "Lets mods create a # counter from chat.",
       "delcounter": "Lets mods delete a # counter from chat.",
       "exception": "Lets mods grant or revoke a user's right to update mod-restricted counters.",
@@ -413,6 +438,16 @@
     "timerOff": "off",
     "pin": "Pin to chat when posted (moderators only)",
     "pinned": "pinned",
+    "announce": "Send as a chat announcement (highlighted, colored)",
+    "announceColor": "Color",
+    "announced": "announcement",
+    "color": {
+      "primary": "Default",
+      "blue": "Blue",
+      "green": "Green",
+      "orange": "Orange",
+      "purple": "Purple"
+    },
     "every": "every",
     "countersHint": "Use #counterName to insert a counter's current value",
     "save": "Save",
@@ -430,7 +465,8 @@
       "timer_invalid": "Auto-post interval must be a number of seconds",
       "timer_too_short": "Auto-post interval is too short (minimum 60 seconds)",
       "timer_too_long": "Auto-post interval is too long",
-      "timer_and_pin": "A command can have an auto-post timer or auto-pin, not both — Twitch allows only one pinned message per channel"
+      "timer_and_pin": "A command can have an auto-post timer or auto-pin, not both — Twitch allows only one pinned message per channel",
+      "announce_and_pin": "A command can be an announcement or auto-pinned, not both — an announcement has no message to pin"
     }
   },
   "counters": {

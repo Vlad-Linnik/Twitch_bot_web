@@ -61,6 +61,25 @@
           server bounce the form back with an error. %>
       <p class="text-xs text-amber-600/80" id="pin-conflict" hidden><%= t('customCommands.errors.timer_and_pin') %></p>
 
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="flex items-center gap-2 text-sm text-neutral-400 cursor-pointer">
+          <input type="checkbox" name="announce" value="on" id="announce" class="accent-purple-600" />
+          <%= t('customCommands.announce') %>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-neutral-500">
+          <%= t('customCommands.announceColor') %>
+          <select name="announceColor" id="announceColor"
+                  class="bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-600">
+            <% announcementColors.forEach(function(color) { %>
+              <option value="<%= color %>"><%= t('customCommands.color.' + color) %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+      <%# Announce and pin can't coexist either - an announcement is a self-contained Helix send
+          with no message ID to pin (see lib/commandValidation.js). %>
+      <p class="text-xs text-amber-600/80" id="announce-conflict" hidden><%= t('customCommands.errors.announce_and_pin') %></p>
+
       <div class="flex gap-3 pt-1">
         <button type="submit"
                 class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('customCommands.save') %></button>
@@ -89,6 +108,9 @@
                 <% if (c.pin) { %>
                   <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-600/20 text-amber-500 border border-amber-600/30"><%= t('customCommands.pinned') %></span>
                 <% } %>
+                <% if (c.announce) { %>
+                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('customCommands.announced') %> · <%= t('customCommands.color.' + c.announceColor) %></span>
+                <% } %>
               </div>
               <p class="text-sm text-neutral-400 mt-1 break-words"><%= c.result %></p>
             </div>
@@ -102,6 +124,8 @@
                       data-result="<%= c.result %>"
                       data-timer="<%= c.timerSeconds || '' %>"
                       data-pin="<%= c.pin ? '1' : '' %>"
+                      data-announce="<%= c.announce ? '1' : '' %>"
+                      data-announce-color="<%= c.announceColor %>"
                       aria-label="<%= t('customCommands.edit') %>"><%- include('partials/iconPencil') %></button>
 
               <form method="post" action="/<%= channel.channelLogin %>/commands" class="js-delete-form">

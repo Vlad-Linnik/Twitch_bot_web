@@ -25,7 +25,7 @@ const { cached: withCache } = createCache({
 // A ban/timeout context (the message the user was actioned for + their previous messages) is
 // only meaningful when the moderator reacted to something JUST said - past this TTA the last
 // logged message is probably unrelated to why they were actioned.
-const MOD_ACTION_CONTEXT_MAX_TTA_MS = 45000;
+const MOD_ACTION_CONTEXT_MAX_TTA_MS = 120000; // 2 minutes
 const MOD_ACTION_CONTEXT_MESSAGES = 6; // the flagged message + 5 before it
 
 let collections;

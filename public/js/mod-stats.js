@@ -478,8 +478,9 @@
 
 // --- Ban-context popup: hovering a Target cell in the recent-actions table shows the message
 // the user was actioned for plus up to 5 of their previous ones. Only wired up on rows whose
-// TTA (moderator reaction time) is under 45s - beyond that the last logged message probably
-// isn't what was acted on, so the popup would mislead (the server enforces the same cutoff).
+// TTA (moderator reaction time) is under 2 minutes - beyond that the last logged message probably
+// isn't what was acted on, so the popup would mislead (the server enforces the same cutoff,
+// db/statsRepo.js's MOD_ACTION_CONTEXT_MAX_TTA_MS - kept in sync by hand).
 // The context costs a DB query, so it's fetched lazily per row, cached, and the panel shows a
 // spinner immediately so the viewer knows to keep the cursor still while it loads.
 (() => {
@@ -487,7 +488,7 @@
   const panel = document.getElementById("ban-context");
   if (!table || !panel) return;
 
-  const MAX_TTA_MS = 45000;
+  const MAX_TTA_MS = 120000; // 2 minutes
   const contextUrl = window.location.pathname.replace(/\/statistics\/mod\/?$/, "/mod-action-context.json");
   const cache = new Map(); // action id -> Promise of context JSON
   let activeId = null; // which row the panel currently belongs to (guards async races)
