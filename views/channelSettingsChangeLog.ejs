@@ -26,7 +26,6 @@
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colModerator') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colCategory') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAction') %></th>
-          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colTarget') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colChanges') %></th>
         </tr>
       </thead>
@@ -37,7 +36,6 @@
             <td class="px-4 py-2 text-neutral-200"><%= e.moderatorDisplayName || e.moderatorLogin || e.moderatorId %></td>
             <td class="px-4 py-2 text-neutral-400"><%= t('settingsChangeLog.category.' + e.category) %></td>
             <td class="px-4 py-2 text-neutral-400"><%= t('settingsChangeLog.action.' + e.action) %></td>
-            <td class="px-4 py-2 text-neutral-300 font-mono text-xs break-all"><%= e.target %></td>
             <td class="px-4 py-2 text-neutral-200 text-xs max-w-sm">
               <%= e.description %>
               <details class="mt-1 text-neutral-600">
@@ -51,7 +49,7 @@
           </tr>
         <% }) %>
         <% if (entries.length === 0) { %>
-          <tr><td colspan="6" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
+          <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
         <% } %>
       </tbody>
     </table>
