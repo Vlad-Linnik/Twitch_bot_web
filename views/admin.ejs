@@ -139,6 +139,7 @@
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colOwnerId') %></th>
             <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.colConsented') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colEnabled') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.colHomepage') %></th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
@@ -157,8 +158,24 @@
                   <span class="text-neutral-500"><%= t('admin.enabledNo') %></span>
                 <% } %>
               </td>
-              <td class="px-4 py-2 text-right">
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle" data-transition="instant">
+              <td class="px-4 py-2">
+                <% if (ch.showOnHomepage === false) { %>
+                  <span class="text-neutral-500"><%= t('admin.homepageNo') %></span>
+                <% } else { %>
+                  <span class="text-green-400"><%= t('admin.homepageYes') %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-2 text-right whitespace-nowrap">
+                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-homepage" data-transition="instant" class="inline-block">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <input type="hidden" name="showOnHomepage" value="<%= ch.showOnHomepage === false ? '1' : '0' %>" />
+                  <% if (ch.showOnHomepage === false) { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.showOnHomepage') %></button>
+                  <% } else { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.hideFromHomepage') %></button>
+                  <% } %>
+                </form>
+                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle" data-transition="instant" class="inline-block">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <input type="hidden" name="enabled" value="<%= ch.enabled ? '0' : '1' %>" />
                   <% if (ch.enabled) { %>
@@ -171,7 +188,7 @@
             </tr>
           <% }) %>
           <% if (channels.length === 0) { %>
-            <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.channelsEmpty') %></td></tr>
+            <tr><td colspan="6" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.channelsEmpty') %></td></tr>
           <% } %>
         </tbody>
       </table>

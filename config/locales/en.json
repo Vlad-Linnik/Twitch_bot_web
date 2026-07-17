@@ -27,7 +27,9 @@
     "statUniqueUsers": "Unique users detected",
     "channelsHeading": "Channels",
     "noChannels": "No channels registered yet.",
-    "viewStatistics": "View statistics"
+    "viewStatistics": "View statistics",
+    "live": "Live",
+    "offline": "Offline"
   },
   "about": {
     "title": "About",
@@ -347,6 +349,58 @@
       "add": "Added",
       "update": "Updated",
       "delete": "Deleted"
+    },
+    "colChanges": "What changed",
+    "rawDetails": "Raw data",
+    "deleteAllButton": "Delete entire log",
+    "deleteAllConfirm": "Delete the entire settings change log across all channels? This can't be undone.",
+    "describe": {
+      "commandLabel": "Command !{{name}}",
+      "commandEnabled": "enabled",
+      "commandDisabled": "disabled",
+      "cooldownChanged": "cooldown {{before}}s → {{after}}s",
+      "minMessagesChanged": "gap between auto-posts: {{before}} → {{after}} messages",
+      "signatureChanged": "trigger {{before}} → {{after}}",
+      "responsesBusyChanged": "\"busy\" replies updated ({{count}} phrases)",
+      "responsesYesNoChanged": "\"yes/no\" replies updated ({{count}} phrases)",
+      "commandAdded": "Command !{{name}} added",
+      "commandDeleted": "Command !{{name}} deleted",
+      "commandUpdated": "Command !{{name}} updated",
+      "commandResultChanged": "text changed to {{after}}",
+      "commandTimerSet": "auto-posts every {{seconds}}s",
+      "commandTimerCleared": "auto-post turned off",
+      "commandPinned": "pinned",
+      "commandUnpinned": "unpinned",
+      "commandAnnounceOn": "announcement turned on",
+      "commandAnnounceOff": "announcement turned off",
+      "counterLabel": "Counter #{{name}}",
+      "counterAdded": "Counter #{{name}} added (value {{count}}, access: {{access}})",
+      "counterDeleted": "Counter #{{name}} deleted",
+      "counterUpdated": "Counter #{{name}} updated",
+      "counterCountChanged": "value {{before}} → {{after}}",
+      "counterAccessChanged": "access {{before}} → {{after}}",
+      "access": {
+        "all": "everyone",
+        "mods": "moderators only"
+      },
+      "bannedWordAdded": "Banned word {{word}} added",
+      "bannedWordRemoved": "Banned word {{word}} removed",
+      "bannedWordRenamed": "Banned word {{before}} changed to {{after}}",
+      "bannedWordAddedMany": "Banned words added: {{list}}",
+      "bannedWordRemovedMany": "Banned words removed: {{list}}",
+      "spamSignatureAdded": "Spam signature {{word}} added",
+      "spamSignatureRemoved": "Spam signature {{word}} removed",
+      "spamSignatureRenamed": "Spam signature {{before}} changed to {{after}}",
+      "spamSignatureAddedMany": "Spam signatures added: {{list}}",
+      "spamSignatureRemovedMany": "Spam signatures removed: {{list}}",
+      "timeoutReasonChanged": "Banned-word timeout reason changed: {{before}} → {{after}}",
+      "spamBanReasonChanged": "Spam ban reason changed: {{before}} → {{after}}",
+      "insultDetectionOn": "Banned-word detection turned on",
+      "insultDetectionOff": "Banned-word detection turned off",
+      "modPermissionGranted": "{{name}} was allowed to edit settings",
+      "modPermissionRevoked": "{{name}} was blocked from editing settings",
+      "genericChanged": "Setting changed",
+      "noVisibleChange": "No visible change"
     }
   },
   "moderatorPermissions": {
@@ -528,10 +582,13 @@
     "tabSettingsLog": "Settings log",
     "tabActions": "Admin actions",
     "flash": {
-      "approved": "Request approved and channel registered. The bot joins the channel after its next restart.",
+      "approved": "Request approved and channel registered. The bot joins the channel within a minute.",
       "rejected": "Request rejected.",
-      "enabled": "Channel enabled. The bot joins it after its next restart.",
-      "disabled": "Channel disabled. The bot leaves it at its next restart."
+      "enabled": "Channel enabled. The bot joins it within a minute.",
+      "disabled": "Channel disabled. The bot leaves it at its next restart.",
+      "homepageShown": "Channel is now shown on the home page.",
+      "homepageHidden": "Channel hidden from the home page.",
+      "deleted": "The entire settings change log has been deleted."
     },
     "healthHeading": "Service health",
     "healthMessages": "Messages stored",
@@ -555,7 +612,7 @@
     "statusApproved": "Approved",
     "statusRejected": "Rejected",
     "channelsHeading": "Channels",
-    "channelsHint": "Disabling removes the channel from the site's home page and from the bot's join list at its next restart.",
+    "channelsHint": "Disabling removes the channel from the site's home page and from the bot's join list at its next restart. \"On home page\" separately hides a channel from the home page only - the site and bot keep working with it as normal.",
     "colChannel": "Channel",
     "colOwnerId": "Owner ID",
     "colConsented": "Consent date",
@@ -564,6 +621,11 @@
     "enabledNo": "Disabled",
     "enable": "Enable",
     "disable": "Disable",
+    "colHomepage": "On home page",
+    "homepageYes": "Shown",
+    "homepageNo": "Hidden",
+    "showOnHomepage": "Show",
+    "hideFromHomepage": "Hide",
     "channelsEmpty": "No channels registered.",
     "settingsLogIntro": "Settings changes across all channels.",
     "actionsIntro": "Audit log of admin actions.",
@@ -579,7 +641,9 @@
       },
       "channel": {
         "enable": "Channel enabled",
-        "disable": "Channel disabled"
+        "disable": "Channel disabled",
+        "homepageShow": "Channel shown on home page",
+        "homepageHide": "Channel hidden from home page"
       }
     }
   }

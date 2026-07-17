@@ -27,7 +27,9 @@
     "statUniqueUsers": "Уникальных пользователей",
     "channelsHeading": "Каналы",
     "noChannels": "Пока нет зарегистрированных каналов.",
-    "viewStatistics": "Смотреть статистику"
+    "viewStatistics": "Смотреть статистику",
+    "live": "В эфире",
+    "offline": "Не в сети"
   },
   "about": {
     "title": "О боте",
@@ -347,6 +349,58 @@
       "add": "Добавлено",
       "update": "Изменено",
       "delete": "Удалено"
+    },
+    "colChanges": "Что изменилось",
+    "rawDetails": "Исходные данные",
+    "deleteAllButton": "Удалить весь журнал",
+    "deleteAllConfirm": "Удалить весь журнал изменений настроек по всем каналам? Это необратимо.",
+    "describe": {
+      "commandLabel": "Команда !{{name}}",
+      "commandEnabled": "включена",
+      "commandDisabled": "выключена",
+      "cooldownChanged": "кулдаун {{before}}с → {{after}}с",
+      "minMessagesChanged": "интервал между автопостами: {{before}} → {{after}} сообщений",
+      "signatureChanged": "триггер {{before}} → {{after}}",
+      "responsesBusyChanged": "ответы «занят» обновлены ({{count}} вариантов)",
+      "responsesYesNoChanged": "ответы «да/нет» обновлены ({{count}} вариантов)",
+      "commandAdded": "Добавлена команда !{{name}}",
+      "commandDeleted": "Удалена команда !{{name}}",
+      "commandUpdated": "Команда !{{name}} изменена",
+      "commandResultChanged": "текст изменён на {{after}}",
+      "commandTimerSet": "автопост каждые {{seconds}}с",
+      "commandTimerCleared": "автопост выключен",
+      "commandPinned": "закреплена",
+      "commandUnpinned": "откреплена",
+      "commandAnnounceOn": "объявление включено",
+      "commandAnnounceOff": "объявление выключено",
+      "counterLabel": "Счётчик #{{name}}",
+      "counterAdded": "Добавлен счётчик #{{name}} (значение {{count}}, доступ: {{access}})",
+      "counterDeleted": "Удалён счётчик #{{name}}",
+      "counterUpdated": "Счётчик #{{name}} изменён",
+      "counterCountChanged": "значение {{before}} → {{after}}",
+      "counterAccessChanged": "доступ {{before}} → {{after}}",
+      "access": {
+        "all": "все",
+        "mods": "только модераторы"
+      },
+      "bannedWordAdded": "Добавлено запрещённое слово {{word}}",
+      "bannedWordRemoved": "Удалено запрещённое слово {{word}}",
+      "bannedWordRenamed": "Запрещённое слово {{before}} изменено на {{after}}",
+      "bannedWordAddedMany": "Добавлены запрещённые слова: {{list}}",
+      "bannedWordRemovedMany": "Удалены запрещённые слова: {{list}}",
+      "spamSignatureAdded": "Добавлена спам-сигнатура {{word}}",
+      "spamSignatureRemoved": "Удалена спам-сигнатура {{word}}",
+      "spamSignatureRenamed": "Спам-сигнатура {{before}} изменена на {{after}}",
+      "spamSignatureAddedMany": "Добавлены спам-сигнатуры: {{list}}",
+      "spamSignatureRemovedMany": "Удалены спам-сигнатуры: {{list}}",
+      "timeoutReasonChanged": "Причина таймаута за запрещённые слова изменена: {{before}} → {{after}}",
+      "spamBanReasonChanged": "Причина бана за спам изменена: {{before}} → {{after}}",
+      "insultDetectionOn": "Определение запрещённых слов включено",
+      "insultDetectionOff": "Определение запрещённых слов выключено",
+      "modPermissionGranted": "{{name}} разрешено редактировать настройки",
+      "modPermissionRevoked": "{{name}} запрещено редактировать настройки",
+      "genericChanged": "Настройка изменена",
+      "noVisibleChange": "Без видимых изменений"
     }
   },
   "moderatorPermissions": {
@@ -528,10 +582,13 @@
     "tabSettingsLog": "Лог настроек",
     "tabActions": "Действия админов",
     "flash": {
-      "approved": "Заявка одобрена, канал зарегистрирован. Бот присоединится к каналу после ближайшего перезапуска.",
+      "approved": "Заявка одобрена, канал зарегистрирован. Бот присоединится к каналу в течение минуты.",
       "rejected": "Заявка отклонена.",
-      "enabled": "Канал включён. Бот присоединится к нему после ближайшего перезапуска.",
-      "disabled": "Канал выключен. Бот покинет его после ближайшего перезапуска."
+      "enabled": "Канал включён. Бот присоединится к нему в течение минуты.",
+      "disabled": "Канал выключен. Бот покинет его после ближайшего перезапуска.",
+      "homepageShown": "Канал теперь показан на главной странице.",
+      "homepageHidden": "Канал скрыт с главной страницы.",
+      "deleted": "Журнал изменений настроек полностью удалён."
     },
     "healthHeading": "Состояние сервиса",
     "healthMessages": "Сообщений в базе",
@@ -555,7 +612,7 @@
     "statusApproved": "Одобрена",
     "statusRejected": "Отклонена",
     "channelsHeading": "Каналы",
-    "channelsHint": "Выключение убирает канал с главной страницы сайта и из списка каналов бота при его следующем перезапуске.",
+    "channelsHint": "Выключение убирает канал с главной страницы сайта и из списка каналов бота при его следующем перезапуске. «На главной» отдельно скрывает канал только с главной страницы — сайт и бот продолжают работать с ним как обычно.",
     "colChannel": "Канал",
     "colOwnerId": "ID владельца",
     "colConsented": "Дата согласия",
@@ -564,6 +621,11 @@
     "enabledNo": "Выключен",
     "enable": "Включить",
     "disable": "Выключить",
+    "colHomepage": "На главной",
+    "homepageYes": "Показан",
+    "homepageNo": "Скрыт",
+    "showOnHomepage": "Показать",
+    "hideFromHomepage": "Скрыть",
     "channelsEmpty": "Каналы не зарегистрированы.",
     "settingsLogIntro": "Изменения настроек по всем каналам.",
     "actionsIntro": "Журнал действий администраторов.",
@@ -579,7 +641,9 @@
       },
       "channel": {
         "enable": "Канал включён",
-        "disable": "Канал выключен"
+        "disable": "Канал выключен",
+        "homepageShow": "Канал показан на главной",
+        "homepageHide": "Канал скрыт с главной"
       }
     }
   }

@@ -12,6 +12,7 @@ const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { MAX_LIST_ITEMS, sanitizeWord, parseSubmittedConfig } = require("../lib/settingsValidation");
 const { diffConfig } = require("../lib/settingsDiff");
+const { describeChange } = require("../lib/settingsChangeDescribe");
 const { getSevenTvLinkStatus } = require("../twitch/emoteImages");
 
 const router = express.Router();
@@ -312,12 +313,34 @@ router.get("/:channel/settings/change-log", requireLevel(2), async (req, res, ne
       page: requestedPage,
       limit: CHANGE_LOG_PER_PAGE,
     });
+    const described = await describeEntries(entries, res.locals.t);
 
-    res.render("channelSettingsChangeLog", { channel, entries, page, totalPages });
+    res.render("channelSettingsChangeLog", { channel, entries: described, page, totalPages });
   } catch (err) {
     next(err);
   }
 });
+
+// Resolves "moderator-permission:<id>" targets to a display name (falls back to the raw id if
+// the profile can't be fetched) and attaches a describeChange() one-liner to every entry, so the
+// view never has to render raw before/after JSON as the primary summary.
+async function describeEntries(entries, t) {
+  const moderatorIds = [
+    ...new Set(
+      entries
+        .filter((e) => e.category === "settings" && e.target.startsWith("moderator-permission:"))
+        .map((e) => e.target.slice("moderator-permission:".length))
+    ),
+  ];
+  const moderatorNames = moderatorIds.length
+    ? await profileCacheRepo
+        .getOrFetchProfiles(moderatorIds)
+        .then((profiles) => new Map([...profiles].map(([id, p]) => [id, p.displayName || id])))
+        .catch(() => new Map())
+    : new Map();
+
+  return entries.map((e) => ({ ...e, description: describeChange(t, e, { moderatorNames }) }));
+}
 
 // Owner-only: per-moderator toggle for whether that moderator may EDIT settings/commands/
 // counters (db/modPermissionOverridesRepo.js) - viewing is unaffected. requireLevel(1), not (2):

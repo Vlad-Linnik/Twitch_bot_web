@@ -21,6 +21,15 @@ async function listEnabled() {
   return col.find({ enabled: true }).sort({ channelLogin: 1 }).toArray();
 }
 
+// Used by routes/home.js only. showOnHomepage is a separate, home-page-only visibility flag from
+// `enabled` (which also controls the bot's join list) - a channel with no showOnHomepage field
+// yet (every channel before this feature existed) defaults to visible, so this ships with no
+// migration needed. Admin-toggled via setShowOnHomepage below.
+async function listVisibleOnHomepage() {
+  const col = await ensureInitialized();
+  return col.find({ enabled: true, showOnHomepage: { $ne: false } }).sort({ channelLogin: 1 }).toArray();
+}
+
 // Unlike listEnabled(), not filtered by `enabled` - used by the public /commands reference
 // page, where a channel's command docs (including its real custom_commands rows) should stay
 // visible regardless of whether the bot is currently joining that channel.
@@ -74,4 +83,25 @@ async function setEnabled(channelLogin, enabled) {
   return result.matchedCount > 0;
 }
 
-module.exports = { findByLogin, listEnabled, listAll, upsertChannel, findByOwnerId, findManyByIds, setEnabled };
+// Admin-panel toggle (/admin), same shape as setEnabled. Independent of `enabled` - hiding a
+// channel from the home page must not touch whether the bot joins it or the site otherwise works.
+async function setShowOnHomepage(channelLogin, show) {
+  const col = await ensureInitialized();
+  const result = await col.updateOne(
+    { channelLogin: channelLogin.toLowerCase() },
+    { $set: { showOnHomepage: !!show, updatedAt: new Date() } }
+  );
+  return result.matchedCount > 0;
+}
+
+module.exports = {
+  findByLogin,
+  listEnabled,
+  listVisibleOnHomepage,
+  listAll,
+  upsertChannel,
+  findByOwnerId,
+  findManyByIds,
+  setEnabled,
+  setShowOnHomepage,
+};

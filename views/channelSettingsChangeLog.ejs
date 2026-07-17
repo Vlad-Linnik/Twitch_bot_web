@@ -2,12 +2,13 @@
 <%- include('partials/nav') %>
 
 <%
-  // before/after can be any JSON value (string, array, object, boolean, null) - render it
-  // compactly and cap the length so a long word list or command blob doesn't blow up the row.
+  // Raw before/after can be any JSON value (string, array, object, boolean, null) - only shown
+  // behind the collapsed "Raw data" toggle now; the primary cell is entries[i].description, a
+  // human sentence built by lib/settingsChangeDescribe.js.
   function fmt(value) {
     if (value === null || value === undefined) return '—';
     const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    return text.length > 120 ? text.slice(0, 120) + '…' : text;
+    return text.length > 300 ? text.slice(0, 300) + '…' : text;
   }
 %>
 
@@ -26,8 +27,7 @@
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colCategory') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAction') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colTarget') %></th>
-          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colBefore') %></th>
-          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAfter') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colChanges') %></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-neutral-800">
@@ -38,12 +38,20 @@
             <td class="px-4 py-2 text-neutral-400"><%= t('settingsChangeLog.category.' + e.category) %></td>
             <td class="px-4 py-2 text-neutral-400"><%= t('settingsChangeLog.action.' + e.action) %></td>
             <td class="px-4 py-2 text-neutral-300 font-mono text-xs break-all"><%= e.target %></td>
-            <td class="px-4 py-2 text-neutral-500 text-xs max-w-[14rem] truncate" title="<%= fmt(e.before) %>"><%= fmt(e.before) %></td>
-            <td class="px-4 py-2 text-neutral-500 text-xs max-w-[14rem] truncate" title="<%= fmt(e.after) %>"><%= fmt(e.after) %></td>
+            <td class="px-4 py-2 text-neutral-200 text-xs max-w-sm">
+              <%= e.description %>
+              <details class="mt-1 text-neutral-600">
+                <summary class="cursor-pointer select-none hover:text-neutral-400"><%= t('settingsChangeLog.rawDetails') %></summary>
+                <div class="mt-1 space-y-0.5 break-all">
+                  <div><%= t('settingsChangeLog.colBefore') %>: <%= fmt(e.before) %></div>
+                  <div><%= t('settingsChangeLog.colAfter') %>: <%= fmt(e.after) %></div>
+                </div>
+              </details>
+            </td>
           </tr>
         <% }) %>
         <% if (entries.length === 0) { %>
-          <tr><td colspan="7" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
+          <tr><td colspan="6" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
         <% } %>
       </tbody>
     </table>

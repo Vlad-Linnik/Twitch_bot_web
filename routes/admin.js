@@ -13,6 +13,7 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const ownerTokensRepo = require("../db/ownerTokensRepo");
 const adminHealthRepo = require("../db/adminHealthRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
+const { describeChange } = require("../lib/settingsChangeDescribe");
 
 const REJECT_REASON_MAX_LENGTH = 300;
 
@@ -127,11 +128,68 @@ router.post("/admin/channels/:login/toggle", settingsWriteLimiter, requireAdmin,
   }
 });
 
+router.post("/admin/channels/:login/toggle-homepage", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const show = req.body.showOnHomepage === "1";
+    const changed = await channelsRepo.setShowOnHomepage(req.params.login, show);
+    if (changed) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: show ? "channel.homepageShow" : "channel.homepageHide",
+        target: req.params.login.toLowerCase(),
+      });
+    }
+    res.redirect(`/admin?flash=${show ? "homepageShown" : "homepageHidden"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/admin/settings-log", requireAdmin, async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const log = await settingsChangeLogRepo.listRecentAll({ page });
-    res.render("adminSettingsLog", { tab: "settings-log", ...log });
+    const entries = await describeAdminEntries(log.entries, res.locals.t);
+    res.render("adminSettingsLog", { tab: "settings-log", ...log, entries });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Site-wide equivalent of routes/settings.js's describeEntries - resolves
+// "moderator-permission:<id>" targets and attaches a human summary to every entry.
+async function describeAdminEntries(entries, t) {
+  const moderatorIds = [
+    ...new Set(
+      entries
+        .filter((e) => e.category === "settings" && e.target.startsWith("moderator-permission:"))
+        .map((e) => e.target.slice("moderator-permission:".length))
+    ),
+  ];
+  const moderatorNames = moderatorIds.length
+    ? await profileCacheRepo
+        .getOrFetchProfiles(moderatorIds)
+        .then((profiles) => new Map([...profiles].map(([id, p]) => [id, p.displayName || id])))
+        .catch(() => new Map())
+    : new Map();
+
+  return entries.map((e) => ({ ...e, description: describeChange(t, e, { moderatorNames }) }));
+}
+
+// Tier-0 only: wipes the entire cross-channel SettingsChangeLog (every channel's history, not
+// just one). A confirmation checkbox on the admin page guards the click; this route itself just
+// trusts the POST and records what happened in AdminActionLogs (the log of admin actions is a
+// separate collection, so deleting SettingsChangeLog doesn't erase the fact that it was deleted).
+router.post("/admin/settings-log/delete-all", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const deletedCount = await settingsChangeLogRepo.deleteAll();
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "settings-log.delete-all",
+      target: "SettingsChangeLog",
+      details: `${deletedCount} entries`,
+    });
+    res.redirect("/admin/settings-log?flash=deleted");
   } catch (err) {
     next(err);
   }

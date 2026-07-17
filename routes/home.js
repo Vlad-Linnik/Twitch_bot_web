@@ -1,6 +1,8 @@
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const globalStatsRepo = require("../db/globalStatsRepo");
+const profileCacheRepo = require("../db/profileCacheRepo");
+const streamStatus = require("../twitch/streamStatus");
 const { statsReadLimiter } = require("../middleware/rateLimiters");
 
 const router = express.Router();
@@ -16,7 +18,32 @@ async function loadGlobalStats() {
 
 router.get("/", async (req, res, next) => {
   try {
-    const [channels, stats] = await Promise.all([channelsRepo.listEnabled(), loadGlobalStats()]);
+    const [channelDocs, stats] = await Promise.all([channelsRepo.listVisibleOnHomepage(), loadGlobalStats()]);
+
+    // ownerId doubles as the channel's numeric broadcaster/channelId (see channelsRepo.upsertChannel).
+    const ownerIds = channelDocs.map((c) => c.ownerId);
+    const [profiles, liveIds] = await Promise.all([
+      profileCacheRepo.getOrFetchProfiles(ownerIds),
+      streamStatus.getLiveChannelIds(ownerIds),
+    ]);
+
+    const channels = channelDocs
+      .map((c) => {
+        const profile = profiles.get(String(c.ownerId));
+        return {
+          ...c,
+          avatarUrl: profile?.avatarUrl || null,
+          chatColor: profile?.chatColor || null,
+          isLive: liveIds.has(String(c.ownerId)),
+        };
+      })
+      // Live channels first (dimmed offline ones pushed to the end), alphabetical within each
+      // group so the order is stable across requests instead of following DB insertion order.
+      .sort((a, b) => {
+        if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+        return a.channelLogin.localeCompare(b.channelLogin);
+      });
+
     res.render("home", { channels, ...stats });
   } catch (err) {
     next(err);

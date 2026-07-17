@@ -102,4 +102,13 @@ async function listRecentAll({ page = 1, limit = DEFAULT_LIMIT } = {}) {
   return { entries, total, totalPages: Math.max(1, Math.ceil(total / limit)), page: safePage };
 }
 
-module.exports = { logChange, listRecent, listRecentAll };
+// Tier-0 admin-only (routes/admin.js's /admin/settings-log/delete-all) - wipes the audit trail
+// site-wide, across every channel. Returns the count so the caller can record it in
+// AdminActionLogs, since the rows themselves are gone right after this resolves.
+async function deleteAll() {
+  const col = await ensureInitialized();
+  const result = await col.deleteMany({});
+  return result.deletedCount;
+}
+
+module.exports = { logChange, listRecent, listRecentAll, deleteAll };

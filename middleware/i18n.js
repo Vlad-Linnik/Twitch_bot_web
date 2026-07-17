@@ -79,7 +79,7 @@ async function i18nMiddleware(req, res, next) {
 
   req.locale = locale;
   res.locals.locale = locale;
-  res.locals.t = (key) => translate(locale, key);
+  res.locals.t = (key, vars) => translate(locale, key, vars);
   res.locals.nativeLanguageNames = NATIVE_LANGUAGE_NAMES;
 
   if (isSupportedLocale(req.query.lang)) {

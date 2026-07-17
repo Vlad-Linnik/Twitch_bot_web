@@ -38,9 +38,27 @@
     <% } else { %>
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <% channels.forEach(function(ch) { %>
-          <a href="/<%= ch.channelLogin %>/statistics/chat" class="block rounded-lg border border-neutral-800 hover:border-purple-600/60 bg-neutral-900 hover:bg-neutral-900/70 p-5 transition-colors group">
-            <h3 class="font-medium text-neutral-100 group-hover:text-purple-300 transition-colors"><%= ch.channelLogin %></h3>
-            <p class="text-xs text-neutral-500 mt-1"><%= t('home.viewStatistics') %> →</p>
+          <a href="/<%= ch.channelLogin %>/statistics/chat"
+             class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-purple-600/60 bg-neutral-900 hover:bg-neutral-900/70 p-5 transition-colors group <%= ch.isLive ? '' : 'opacity-50 hover:opacity-80' %>">
+            <% if (ch.avatarUrl) { %>
+              <img src="<%= ch.avatarUrl %>" alt="" width="40" height="40"
+                   class="w-10 h-10 rounded-full ring-1 ring-neutral-700 shrink-0" />
+            <% } else { %>
+              <span class="w-10 h-10 rounded-full grid place-items-center bg-neutral-800 text-neutral-300 text-sm font-semibold ring-1 ring-neutral-700 shrink-0"><%= ch.channelLogin.charAt(0).toUpperCase() %></span>
+            <% } %>
+            <div class="min-w-0">
+              <h3 class="font-medium truncate group-hover:text-purple-300 transition-colors <%= ch.chatColor ? '' : 'text-neutral-100' %>"
+                  <% if (ch.chatColor) { %>style="color: <%= ch.chatColor %>"<% } %>><%= ch.channelLogin %></h3>
+              <p class="text-xs mt-1 flex items-center gap-1.5">
+                <% if (ch.isLive) { %>
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                  <span class="text-red-400"><%= t('home.live') %></span>
+                <% } else { %>
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-neutral-600"></span>
+                  <span class="text-neutral-500"><%= t('home.offline') %></span>
+                <% } %>
+              </p>
+            </div>
           </a>
         <% }) %>
       </div>
