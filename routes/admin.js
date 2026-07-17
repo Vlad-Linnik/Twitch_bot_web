@@ -150,7 +150,7 @@ router.get("/admin/settings-log", requireAdmin, async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const log = await settingsChangeLogRepo.listRecentAll({ page });
     const entries = await describeAdminEntries(log.entries, res.locals.t);
-    res.render("adminSettingsLog", { tab: "settings-log", ...log, entries });
+    res.render("adminSettingsLog", { tab: "settings-log", ...log, entries, flash: req.query.flash || null });
   } catch (err) {
     next(err);
   }
