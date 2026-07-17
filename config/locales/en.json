@@ -165,8 +165,32 @@
   },
   "games": {
     "title": "Mini-Games",
-    "comingSoon": "Coming soon...",
-    "comingSoonSubtitle": "On-site games are in the works. In the meantime, chat mini-games like !muteduel are listed on the Commands page."
+    "subtitle": "Play right here on the site. Chat mini-games like !muteduel are listed on the Commands page.",
+    "fallingBlocks": {
+      "name": "Falling Blocks",
+      "cardDescription": "Stack the falling pieces, clear lines and chase your best score.",
+      "score": "Score",
+      "best": "Best",
+      "lines": "Lines",
+      "level": "Level",
+      "next": "Next",
+      "controlsTitle": "Controls",
+      "controlsMove": "Move",
+      "controlsRotate": "Rotate",
+      "controlsSoftDrop": "Soft drop",
+      "controlsHardDrop": "Hard drop",
+      "controlsPause": "Pause",
+      "start": "Start",
+      "paused": "Paused",
+      "resume": "Resume",
+      "gameOver": "Game over",
+      "finalScore": "Score",
+      "playAgain": "Play again",
+      "backToGames": "All games",
+      "leaderboardTitle": "Top 10",
+      "leaderboardEmpty": "No scores yet — be the first!",
+      "loginToSave": "Log in to save your score to the leaderboard."
+    }
   },
   "statistics": {
     "titleSuffix": "statistics",

@@ -165,8 +165,32 @@
   },
   "games": {
     "title": "Мини-игры",
-    "comingSoon": "Скоро...",
-    "comingSoonSubtitle": "Игры на сайте в разработке. А пока чат-мини-игры вроде !muteduel можно найти на странице Команды."
+    "subtitle": "Играйте прямо на сайте. Чат-мини-игры вроде !muteduel — на странице Команды.",
+    "fallingBlocks": {
+      "name": "Падающие блоки",
+      "cardDescription": "Складывайте падающие фигуры, собирайте линии и бейте свой рекорд.",
+      "score": "Счёт",
+      "best": "Рекорд",
+      "lines": "Линии",
+      "level": "Уровень",
+      "next": "Далее",
+      "controlsTitle": "Управление",
+      "controlsMove": "Движение",
+      "controlsRotate": "Поворот",
+      "controlsSoftDrop": "Мягкое падение",
+      "controlsHardDrop": "Мгновенное падение",
+      "controlsPause": "Пауза",
+      "start": "Играть",
+      "paused": "Пауза",
+      "resume": "Продолжить",
+      "gameOver": "Игра окончена",
+      "finalScore": "Счёт",
+      "playAgain": "Ещё раз",
+      "backToGames": "Все игры",
+      "leaderboardTitle": "Топ-10",
+      "leaderboardEmpty": "Пока пусто — станьте первым!",
+      "loginToSave": "Войдите, чтобы сохранять результат в таблицу."
+    }
   },
   "statistics": {
     "titleSuffix": "статистика",

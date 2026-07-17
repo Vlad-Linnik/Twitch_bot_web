@@ -1,10 +1,38 @@
 <%- include('partials/head', { title: t('games.title') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-3xl mx-auto px-6 py-24 text-center">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-4"><%= t('games.title') %></h1>
-  <p class="text-2xl font-semibold text-purple-400 mb-3"><%= t('games.comingSoon') %></p>
-  <p class="text-neutral-500 text-sm max-w-md mx-auto"><%= t('games.comingSoonSubtitle') %></p>
+<main class="pt-14 max-w-3xl mx-auto px-6 py-12">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-2"><%= t('games.title') %></h1>
+  <p class="text-neutral-400 text-sm mb-8"><%= t('games.subtitle') %></p>
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <a href="/games/falling-blocks"
+       class="group block rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-purple-500/50 transition-colors">
+      <%# Decorative preview - original inline SVG, a half-built stack of blocks. %>
+      <div class="mb-4 h-28 rounded-lg bg-neutral-950 border border-neutral-800 grid place-items-center overflow-hidden">
+        <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+          <g>
+            <rect x="66" y="6" width="16" height="16" rx="2" fill="#c084fc"/>
+            <rect x="66" y="24" width="16" height="16" rx="2" fill="#c084fc"/>
+            <rect x="84" y="24" width="16" height="16" rx="2" fill="#c084fc"/>
+            <rect x="84" y="6" width="16" height="16" rx="2" fill="#c084fc" opacity="0.35"/>
+          </g>
+          <rect x="12" y="68" width="16" height="16" rx="2" fill="#38bdf8"/>
+          <rect x="30" y="68" width="16" height="16" rx="2" fill="#38bdf8"/>
+          <rect x="30" y="50" width="16" height="16" rx="2" fill="#38bdf8"/>
+          <rect x="48" y="68" width="16" height="16" rx="2" fill="#fbbf24"/>
+          <rect x="66" y="68" width="16" height="16" rx="2" fill="#fbbf24"/>
+          <rect x="66" y="50" width="16" height="16" rx="2" fill="#34d399"/>
+          <rect x="84" y="68" width="16" height="16" rx="2" fill="#fb7185"/>
+          <rect x="102" y="68" width="16" height="16" rx="2" fill="#fb7185"/>
+          <rect x="102" y="50" width="16" height="16" rx="2" fill="#818cf8"/>
+          <rect x="120" y="68" width="16" height="16" rx="2" fill="#fb923c"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold text-neutral-100 group-hover:text-purple-300 transition-colors"><%= t('games.fallingBlocks.name') %></h2>
+      <p class="text-sm text-neutral-500 mt-1"><%= t('games.fallingBlocks.cardDescription') %></p>
+    </a>
+  </div>
 </main>
 
 <%- include('partials/foot') %>
