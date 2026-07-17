@@ -94,6 +94,13 @@ describe("buildCustomCommandsGroup", () => {
     assert.equal(group.commands[1].accessKey, "commands.access.mod");
   });
 
+  test("an announced custom command is mod-only too, same as pinned", () => {
+    const group = buildCustomCommandsGroup([
+      { command: "hype", result: "let's go!", pin: false, announce: true, timer: null },
+    ]);
+    assert.equal(group.commands[0].accessKey, "commands.access.mod");
+  });
+
   test("truncates a long result and converts the timer from ms to seconds", () => {
     const group = buildCustomCommandsGroup([
       { command: "long", result: "x".repeat(100), pin: false, announce: false, timer: 120000 },

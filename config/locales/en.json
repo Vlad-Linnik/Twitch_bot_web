@@ -20,7 +20,7 @@
   },
   "home": {
     "title": "ChatWizardBot",
-    "subtitle": "A Twitch chat bot with moderation, mini-games, and per-channel customization. Manage settings and view stats for channels below.",
+    "subtitle": "A Twitch chat bot with moderation and custom commands. Manage settings and view stats for channels below.",
     "statCommandsExecuted": "Commands executed",
     "statEmotesUsed": "Emotes used",
     "statEmotesTracked": "Distinct emotes tracked",
@@ -33,7 +33,7 @@
   },
   "about": {
     "title": "About",
-    "intro": "ChatWizardBot is a Twitch chat bot providing moderation, custom commands, counters, chat statistics, and mini-games across multiple channels.",
+    "intro": "ChatWizardBot is a Twitch chat bot providing moderation, custom commands, counters, and chat statistics across multiple channels.",
     "creatorHeading": "Creator",
     "creatorName": "@vlad_261",
     "supportHeading": "Support",
@@ -93,13 +93,12 @@
     "customBadge": {
       "pinned": "pinned",
       "announced": "announcement",
-      "timerEvery": "every",
-      "manualOnly": "manual only"
+      "timerEvery": "every"
     },
     "access": {
       "mod": "mod",
       "all": "all",
-      "allPinExempt": "all (mod-only if pinned)",
+      "allPinExempt": "all (mod-only if pinned or announced)",
       "allExceptionListed": "all (or mod/exception-listed)"
     },
     "category": {
@@ -129,12 +128,12 @@
       "countword": "How many times a word was said today.",
       "countmsg": "Your message count and rank for the period.",
       "countunique": "Count of unique chatters for the period.",
-      "botinfo": "Bot uptime and DB stats summary.",
+      "botinfo": "Bot uptime.",
       "randomclip": "Posts a random clip from the channel's most-viewed clips.",
       "update7tv": "Re-sync the channel's 7TV emote set into the tracked-word whitelist.",
       "muteduel": "Challenge chat or a user to a dice-roll duel; loser gets timed out.",
       "muteaccept": "Accept a pending mute duel.",
-      "sovet": "Get a random Dota 2 item suggestion."
+      "sovet": "Get a random Dota 2 item suggestion. Only responds while the stream's category is Dota 2."
     },
     "useCase": {
       "addcommand": "Set up a !discord or !socials command once and let chat trigger it any time.",
@@ -165,7 +164,6 @@
   },
   "games": {
     "title": "Mini-Games",
-    "subtitle": "Play right here on the site. Chat mini-games like !muteduel are listed on the Commands page.",
     "fallingBlocks": {
       "name": "Falling Blocks",
       "cardDescription": "Stack the falling pieces, clear lines and chase your best score.",
@@ -239,7 +237,7 @@
   },
   "channelSettings": {
     "titleSuffix": "settings",
-    "subtitle": "Changes take effect within a few seconds - no bot restart needed.",
+    "subtitle": "Changes take effect within a few seconds.",
     "saved": "Settings saved.",
     "bannedWordsHeading": "Banned words",
     "bannedWordsIntro": "A user is timed out if they type one of these words and ping the bot with \"@ChatWizardBot\" in the same message.",
@@ -258,10 +256,27 @@
     "timeoutReasonLabel": "Timeout reason",
     "timeoutReasonHint": "Shown to the user as the reason for their timeout.",
     "spamSignaturesHeading": "Spam signatures",
-    "spamSignaturesIntro": "A message is re-obfuscated (homoglyphs, spacing tricks, etc. normalized back to plain text) before being checked against these signatures. A match results in a permanent ban.",
+    "spamSignaturesIntro": "A message is re-obfuscated (homoglyphs, spacing tricks, etc. normalized back to plain text) before being checked against these signatures. Each signature can have its own ban duration (up to permanent) and its own reason.",
     "spamSignaturesExample": "Example signature \"subscribe to my channel ExampleChannel\" also catches messages using modified/obfuscated fonts to spell it out.",
-    "spamBanReasonLabel": "Ban reason",
-    "spamBanReasonHint": "Shown to the user as the reason for their ban when a spam signature matches.",
+    "spamBanReasonLabel": "Ban reason (shared)",
+    "spamBanReasonHint": "Used by default for signatures that don't have their own reason.",
+    "spamDurationLabel": "Duration",
+    "spamReasonLabel": "Reason (optional)",
+    "spamReasonHint": "If not set, the shared reason above is used.",
+    "spamDurationPermanentBadge": "Permanent",
+    "spamReasonSharedBadge": "shared reason",
+    "duration": {
+      "permanent": "Permanent",
+      "duration10m": "10 minutes",
+      "duration1h": "1 hour",
+      "duration1d": "1 day",
+      "duration1w": "1 week",
+      "duration2w": "2 weeks"
+    },
+    "errors": {
+      "signature_required": "A signature is required",
+      "duration_invalid": "Pick a duration from the list"
+    },
     "detectionToggleLabel": "Banned-word detection",
     "detectionToggleHint": "When on, the bot times out users who type a banned word while pinging it.",
     "sevenTvHeading": "7TV",
@@ -272,13 +287,14 @@
     "colSignature": "Signature",
     "colCooldown": "Cooldown (s)",
     "colEnabled": "Enabled",
+    "autoBehaviorHeading": "Automatic bot behavior",
+    "autoBehaviorIntro": "Features the bot performs on its own, without a chat command — each can be turned on or off individually.",
     "group": {
       "chatStats": "Chat statistics commands",
       "customCommands": "Custom commands",
       "counters": "Counters",
       "miniGames": "Mini-games",
-      "other": "Other commands",
-      "mentions": "Bot mentions"
+      "other": "Other commands"
     },
     "groupIntro": {
       "chatStats": "Commands that report chat activity and emote usage.",
@@ -314,7 +330,7 @@
       "countword": "Reports how many times a specific word was said.",
       "countmsg": "Reports a user's own message count and rank.",
       "countunique": "Reports how many unique chatters have spoken.",
-      "botinfo": "Shows bot uptime and database stats (mods only).",
+      "botinfo": "Shows bot uptime (mods only).",
       "randomclip": "Posts a random clip from the channel's most-viewed clips.",
       "addcommand": "Lets mods create and edit custom commands from chat.",
       "delcommand": "Lets mods delete a custom command from chat.",
@@ -343,7 +359,6 @@
     "autoPostPacingHint": "How many ordinary chat messages must pass before the next custom command is auto-posted, so auto-sends don't land back-to-back.",
     "counterCooldownLabel": "Counter update cooldown (s)",
     "counterCooldownHint": "Minimum time between two # counter updates in chat.",
-    "responsesIntro": "What the bot says when it's pinged directly (\"@ChatWizardBot ...\").",
     "busyResponsesLabel": "\"Busy\" filler responses (one per line)",
     "busyResponsesHint": "A random one of these is sent when the bot is pinged but has nothing more specific to say.",
     "yesNoResponsesLabel": "Yes/No answers (one per line)",
@@ -378,6 +393,8 @@
     "rawDetails": "Raw data",
     "deleteAllButton": "Delete entire log",
     "deleteAllConfirm": "Delete the entire settings change log across all channels? This can't be undone.",
+    "deleteRowButton": "Delete",
+    "deleteRowConfirm": "Delete this log entry?",
     "describe": {
       "commandLabel": "Command !{{name}}",
       "commandEnabled": "enabled",
@@ -514,12 +531,15 @@
     "existing": "Commands",
     "none": "No custom commands yet",
     "name": "Command",
-    "response": "Response",
+    "response": "Default response",
+    "responseHint": "Used when the stream's current category doesn't match any of the categories below.",
+    "disabledBadge": "disabled",
+    "toggleEnabled": "Enable or disable this command",
     "timer": "Auto-post (sec)",
     "timerOff": "off",
     "pin": "Pin to chat when posted (moderators only)",
     "pinned": "pinned",
-    "announce": "Send as a chat announcement (highlighted, colored)",
+    "announce": "Send as a chat announcement (highlighted, colored; only moderators will be able to trigger the command)",
     "announceColor": "Color",
     "announced": "announcement",
     "color": {
@@ -531,6 +551,11 @@
     },
     "every": "every",
     "countersHint": "Use #counterName to insert a counter's current value",
+    "categoryOverridesHeading": "Text by stream category",
+    "categoryOverridesHint": "Optional: different text for different categories (e.g. \"Dota 2\"). The name must exactly match the stream's Twitch category. Blank rows are ignored.",
+    "categoryOverridesBadge": "by category",
+    "categoryPlaceholder": "Category",
+    "categoryResultPlaceholder": "Text for this category",
     "save": "Save",
     "cancel": "Cancel",
     "edit": "Edit",
@@ -547,7 +572,13 @@
       "timer_too_short": "Auto-post interval is too short (minimum 60 seconds)",
       "timer_too_long": "Auto-post interval is too long",
       "timer_and_pin": "A command can have an auto-post timer or auto-pin, not both — Twitch allows only one pinned message per channel",
-      "announce_and_pin": "A command can be an announcement or auto-pinned, not both — an announcement has no message to pin"
+      "announce_and_pin": "A command can be an announcement or auto-pinned, not both — an announcement has no message to pin",
+      "category_required": "Enter a category for this row, or clear both cells",
+      "category_too_long": "Category name is too long",
+      "category_result_required": "Enter text for this category, or clear both cells",
+      "category_result_too_long": "Text is too long for a Twitch message",
+      "category_duplicate": "Each category can only be listed once",
+      "category_overrides_too_many": "Too many categories"
     }
   },
   "counters": {
@@ -603,8 +634,14 @@
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",
     "tabOverview": "Overview",
+    "tabStatistics": "Statistics",
     "tabSettingsLog": "Settings log",
     "tabActions": "Admin actions",
+    "visitsToday": "Visits today",
+    "visitsTotal": "Visits (30 days)",
+    "visitsHeading": "Site visits",
+    "visitsIntro": "Page views per day for the last 30 days (excludes static files and pages' own background JSON polling).",
+    "visitsEmpty": "No visit data yet.",
     "flash": {
       "approved": "Request approved and channel registered. The bot joins the channel within a minute.",
       "rejected": "Request rejected.",

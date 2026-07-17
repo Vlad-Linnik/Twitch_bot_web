@@ -45,6 +45,7 @@
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colAction') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colTarget') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colChanges') %></th>
+          <th class="text-left font-medium px-4 py-2"></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-neutral-800">
@@ -68,10 +69,20 @@
                 </div>
               </details>
             </td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              <form method="post" action="/admin/settings-log/<%= e._id %>/delete" data-transition="instant"
+                    data-confirm-delete="<%= t('settingsChangeLog.deleteRowConfirm') %>">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="page" value="<%= page %>" />
+                <button type="submit" class="px-2 py-1 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors">
+                  <%= t('settingsChangeLog.deleteRowButton') %>
+                </button>
+              </form>
+            </td>
           </tr>
         <% }) %>
         <% if (entries.length === 0) { %>
-          <tr><td colspan="7" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
+          <tr><td colspan="8" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
         <% } %>
       </tbody>
     </table>

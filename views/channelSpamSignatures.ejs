@@ -7,7 +7,11 @@
   <p class="text-neutral-500 text-sm mb-2"><%= t('channelSettings.spamSignaturesIntro') %></p>
   <p class="text-neutral-600 text-sm mb-8 italic"><%= t('channelSettings.spamSignaturesExample') %></p>
 
-  <!-- Ban reason - same pattern as banned-words' timeout reason -->
+  <% if (error) { %>
+    <p class="mb-6 rounded-lg border border-red-800/50 bg-red-900/20 text-red-400 px-4 py-2.5 text-sm"><%= t('channelSettings.errors.' + error) %></p>
+  <% } %>
+
+  <!-- Shared ban reason - the fallback for any signature without its own reason -->
   <section class="mb-10">
     <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.spamBanReasonLabel') %></h2>
     <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.spamBanReasonHint') %></p>
@@ -25,7 +29,89 @@
 
   <section>
     <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.wordsLabel') %></h2>
-    <%- include('partials/wordListEditor', { words: config.spamSignatures, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/spam-signatures', editIndex, csrfToken }) %>
+
+    <input
+      type="search"
+      id="word-search"
+      placeholder="<%= t('channelSettings.wordSearchPlaceholder') %>"
+      class="w-full mb-3 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
+    />
+
+    <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/add" data-transition="instant" id="word-add-form" class="hidden mb-4">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div class="flex items-center gap-2 rounded-md border border-purple-800 bg-purple-950/30 px-3 py-2">
+        <span class="text-sm text-neutral-400"><%= t('channelSettings.wordAddPrefix') %></span>
+        <input type="text" name="word" id="word-add-input" class="flex-1 bg-transparent text-sm text-neutral-100 focus:outline-none" />
+        <button type="submit" class="px-3 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.wordAdd') %></button>
+      </div>
+    </form>
+
+    <div class="rounded-lg border border-neutral-800 divide-y divide-neutral-800" id="word-list">
+      <% signatures.forEach(function(sig, index) { %>
+        <% if (editIndex === index) { %>
+          <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/edit" data-transition="instant" class="px-4 py-3 space-y-2">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="index" value="<%= index %>" />
+            <input type="text" name="word" value="<%= sig.word %>" autofocus class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-100 focus:outline-none focus:border-purple-500" />
+
+            <div>
+              <label class="block text-xs text-neutral-500 mb-1"><%= t('channelSettings.spamDurationLabel') %></label>
+              <select name="duration" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+                <option value="<%= PERMANENT %>" <%= sig.durationSeconds === null ? 'selected' : '' %>><%= t('channelSettings.duration.permanent') %></option>
+                <% durationPresets.forEach(function(p) { %>
+                  <option value="<%= p.seconds %>" <%= sig.durationSeconds === p.seconds ? 'selected' : '' %>><%= t('channelSettings.duration.' + p.labelKey) %></option>
+                <% }) %>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs text-neutral-500 mb-1"><%= t('channelSettings.spamReasonLabel') %></label>
+              <input type="text" name="reason" value="<%= sig.reason || '' %>" placeholder="<%= t('channelSettings.spamBanReasonLabel') %>"
+                     class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-purple-500" />
+              <p class="text-neutral-600 text-xs mt-1"><%= t('channelSettings.spamReasonHint') %></p>
+            </div>
+
+            <div class="flex gap-2">
+              <button type="submit" class="px-3 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.wordSave') %></button>
+              <a href="/<%= channel.channelLogin %>/settings/spam-signatures" class="px-3 py-1 rounded-md text-neutral-400 hover:text-neutral-100 text-xs transition-colors"><%= t('channelSettings.wordCancel') %></a>
+            </div>
+          </form>
+        <% } else { %>
+          <div class="flex items-center justify-between gap-2 px-4 py-2" data-word-row data-search-text="<%= sig.word.toLowerCase() %>">
+            <div class="min-w-0">
+              <span class="text-sm text-neutral-200 break-all"><%= sig.word %></span>
+              <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
+                  <%= sig.durationSeconds === null ? t('channelSettings.spamDurationPermanentBadge') : t('channelSettings.duration.' + (durationPresets.find(p => p.seconds === sig.durationSeconds) || {}).labelKey) %>
+                </span>
+                <% if (sig.reason) { %>
+                  <span class="text-neutral-500 text-xs break-all" title="<%= sig.reason %>"><%= sig.reason %></span>
+                <% } else { %>
+                  <span class="text-neutral-600 text-xs italic"><%= t('channelSettings.spamReasonSharedBadge') %></span>
+                <% } %>
+              </div>
+            </div>
+            <span class="flex items-center gap-1 shrink-0">
+              <a href="/<%= channel.channelLogin %>/settings/spam-signatures?edit=<%= index %>" class="p-1.5 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordEdit') %>">
+                <%- include('partials/iconPencil') %>
+              </a>
+              <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/delete" data-transition="instant" data-confirm-delete="<%= t('channelSettings.wordDeleteConfirm') %>">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="index" value="<%= index %>" />
+                <button type="submit" class="p-1.5 rounded-md text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordDelete') %>">
+                  <%- include('partials/iconTrash') %>
+                </button>
+              </form>
+            </span>
+          </div>
+        <% } %>
+      <% }) %>
+      <% if (signatures.length === 0) { %>
+        <p class="px-4 py-3 text-sm text-neutral-500" data-word-empty><%= t('channelSettings.wordListEmpty') %></p>
+      <% } %>
+    </div>
+
+    <script src="/js/word-list-search.js" defer></script>
   </section>
 </main>
 

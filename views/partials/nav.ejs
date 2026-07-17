@@ -14,16 +14,6 @@
     <a href="/commands" class="hover:text-neutral-100 transition-colors <%= currentPath === '/commands' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.commands') %></a>
     <a href="/games" class="hover:text-neutral-100 transition-colors <%= currentPath === '/games' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.games') %></a>
     <a href="/about" class="hidden sm:inline hover:text-neutral-100 transition-colors <%= currentPath === '/about' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.about') %></a>
-    <%# Tier-0 only (isAdmin comes from middleware/navMenu.js, an env-allowlist check).
-        The badge is the count of pending bot-join requests awaiting review on /admin. %>
-    <% if (typeof isAdmin !== "undefined" && isAdmin) { %>
-      <a href="/admin" class="inline-flex items-center gap-1.5 hover:text-neutral-100 transition-colors <%= currentPath && currentPath.startsWith('/admin') ? 'text-neutral-100 font-medium' : '' %>">
-        <%= t('nav.admin') %>
-        <% if (typeof pendingRequestCount !== "undefined" && pendingRequestCount > 0) { %>
-          <span class="min-w-4 h-4 px-1 rounded-full bg-purple-600 text-white text-[10px] leading-4 text-center font-semibold"><%= pendingRequestCount %></span>
-        <% } %>
-      </a>
-    <% } %>
   </div>
 
   <%#
@@ -57,6 +47,20 @@
               <p class="font-medium truncate"
                  <% if (typeof userDisplayColor !== "undefined" && userDisplayColor) { %>style="color: <%= userDisplayColor %>"<% } %>><%= user.displayName %></p>
             </div>
+
+            <%# Tier-0 only (isAdmin comes from middleware/navMenu.js, an env-allowlist check).
+                Lives in the avatar popout rather than the nav bar itself - it's a privileged
+                action for the tiny handful of app-developer accounts, not everyday navigation.
+                The badge is the count of pending bot-join requests awaiting review on /admin. %>
+            <% if (typeof isAdmin !== "undefined" && isAdmin) { %>
+              <a href="/admin" class="flex items-center justify-between gap-2 px-4 py-2 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100">
+                <span><%= t('nav.admin') %></span>
+                <% if (typeof pendingRequestCount !== "undefined" && pendingRequestCount > 0) { %>
+                  <span class="min-w-4 h-4 px-1 rounded-full bg-purple-600 text-white text-[10px] leading-4 text-center font-semibold"><%= pendingRequestCount %></span>
+                <% } %>
+              </a>
+              <div class="border-t border-neutral-800 my-1"></div>
+            <% } %>
 
             <%# Both channel sections render NOTHING when empty - a visitor with no connected
                 channel / no moderated channels has no use for the heading or an empty-state

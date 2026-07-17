@@ -45,37 +45,51 @@
   <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" data-autosave id="settings-form" class="space-y-12">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
+    <section class="mb-4">
+      <a href="/<%= channel.channelLogin %>/settings/custom-commands" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
+        <span class="text-2xl leading-none">🛠️</span>
+        <span>
+          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.customCommands') %></span>
+          <span class="block text-neutral-400 text-sm mt-0.5"><%= customCommandCount %> <%= t('channelSettings.commandCountSuffix') %></span>
+        </span>
+      </a>
+    </section>
+
     <section class="grid sm:grid-cols-2 gap-4">
-      <a href="/<%= channel.channelLogin %>/settings/banned-words" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
-        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.bannedWordsHeading') %></h2>
-        <p class="text-neutral-500 text-sm mt-1"><%= config.bannedWords.words.length %> <%= t('channelSettings.wordCountSuffix') %></p>
+      <a href="/<%= channel.channelLogin %>/settings/spam-signatures" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <span class="text-xl leading-none">🚨</span>
+        <span>
+          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.spamSignaturesHeading') %></span>
+          <span class="block text-neutral-500 text-sm mt-1"><%= config.spamSignatures.length %> <%= t('channelSettings.wordCountSuffix') %></span>
+        </span>
       </a>
-      <a href="/<%= channel.channelLogin %>/settings/spam-signatures" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
-        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.spamSignaturesHeading') %></h2>
-        <p class="text-neutral-500 text-sm mt-1"><%= config.spamSignatures.length %> <%= t('channelSettings.wordCountSuffix') %></p>
+      <a href="/<%= channel.channelLogin %>/settings/counters" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <span class="text-xl leading-none">🔢</span>
+        <span>
+          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.counters') %></span>
+          <span class="block text-neutral-500 text-sm mt-1"><%= counterCount %> <%= t('channelSettings.counterCountSuffix') %></span>
+        </span>
       </a>
-      <a href="/<%= channel.channelLogin %>/settings/custom-commands" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
-        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.customCommands') %></h2>
-        <p class="text-neutral-500 text-sm mt-1"><%= customCommandCount %> <%= t('channelSettings.commandCountSuffix') %></p>
-      </a>
-      <a href="/<%= channel.channelLogin %>/settings/counters" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
-        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.counters') %></h2>
-        <p class="text-neutral-500 text-sm mt-1"><%= counterCount %> <%= t('channelSettings.counterCountSuffix') %></p>
-      </a>
-      <a href="/<%= channel.channelLogin %>/settings/change-log" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
-        <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.changeLogHeading') %></h2>
-        <p class="text-neutral-500 text-sm mt-1"><%= t('channelSettings.changeLogIntro') %></p>
+      <a href="/<%= channel.channelLogin %>/settings/change-log" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <span class="text-xl leading-none">📜</span>
+        <span>
+          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.changeLogHeading') %></span>
+          <span class="block text-neutral-500 text-sm mt-1"><%= t('channelSettings.changeLogIntro') %></span>
+        </span>
       </a>
       <% if (canManageModerators) { %>
-        <a href="/<%= channel.channelLogin %>/settings/moderators" class="block rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
-          <h2 class="text-lg font-semibold text-neutral-100"><%= t('channelSettings.moderatorsHeading') %></h2>
-          <p class="text-neutral-500 text-sm mt-1"><%= t('channelSettings.moderatorsIntro') %></p>
+        <a href="/<%= channel.channelLogin %>/settings/moderators" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+          <span class="text-xl leading-none">🛡️</span>
+          <span>
+            <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.moderatorsHeading') %></span>
+            <span class="block text-neutral-500 text-sm mt-1"><%= t('channelSettings.moderatorsIntro') %></span>
+          </span>
         </a>
       <% } %>
     </section>
 
     <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('channelSettings.sevenTvHeading') %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100 mb-3">🟣 <%= t('channelSettings.sevenTvHeading') %></h2>
       <% if (sevenTvStatus.linked) { %>
         <p class="text-sm text-green-400">✅ <%= t('channelSettings.sevenTvLinked') %> (<%= sevenTvStatus.emoteCount %>)</p>
       <% } else { %>
@@ -92,65 +106,113 @@
       </section>
     <% }) %>
 
-    <!-- Bot mentions: what happens when someone pings @ChatWizardBot. question/directmsg are
-         features, not chat commands - each toggle sits right next to the responses it uses. -->
-    <section>
-      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('channelSettings.group.mentions') %></h2>
-      <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.responsesIntro') %></p>
-
-      <% if (config.commands.question) { %>
-        <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 mb-4">
-          <div class="flex items-center justify-between gap-4 mb-1">
-            <span class="text-sm font-medium text-neutral-200"><%= t('channelSettings.commandName.question') %></span>
-            <div class="flex items-center gap-4">
-              <label class="flex items-center gap-1.5 text-xs text-neutral-500">
-                <%= t('channelSettings.colCooldown') %>
-                <input type="number" min="0" max="86400" step="1" name="commands.question.cooldownSeconds"
-                       value="<%= Math.round(config.commands.question.cooldownMs / 1000) %>"
-                       class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-              </label>
-              <input type="hidden" name="commands.question.present" value="1" />
-              <label class="toggle-switch">
-                <input type="checkbox" name="commands.question.enabled" <%= config.commands.question.enabled ? 'checked' : '' %> class="sr-only" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-            </div>
-          </div>
-          <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.question') %></p>
-          <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.yesNoResponsesLabel') %></label>
-          <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.yesNoResponsesHint') %></p>
-          <textarea name="yesNoResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.yesNo.join('\n') %></textarea>
-        </div>
-      <% } %>
-
-      <% if (config.commands.directmsg) { %>
-        <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-          <div class="flex items-center justify-between gap-4 mb-1">
-            <span class="text-sm font-medium text-neutral-200"><%= t('channelSettings.commandName.directmsg') %></span>
-            <div class="flex items-center gap-4">
-              <label class="flex items-center gap-1.5 text-xs text-neutral-500">
-                <%= t('channelSettings.colCooldown') %>
-                <input type="number" min="0" max="86400" step="1" name="commands.directmsg.cooldownSeconds"
-                       value="<%= Math.round(config.commands.directmsg.cooldownMs / 1000) %>"
-                       class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-              </label>
-              <input type="hidden" name="commands.directmsg.present" value="1" />
-              <label class="toggle-switch">
-                <input type="checkbox" name="commands.directmsg.enabled" <%= config.commands.directmsg.enabled ? 'checked' : '' %> class="sr-only" />
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </label>
-            </div>
-          </div>
-          <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.directmsg') %></p>
-          <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.busyResponsesLabel') %></label>
-          <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.busyResponsesHint') %></p>
-          <textarea name="busyResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.busy.join('\n') %></textarea>
-        </div>
-      <% } %>
-    </section>
-
     <%- include('partials/autosaveStatus') %>
   </form>
+
+  <!-- Automatic bot behavior: things the bot does on its own, no chat command involved - banned-
+       word timeouts, yes/no answers, and mention replies. Merged into one place (each individually
+       toggleable) instead of being split across a separate Banned Words page and this page's
+       bottom section, since a bare "N words configured" tile gave no hint the feature could be off. -->
+  <section class="mt-12">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1">🤖 <%= t('channelSettings.autoBehaviorHeading') %></h2>
+    <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.autoBehaviorIntro') %></p>
+
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+      <!-- Banned words: its own dedicated toggle form (same route the old Banned Words page
+           used), since it isn't a `commands.*` entry parseSubmittedConfig understands. -->
+      <div class="px-4 py-3">
+        <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/detection-toggle" data-transition="instant" data-autosave>
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <span class="text-sm font-medium text-neutral-200">🚫 <%= t('channelSettings.bannedWordsHeading') %></span>
+              <p class="text-neutral-600 text-xs mt-0.5"><%= t('channelSettings.detectionToggleHint') %></p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <span data-autosave-status aria-live="polite"
+                    data-saving-text="<%= t('channelSettings.autosaveSaving') %>"
+                    data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
+                    data-error-text="<%= t('channelSettings.autosaveError') %>"
+                    class="autosave-status px-2 py-1 rounded-md text-xs font-medium"></span>
+              <label class="toggle-switch">
+                <input type="checkbox" name="detectionEnabled" <%= config.commands.insult && config.commands.insult.enabled ? 'checked' : '' %> class="sr-only" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+              <button type="submit" class="save-fab px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.save') %></button>
+            </div>
+          </div>
+          <a href="/<%= channel.channelLogin %>/settings/banned-words" class="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300"><%= config.bannedWords.words.length %> <%= t('channelSettings.wordCountSuffix') %> →</a>
+        </form>
+      </div>
+
+      <!-- Yes/No answers + mention replies: both are commands.* fields, so they share one
+           autosave form posting to the main settings endpoint (parseSubmittedConfig only ever
+           touches the fields actually present in a submission - see lib/settingsValidation.js -
+           so this form coexisting with the one above is safe). -->
+      <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" data-autosave>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+        <% if (config.commands.question) { %>
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between gap-4 mb-1">
+              <span class="text-sm font-medium text-neutral-200">❓ <%= t('channelSettings.commandName.question') %></span>
+              <div class="flex items-center gap-4">
+                <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+                  <%= t('channelSettings.colCooldown') %>
+                  <input type="number" min="0" max="86400" step="1" name="commands.question.cooldownSeconds"
+                         value="<%= Math.round(config.commands.question.cooldownMs / 1000) %>"
+                         class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+                </label>
+                <input type="hidden" name="commands.question.present" value="1" />
+                <label class="toggle-switch">
+                  <input type="checkbox" name="commands.question.enabled" <%= config.commands.question.enabled ? 'checked' : '' %> class="sr-only" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+            </div>
+            <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.question') %></p>
+            <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.yesNoResponsesLabel') %></label>
+            <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.yesNoResponsesHint') %></p>
+            <textarea name="yesNoResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.yesNo.join('\n') %></textarea>
+          </div>
+        <% } %>
+
+        <% if (config.commands.directmsg) { %>
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between gap-4 mb-1">
+              <span class="text-sm font-medium text-neutral-200">💬 <%= t('channelSettings.commandName.directmsg') %></span>
+              <div class="flex items-center gap-4">
+                <label class="flex items-center gap-1.5 text-xs text-neutral-500">
+                  <%= t('channelSettings.colCooldown') %>
+                  <input type="number" min="0" max="86400" step="1" name="commands.directmsg.cooldownSeconds"
+                         value="<%= Math.round(config.commands.directmsg.cooldownMs / 1000) %>"
+                         class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+                </label>
+                <input type="hidden" name="commands.directmsg.present" value="1" />
+                <label class="toggle-switch">
+                  <input type="checkbox" name="commands.directmsg.enabled" <%= config.commands.directmsg.enabled ? 'checked' : '' %> class="sr-only" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+            </div>
+            <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.directmsg') %></p>
+            <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.busyResponsesLabel') %></label>
+            <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.busyResponsesHint') %></p>
+            <textarea name="busyResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.busy.join('\n') %></textarea>
+          </div>
+        <% } %>
+
+        <div class="px-4 py-3 flex items-center justify-end gap-3">
+          <span data-autosave-status aria-live="polite"
+                data-saving-text="<%= t('channelSettings.autosaveSaving') %>"
+                data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
+                data-error-text="<%= t('channelSettings.autosaveError') %>"
+                class="autosave-status px-2 py-1 rounded-md text-xs font-medium"></span>
+          <button type="submit" class="save-fab px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.save') %></button>
+        </div>
+      </form>
+    </div>
+  </section>
 </main>
 
 <script src="/js/autosave.js" defer></script>

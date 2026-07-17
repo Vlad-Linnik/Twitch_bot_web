@@ -1,0 +1,93 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabStatistics') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const fmtNumber = (n) => new Intl.NumberFormat(dateLocale).format(n);
+  const dayFmt = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short' });
+
+  // Static server-rendered SVG area chart, no client JS - the data is fixed at page load and
+  // never changes without a reload, so there's nothing here that benefits from the animated,
+  // period-toggling chart machinery in public/js/user-dashboard.js. Same visual language
+  // (purple gradient area, three gridlines) as that chart for consistency.
+  const CHART_W = 800, CHART_H = 200, PLOT_PAD = 4;
+  const counts = dailyVisits.map((d) => d.count);
+  const maxCount = Math.max(...counts, 1);
+  const hasData = counts.some((c) => c > 0);
+  const yFor = (value) => CHART_H - PLOT_PAD - (value / maxCount) * (CHART_H - 2 * PLOT_PAD);
+  const step = dailyVisits.length > 1 ? CHART_W / (dailyVisits.length - 1) : 0;
+
+  let areaPath = `M 0 ${CHART_H}`;
+  dailyVisits.forEach(function (d, i) {
+    const x = dailyVisits.length === 1 ? CHART_W / 2 : i * step;
+    areaPath += ` L ${x.toFixed(1)} ${yFor(d.count).toFixed(1)}`;
+  });
+  areaPath += ` L ${CHART_W} ${CHART_H} Z`;
+
+  // Evenly spaced tick indices for the x-axis labels (first/last always included) - matches
+  // the labels to a justify-between row so they visually line up with the uniform bucket spacing.
+  function tickIndices(n, want) {
+    const count = Math.min(want, n);
+    if (count <= 1) return n ? [0] : [];
+    const idx = [];
+    for (let i = 0; i < count; i++) idx.push(Math.round((i * (n - 1)) / (count - 1)));
+    return [...new Set(idx)];
+  }
+  const ticks = tickIndices(dailyVisits.length, 6);
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <section>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.visitsToday') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtNumber(todayVisits) %></p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.visitsTotal') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtNumber(totalVisits) %></p>
+      </div>
+    </div>
+
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.visitsHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.visitsIntro') %></p>
+
+    <% if (!hasData) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.visitsEmpty') %></p>
+    <% } else { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+        <div class="flex gap-2">
+          <div class="flex flex-col justify-between py-0.5 text-[11px] text-neutral-500 text-right shrink-0 w-8">
+            <span><%= fmtNumber(maxCount) %></span>
+            <span><%= fmtNumber(Math.round(maxCount / 2)) %></span>
+            <span>0</span>
+          </div>
+          <svg viewBox="0 0 <%= CHART_W %> <%= CHART_H %>" preserveAspectRatio="none" class="w-full h-40">
+            <defs>
+              <linearGradient id="visits-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#a855f7" stop-opacity="0.5" />
+                <stop offset="100%" stop-color="#a855f7" stop-opacity="0.03" />
+              </linearGradient>
+            </defs>
+            <% [PLOT_PAD, CHART_H / 2, CHART_H - PLOT_PAD].forEach(function (y) { %>
+              <line x1="0" y1="<%= y %>" x2="<%= CHART_W %>" y2="<%= y %>" stroke="#262626" stroke-width="1" vector-effect="non-scaling-stroke" />
+            <% }) %>
+            <path d="<%= areaPath %>" fill="url(#visits-fill)" stroke="#a855f7" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+          </svg>
+        </div>
+        <div class="flex justify-between text-[11px] text-neutral-500 mt-1 pl-10">
+          <% ticks.forEach(function (i) { %>
+            <span><%= dayFmt.format(dailyVisits[i].date) %></span>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

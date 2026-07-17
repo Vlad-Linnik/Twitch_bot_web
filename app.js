@@ -8,6 +8,7 @@ const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
 const csrf = require("./middleware/csrf");
+const siteVisits = require("./middleware/siteVisits");
 const safeJson = require("./lib/safeJson");
 
 function createApp() {
@@ -49,6 +50,7 @@ function createApp() {
     })
   );
   app.use(express.static(path.join(__dirname, "public")));
+  app.use(siteVisits);
   app.use(express.urlencoded({ extended: false }));
   app.use(createSessionMiddleware());
   app.use(attachUser);

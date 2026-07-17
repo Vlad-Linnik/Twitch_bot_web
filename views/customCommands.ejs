@@ -23,7 +23,7 @@
   <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
     <h2 class="text-lg font-semibold text-neutral-100 mb-4" id="form-heading"><%= t('customCommands.create') %></h2>
 
-    <form method="post" action="/<%= channel.channelLogin %>/commands" class="space-y-4" id="command-form">
+    <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" class="space-y-4" id="command-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
       <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_10rem] gap-4">
@@ -49,7 +49,43 @@
         <label for="result" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('customCommands.response') %></label>
         <textarea id="result" name="result" rows="3" required maxlength="<%= maxResultLength %>"
                   class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-600"></textarea>
-        <p class="text-xs text-neutral-600 mt-1"><%= t('customCommands.countersHint') %></p>
+        <p class="text-xs text-neutral-600 mt-1"><%= t('customCommands.countersHint') %> <%= t('customCommands.responseHint') %></p>
+      </div>
+
+      <div>
+        <label class="flex items-center gap-2 text-sm text-neutral-400 cursor-pointer mb-1">
+          <input type="checkbox" id="categoryOverridesEnable" class="accent-purple-600" />
+          <%= t('customCommands.categoryOverridesHeading') %>
+        </label>
+        <p class="text-xs text-neutral-600 mb-2"><%= t('customCommands.categoryOverridesHint') %></p>
+        <div class="space-y-2" id="category-rows" data-max="<%= maxCategoryOverrides %>" hidden></div>
+        <template id="category-row-template">
+          <div class="grid grid-cols-1 sm:grid-cols-[10rem_minmax(0,1fr)] gap-2">
+            <input type="text" name="categoryName" maxlength="<%= maxCategoryLength %>"
+                   placeholder="<%= t('customCommands.categoryPlaceholder') %>"
+                   class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+            <input type="text" name="categoryResult" maxlength="<%= maxResultLength %>"
+                   placeholder="<%= t('customCommands.categoryResultPlaceholder') %>"
+                   class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+          </div>
+        </template>
+        <%# No-JS fallback: the toggle + one-row-at-a-time behaviour above needs JS to add rows,
+            so a JS-disabled visitor gets the old fixed set of rows instead - still fully usable,
+            since parseCategoryTexts (lib/commandValidation.js) silently ignores blank rows. %>
+        <noscript>
+          <div class="space-y-2">
+            <% for (let i = 0; i < maxCategoryOverrides; i++) { %>
+              <div class="grid grid-cols-1 sm:grid-cols-[10rem_minmax(0,1fr)] gap-2">
+                <input type="text" name="categoryName" maxlength="<%= maxCategoryLength %>"
+                       placeholder="<%= t('customCommands.categoryPlaceholder') %>"
+                       class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+                <input type="text" name="categoryResult" maxlength="<%= maxResultLength %>"
+                       placeholder="<%= t('customCommands.categoryResultPlaceholder') %>"
+                       class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+              </div>
+            <% } %>
+          </div>
+        </noscript>
       </div>
 
       <label class="flex items-center gap-2 text-sm text-neutral-400 cursor-pointer">
@@ -102,6 +138,9 @@
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
                 <code class="text-purple-400 font-medium">!<%= c.command %></code>
+                <% if (c.enabled === false) { %>
+                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-500 border border-neutral-700"><%= t('customCommands.disabledBadge') %></span>
+                <% } %>
                 <% if (c.timerSeconds) { %>
                   <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400"><%= t('customCommands.every') %> <%= c.timerSeconds %>s</span>
                 <% } %>
@@ -111,11 +150,35 @@
                 <% if (c.announce) { %>
                   <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('customCommands.announced') %> · <%= t('customCommands.color.' + c.announceColor) %></span>
                 <% } %>
+                <% if (c.categoryTexts.length) { %>
+                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400 border border-blue-600/30"><%= t('customCommands.categoryOverridesBadge') %> · <%= c.categoryTexts.length %></span>
+                <% } %>
               </div>
               <p class="text-sm text-neutral-400 mt-1 break-words"><%= c.result %></p>
+              <% if (c.categoryTexts.length) { %>
+                <ul class="mt-1 space-y-0.5">
+                  <% c.categoryTexts.forEach(function(ov) { %>
+                    <li class="text-xs text-neutral-500 break-words"><span class="text-neutral-400 font-medium"><%= ov.category %>:</span> <%= ov.result %></li>
+                  <% }) %>
+                </ul>
+              <% } %>
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
+              <%# Enable/disable toggle: a plain form submit (action=toggle), so it works without
+                  JS too - no separate "enabled" checkbox on the create/edit form anymore. %>
+              <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="action" value="toggle" />
+                <input type="hidden" name="name" value="<%= c.command %>" />
+                <button type="submit"
+                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors <%= c.enabled ? 'bg-purple-600' : 'bg-neutral-700' %>"
+                        aria-pressed="<%= c.enabled ? 'true' : 'false' %>"
+                        aria-label="<%= t('customCommands.toggleEnabled') %>">
+                  <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform <%= c.enabled ? 'translate-x-4' : 'translate-x-1' %>"></span>
+                </button>
+              </form>
+
               <%# Edit is client-side only: it copies the row back into the form above. The form
                   posts an upsert, so "edit" and "create" are the same request. %>
               <button type="button"
@@ -126,9 +189,10 @@
                       data-pin="<%= c.pin ? '1' : '' %>"
                       data-announce="<%= c.announce ? '1' : '' %>"
                       data-announce-color="<%= c.announceColor %>"
+                      data-category-texts="<%= JSON.stringify(c.categoryTexts) %>"
                       aria-label="<%= t('customCommands.edit') %>"><%- include('partials/iconPencil') %></button>
 
-              <form method="post" action="/<%= channel.channelLogin %>/commands" class="js-delete-form">
+              <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" class="js-delete-form">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                 <input type="hidden" name="action" value="delete" />
                 <input type="hidden" name="name" value="<%= c.command %>" />

@@ -14,7 +14,15 @@ test("normalizeName strips a leading ! and lowercases", () => {
 test("accepts a plain command", () => {
   const res = parseCommand({ name: "!discord", result: "https://discord.gg/x" });
   assert.equal(res.ok, true);
-  assert.deepEqual(res.command, { command: "discord", result: "https://discord.gg/x", timer: null, pin: false, announce: false, announceColor: "primary" });
+  assert.deepEqual(res.command, {
+    command: "discord", result: "https://discord.gg/x", timer: null, pin: false, announce: false,
+    announceColor: "primary", enabled: false, categoryTexts: [],
+  });
+});
+
+test("enabled follows the same on/absent convention as pin/announce", () => {
+  assert.equal(parseCommand({ name: "x", result: "y" }).command.enabled, false);
+  assert.equal(parseCommand({ name: "x", result: "y", enabled: "on" }).command.enabled, true);
 });
 
 test("accepts Cyrillic names, like the bot's own matcher does", () => {
@@ -83,4 +91,47 @@ test("defaults to the primary announcement color and rejects unknown ones", () =
   assert.equal(parseCommand({ name: "x", result: "y", announce: "on" }).command.announceColor, "primary");
   assert.equal(parseCommand({ name: "x", result: "y", announce: "on", announceColor: "blue" }).command.announceColor, "blue");
   assert.equal(parseCommand({ name: "x", result: "y", announce: "on", announceColor: "not-a-color" }).command.announceColor, "primary");
+});
+
+test("category overrides: blank rows are dropped, filled rows are kept", () => {
+  const res = parseCommand({
+    name: "x", result: "default text",
+    categoryTexts: [{ category: "", result: "" }, { category: "Dota 2", result: "gl hf" }, { category: "", result: "" }],
+  });
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.command.categoryTexts, [{ category: "Dota 2", result: "gl hf" }]);
+});
+
+test("category overrides: a row with only one side filled in is rejected, not silently dropped", () => {
+  assert.equal(
+    parseCommand({ name: "x", result: "y", categoryTexts: [{ category: "Dota 2", result: "" }] }).error,
+    "category_result_required"
+  );
+  assert.equal(
+    parseCommand({ name: "x", result: "y", categoryTexts: [{ category: "", result: "gl hf" }] }).error,
+    "category_required"
+  );
+});
+
+test("category overrides: rejects a result too long for a Twitch message", () => {
+  const res = parseCommand({ name: "x", result: "y", categoryTexts: [{ category: "Dota 2", result: "a".repeat(600) }] });
+  assert.equal(res.error, "category_result_too_long");
+});
+
+test("category overrides: rejects a duplicate category (case-insensitive)", () => {
+  const res = parseCommand({
+    name: "x", result: "y",
+    categoryTexts: [{ category: "Dota 2", result: "a" }, { category: "dota 2", result: "b" }],
+  });
+  assert.equal(res.error, "category_duplicate");
+});
+
+test("category overrides: caps the number of rows", () => {
+  const categoryTexts = Array.from({ length: 6 }, (_, i) => ({ category: `Game ${i}`, result: "text" }));
+  const res = parseCommand({ name: "x", result: "y", categoryTexts });
+  assert.equal(res.error, "category_overrides_too_many");
+});
+
+test("category overrides: default to an empty list when omitted", () => {
+  assert.deepEqual(parseCommand({ name: "x", result: "y" }).command.categoryTexts, []);
 });

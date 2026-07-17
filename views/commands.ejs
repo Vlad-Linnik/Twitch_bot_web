@@ -97,7 +97,7 @@
                       <th class="text-left font-medium px-4 py-2 w-32"><%= t('commands.colAccess') %></th>
                       <th class="text-left font-medium px-4 py-2 w-24"><%= t('commands.colCooldown') %></th>
                       <th class="text-left font-medium px-4 py-2 w-64"><%= t('commands.colDescription') %></th>
-                      <th class="text-left font-medium px-4 py-2 w-72"><%= t('commands.colExample') %></th>
+                      <% if (!group.isCustom) { %><th class="text-left font-medium px-4 py-2 w-72"><%= t('commands.colExample') %></th><% } %>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-neutral-800">
@@ -109,20 +109,21 @@
                           <% if (cmd.enabled === false) { %>
                             <span class="ml-2 rounded bg-red-500/10 text-red-400 text-[11px] px-1.5 py-0.5 align-middle whitespace-nowrap"><%= t('commands.disabledBadge') %></span>
                           <% } %>
+                          <% if (cmd.isCustom) {
+                               const customBadges = [];
+                               if (cmd.pin) customBadges.push(t('commands.customBadge.pinned'));
+                               if (cmd.announce) customBadges.push(t('commands.customBadge.announced'));
+                               if (cmd.timerSeconds) customBadges.push(t('commands.customBadge.timerEvery') + ' ' + cmd.timerSeconds + 's');
+                          %>
+                            <% customBadges.forEach(function(b) { %>
+                              <span class="ml-2 rounded bg-neutral-800 text-neutral-400 text-[11px] px-1.5 py-0.5 align-middle whitespace-nowrap"><%= b %></span>
+                            <% }) %>
+                          <% } %>
                         </td>
                         <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t(cmd.accessKey) %></td>
                         <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
                         <% if (cmd.isCustom) { %>
                           <td class="px-4 py-2 text-neutral-300"><%= cmd.resultPreview %></td>
-                          <td class="px-4 py-2 text-neutral-400">
-                            <%
-                              const badges = [];
-                              if (cmd.pin) badges.push(t('commands.customBadge.pinned'));
-                              if (cmd.announce) badges.push(t('commands.customBadge.announced'));
-                              if (cmd.timerSeconds) badges.push(t('commands.customBadge.timerEvery') + ' ' + cmd.timerSeconds + 's');
-                            %>
-                            <%= badges.length ? badges.join(' · ') : t('commands.customBadge.manualOnly') %>
-                          </td>
                         <% } else { %>
                           <td class="px-4 py-2 text-neutral-300"><%= t(cmd.descriptionKey) %></td>
                           <td class="px-4 py-2 text-neutral-400"><%= t(cmd.useCaseKey) %></td>

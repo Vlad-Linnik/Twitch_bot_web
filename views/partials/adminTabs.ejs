@@ -1,9 +1,13 @@
-<%# Sub-page switcher for /admin{,/settings-log,/actions}. Expects: tab
-    ("overview"|"settings-log"|"actions"). Same look as statsTabs.ejs. %>
+<%# Sub-page switcher for /admin{,/settings-log,/actions,/statistics}. Expects: tab
+    ("overview"|"settings-log"|"actions"|"statistics"). Same look as statsTabs.ejs. %>
 <nav class="flex gap-1 mb-10 border-b border-neutral-800">
   <a href="/admin" data-transition="backward"
      class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'overview' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
     <%= t('admin.tabOverview') %>
+  </a>
+  <a href="/admin/visits"
+     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'statistics' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
+    <%= t('admin.tabStatistics') %>
   </a>
   <a href="/admin/settings-log"
      class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'settings-log' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">

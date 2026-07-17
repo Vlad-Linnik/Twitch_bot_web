@@ -12,6 +12,7 @@ const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const ownerTokensRepo = require("../db/ownerTokensRepo");
 const adminHealthRepo = require("../db/adminHealthRepo");
+const siteVisitsRepo = require("../db/siteVisitsRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 
@@ -190,6 +191,42 @@ router.post("/admin/settings-log/delete-all", settingsWriteLimiter, requireAdmin
       details: `${deletedCount} entries`,
     });
     res.redirect("/admin/settings-log?flash=deleted");
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Tier-0 only: removes a single SettingsChangeLog entry (as opposed to delete-all's full wipe).
+// Redirects back to the same page the row was deleted from so the list doesn't jump to page 1.
+router.post("/admin/settings-log/:id/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const entry = await settingsChangeLogRepo.deleteOne(req.params.id);
+    if (entry) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "settings-log.delete-one",
+        target: `${entry.channelLogin}:${entry.category}:${entry.target}`,
+      });
+    }
+    const page = Math.max(1, parseInt(req.body.page, 10) || 1);
+    res.redirect(`/admin/settings-log?page=${page}&flash=deleted`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const VISITS_CHART_DAYS = 30;
+
+// Named "/admin/visits", not "/admin/statistics" - routes/statistics.js already owns a
+// "/:channel/statistics" route mounted earlier in routes/index.js, which would otherwise swallow
+// this as channel="admin" (see that file's own wildcard-ordering warnings).
+router.get("/admin/visits", requireAdmin, async (req, res, next) => {
+  try {
+    const dailyVisits = await siteVisitsRepo.getDailyVisits(VISITS_CHART_DAYS);
+    const totalVisits = dailyVisits.reduce((sum, d) => sum + d.count, 0);
+    const todayVisits = dailyVisits[dailyVisits.length - 1]?.count || 0;
+
+    res.render("adminVisits", { tab: "statistics", dailyVisits, totalVisits, todayVisits });
   } catch (err) {
     next(err);
   }

@@ -11,6 +11,7 @@ const { requireLevel, requireSettingsEditAccess } = require("../middleware/permi
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { MAX_LIST_ITEMS, sanitizeWord, parseSubmittedConfig } = require("../lib/settingsValidation");
+const { DURATION_PRESETS, PERMANENT, normalizeSignatureEntry, parseSignatureEntry } = require("../lib/spamSignatureValidation");
 const { diffConfig } = require("../lib/settingsDiff");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 const { getSevenTvLinkStatus } = require("../twitch/emoteImages");
@@ -228,7 +229,111 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
 }
 
 registerWordListRoutes("/settings/banned-words", "channelBannedWords", (config) => config.bannedWords.words, "bannedWords.words");
-registerWordListRoutes("/settings/spam-signatures", "channelSpamSignatures", (config) => config.spamSignatures, "spamSignatures");
+
+// Spam signatures: each entry needs a word PLUS an optional per-signature ban duration (falling
+// back to permanent) and an optional per-signature reason (falling back to the channel's shared
+// spamBanReason at ban time - see TwitchBot/commands/msgHandle.js's spam_protection). That's a
+// richer shape than registerWordListRoutes' plain-string CRUD handles, so this gets its own
+// routes instead of being squeezed through that factory.
+router.get("/:channel/settings/spam-signatures", requireLevel(2), async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    const signatures = config.spamSignatures.map(normalizeSignatureEntry);
+    const rawEdit = parseInt(req.query.edit, 10);
+    const editIndex = Number.isInteger(rawEdit) && rawEdit >= 0 && rawEdit < signatures.length ? rawEdit : null;
+
+    res.render("channelSpamSignatures", {
+      channel, config, signatures, editIndex, error: req.query.error || null,
+      durationPresets: DURATION_PRESETS, PERMANENT,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:channel/settings/spam-signatures/add", settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    const signatures = config.spamSignatures.map(normalizeSignatureEntry);
+    const before = [...signatures];
+    // The quick "type to add" flow only ever submits a word (see public/js/word-list-search.js) -
+    // a fresh signature starts as permanent + the shared reason, customizable afterward via edit.
+    const parsed = parseSignatureEntry({ word: req.body.word, duration: "", reason: "" });
+    if (parsed.ok && !signatures.some((s) => s.word === parsed.entry.word) && signatures.length < MAX_LIST_ITEMS) {
+      signatures.push(parsed.entry);
+      config.spamSignatures = signatures;
+      await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+      await settingsChangeLogRepo.logChange({
+        channelLogin: req.params.channel, user: req.user, category: "settings",
+        action: "add", target: "spamSignatures", before, after: [...signatures],
+      });
+    }
+    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:channel/settings/spam-signatures/edit", settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    const signatures = config.spamSignatures.map(normalizeSignatureEntry);
+    const before = [...signatures];
+    const index = parseInt(req.body.index, 10);
+    if (!Number.isInteger(index) || index < 0 || index >= signatures.length) {
+      return res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+    }
+
+    const parsed = parseSignatureEntry(req.body);
+    if (!parsed.ok) {
+      return res.redirect(`/${req.params.channel}/settings/spam-signatures?edit=${index}&error=${parsed.error}`);
+    }
+
+    signatures[index] = parsed.entry;
+    config.spamSignatures = signatures;
+    await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+    await settingsChangeLogRepo.logChange({
+      channelLogin: req.params.channel, user: req.user, category: "settings",
+      action: "update", target: "spamSignatures", before, after: [...signatures],
+    });
+    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:channel/settings/spam-signatures/delete", settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).render("errors/404");
+
+    const config = await channelConfigRepo.getConfig(req.params.channel);
+    const signatures = config.spamSignatures.map(normalizeSignatureEntry);
+    const before = [...signatures];
+    const index = parseInt(req.body.index, 10);
+    if (Number.isInteger(index) && index >= 0 && index < signatures.length) {
+      signatures.splice(index, 1);
+      config.spamSignatures = signatures;
+      await channelConfigRepo.saveConfig(req.params.channel, config, req.user.userId);
+      await settingsChangeLogRepo.logChange({
+        channelLogin: req.params.channel, user: req.user, category: "settings",
+        action: "delete", target: "spamSignatures", before, after: [...signatures],
+      });
+    }
+    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
   try {

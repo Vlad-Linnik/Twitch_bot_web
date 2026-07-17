@@ -2,6 +2,7 @@
 // /<channel>/counters - a new, web-only collection (this app owns it outright, unlike
 // ChannelConfig/custom_commands/counters). Lives in the web-only DB (connectWeb, same
 // pattern as db/profileCacheRepo.js) since the bot never needs to read it.
+const { ObjectId } = require("mongodb");
 const { connectWeb } = require("./connection");
 
 const DEFAULT_LIMIT = 25;
@@ -111,4 +112,16 @@ async function deleteAll() {
   return result.deletedCount;
 }
 
-module.exports = { logChange, listRecent, listRecentAll, deleteAll };
+// Tier-0 admin-only (routes/admin.js's /admin/settings-log/:id/delete) - removes a single entry
+// instead of the whole log. Returns the deleted entry (or null if the id didn't match anything,
+// e.g. a double-submit) so the caller can log a meaningful target in AdminActionLogs.
+async function deleteOne(id) {
+  if (!ObjectId.isValid(id)) return null;
+  const col = await ensureInitialized();
+  const entry = await col.findOne({ _id: new ObjectId(id) });
+  if (!entry) return null;
+  await col.deleteOne({ _id: entry._id });
+  return entry;
+}
+
+module.exports = { logChange, listRecent, listRecentAll, deleteAll, deleteOne };
