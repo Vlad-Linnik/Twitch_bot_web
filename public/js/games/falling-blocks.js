@@ -57,11 +57,37 @@
   scaleForDpr(nextCanvas, nextCtx);
 
   let grid, current, next, bag;
-  let score, lines, level, best;
+  let score, lines, level, best, combo;
   let dropTimer, dropInterval;
   let state = "idle"; // idle | running | paused | over
   let rafId = null;
   let lastTime = 0;
+  let particles = [];
+
+  // --- Sound -----------------------------------------------------------------
+
+  const SOUND_BASE = "/sounds/games/falling-blocks/";
+  const SOUNDS = {
+    rotate: new Audio(SOUND_BASE + "rotate.wav"),
+    land: new Audio(SOUND_BASE + "land.wav"),
+    combo: new Audio(SOUND_BASE + "combo.wav"),
+  };
+  for (const audio of Object.values(SOUNDS)) audio.volume = 0.5;
+
+  // Cloning the node lets overlapping plays (rapid rotates, chained clears)
+  // stack instead of the next play cutting the previous one off.
+  function playSound(name, opts) {
+    const base = SOUNDS[name];
+    if (!base) return;
+    try {
+      const node = base.cloneNode(true);
+      node.volume = opts && opts.volume != null ? opts.volume : base.volume;
+      node.playbackRate = (opts && opts.rate) || 1;
+      node.play().catch(() => {});
+    } catch (_) {
+      /* audio unsupported/blocked - the game keeps working silently */
+    }
+  }
 
   function readBest() {
     try {
@@ -126,6 +152,7 @@
       if (!collides(current, kick, 0, cells)) {
         current.cells = cells;
         current.x += kick;
+        playSound("rotate");
         return;
       }
     }
@@ -145,10 +172,13 @@
     score = 0;
     lines = 0;
     level = 1;
+    combo = -1; // -1 = no active streak; 0 = first clear; 1+ = a real back-to-back combo
+    particles = [];
     dropInterval = 1000;
     dropTimer = 0;
     current = nextFromBag();
     next = nextFromBag();
+    hideCombo();
     updateHud();
   }
 
@@ -163,6 +193,7 @@
   }
 
   function lockPiece() {
+    playSound("land");
     for (const [cx, cy] of current.cells) {
       const y = current.y + cy;
       if (y >= 0) grid[y][current.x + cx] = current.color;
@@ -175,15 +206,29 @@
     let cleared = 0;
     for (let y = ROWS - 1; y >= 0; y--) {
       if (grid[y].every((cell) => cell)) {
+        spawnRowExplosion(y);
         grid.splice(y, 1);
         grid.unshift(new Array(COLS).fill(null));
         cleared++;
         y++; // re-check the row that just slid down into this index
       }
     }
-    if (!cleared) return;
+    if (!cleared) {
+      combo = -1;
+      return;
+    }
     lines += cleared;
     score += LINE_SCORES[cleared] * level;
+    // Guideline-style combo counter: consecutive clearing locks bump it, any
+    // lock that clears nothing resets it. combo > 0 means this is at least the
+    // second clear in a row, which is the actual "combo" the player is chasing.
+    combo++;
+    if (combo > 0) {
+      score += combo * 50 * level;
+      showCombo(combo + 1);
+    }
+    // Pitch climbs with the streak so a long combo feels more rewarding to hear.
+    playSound("combo", { rate: Math.min(1.6, 1 + combo * 0.1) });
     // Level up every 8 lines, ~22% faster per level - the wide 12-column board
     // gives more room, so the ramp is deliberately steep to compensate.
     const newLevel = Math.floor(lines / 8) + 1;
@@ -192,6 +237,78 @@
       dropInterval = Math.max(70, 1000 * Math.pow(0.78, level - 1));
     }
     updateHud();
+  }
+
+  // --- Explosion particles ---------------------------------------------------
+
+  function spawnRowExplosion(y) {
+    for (let x = 0; x < COLS; x++) {
+      const color = grid[y][x];
+      if (!color) continue;
+      const cx = x * CELL + CELL / 2;
+      const cy = y * CELL + CELL / 2;
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.2 + Math.random() * 2.8;
+        particles.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1.5,
+          color,
+          size: 2 + Math.random() * 2.5,
+          life: 0,
+          maxLife: 400 + Math.random() * 250,
+        });
+      }
+    }
+  }
+
+  function updateParticles(delta) {
+    if (!particles.length) return;
+    const kept = [];
+    const dt = delta / 16.67;
+    for (const p of particles) {
+      p.life += delta;
+      if (p.life >= p.maxLife) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 0.15 * dt; // gravity
+      kept.push(p);
+    }
+    particles = kept;
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const t = p.life / p.maxLife;
+      ctx.globalAlpha = Math.max(0, 1 - t);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, p.size * (1 - t * 0.4)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // --- Combo callout -----------------------------------------------------------
+
+  const comboEl = document.getElementById("fb-combo");
+
+  function showCombo(multiplier) {
+    if (!comboEl) return;
+    comboEl.textContent = comboEl.dataset.label + " ×" + multiplier;
+    // Toggling the class off then on retriggers the CSS animation even when
+    // the same multiplier pops twice in a row.
+    comboEl.classList.remove("fb-combo-pop");
+    void comboEl.offsetWidth;
+    comboEl.classList.add("fb-combo-pop");
+  }
+
+  function hideCombo() {
+    if (!comboEl) return;
+    comboEl.classList.remove("fb-combo-pop");
+    comboEl.textContent = "";
   }
 
   function softDrop() {
@@ -288,6 +405,68 @@
       .catch(() => {});
   }
 
+  // --- Leave-page confirmation ----------------------------------------------
+
+  function gameInProgress() {
+    return state === "running" || state === "paused";
+  }
+
+  // Same request submitScore() makes, but with keepalive so it survives the
+  // navigation that follows right after, and no UI update since we're leaving.
+  function saveScoreBeacon() {
+    if (!leaderboard || !leaderboard.dataset.submitUrl || score < 1) return;
+    fetch(leaderboard.dataset.submitUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(score) }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  const leaveDialog = document.getElementById("fb-leave-confirm-dialog");
+  const leaveSaveBtn = document.getElementById("fb-leave-save");
+  const leaveDiscardBtn = document.getElementById("fb-leave-discard");
+  const leaveCancelBtn = document.getElementById("fb-leave-cancel");
+  let pendingLeaveHref = null;
+
+  if (leaveDialog) {
+    // Intercept in-page link clicks (nav, "All games", leaderboard login link,
+    // etc.) mid-game and offer a choice instead of navigating straight away.
+    document.addEventListener("click", (event) => {
+      if (!gameInProgress()) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target.closest("a[href]");
+      if (!link || link.target === "_blank") return;
+      event.preventDefault();
+      pendingLeaveHref = link.href;
+      pause();
+      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
+      leaveDialog.showModal();
+    });
+
+    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
+    leaveDiscardBtn?.addEventListener("click", () => {
+      leaveDialog.close();
+      if (pendingLeaveHref) location.href = pendingLeaveHref;
+    });
+    leaveSaveBtn?.addEventListener("click", () => {
+      saveScoreBeacon();
+      leaveDialog.close();
+      if (pendingLeaveHref) location.href = pendingLeaveHref;
+    });
+  }
+
+  // Tab close/refresh/typed URL can't be intercepted with a custom dialog -
+  // this is the browser's own generic "leave site?" prompt.
+  window.addEventListener("beforeunload", (event) => {
+    if (!gameInProgress()) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
   function updateHud() {
     scoreEl.textContent = score;
     bestEl.textContent = best;
@@ -359,6 +538,7 @@
       }
     }
 
+    drawParticles();
     drawNext();
   }
 
@@ -384,6 +564,7 @@
     const delta = time - lastTime;
     lastTime = time;
     dropTimer += delta;
+    updateParticles(delta);
     if (dropTimer >= dropInterval) {
       dropTimer = 0;
       if (collides(current, 0, 1)) {

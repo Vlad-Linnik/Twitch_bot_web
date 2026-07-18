@@ -63,6 +63,11 @@
       <canvas id="fb-board" width="360" height="600"
               class="block rounded-lg bg-neutral-950 w-[324px] h-[540px] sm:w-auto sm:h-[min(600px,calc(100dvh_-_11rem))]"></canvas>
 
+      <%# Combo multiplier callout - toggled by showCombo() in falling-blocks.js
+          whenever a lock clears a line on top of a previous one. %>
+      <div id="fb-combo" data-label="<%= t('games.fallingBlocks.combo') %>"
+           class="pointer-events-none absolute inset-x-0 top-6 text-center text-2xl font-extrabold tracking-wide text-amber-400 opacity-0 [text-shadow:0_2px_8px_rgba(0,0,0,0.6)]"></div>
+
       <div id="fb-overlay"
            data-title-start="<%= t('games.fallingBlocks.name') %>"
            data-title-paused="<%= t('games.fallingBlocks.paused') %>"
@@ -80,6 +85,23 @@
         </div>
       </div>
     </div>
+
+    <%# Shown instead of navigating away when a link is clicked mid-game (see
+        falling-blocks.js's click interceptor) - browser tab close/refresh gets
+        the native beforeunload prompt instead, which can't offer a save choice. %>
+    <dialog id="fb-leave-confirm-dialog"
+            class="w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-200 p-8 m-auto backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+      <h2 class="text-xl font-semibold text-neutral-100 mb-2"><%= t('games.fallingBlocks.leaveConfirmTitle') %></h2>
+      <p class="text-base text-neutral-400 mb-8"><%= t('games.fallingBlocks.leaveConfirmBody') %></p>
+      <div class="flex flex-wrap justify-end gap-3">
+        <button type="button" id="fb-leave-cancel"
+                class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.fallingBlocks.leaveCancel') %></button>
+        <button type="button" id="fb-leave-discard"
+                class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.fallingBlocks.leaveDiscard') %></button>
+        <button type="button" id="fb-leave-save"
+                class="px-5 py-2.5 text-base font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.fallingBlocks.leaveSave') %></button>
+      </div>
+    </dialog>
 
     <div class="w-full sm:w-56 grid grid-cols-2 sm:grid-cols-1 gap-4">
       <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
