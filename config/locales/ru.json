@@ -194,6 +194,31 @@
       "leaveSave": "Сохранить и выйти",
       "leaveDiscard": "Выйти без сохранения",
       "leaveCancel": "Продолжить игру"
+    },
+    "pipeDodger": {
+      "name": "Труболёт",
+      "cardDescription": "Пролетайте между труб и бейте свой рекорд.",
+      "score": "Счёт",
+      "best": "Рекорд",
+      "controlsTitle": "Управление",
+      "controlsFlap": "Взмах",
+      "controlsPause": "Пауза",
+      "tapHint": "Пробел, клик или тап, чтобы взмахнуть крыльями",
+      "start": "Играть",
+      "paused": "Пауза",
+      "resume": "Продолжить",
+      "gameOver": "Игра окончена",
+      "finalScore": "Счёт",
+      "playAgain": "Ещё раз",
+      "backToGames": "Все игры",
+      "leaderboardTitle": "Топ-10",
+      "leaderboardEmpty": "Пока пусто — станьте первым!",
+      "loginToSave": "Войдите, чтобы сохранять результат в таблицу.",
+      "leaveConfirmTitle": "Покинуть игру?",
+      "leaveConfirmBody": "Игра ещё не окончена. Сохранить текущий результат перед выходом или уйти без сохранения?",
+      "leaveSave": "Сохранить и выйти",
+      "leaveDiscard": "Выйти без сохранения",
+      "leaveCancel": "Продолжить игру"
     }
   },
   "statistics": {

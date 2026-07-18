@@ -1,0 +1,126 @@
+<%- include('partials/head', { title: t('games.pipeDodger.name') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.pipeDodger.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.pipeDodger.backToGames') %></a>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-6 items-center sm:items-start justify-center">
+    <%# Leaderboard: top 10, plus the visitor's own row (with its real rank) as an
+        11th line when they're ranked below the top. Row markup here must stay in
+        sync with lbRow() in public/js/games/pipe-dodger.js, which re-renders
+        these rows from the score.json response after a game over. data-csrf is
+        only present for logged-in visitors - its absence is how the client knows
+        not to attempt saving. Ordered last on mobile (below the board). Same
+        pattern as gameFallingBlocks.ejs / falling-blocks.js. %>
+    <aside id="pd-leaderboard"
+           class="w-full sm:w-56 order-last sm:order-none rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+           <% if (user) { %>data-submit-url="/games/pipe-dodger/score.json" data-csrf="<%= csrfToken %>"<% } %>
+           data-empty-label="<%= t('games.pipeDodger.leaderboardEmpty') %>">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.pipeDodger.leaderboardTitle') %></p>
+      <ol id="pd-lb-list" class="space-y-0.5">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="text-sm text-neutral-500 py-1"><%= t('games.pipeDodger.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+            <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+          </li>
+        <% }) %>
+      </ol>
+      <div id="pd-lb-me" class="mt-1 pt-1 border-t border-neutral-800" <% if (!leaderboard.myRow) { %>hidden<% } %>>
+        <ol id="pd-lb-me-row">
+          <% if (leaderboard.myRow) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+              <span class="flex-1 truncate text-purple-300"
+                    <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+            </li>
+          <% } %>
+        </ol>
+      </div>
+      <% if (!user) { %>
+        <p class="text-xs text-neutral-500 mt-3">
+          <%= t('games.pipeDodger.loginToSave') %>
+          <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+        </p>
+      <% } %>
+    </aside>
+
+    <%# The board. The overlay (start / pause / game over) sits on top of the canvas;
+        all its text is server-rendered here - public/js/games/pipe-dodger.js only
+        toggles which pieces are visible via the data-* labels below. Same fixed
+        internal resolution + dpr-scaling approach as falling-blocks. %>
+    <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 shrink-0">
+      <canvas id="pd-board" width="360" height="600"
+              class="block touch-none rounded-lg bg-neutral-950 w-[324px] h-[540px] sm:w-auto sm:h-[min(600px,calc(100dvh_-_11rem))]"></canvas>
+
+      <div id="pd-overlay"
+           data-title-start="<%= t('games.pipeDodger.name') %>"
+           data-title-paused="<%= t('games.pipeDodger.paused') %>"
+           data-title-over="<%= t('games.pipeDodger.gameOver') %>"
+           data-button-start="<%= t('games.pipeDodger.start') %>"
+           data-button-resume="<%= t('games.pipeDodger.resume') %>"
+           data-button-again="<%= t('games.pipeDodger.playAgain') %>"
+           data-final-score-label="<%= t('games.pipeDodger.finalScore') %>"
+           data-tap-hint="<%= t('games.pipeDodger.tapHint') %>"
+           class="absolute inset-3 rounded-lg bg-neutral-950/80 backdrop-blur-sm grid place-items-center text-center">
+        <div class="px-4">
+          <h2 id="pd-overlay-title" class="text-xl font-semibold text-neutral-100 mb-1"></h2>
+          <p id="pd-overlay-score" class="text-sm text-neutral-400 mb-4" hidden></p>
+          <button type="button" id="pd-overlay-button"
+                  class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"></button>
+          <p id="pd-overlay-hint" class="text-xs text-neutral-500 mt-4"></p>
+        </div>
+      </div>
+    </div>
+
+    <%# Shown instead of navigating away when a link is clicked mid-game (see
+        pipe-dodger.js's click interceptor) - browser tab close/refresh gets
+        the native beforeunload prompt instead, which can't offer a save choice. %>
+    <dialog id="pd-leave-confirm-dialog"
+            class="w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-200 p-8 m-auto backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+      <h2 class="text-xl font-semibold text-neutral-100 mb-2"><%= t('games.pipeDodger.leaveConfirmTitle') %></h2>
+      <p class="text-base text-neutral-400 mb-8"><%= t('games.pipeDodger.leaveConfirmBody') %></p>
+      <div class="flex flex-wrap justify-end gap-3">
+        <button type="button" id="pd-leave-cancel"
+                class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.pipeDodger.leaveCancel') %></button>
+        <button type="button" id="pd-leave-discard"
+                class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.pipeDodger.leaveDiscard') %></button>
+        <button type="button" id="pd-leave-save"
+                class="px-5 py-2.5 text-base font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.pipeDodger.leaveSave') %></button>
+      </div>
+    </dialog>
+
+    <div class="w-full sm:w-56 grid grid-cols-2 sm:grid-cols-1 gap-4">
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex justify-between items-baseline mb-2">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.pipeDodger.score') %></span>
+          <span id="pd-score" class="text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.pipeDodger.best') %></span>
+          <span id="pd-best" class="text-sm text-purple-400 tabular-nums">0</span>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.pipeDodger.controlsTitle') %></p>
+        <ul class="text-sm text-neutral-400 space-y-1.5">
+          <li class="flex justify-between gap-2"><span><%= t('games.pipeDodger.controlsFlap') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">Space</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.pipeDodger.controlsPause') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">P</kbd></li>
+        </ul>
+        <p class="text-xs text-neutral-500 mt-3"><%= t('games.pipeDodger.tapHint') %></p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/js/games/pipe-dodger.js" defer></script>
+<%- include('partials/foot') %>
