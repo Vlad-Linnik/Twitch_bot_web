@@ -284,7 +284,9 @@ async function getModStats(channelId, limit = 25) {
 async function getModeratorSummary(channelId, period = "all") {
   const { modStats } = await ensureInitialized();
   const match = { channelId: String(channelId) };
-  const start = limits.periodStart(period);
+  // ModeratorStatistics buckets at local midnight, not periodStart()'s local noon - see
+  // moderatorPeriodStart's comment in config/statsLimits.js.
+  const start = limits.moderatorPeriodStart(period);
   if (start !== null) match.date = { $gte: start };
   return modStats
     .aggregate([

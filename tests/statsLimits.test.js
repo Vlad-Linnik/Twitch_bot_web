@@ -4,7 +4,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { periodStart, resolvePeriod, PERIODS, DEFAULT_PERIOD } = require("../config/statsLimits");
+const {
+  periodStart,
+  moderatorPeriodStart,
+  resolvePeriod,
+  PERIODS,
+  DEFAULT_PERIOD,
+} = require("../config/statsLimits");
 const { dayBucket } = require("../lib/textStats");
 
 test("periodStart: 'all' is null - the signal to read the precomputed all-time row", () => {
@@ -33,6 +39,24 @@ test("periodStart: any real window starts after the epoch, so the all-time senti
 
 test("periodStart: an unknown period falls back to the week window, like resolvePeriod's default", () => {
   assert.deepEqual(periodStart("bogus"), periodStart("week"));
+});
+
+test("moderatorPeriodStart: 'day' lands on local midnight, matching ModeratorStatistics' own rows", () => {
+  const start = moderatorPeriodStart("day");
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  assert.deepEqual(start, midnight);
+  assert.equal(start.getHours(), 0, "day must bucket at local midnight, not noon");
+});
+
+test("moderatorPeriodStart: today's midnight-stamped row satisfies the 'day' filter", () => {
+  const todayRow = new Date();
+  todayRow.setHours(0, 0, 0, 0);
+  assert.ok(todayRow >= moderatorPeriodStart("day"));
+});
+
+test("moderatorPeriodStart: 'all' is null, same contract as periodStart", () => {
+  assert.equal(moderatorPeriodStart("all"), null);
 });
 
 test("resolvePeriod: caps ranges at max but never downgrades 'all' (it is the cheapest read)", () => {

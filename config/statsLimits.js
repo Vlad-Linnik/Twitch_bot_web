@@ -106,6 +106,26 @@ function periodStart(period) {
   return dayBucket(new Date(Date.now() - days * 86400000));
 }
 
+// ModeratorStatistics/ModUpTimeStats bucket their date/timestamp at local MIDNIGHT
+// (TwitchBot/db/chatStats.js's recordDailyModeratorStats/updateModUpTime) - a different
+// convention from dayBucket()'s local noon used by every other daily-bucketed collection
+// (ChatWordStats, UserMentionStats, UserDailyMessageStats). Reusing periodStart() here made
+// the "day" filter compare today's midnight-stamped row against a noon cutoff, which it can
+// never satisfy - the web panel's mod stats page never showed today's data. This mirrors the
+// bot's own midnight bucketing instead.
+function moderatorPeriodStart(period) {
+  if (period === "all") return null;
+  if (period === "day") {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+  const days = { week: 7, month: 30 }[period] ?? 7;
+  const start = new Date(Date.now() - days * 86400000);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
 function resolvePeriod(requested, { max = null } = {}) {
   const period = PERIODS.includes(requested) ? requested : DEFAULT_PERIOD;
   if (!max) return period;
@@ -144,4 +164,5 @@ module.exports = {
   resolvePeriod,
   clampLimit,
   periodStart,
+  moderatorPeriodStart,
 };
