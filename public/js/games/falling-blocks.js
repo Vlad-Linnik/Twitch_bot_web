@@ -57,7 +57,7 @@
   scaleForDpr(nextCanvas, nextCtx);
 
   let grid, current, next, bag;
-  let score, lines, level, best, combo;
+  let score, lines, level, best;
   let dropTimer, dropInterval;
   let state = "idle"; // idle | running | paused | over
   let rafId = null;
@@ -172,7 +172,6 @@
     score = 0;
     lines = 0;
     level = 1;
-    combo = -1; // -1 = no active streak; 0 = first clear; 1+ = a real back-to-back combo
     particles = [];
     dropInterval = 1000;
     dropTimer = 0;
@@ -213,22 +212,16 @@
         y++; // re-check the row that just slid down into this index
       }
     }
-    if (!cleared) {
-      combo = -1;
-      return;
-    }
+    if (!cleared) return;
     lines += cleared;
     score += LINE_SCORES[cleared] * level;
-    // Guideline-style combo counter: consecutive clearing locks bump it, any
-    // lock that clears nothing resets it. combo > 0 means this is at least the
-    // second clear in a row, which is the actual "combo" the player is chasing.
-    combo++;
-    if (combo > 0) {
-      score += combo * 50 * level;
-      showCombo(combo + 1);
+    // "Combo" here means several rows clearing at once from a single piece
+    // (double/triple/tetris) - not consecutive clears across separate pieces.
+    if (cleared >= 2) {
+      showCombo(cleared);
+      // Pitch climbs with the size of the clear so a tetris feels more rewarding to hear.
+      playSound("combo", { rate: Math.min(1.6, 1 + (cleared - 1) * 0.15) });
     }
-    // Pitch climbs with the streak so a long combo feels more rewarding to hear.
-    playSound("combo", { rate: Math.min(1.6, 1 + combo * 0.1) });
     // Level up every 8 lines, ~22% faster per level - the wide 12-column board
     // gives more room, so the ramp is deliberately steep to compensate.
     const newLevel = Math.floor(lines / 8) + 1;
