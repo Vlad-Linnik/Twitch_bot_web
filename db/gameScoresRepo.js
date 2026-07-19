@@ -75,6 +75,19 @@ async function getRatings(game, userIds, defaultRating) {
 // fall back to inserting a fresh doc if nothing matched; a concurrent insert
 // racing us (two of this player's games finishing at once) is resolved by
 // retrying as a plain increment.
+// Like getRatings, but leaves a player absent from the returned Map instead of
+// defaulting them to `defaultRating` - callers that need to DISPLAY a rating
+// (as opposed to computing this game's Elo deltas) must be able to tell "never
+// finished a rated game" apart from "actually sitting at the default", since
+// the default is meant to stay hidden until a player's first finished game
+// creates a real doc (see applyEloDelta's comment).
+async function getRawRatings(game, userIds) {
+  const col = await ensureInitialized();
+  const ids = userIds.map(String);
+  const docs = await col.find({ game, userId: { $in: ids } }).toArray();
+  return new Map(docs.map((doc) => [doc.userId, doc.bestScore]));
+}
+
 async function applyEloDelta(game, userId, delta, baseRating) {
   const col = await ensureInitialized();
   const now = new Date();
@@ -116,4 +129,4 @@ async function getGameCounts() {
   return col.aggregate([{ $group: { _id: "$game", count: { $sum: 1 } } }, { $sort: { count: -1 } }]).toArray();
 }
 
-module.exports = { submitScore, getRatings, applyEloDelta, getTop, getUserBestAndRank, getGameCounts };
+module.exports = { submitScore, getRatings, getRawRatings, applyEloDelta, getTop, getUserBestAndRank, getGameCounts };

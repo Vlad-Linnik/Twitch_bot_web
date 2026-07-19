@@ -290,10 +290,13 @@
     return wrap;
   }
 
-  function buildCardBackEl(extraClass) {
+  // sizeClass is required, not optional - see durak-multiplayer.js's copy of
+  // this same function for why a hardcoded default size here would silently
+  // beat a caller's override instead of composing with it.
+  function buildCardBackEl(sizeClass, extraClass) {
     const el = document.createElement("div");
     el.className =
-      "w-14 h-20 rounded-md border-2 border-purple-950 shrink-0 bg-purple-800 ring-1 ring-inset ring-purple-500/40" +
+      sizeClass + " rounded-md border-2 border-purple-950 shrink-0 bg-purple-800 ring-1 ring-inset ring-purple-500/40" +
       (extraClass ? " " + extraClass : "");
     return el;
   }
@@ -611,7 +614,7 @@
     opponentHandEl.innerHTML = "";
     opponentHandEl.title = boardEl.dataset.opponentTooltip + " " + aiHand.length;
     for (let i = 0; i < aiHand.length; i++) {
-      opponentHandEl.appendChild(buildCardBackEl("w-10 h-14" + (i > 0 ? " -ml-4" : "")));
+      opponentHandEl.appendChild(buildCardBackEl("w-10 h-14", i > 0 ? "-ml-4" : ""));
     }
   }
 
@@ -620,8 +623,11 @@
     deckEl.title = boardEl.dataset.deckTooltip + " " + deck.length;
     deckCountEl.textContent = String(deck.length);
     if (deck.length > 0) {
-      deckEl.appendChild(buildCardEl(trumpCard, "w-10 h-14 rotate-90"));
-      deckEl.appendChild(buildCardBackEl(""));
+      // buildCardEl()'s base class hardcodes w-14 h-20 - the trailing "!"
+      // important-modifier is what actually shrinks this, same reasoning as
+      // durak-multiplayer.js's own copy of this call.
+      deckEl.appendChild(buildCardEl(trumpCard, "w-10! h-14! rotate-90"));
+      deckEl.appendChild(buildCardBackEl("w-14 h-20"));
     }
     // Unlike the rotated trump card above (a real deck has nothing left to
     // show once it's empty), this label stays up for the rest of the game -
@@ -684,9 +690,18 @@
     playerHand.forEach((card) => {
       const id = cardId(card);
       const isLegal = legal.has(card);
+      // The extra before:* classes enlarge the clickable area beyond the
+      // painted 56x80 card (biased upward, where a hand full of cards packed
+      // close together made the top edge the easiest to miss) without
+      // changing how big the card actually looks - a plain invisible
+      // ::before sized via inset, same "expand touch target" trick as any
+      // small tap target. gap-2 on #durak-player-hand (see gameDurak.ejs)
+      // keeps two neighboring cards' expanded areas from overlapping.
       const el = getTrackedFaceEl(
         card,
-        isLegal ? "cursor-pointer hover:-translate-y-2 transition-transform" : "opacity-40 pointer-events-none"
+        isLegal
+          ? "cursor-pointer hover:-translate-y-2 transition-transform before:content-[''] before:absolute before:-top-2 before:-left-1 before:-right-1 before:-bottom-1"
+          : "opacity-40 pointer-events-none"
       );
       el.dataset.cardId = id;
       playerHandEl.appendChild(el);

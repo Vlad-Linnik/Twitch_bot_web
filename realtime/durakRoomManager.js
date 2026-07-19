@@ -18,7 +18,8 @@ const durakElo = require("./durakElo");
 const durakClock = require("./durakClock");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
-const { durakRoomCreateLimiter } = require("../middleware/rateLimiters");
+const userProfileService = require("../db/userProfileService");
+const { durakRoomCreateLimiter, durakStickerLimiter } = require("../middleware/rateLimiters");
 
 const MAX_PLAYERS = 6;
 const DISCONNECT_GRACE_MS = 60 * 1000;
@@ -31,11 +32,17 @@ const READY_CHECK_MS = 45 * 1000;
 const BEATEN_PAUSE_MS = 4000;
 const GAME_KEY = "durak-multiplayer";
 const DEFAULT_RULES = { allowThrowIns: true, allowTransfers: false };
+// The fixed sticker set players can react with mid-game (public/js/games/
+// durak-multiplayer.js renders the buttons and the pop-in animation; the
+// actual images live at public/images/games/durak/stickers/). A closed set
+// server-validates msg.stickerId against, same reasoning as isCardShape()
+// below - never trust a client-supplied id straight through to a broadcast.
+const STICKER_IDS = new Set(["subprise", "bloodtrail", "jokerge"]);
 
 const rooms = new Map(); // roomId -> Room
-const socketMeta = new Map(); // ws -> { userId, login, displayName, roomId }
+const socketMeta = new Map(); // ws -> { userId, login, displayName, roomId, watchRoomId }
 const userActiveRoom = new Map(); // userId -> roomId, only while that room is lobby/playing
-const lobbySockets = new Set(); // sockets currently viewing the lobby (not seated in a room)
+const lobbySockets = new Set(); // sockets currently viewing the lobby (not seated in a room, not spectating)
 
 function genRoomId() {
   let id;
@@ -70,7 +77,20 @@ function buildLobbySnapshot() {
       playerCount: r.players.length,
       maxPlayers: MAX_PLAYERS,
     }));
-  return { type: "lobbyState", rooms: openRooms };
+  // Rooms with a game already underway - shown separately so a visitor can
+  // see who's playing right now and, unlike openRooms, watch instead of join
+  // (see handleWatchRoom). Deliberately excludes "starting" (ready check,
+  // nothing to watch yet) and "finished" (its 2-minute post-game window is
+  // for the players' own result screen, not something worth advertising).
+  const playingRooms = [...rooms.values()]
+    .filter((r) => r.status === "playing")
+    .map((r) => ({
+      id: r.id,
+      players: r.players.map((p) => ({ displayName: p.displayName, left: p.left })),
+      playerCount: r.players.length,
+      spectatorCount: r.spectators.size,
+    }));
+  return { type: "lobbyState", rooms: openRooms, playingRooms };
 }
 
 function sendLobbySnapshot(ws) {
@@ -88,6 +108,21 @@ function enterLobby(ws, meta) {
   sendLobbySnapshot(ws);
 }
 
+// Called wherever a room is torn down (rooms.delete) - a spectator has no
+// seat to lose and nothing to forfeit, so unlike a player being removed they
+// just get dropped straight back into the lobby view rather than left
+// pointing at a room that no longer exists.
+function evictSpectators(room) {
+  if (!room.spectators || !room.spectators.size) return;
+  for (const ws of room.spectators.keys()) {
+    const m = socketMeta.get(ws);
+    if (!m) continue;
+    m.watchRoomId = null;
+    enterLobby(ws, m);
+  }
+  room.spectators.clear();
+}
+
 // --- Room state push -------------------------------------------------------
 
 function serializeRoomMeta(room) {
@@ -96,14 +131,28 @@ function serializeRoomMeta(room) {
     hostUserId: room.hostUserId,
     status: room.status,
     rules: room.rules,
+    spectatorCount: room.spectators ? room.spectators.size : 0,
     players: room.players.map((p) => ({
       userId: p.userId,
       login: p.login,
       displayName: p.displayName,
       connected: p.connected,
       left: p.left,
+      avatarUrl: p.avatarUrl,
+      color: p.color,
+      rating: p.rating,
     })),
   };
+}
+
+function buildClocksPayload(room) {
+  // remainingMs is only ever updated at tick time (an action, a leave, or the
+  // clock timer firing) - serverNow says exactly when THAT was, so a client
+  // can correctly interpolate a live countdown for whichever seats are in
+  // runningSeats between snapshots instead of showing a stale, unmoving number.
+  return room.clocks
+    ? { remainingMs: room.clocks.remainingMs, runningSeats: room.clocks.runningSeats, serverNow: room.clocks.lastTick }
+    : null;
 }
 
 function broadcastRoom(room) {
@@ -115,7 +164,8 @@ function broadcastRoom(room) {
   if (room.status === "starting") {
     // room.game doesn't exist yet at this point - the ready check is a lobby
     // sub-phase, not gameplay - so this can't go through the generic
-    // engine.serializeForSeat() path below at all.
+    // engine.serializeForSeat() path below at all. Nothing to watch yet
+    // either (see buildLobbySnapshot), so spectators can't be attached here.
     const meta = serializeRoomMeta(room);
     for (const p of room.players) {
       safeSend(p.ws, {
@@ -132,17 +182,18 @@ function broadcastRoom(room) {
     return;
   }
   const meta = serializeRoomMeta(room);
-  // remainingMs is only ever updated at tick time (an action, a leave, or the
-  // clock timer firing) - serverNow says exactly when THAT was, so a client
-  // can correctly interpolate a live countdown for whichever seats are in
-  // runningSeats between snapshots instead of showing a stale, unmoving number.
-  const clocks = room.clocks
-    ? { remainingMs: room.clocks.remainingMs, runningSeats: room.clocks.runningSeats, serverNow: room.clocks.lastTick }
-    : null;
+  const clocks = buildClocksPayload(room);
   room.players.forEach((p, seat) => {
     if (!p.ws) return;
     safeSend(p.ws, { type: "roomState", room: meta, game: engine.serializeForSeat(room.game, seat), clocks });
   });
+  if (room.spectators && room.spectators.size) {
+    // engine.serializeForSpectator() (unlike serializeForSeat) never includes
+    // any seat's actual hand - a spectator sees exactly what's on the table,
+    // same as durakEngine.js's file banner promises.
+    const payload = { type: "roomState", room: meta, game: engine.serializeForSpectator(room.game), clocks, spectating: true };
+    for (const ws of room.spectators.keys()) safeSend(ws, payload);
+  }
 }
 
 // --- Room lifecycle ----------------------------------------------------------
@@ -156,15 +207,52 @@ function makePlayerEntry(ws, meta) {
     connected: true,
     left: false,
     disconnectTimer: null,
+    // Filled in asynchronously by loadPlayerProfile() below - null until then,
+    // which the client renders as "no avatar / undecorated name / no rating"
+    // rather than blocking the join on a Twitch/Mongo round-trip.
+    avatarUrl: null,
+    color: null,
+    rating: null,
   };
+}
+
+// Avatar + chat colour (userProfileService, the single "how is this user
+// displayed" owner - see its own file header) and current Elo rating
+// (gameScoresRepo.getRawRatings, which - unlike getRatings - leaves a player
+// with no finished rated game absent from the Map instead of defaulting them
+// to durakElo.DEFAULT_RATING, so a first-timer's rating stays hidden here too,
+// same policy the leaderboard already follows). Fetched once per join rather
+// than on every broadcastRoom() tick, then pushed via one extra room update -
+// good enough since none of this changes again until the player's next game
+// finishes (ratingChanges handles that separately).
+async function loadPlayerProfile(room, entry) {
+  try {
+    const [profile, ratings] = await Promise.all([
+      userProfileService.getDisplayProfile(entry.userId),
+      gameScoresRepo.getRawRatings(GAME_KEY, [entry.userId]),
+    ]);
+    entry.avatarUrl = profile.avatarUrl;
+    entry.color = profile.color;
+    entry.rating = ratings.has(entry.userId) ? ratings.get(entry.userId) : null;
+  } catch (err) {
+    console.error(`[durakRoomManager] failed to load profile for ${entry.userId}:`, err.message);
+    return;
+  }
+  // The room may have been torn down, or this player may have already left,
+  // by the time the lookup resolves - only push if they're still there.
+  if (rooms.get(room.id) === room && room.players.includes(entry)) {
+    broadcastRoom(room);
+  }
 }
 
 function joinRoomInternal(ws, meta, room) {
   lobbySockets.delete(ws);
-  room.players.push(makePlayerEntry(ws, meta));
+  const entry = makePlayerEntry(ws, meta);
+  room.players.push(entry);
   meta.roomId = room.id;
   userActiveRoom.set(meta.userId, room.id);
   broadcastRoom(room);
+  loadPlayerProfile(room, entry);
 }
 
 function resumeIntoRoom(ws, meta, room) {
@@ -206,6 +294,7 @@ function removeFromRoom(room, userId, reason) {
         clearTimeout(room.readyCheckTimer);
         room.readyCheckTimer = null;
       }
+      evictSpectators(room);
       rooms.delete(room.id);
       broadcastLobby();
       return;
@@ -336,6 +425,7 @@ function broadcastRatingChanges(room) {
   if (!room.ratingChanges) return;
   const payload = { type: "ratingChanges", changes: room.ratingChanges };
   for (const p of room.players) safeSend(p.ws, payload);
+  if (room.spectators) for (const ws of room.spectators.keys()) safeSend(ws, payload);
 }
 
 async function finalizeGame(room) {
@@ -346,8 +436,17 @@ async function finalizeGame(room) {
   gameSessionStatsRepo.recordPlay(GAME_KEY).catch((err) => console.error("[durakRoomManager] failed to record play count:", err.message));
   await updateRatings(room);
   const cleanup = setTimeout(() => {
+    evictSpectators(room);
     rooms.delete(room.id);
-    for (const p of room.players) userActiveRoom.delete(p.userId);
+    // Guarded, not a blanket delete: a player who already left this finished
+    // room and started/joined another game has userActiveRoom pointing at
+    // that new room by now. An unconditional delete here would clobber that
+    // live mapping out from under them - on their next reconnect (refresh, a
+    // brief network drop) handleConnection() would find nothing and dump
+    // them into the lobby instead of resuming the game they're actively in.
+    for (const p of room.players) {
+      if (userActiveRoom.get(p.userId) === room.id) userActiveRoom.delete(p.userId);
+    }
   }, FINISHED_ROOM_CLEANUP_MS);
   cleanup.unref();
   broadcastLobby(); // in case anything was watching room counts elsewhere
@@ -356,7 +455,7 @@ async function finalizeGame(room) {
 // --- Message handlers --------------------------------------------------------
 
 function handleCreateRoom(ws, meta) {
-  if (meta.roomId) return sendError(ws, "already-in-room");
+  if (meta.roomId || meta.watchRoomId) return sendError(ws, "already-in-room");
   if (!durakRoomCreateLimiter(meta.userId)) return sendError(ws, "rate-limited");
   const room = {
     id: genRoomId(),
@@ -364,6 +463,7 @@ function handleCreateRoom(ws, meta) {
     createdAt: Date.now(),
     status: "lobby",
     players: [],
+    spectators: new Map(), // ws -> { userId, displayName } - see handleWatchRoom
     game: null,
     rules: { ...DEFAULT_RULES },
   };
@@ -383,8 +483,37 @@ function handleSetRules(ws, meta, rules) {
   broadcastRoom(room);
 }
 
+// Host-only, lobby-only (like handleSetRules above) - once a ready check has
+// opened there's a dedicated way to drop a seat already (just don't accept,
+// see resolveReadyCheckTimeout), and "playing" removal is what leaving/
+// disconnecting/the clock already cover. This is purely a pre-game lobby tool
+// for a host to clear a seat someone doesn't belong in (AFK, wrong person,
+// griefing) before committing to a ready check at all.
+function handleKickPlayer(ws, meta, targetUserId) {
+  const room = rooms.get(meta.roomId);
+  if (!room) return sendError(ws, "room-not-found");
+  if (room.hostUserId !== meta.userId) return sendError(ws, "not-host");
+  if (room.status !== "lobby") return sendError(ws, "not-in-lobby");
+  if (typeof targetUserId !== "string" || targetUserId === meta.userId) return sendError(ws, "bad-request");
+  const target = room.players.find((p) => p.userId === targetUserId);
+  if (!target) return sendError(ws, "player-not-found");
+  const targetWs = target.ws;
+  const targetMeta = targetWs ? socketMeta.get(targetWs) : null;
+  removeFromRoom(room, targetUserId, "kicked");
+  // Tell the kicked socket itself before dropping it back into the lobby -
+  // removeFromRoom() only updates the room's own state, it has no idea the
+  // removal came from someone else's request rather than the player's own
+  // leaveRoom. enterLobby() clears meta.roomId and immediately pushes a fresh
+  // lobbyState, so "kicked" must go out first or the client would still think
+  // it's in the (now nonexistent, for them) room when that snapshot lands.
+  if (targetWs && targetMeta) {
+    safeSend(targetWs, { type: "kicked" });
+    enterLobby(targetWs, targetMeta);
+  }
+}
+
 function handleJoinRoom(ws, meta, roomId) {
-  if (meta.roomId) return sendError(ws, "already-in-room");
+  if (meta.roomId || meta.watchRoomId) return sendError(ws, "already-in-room");
   if (typeof roomId !== "string") return sendError(ws, "bad-request");
   const room = rooms.get(roomId);
   if (!room) return sendError(ws, "room-not-found");
@@ -397,6 +526,41 @@ function handleJoinRoom(ws, meta, roomId) {
 function handleLeaveRoom(ws, meta) {
   const room = rooms.get(meta.roomId);
   if (room) removeFromRoom(room, meta.userId, "leave");
+  enterLobby(ws, meta);
+}
+
+// --- Spectating ------------------------------------------------------------
+// Read-only: a spectator is never added to room.players and never touches
+// engine state, so there's nothing here for durakEngine.js to validate - the
+// only enforcement needed is which SERIALIZATION a spectator receives
+// (engine.serializeForSpectator, wired into broadcastRoom above), which is
+// what actually keeps seated players' hands hidden from them.
+
+function handleWatchRoom(ws, meta, roomId) {
+  if (meta.roomId || meta.watchRoomId) return sendError(ws, "already-in-room");
+  if (typeof roomId !== "string") return sendError(ws, "bad-request");
+  const room = rooms.get(roomId);
+  if (!room) return sendError(ws, "room-not-found");
+  // Only rooms with a hand actually in progress are watchable - "lobby"/
+  // "starting" have no game object yet (see broadcastRoom's early returns),
+  // and "finished" is a stray race (the room fell out of buildLobbySnapshot's
+  // playingRooms the instant the game ended, so the UI shouldn't be offering
+  // a Watch button for it anymore anyway).
+  if (room.status !== "playing") return sendError(ws, "room-not-watchable");
+  lobbySockets.delete(ws);
+  room.spectators.set(ws, { userId: meta.userId, displayName: meta.displayName });
+  meta.watchRoomId = room.id;
+  broadcastRoom(room); // pushes the initial state to this spectator and the updated spectatorCount to everyone else
+  broadcastLobby();
+}
+
+function handleLeaveWatch(ws, meta) {
+  const room = rooms.get(meta.watchRoomId);
+  meta.watchRoomId = null;
+  if (room && room.spectators.delete(ws)) {
+    broadcastRoom(room);
+    broadcastLobby();
+  }
   enterLobby(ws, meta);
 }
 
@@ -478,6 +642,7 @@ function resolveReadyCheckTimeout(room) {
     }
   }
   if (room.players.length === 0) {
+    evictSpectators(room);
     rooms.delete(room.id);
     broadcastLobby();
     return;
@@ -499,6 +664,25 @@ function resolveReadyCheckTimeout(room) {
 function broadcastAction(room, seat, action) {
   const payload = { type: "action", seat, action };
   for (const p of room.players) safeSend(p.ws, payload);
+  if (room.spectators) for (const ws of room.spectators.keys()) safeSend(ws, payload);
+}
+
+// Stickers are a pure reaction - unlike broadcastAction() above they never
+// come from a game-state change, so they skip handleGameAction() entirely
+// (no engine call, no syncClock, no room-state re-broadcast needed).
+function broadcastSticker(room, seat, stickerId) {
+  const payload = { type: "sticker", seat, stickerId };
+  for (const p of room.players) safeSend(p.ws, payload);
+  if (room.spectators) for (const ws of room.spectators.keys()) safeSend(ws, payload);
+}
+
+function handleSticker(ws, meta, stickerId) {
+  const room = rooms.get(meta.roomId);
+  if (!room || room.status !== "playing") return sendError(ws, "not-playing");
+  const seat = room.players.findIndex((p) => p.userId === meta.userId);
+  if (seat < 0) return sendError(ws, "not-in-room");
+  if (!durakStickerLimiter(meta.userId)) return sendError(ws, "sticker-rate-limited");
+  broadcastSticker(room, seat, stickerId);
 }
 
 function handleGameAction(ws, meta, applyFn, msgType) {
@@ -566,12 +750,18 @@ function onMessage(ws, meta, raw) {
       return handleJoinRoom(ws, meta, msg.roomId);
     case "leaveRoom":
       return handleLeaveRoom(ws, meta);
+    case "watchRoom":
+      return handleWatchRoom(ws, meta, msg.roomId);
+    case "leaveWatch":
+      return handleLeaveWatch(ws, meta);
     case "startGame":
       return handleStartGame(ws, meta);
     case "acceptStart":
       return handleAcceptStart(ws, meta);
     case "setRules":
       return handleSetRules(ws, meta, msg.rules);
+    case "kickPlayer":
+      return handleKickPlayer(ws, meta, msg.userId);
     case "open":
       if (!isCardShape(msg.card)) return sendError(ws, "bad-request");
       return handleGameAction(ws, meta, (room, seat) => engine.applyOpen(room.game, seat, msg.card), msg.type);
@@ -593,6 +783,9 @@ function onMessage(ws, meta, raw) {
       return handleGameAction(ws, meta, (room, seat) => engine.applyTransfer(room.game, seat, msg.card), msg.type);
     case "take":
       return handleGameAction(ws, meta, (room, seat) => engine.applyTake(room.game, seat), msg.type);
+    case "sticker":
+      if (typeof msg.stickerId !== "string" || !STICKER_IDS.has(msg.stickerId)) return sendError(ws, "bad-request");
+      return handleSticker(ws, meta, msg.stickerId);
     default:
       return;
   }
@@ -601,6 +794,13 @@ function onMessage(ws, meta, raw) {
 function onClose(ws, meta) {
   socketMeta.delete(ws);
   lobbySockets.delete(ws);
+  if (meta.watchRoomId) {
+    const watchedRoom = rooms.get(meta.watchRoomId);
+    if (watchedRoom && watchedRoom.spectators.delete(ws)) {
+      broadcastRoom(watchedRoom);
+      broadcastLobby();
+    }
+  }
   if (!meta.roomId) return;
   const room = rooms.get(meta.roomId);
   if (!room) return;
@@ -626,7 +826,7 @@ function onClose(ws, meta) {
 }
 
 function handleConnection(ws, user) {
-  const meta = { userId: String(user.userId), login: user.login, displayName: user.displayName, roomId: null };
+  const meta = { userId: String(user.userId), login: user.login, displayName: user.displayName, roomId: null, watchRoomId: null };
   socketMeta.set(ws, meta);
   ws.on("message", (raw) => onMessage(ws, meta, raw));
   ws.on("close", () => onClose(ws, meta));

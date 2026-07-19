@@ -29,6 +29,24 @@
   const overlayButton = document.getElementById("g2048-overlay-button");
   const overlayHint = document.getElementById("g2048-overlay-hint");
 
+  // --- Sound -------------------------------------------------------------------
+
+  const SOUND_BASE = "/sounds/games/2048/";
+  const SOUNDS = { merge: new Audio(SOUND_BASE + "merge.wav") };
+  SOUNDS.merge.volume = 0.5;
+
+  // Cloning the node lets overlapping plays (a move that merges several pairs
+  // at once) stack instead of the next play cutting the previous one off.
+  function playSound(name) {
+    const base = SOUNDS[name];
+    if (!base) return;
+    try {
+      base.cloneNode(true).play().catch(() => {});
+    } catch (_) {
+      /* audio unsupported/blocked - the game keeps working silently */
+    }
+  }
+
   function readBest() {
     try {
       return parseInt(localStorage.getItem(BEST_KEY), 10) || 0;
@@ -340,6 +358,7 @@
           retriggerAnim(primEl.firstElementChild, "g2048-merge");
         }
       }
+      if (merges.length > 0) playSound("merge");
 
       spawnRandomTile();
 

@@ -352,3 +352,38 @@ html.js .save-fab.save-visible {
     animation: none;
   }
 }
+
+/* Multiplayer Durak: sticker reactions (durak-multiplayer.js's showSticker()) -
+   each pop is a fresh <img> appended then removed on a JS timeout, unlike
+   fb-combo-pop's reused node, so there's no toggle-class-to-retrigger dance
+   here. Duration must match STICKER_POP_MS in that file. */
+@keyframes durak-sticker-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.15);
+  }
+  25% {
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.9);
+  }
+}
+.durak-sticker-pop {
+  animation: durak-sticker-pop 1400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .durak-sticker-pop {
+    animation: none;
+    opacity: 1;
+  }
+}

@@ -47,10 +47,39 @@
     return el;
   }
 
-  function buildCardBackEl(extraClass) {
+  // p.avatarUrl/p.color/p.rating come from durakRoomManager.js's serializeRoomMeta
+  // (fetched once per join via loadPlayerProfile() - see that comment) - all
+  // three can be null (lookup still in flight, or - for rating - the player
+  // simply hasn't finished a rated multiplayer game yet), so every caller here
+  // has to tolerate that instead of assuming they're always present. Same
+  // fallback-initial-circle pattern as views/partials/nav.ejs's own avatar.
+  function buildAvatarEl(p) {
+    if (p.avatarUrl) {
+      const img = document.createElement("img");
+      img.src = p.avatarUrl;
+      img.alt = "";
+      img.width = 24;
+      img.height = 24;
+      img.className = "w-6 h-6 rounded-full shrink-0 object-cover";
+      return img;
+    }
+    const fallback = document.createElement("span");
+    fallback.className =
+      "w-6 h-6 rounded-full shrink-0 grid place-items-center bg-neutral-800 text-neutral-300 text-[10px] font-semibold";
+    fallback.textContent = (p.displayName || "?").charAt(0).toUpperCase();
+    return fallback;
+  }
+
+  // sizeClass is required, not optional - Tailwind's compiled stylesheet
+  // order decides which width/height utility wins on one element, not the
+  // order classes appear in this string (same gotcha positionAbsolute()
+  // below documents for "relative"/"absolute"), so a hardcoded default size
+  // here would silently outrank whatever size a caller tried to override it
+  // with instead of composing with it.
+  function buildCardBackEl(sizeClass, extraClass) {
     const el = document.createElement("div");
     el.className =
-      "w-14 h-20 rounded-md border-2 border-purple-950 shrink-0 bg-purple-800 ring-1 ring-inset ring-purple-500/40" +
+      sizeClass + " rounded-md border-2 border-purple-950 shrink-0 bg-purple-800 ring-1 ring-inset ring-purple-500/40" +
       (extraClass ? " " + extraClass : "");
     return el;
   }
@@ -113,6 +142,45 @@
 
   function cardsEqual(a, b) {
     return a.suit === b.suit && a.rank === b.rank;
+  }
+
+  // --- Sticker reactions -----------------------------------------------------
+  // A fixed set of 7TV-sourced images (durakRoomManager.js server-validates
+  // stickerId against the same three ids) any seated player can fire off
+  // mid-game as a lightweight reaction - it never touches game state, so it's
+  // routed entirely outside the roomState/action message flow (see the
+  // "sticker" branch in handleMessage()).
+  const STICKER_BASE = "/images/games/durak/stickers/";
+  const STICKER_FILES = { subprise: "subprise.png", bloodtrail: "bloodtrail.png", jokerge: "jokerge.png" };
+
+  // How long a popped sticker stays in the DOM - must be >= the
+  // durak-sticker-pop CSS animation's own duration (public/css/input.css) so
+  // reduced-motion visitors (animation skipped, element left at opacity: 1)
+  // still get it cleaned up on the same schedule as everyone else.
+  const STICKER_POP_MS = 1400;
+
+  // Anchors the popped sticker over whoever sent it: the sender's own hand
+  // panel if it was me (my own seat has no block in #dmp-opponents - see
+  // renderTable()'s seatOrder, which always excludes mySeat), otherwise that
+  // seat's opponent block, which every viewer (seated or spectating) has one
+  // of. Silently no-ops if neither exists yet (a stale/racing message against
+  // a room the client has already left).
+  function showSticker(seat, stickerId) {
+    const file = STICKER_FILES[stickerId];
+    if (!file) return;
+    const anchor = seat === mySeat ? handPanelEl : opponentsEl.querySelector('[data-seat="' + seat + '"]');
+    if (!anchor || !dmpBoardEl) return;
+    const anchorRect = anchor.getBoundingClientRect();
+    const boardRect = dmpBoardEl.getBoundingClientRect();
+    const img = document.createElement("img");
+    img.src = STICKER_BASE + file;
+    img.alt = "";
+    img.className = "durak-sticker-pop absolute w-14 h-14 pointer-events-none drop-shadow-lg";
+    img.style.left = anchorRect.left - boardRect.left + anchorRect.width / 2 - 28 + "px";
+    img.style.top = anchorRect.top - boardRect.top - 56 + "px";
+    img.style.zIndex = "30";
+    dmpBoardEl.appendChild(img);
+    setTimeout(() => img.remove(), STICKER_POP_MS);
   }
 
   // --- Sound ---------------------------------------------------------------
@@ -178,11 +246,16 @@
   const roomListEl = document.getElementById("dmp-room-list");
   const roomListEmptyEl = document.getElementById("dmp-room-list-empty");
   const createRoomBtn = document.getElementById("dmp-create-room-btn");
+  const playingListEl = document.getElementById("dmp-playing-list");
+  const playingListEmptyEl = document.getElementById("dmp-playing-list-empty");
 
   const roomCodeEl = document.getElementById("dmp-room-code");
   const copyLinkBtn = document.getElementById("dmp-copy-link-btn");
+  const spectatorCountEl = document.getElementById("dmp-spectator-count");
+  const spectatingBadgeEl = document.getElementById("dmp-spectating-badge");
   const startBtn = document.getElementById("dmp-start-btn");
   const leaveBtn = document.getElementById("dmp-leave-btn");
+  const stopWatchingBtn = document.getElementById("dmp-stop-watching-btn");
   const playerListEl = document.getElementById("dmp-player-list");
   const waitingHintEl = document.getElementById("dmp-waiting-hint");
 
@@ -211,8 +284,17 @@
   const statusEl = document.getElementById("dmp-status");
   const takeBtn = document.getElementById("dmp-take-btn");
   const passBtn = document.getElementById("dmp-pass-btn");
+  const handPanelEl = document.getElementById("dmp-hand-panel");
   const handEl = document.getElementById("dmp-hand");
   const myClockEl = document.getElementById("dmp-my-clock");
+  const stickersEl = document.getElementById("dmp-stickers");
+  const stickerBtns = stickersEl ? Array.from(stickersEl.querySelectorAll("[data-sticker-id]")) : [];
+  for (const btn of stickerBtns) {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.stickerId;
+      if (STICKER_FILES[id]) send({ type: "sticker", stickerId: id });
+    });
+  }
 
   const resultOverlayEl = document.getElementById("dmp-result-overlay");
   const resultTitleEl = document.getElementById("dmp-result-title");
@@ -227,7 +309,8 @@
   let deliberateClose = false;
   let currentRoomId = null;
   let lastRoom = null; // set by renderRoom() - lets a later "action" message resolve seat -> player
-  let mySeat = null; // set from game.you.seat once seated - lets narrateAction() say "You" for my own moves
+  let mySeat = null; // set from game.you.seat once seated - lets narrateAction() say "You" for my own moves; stays null while spectating (see isSpectating)
+  let isSpectating = false; // set from roomState's "spectating" flag (durakRoomManager.js's watchRoom path) - read-only view, no game.you/game.legal to draw from
   // Elo deltas for the just-finished game arrive as their own "ratingChanges"
   // message, separately and slightly after the roomState that first shows the
   // result overlay (realtime/durakRoomManager.js computes/persists them via a
@@ -434,8 +517,10 @@
   function handleMessage(msg) {
     if (msg.type === "lobbyState") {
       renderLobbyList(msg.rooms);
+      renderPlayingList(msg.playingRooms || []);
     } else if (msg.type === "roomState") {
       currentRoomId = msg.room.id;
+      isSpectating = !!msg.spectating;
       renderRoom(msg);
     } else if (msg.type === "action") {
       narrateAction(msg.seat, msg.action);
@@ -445,6 +530,15 @@
       // the roomState that actually clears the table (see the comment below),
       // and renderTable() consumes+resets it the moment it's read.
       pendingTakeSeat = msg.action === "take" ? msg.seat : null;
+    } else if (msg.type === "sticker") {
+      showSticker(msg.seat, msg.stickerId);
+    } else if (msg.type === "kicked") {
+      // The host kicked me from a room I'm still looking at (durakRoomManager.js's
+      // handleKickPlayer) - the "lobbyState" that immediately follows this message
+      // won't render otherwise, since renderLobbyList()/renderPlayingList() both
+      // bail out early while currentRoomId is still set to the room I just lost my seat in.
+      resetRoomUiState();
+      showToast(d.kickedToast);
     } else if (msg.type === "ratingChanges") {
       lastRatingChanges = msg.changes;
       if (lastRoom && lastGame && !resultOverlayEl.hidden) renderStandings(lastRoom, lastGame);
@@ -483,6 +577,10 @@
       "already-in-room": d.errAlreadyInRoom,
       "not-enough-players": d.errNotEnoughPlayers,
       "not-host": d.errNotHost,
+      "room-not-watchable": d.errRoomNotWatchable,
+      "sticker-rate-limited": d.errStickerRateLimited,
+      "not-in-lobby": d.errNotInLobby,
+      "player-not-found": d.errPlayerNotFound,
     };
     return map[code] || d.errGeneric;
   }
@@ -525,6 +623,41 @@
     }
   }
 
+  // Rooms with a hand already in progress (server-filtered to status
+  // "playing" - see durakRoomManager.js's buildLobbySnapshot). A row here
+  // sends "watchRoom" instead of "joinRoom" - the visitor becomes a
+  // read-only spectator, never a seated player, of that room.
+  function renderPlayingList(rooms) {
+    if (currentRoomId) return; // already in a room (seated or spectating) - the lobby view isn't shown
+    playingListEl.querySelectorAll("[data-playing-row]").forEach((el) => el.remove());
+    playingListEmptyEl.hidden = rooms.length > 0;
+    for (const r of rooms) {
+      const li = document.createElement("li");
+      li.dataset.playingRow = "1";
+      li.className = "flex items-center justify-between gap-3 rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-2.5";
+
+      const info = document.createElement("div");
+      const namesLine = document.createElement("p");
+      namesLine.className = "text-sm text-neutral-200 truncate max-w-xs";
+      namesLine.textContent = r.players.map((p) => p.displayName + (p.left ? " ✗" : "")).join(", ");
+      const countLine = document.createElement("p");
+      countLine.className = "text-xs text-neutral-500";
+      countLine.textContent =
+        fillTemplate(d.matchPlayerCountTpl, { COUNT: r.playerCount }) +
+        (r.spectatorCount > 0 ? " · " + fillTemplate(d.spectatorCountTpl, { COUNT: r.spectatorCount }) : "");
+      info.append(namesLine, countLine);
+
+      const watchBtn = document.createElement("button");
+      watchBtn.type = "button";
+      watchBtn.className = "px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors shrink-0";
+      watchBtn.textContent = d.watchLabel;
+      watchBtn.addEventListener("click", () => send({ type: "watchRoom", roomId: r.id }));
+
+      li.append(info, watchBtn);
+      playingListEl.appendChild(li);
+    }
+  }
+
   function fillTemplate(tpl, vars) {
     let out = tpl || "";
     for (const key of Object.keys(vars)) out = out.split("__" + key + "__").join(String(vars[key]));
@@ -549,24 +682,44 @@
     lastRoom = room;
     roomCodeEl.textContent = room.id;
 
+    leaveBtn.hidden = isSpectating;
+    stopWatchingBtn.hidden = !isSpectating;
+    spectatingBadgeEl.hidden = !isSpectating;
+    spectatorCountEl.hidden = !room.spectatorCount;
+    if (room.spectatorCount) spectatorCountEl.textContent = fillTemplate(d.spectatorCountTpl, { COUNT: room.spectatorCount });
+
+    const amHost = !isSpectating && room.hostUserId === myUserId;
+
     playerListEl.textContent = "";
     room.players.forEach((p) => {
       const li = document.createElement("li");
       const isMe = p.userId === myUserId;
       const isHost = p.userId === room.hostUserId;
       li.className =
-        "px-2.5 py-1 rounded-lg text-xs border " +
+        "flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border " +
         (p.left
           ? "border-neutral-800 text-neutral-600 line-through"
           : p.connected
             ? "border-neutral-700 text-neutral-200"
             : "border-amber-700 text-amber-500") +
         (isMe ? " ring-2 ring-purple-400" : "");
-      li.textContent = p.displayName + (isHost ? " ★" : "");
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = p.displayName + (isHost ? " ★" : "");
+      li.appendChild(nameSpan);
+      // Host-only, lobby-only (durakRoomManager.js's handleKickPlayer enforces
+      // the same two gates server-side) - never shown for the host's own row.
+      if (amHost && room.status === "lobby" && !isMe) {
+        const kickBtn = document.createElement("button");
+        kickBtn.type = "button";
+        kickBtn.className = "text-neutral-500 hover:text-rose-400 leading-none px-0.5";
+        kickBtn.textContent = "✕";
+        kickBtn.title = d.kickButtonTitle;
+        kickBtn.addEventListener("click", () => send({ type: "kickPlayer", userId: p.userId }));
+        li.appendChild(kickBtn);
+      }
       playerListEl.appendChild(li);
     });
 
-    const amHost = room.hostUserId === myUserId;
     renderRulesPanel(room.rules, amHost, room.status);
     if (room.status === "lobby") {
       startBtn.hidden = !amHost;
@@ -609,7 +762,12 @@
       startBtn.hidden = true;
       waitingHintEl.hidden = true;
       tableWrapEl.hidden = false;
-      if (msg.game) mySeat = msg.game.you.seat;
+      // game.you is absent entirely for a spectator's payload (see
+      // durakEngine.js's serializeForSpectator) - stays null rather than
+      // carrying over a stale seat number from a previous seated session in
+      // this same tab (leaveRoom -> watchRoom is one connection, mySeat
+      // otherwise wouldn't get reset).
+      mySeat = msg.game && msg.game.you ? msg.game.you.seat : null;
       clocksSnapshot = msg.clocks || null;
       renderTable(room, msg.game, justDealt);
       if (msg.game && msg.game.result) {
@@ -620,6 +778,23 @@
     }
   }
 
+  // Shared by every "back to the lobby" path (leave as player, stop watching,
+  // back-from-result) - resets every piece of per-room client state so the
+  // next roomState (a fresh join or watch) never inherits a stale seat
+  // number, clock snapshot, or dedup marker from whatever this tab was doing before.
+  function resetRoomUiState() {
+    currentRoomId = null;
+    isSpectating = false;
+    mySeat = null;
+    clocksSnapshot = null;
+    stopClockTicking();
+    stopReadyCheckTicking();
+    readyCheckSoundPlayedFor = null;
+    previousLobbyPlayerIds = null;
+    previousLobbyPlayerRoomId = null;
+    switchView(false);
+  }
+
   startBtn.addEventListener("click", () => {
     send({ type: "startGame" });
     startBtn.blur();
@@ -627,26 +802,17 @@
   leaveBtn.addEventListener("click", () => {
     send({ type: "leaveRoom" });
     leaveBtn.blur();
-    currentRoomId = null;
-    clocksSnapshot = null;
-    stopClockTicking();
-    stopReadyCheckTicking();
-    readyCheckSoundPlayedFor = null;
-    previousLobbyPlayerIds = null;
-    previousLobbyPlayerRoomId = null;
-    switchView(false);
+    resetRoomUiState();
+  });
+  stopWatchingBtn.addEventListener("click", () => {
+    send({ type: "leaveWatch" });
+    stopWatchingBtn.blur();
+    resetRoomUiState();
   });
   resultBackBtn.addEventListener("click", () => {
-    send({ type: "leaveRoom" });
+    send({ type: isSpectating ? "leaveWatch" : "leaveRoom" });
     resultBackBtn.blur();
-    currentRoomId = null;
-    clocksSnapshot = null;
-    stopClockTicking();
-    stopReadyCheckTicking();
-    readyCheckSoundPlayedFor = null;
-    previousLobbyPlayerIds = null;
-    previousLobbyPlayerRoomId = null;
-    switchView(false);
+    resetRoomUiState();
   });
   copyLinkBtn.addEventListener("click", () => {
     const url = location.origin + "/games/durak/room/" + roomCodeEl.textContent;
@@ -655,57 +821,105 @@
 
   // --- Table rendering -----------------------------------------------------
 
+  // "Attacking"/"defending"/"passed" text next to a seat's border color - the
+  // color alone (purple attacker, rose defender) isn't self-explanatory to
+  // everyone, so this spells it out. Empty once a seat is done (out/left) or
+  // has nothing to report (e.g. attacker's own opening move is over and play
+  // has moved to "defend" - nothing left for them to visibly be doing).
+  function seatRoleLabel(game, seat, meta) {
+    if (meta.out || meta.left) return "";
+    if (game.phase === "beaten-pause") return ""; // transient hold before the table clears - nobody's "doing" anything
+    if (seat === game.attackerSeat && (game.phase === "open" || game.phase === "wave")) return d.roleAttacking;
+    if (seat === game.defenderSeat) return d.roleDefending;
+    if (game.phase === "wave" && meta.passed) return d.rolePassed;
+    return "";
+  }
+
   function renderTable(room, game, justDealt) {
     if (!game) return;
     // A fresh roomState always supersedes whatever the beat-vs-transfer
     // chooser (if open) was about - e.g. the clock ran out mid-choice and the
     // server force-took the bout for them. Re-shown fresh if still relevant.
     hideActionChoice();
-    const mySeat = game.you.seat;
+    // Spectator payloads have no game.you at all (durakEngine.js's
+    // serializeForSpectator) - mySeat stays null, which the seat-order and
+    // hand-panel logic below both treat as "showing every seat, no hand of my own".
+    const mySeat = game.you ? game.you.seat : null;
+    handPanelEl.hidden = mySeat == null;
+    // Spectators (no seat of their own) can watch but not react - same gate
+    // as the hand panel above.
+    if (stickersEl) stickersEl.hidden = mySeat == null;
 
-    // Opponents: every other seat, ordered starting from the seat after mine
-    // so the table reads left-to-right the way it's seated around from you.
+    // Opponents: every other seat. Seated players see them starting from the
+    // seat after their own, so the row reads left-to-right the way people are
+    // seated around from you; a spectator (no seat of their own) just sees
+    // every seat in table order. flex-nowrap in the markup (gameDurak.ejs)
+    // keeps this to one row even at 6 players - each block below is sized
+    // compact specifically so 5 opponents fit without wrapping to a second
+    // row, which was confusing turn order at full tables.
     opponentsEl.textContent = "";
     const n = room.players.length;
-    for (let i = 1; i < n; i++) {
-      const seat = (mySeat + i) % n;
+    const seatOrder =
+      mySeat != null
+        ? Array.from({ length: n - 1 }, (_, i) => (mySeat + i + 1) % n)
+        : Array.from({ length: n }, (_, i) => i);
+    for (const seat of seatOrder) {
       const p = room.players[seat];
       const meta = game.players[seat];
+      const isAttacker = seat === game.attackerSeat;
+      const isDefender = seat === game.defenderSeat;
       const wrap = document.createElement("div");
       wrap.dataset.seat = String(seat);
       wrap.className =
-        "flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg border " +
-        (seat === game.attackerSeat
-          ? "border-purple-600 bg-purple-500/10"
-          : seat === game.defenderSeat
-            ? "border-rose-600 bg-rose-500/10"
-            : "border-neutral-800");
+        "flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-lg border w-[4.5rem] sm:w-20 shrink-0 " +
+        (isAttacker ? "border-purple-600 bg-purple-500/10" : isDefender ? "border-rose-600 bg-rose-500/10" : "border-neutral-800");
+      const header = document.createElement("div");
+      header.className = "flex items-center gap-1 max-w-full";
+      // Rating (when known) moves to a tooltip instead of sitting inline next
+      // to the name - the whole point of shrinking this block is fitting 5 of
+      // them in one row, and "(1500)" next to every name undoes that.
+      header.title = p.rating != null ? p.displayName + " (" + p.rating + ")" : p.displayName;
+      header.appendChild(buildAvatarEl(p));
       const name = document.createElement("p");
-      name.className = "text-xs " + (p.connected ? "text-neutral-300" : "text-amber-500");
+      name.className = "text-[10px] truncate " + (p.connected ? "text-neutral-300" : "text-amber-500");
+      // The disconnected/amber colour is a status signal, more useful than
+      // the player's own chat colour in that moment - only apply their
+      // colour while they're actually connected.
+      if (p.connected && p.color) name.style.color = p.color;
       name.textContent = p.displayName + (meta.out ? " ✔" : p.left ? " ✗" : "");
+      header.appendChild(name);
       const backs = document.createElement("div");
       backs.className = "flex";
       for (let c = 0; c < Math.min(meta.handCount, 6); c++) {
-        const backEl = buildCardBackEl("w-6 h-9" + (c > 0 ? " -ml-3" : ""));
+        const backEl = buildCardBackEl("w-4 h-6", c > 0 ? "-ml-2" : "");
         if (justDealt) dealInAnimate(backEl, c);
         backs.appendChild(backEl);
       }
       const count = document.createElement("p");
-      count.className = "text-[10px] text-neutral-500 tabular-nums";
+      count.className = "text-[9px] text-neutral-500 tabular-nums";
       count.textContent = String(meta.handCount);
+      const roleEl = document.createElement("p");
+      roleEl.className =
+        "text-[9px] font-medium leading-tight h-3 " + (isAttacker ? "text-purple-400" : isDefender ? "text-rose-400" : "text-neutral-600");
+      roleEl.textContent = seatRoleLabel(game, seat, meta);
       const clockBadge = document.createElement("p");
-      clockBadge.className = "text-[10px] font-mono tabular-nums text-neutral-500";
+      clockBadge.className = "text-[9px] font-mono tabular-nums text-neutral-500";
       clockBadge.dataset.clockSeat = String(seat);
       clockBadge.title = d.timeRemainingTooltip;
-      wrap.append(name, backs, count, clockBadge);
+      wrap.append(header, backs, count, roleEl, clockBadge);
       opponentsEl.appendChild(wrap);
     }
 
     deckEl.textContent = "";
     deckCountEl.textContent = String(game.deckCount);
     if (game.trumpCard) {
-      deckEl.appendChild(buildCardEl(game.trumpCard, "w-10 h-14 rotate-90"));
-      deckEl.appendChild(buildCardBackEl(""));
+      // buildCardEl()'s own base class hardcodes w-14 h-20 - the trailing "!"
+      // important-modifier (not just a plain override) is what actually makes
+      // this shrink to w-10 h-14 instead of losing to the base size the same
+      // way buildCardBackEl's opponent-row size once silently lost (see that
+      // function's own comment).
+      deckEl.appendChild(buildCardEl(game.trumpCard, "w-10! h-14! rotate-90"));
+      deckEl.appendChild(buildCardBackEl("w-14 h-20"));
     }
     // Unlike the rotated trump card above (nothing left to show once the deck
     // itself is empty), this label stays up for the rest of the game -
@@ -761,7 +975,7 @@
       for (let i = 0; i < oldPairEls.length; i++) animateTableExit(oldPairEls[i], oldPairRects[i], clearTowardRect);
     }
 
-    renderHand(game, justDealt);
+    if (game.you) renderHand(game, justDealt);
     renderStatusAndButtons(game);
     myClockEl.title = d.timeRemainingTooltip;
     renderClockDisplays(); // paint immediately - the 250ms interval alone would leave a blank flash
@@ -810,9 +1024,15 @@
         isLegal = true;
         onClick = () => send({ type: "throwIn", card });
       }
+      // Enlarges the clickable area beyond the painted 56x80 card, biased
+      // upward - same "expand touch target" ::before trick as durak.js's
+      // renderPlayerHand(), see that comment. gap-2 on #dmp-hand (see
+      // gameDurak.ejs) keeps neighboring cards' expanded areas from overlapping.
       const el = buildCardEl(
         card,
-        isLegal ? "cursor-pointer hover:-translate-y-2 transition-transform" : "opacity-40 pointer-events-none"
+        isLegal
+          ? "cursor-pointer hover:-translate-y-2 transition-transform before:content-[''] before:absolute before:-top-2 before:-left-1 before:-right-1 before:-bottom-1"
+          : "opacity-40 pointer-events-none"
       );
       if (isLegal) el.addEventListener("click", onClick);
       if (justDealt) dealInAnimate(el, index);
@@ -849,6 +1069,16 @@
   });
 
   function renderStatusAndButtons(game) {
+    if (!game.legal) {
+      // Spectator payload (durakEngine.js's serializeForSpectator never
+      // includes "legal" - it's meaningless without a seat of your own).
+      // Nothing to press, and each opponent block already spells out its own
+      // role (see seatRoleLabel above), so the central status line stays blank.
+      takeBtn.hidden = true;
+      passBtn.hidden = true;
+      statusEl.textContent = "";
+      return;
+    }
     takeBtn.hidden = !game.legal.canTake;
     passBtn.hidden = !game.legal.canPass;
     if (game.result) {
@@ -867,7 +1097,7 @@
   function showResult(room, game) {
     resultOverlayEl.hidden = false;
     const result = game.result;
-    const mySeat = game.you.seat;
+    const mySeat = game.you ? game.you.seat : null; // null for a spectator - every "was this me" check below then just falls through to the displayName branch
     resultDetailEl.textContent = "";
     if (result.kind === "durak") {
       resultTitleEl.textContent = d.titleDurak;

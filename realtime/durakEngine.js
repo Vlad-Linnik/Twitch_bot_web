@@ -524,8 +524,13 @@ function removePlayer(state, seat, reason) {
   return state;
 }
 
-function serializeForSeat(state, seat) {
-  const me = state.players[seat];
+// The subset of state that's public regardless of viewer: table, trump, deck
+// count, per-seat hand COUNTS (never the cards themselves) and finishing
+// state. serializeForSeat adds the viewer's own hand + legal-move hints on
+// top of this; serializeForSpectator (durakRoomManager.js's watchRoom path)
+// sends exactly this and nothing else - a spectator gets the same visibility
+// as someone looking at the table from outside, never a seated player's hand.
+function serializePublicState(state) {
   return {
     phase: state.phase,
     attackerSeat: state.attackerSeat,
@@ -536,15 +541,32 @@ function serializeForSeat(state, seat) {
     rules: state.rules,
     boutCap: state.boutCap,
     table: state.table.map((p) => ({ attack: p.attack, defense: p.defense })),
-    you: { seat, hand: me ? me.hand.slice() : [] },
     players: state.players.map((p, i) => ({
       seat: i,
       handCount: p.hand.length,
       out: p.out,
       left: p.left,
       finishRank: p.finishRank,
+      // Public, not hand-revealing (passing just means "added nothing this
+      // wave") - lets a viewer's per-seat role label (durak-multiplayer.js)
+      // show "passed" instead of leaving a wave participant unlabeled.
+      // Meaningless outside "wave" (passedSeats is reset at the start of
+      // every wave - see checkWaveClosure/applyOpen/applyDefend/applyTransfer).
+      passed: state.passedSeats.has(i),
     })),
     result: state.result,
+  };
+}
+
+function serializeForSpectator(state) {
+  return serializePublicState(state);
+}
+
+function serializeForSeat(state, seat) {
+  const me = state.players[seat];
+  return {
+    ...serializePublicState(state),
+    you: { seat, hand: me ? me.hand.slice() : [] },
     legal: {
       canOpen: state.phase === "open" && seat === state.attackerSeat,
       canThrowIn: legalThrowInCards(state, seat),
@@ -575,6 +597,7 @@ module.exports = {
   applyTake,
   removePlayer,
   serializeForSeat,
+  serializeForSpectator,
   legalThrowInCards,
   legalDefendCards,
   canTransfer,

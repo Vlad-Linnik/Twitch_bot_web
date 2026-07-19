@@ -112,7 +112,10 @@
               #durak-board if the layout above changes. %>
           <div class="px-3 pb-3">
             <p class="text-xs uppercase tracking-wide text-neutral-500 mb-1.5"><%= t('games.durak.yourHand') %></p>
-            <div id="durak-player-hand" class="flex flex-wrap justify-center gap-1 min-h-[110px]"></div>
+            <%# gap-2 (not gap-1) so the extra invisible hit-area each legal
+                card gets in durak.js's renderPlayerHand() (before:-top-2 etc.)
+                has room to sit in without overlapping its neighbor's card. %>
+            <div id="durak-player-hand" class="flex flex-wrap justify-center gap-2 min-h-[110px]"></div>
           </div>
 
           <div class="border-t border-neutral-800 pt-2 pb-3 px-3">
@@ -189,7 +192,21 @@
          data-err-already-in-room="<%= t('games.durakMultiplayer.errorAlreadyInRoom') %>"
          data-err-not-enough-players="<%= t('games.durakMultiplayer.errorNotEnoughPlayers') %>"
          data-err-not-host="<%= t('games.durakMultiplayer.errorNotHost') %>"
+         data-err-room-not-watchable="<%= t('games.durakMultiplayer.errorRoomNotWatchable') %>"
+         data-err-sticker-rate-limited="<%= t('games.durakMultiplayer.errorStickerRateLimited') %>"
+         data-err-not-in-lobby="<%= t('games.durakMultiplayer.errorNotInLobby') %>"
+         data-err-player-not-found="<%= t('games.durakMultiplayer.errorPlayerNotFound') %>"
          data-err-generic="<%= t('games.durakMultiplayer.errorGeneric') %>"
+         data-kick-button-title="<%= t('games.durakMultiplayer.kickButtonTitle') %>"
+         data-kicked-toast="<%= t('games.durakMultiplayer.kickedToast') %>"
+         data-watch-label="<%= t('games.durakMultiplayer.watchLabel') %>"
+         data-match-player-count-tpl="<%= t('games.durakMultiplayer.matchPlayerCountTpl', { count: '__COUNT__' }) %>"
+         data-spectator-count-tpl="<%= t('games.durakMultiplayer.spectatorCountTpl', { count: '__COUNT__' }) %>"
+         data-stop-watching="<%= t('games.durakMultiplayer.stopWatching') %>"
+         data-spectating-badge="<%= t('games.durakMultiplayer.spectatingBadge') %>"
+         data-role-attacking="<%= t('games.durakMultiplayer.roleAttacking') %>"
+         data-role-defending="<%= t('games.durakMultiplayer.roleDefending') %>"
+         data-role-passed="<%= t('games.durakMultiplayer.rolePassed') %>"
          data-title-durak="<%= t('games.durakMultiplayer.durakResultTitle') %>"
          data-title-draw="<%= t('games.durakMultiplayer.drawResultTitle') %>"
          data-left-result-title-tpl="<%= t('games.durakMultiplayer.leftResultTitleTpl', { name: '__NAME__' }) %>"
@@ -217,6 +234,18 @@
           <li id="dmp-room-list-empty" class="text-sm text-neutral-500 py-2"><%= t('games.durakMultiplayer.lobbyEmpty') %></li>
         </ul>
 
+        <%# Rooms with a hand already underway - read-only "watch" instead of
+            "join" (durak-multiplayer.js sends watchRoom, not joinRoom). Kept
+            as its own list rather than merged into dmp-room-list above since
+            the two rows need different actions and different fields
+            (participants instead of a host name). %>
+        <div class="mt-6">
+          <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.durakMultiplayer.ongoingMatchesTitle') %></p>
+          <ul id="dmp-playing-list" class="space-y-2">
+            <li id="dmp-playing-list-empty" class="text-sm text-neutral-500 py-2"><%= t('games.durakMultiplayer.ongoingMatchesEmpty') %></li>
+          </ul>
+        </div>
+
         <div class="mt-8 rounded-xl border border-neutral-800 bg-neutral-900 p-4 max-w-sm">
           <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.durakMultiplayer.rulesTitle') %></p>
           <ul class="text-sm text-neutral-400 space-y-1.5 list-disc list-inside">
@@ -241,12 +270,20 @@
               <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.durakMultiplayer.roomCodeLabel') %></span>
               <span id="dmp-room-code" class="text-sm font-mono text-neutral-200"></span>
               <button type="button" id="dmp-copy-link-btn" class="text-xs text-purple-400 hover:text-purple-300"><%= t('games.durakMultiplayer.copyLink') %></button>
+              <%# Visible to players and spectators alike (durakRoomManager.js's
+                  serializeRoomMeta puts spectatorCount on every roomState push,
+                  not just the spectator-facing one) - hidden entirely at 0 so
+                  an unwatched game doesn't show a stray "0 watching". %>
+              <span id="dmp-spectator-count" class="text-xs text-neutral-500" hidden></span>
             </div>
-            <div class="flex gap-2">
+            <div class="flex items-center gap-2">
+              <span id="dmp-spectating-badge" class="text-xs text-purple-400" hidden><%= t('games.durakMultiplayer.spectatingBadge') %></span>
               <button type="button" id="dmp-start-btn" hidden
                       class="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('games.durakMultiplayer.startGame') %></button>
               <button type="button" id="dmp-leave-btn"
                       class="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.durakMultiplayer.leaveRoom') %></button>
+              <button type="button" id="dmp-stop-watching-btn" hidden
+                      class="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.durakMultiplayer.stopWatching') %></button>
             </div>
           </div>
           <ul id="dmp-player-list" class="flex flex-wrap gap-2"></ul>
@@ -295,8 +332,38 @@
 
         <div id="dmp-table-wrap" class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4" hidden>
           <div id="dmp-board" class="relative rounded-lg bg-neutral-950 border border-neutral-800 min-h-[420px] flex flex-col">
+            <%# Sticker reactions - a fixed 3-image set (durakRoomManager.js
+                server-validates the id), hidden while spectating or before a
+                seat exists (durak-multiplayer.js toggles this alongside
+                #dmp-hand-panel). Absolutely positioned in the board's own
+                top-right corner so it doesn't take a row of its own in the
+                layout above. %>
+            <div id="dmp-stickers" class="absolute top-2 right-2 z-10 flex gap-1.5" hidden>
+              <button type="button" data-sticker-id="subprise"
+                      class="w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 p-1 transition-colors"
+                      title="<%= t('games.durakMultiplayer.stickerSubprise') %>">
+                <img src="/images/games/durak/stickers/subprise.png" alt="<%= t('games.durakMultiplayer.stickerSubprise') %>" class="w-full h-full object-contain">
+              </button>
+              <button type="button" data-sticker-id="bloodtrail"
+                      class="w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 p-1 transition-colors"
+                      title="<%= t('games.durakMultiplayer.stickerBloodtrail') %>">
+                <img src="/images/games/durak/stickers/bloodtrail.png" alt="<%= t('games.durakMultiplayer.stickerBloodtrail') %>" class="w-full h-full object-contain">
+              </button>
+              <button type="button" data-sticker-id="jokerge"
+                      class="w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 p-1 transition-colors"
+                      title="<%= t('games.durakMultiplayer.stickerJokerge') %>">
+                <img src="/images/games/durak/stickers/jokerge.png" alt="<%= t('games.durakMultiplayer.stickerJokerge') %>" class="w-full h-full object-contain">
+              </button>
+            </div>
             <div class="px-3 pt-3">
-              <div id="dmp-opponents" class="flex flex-wrap justify-center gap-3"></div>
+              <%# flex-nowrap (not wrap) - up to 5 opponents (6-player room) must
+                  stay in one row, left-to-right in turn order, or the reading
+                  order that's supposed to show "who's next" breaks. Each block
+                  is sized compact enough (see durak-multiplayer.js's
+                  renderTable) that this fits without needing overflow-x-auto
+                  in practice, but it's kept as a fallback for a very narrow
+                  viewport with a full 6-player table. %>
+              <div id="dmp-opponents" class="flex flex-nowrap justify-center gap-1.5 sm:gap-2 overflow-x-auto pb-1"></div>
             </div>
 
             <div class="flex-1 flex items-center gap-3 px-3 py-2">
@@ -319,12 +386,14 @@
                       class="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('games.durakMultiplayer.pass') %></button>
             </div>
 
-            <div class="px-3 pb-3">
+            <div id="dmp-hand-panel" class="px-3 pb-3">
               <div class="flex items-center justify-between mb-1.5">
                 <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.durakMultiplayer.yourHand') %></p>
                 <span id="dmp-my-clock" class="text-xs font-mono tabular-nums text-neutral-400"></span>
               </div>
-              <div id="dmp-hand" class="flex flex-wrap justify-center gap-1 min-h-[88px]"></div>
+              <%# gap-2, same reasoning as durak-player-hand above - room for
+                  the expanded hit-area durak-multiplayer.js's renderHand() adds. %>
+              <div id="dmp-hand" class="flex flex-wrap justify-center gap-2 min-h-[88px]"></div>
             </div>
           </div>
 

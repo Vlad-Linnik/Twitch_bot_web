@@ -83,6 +83,12 @@ function createSimpleLimiter({ windowMs, max }) {
 // not something a legitimate player does repeatedly in a short window.
 const durakRoomCreateLimiter = createSimpleLimiter({ windowMs: 10 * 60 * 1000, max: 5 });
 
+// Sticker reactions are a chat-adjacent, low-stakes action (unlike a game
+// move, sending one never changes room state) - 4 per 8s per user is enough
+// to react to a beaten bout or a good bluff without letting one seat spam the
+// board for everyone else at the table.
+const durakStickerLimiter = createSimpleLimiter({ windowMs: 8 * 1000, max: 4 });
+
 module.exports = {
   authLimiter,
   settingsWriteLimiter,
@@ -90,4 +96,5 @@ module.exports = {
   statsReadLimiter,
   searchLimiter,
   durakRoomCreateLimiter,
+  durakStickerLimiter,
 };
