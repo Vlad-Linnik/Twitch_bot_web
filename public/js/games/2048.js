@@ -14,6 +14,7 @@
   const SIZE = 4;
   const WIN_VALUE = 2048;
   const BEST_KEY = "the2048Best";
+  const SAVE_KEY = "the2048Save";
   const MOVE_MS = 120;
   const SPAWN_MS = 160;
 
@@ -41,6 +42,58 @@
       localStorage.setItem(BEST_KEY, String(value));
     } catch (_) {
       /* private mode etc. - the game just won't remember the record */
+    }
+  }
+
+  // --- In-progress board persistence ------------------------------------------
+  // Lets a visitor close the tab mid-game and pick up exactly where they left
+  // off later - only ever holds a "running"/"won" (mid keep-playing-prompt)
+  // board, never a finished one (endGame() clears it - nothing to resume).
+  // Tile identity doesn't need to survive the round trip (nothing animates
+  // across a page load), so this only stores each cell's value, not tile ids.
+
+  function saveGame() {
+    try {
+      const grid = cells.map((row) => row.map((t) => (t ? t.value : null)));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ grid, score, won, state }));
+    } catch (_) {
+      /* private mode etc. - the game just won't resume next time */
+    }
+  }
+
+  function clearSave() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (_) {
+      /* nothing to clean up if storage was never writable */
+    }
+  }
+
+  // Defensive about shape - a saved game from an earlier version of this
+  // script, or a hand-edited localStorage value, must never be able to crash
+  // the board render below. Returns null for anything that doesn't check out.
+  function loadSave() {
+    let raw;
+    try {
+      raw = localStorage.getItem(SAVE_KEY);
+    } catch (_) {
+      return null;
+    }
+    if (!raw) return null;
+    try {
+      const save = JSON.parse(raw);
+      if (!save || (save.state !== "running" && save.state !== "won")) return null;
+      if (!Array.isArray(save.grid) || save.grid.length !== SIZE) return null;
+      for (const row of save.grid) {
+        if (!Array.isArray(row) || row.length !== SIZE) return null;
+        for (const v of row) {
+          if (v !== null && !(Number.isInteger(v) && v > 0)) return null;
+        }
+      }
+      if (!Number.isInteger(save.score) || save.score < 0) return null;
+      return save;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -174,6 +227,31 @@
     bestEl.textContent = best;
   }
 
+  function restoreFromSave(save) {
+    cells = Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
+    tiles = new Map();
+    tileEls = new Map();
+    tilesLayer.textContent = "";
+    nextId = 1;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const value = save.grid[r][c];
+        if (value == null) continue;
+        const tile = { id: nextId++, r, c, value };
+        cells[r][c] = tile;
+        tiles.set(tile.id, tile);
+        createTileEl(tile);
+      }
+    }
+    score = save.score;
+    won = !!save.won;
+    busy = false;
+    updateHud();
+    state = save.state;
+    if (state === "won") showOverlay("won");
+    else hideOverlay();
+  }
+
   // --- Movement ------------------------------------------------------------
 
   // Each line is 4 [r,c] coordinate pairs ordered toward index 0, i.e. the
@@ -296,9 +374,14 @@
       won = true;
       state = "won";
       showOverlay("won");
+      saveGame();
       return;
     }
-    if (isGameOver()) endGame();
+    if (isGameOver()) {
+      endGame();
+    } else {
+      saveGame();
+    }
   }
 
   function endGame() {
@@ -310,6 +393,7 @@
     }
     submitScore(score);
     showOverlay("over");
+    clearSave(); // nothing left to resume once the game has actually ended
   }
 
   // --- Leaderboard -----------------------------------------------------------
@@ -459,12 +543,14 @@
     reset();
     state = "running";
     hideOverlay();
+    saveGame();
   }
 
   overlayButton.addEventListener("click", () => {
     if (state === "won") {
       state = "running";
       hideOverlay();
+      saveGame();
     } else {
       start();
     }
@@ -523,6 +609,11 @@
   // --- Boot --------------------------------------------------------------------
 
   best = readBest();
-  reset();
-  showOverlay("start");
+  const save = loadSave();
+  if (save) {
+    restoreFromSave(save);
+  } else {
+    reset();
+    showOverlay("start");
+  }
 })();

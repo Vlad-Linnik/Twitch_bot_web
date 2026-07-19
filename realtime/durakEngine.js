@@ -181,6 +181,10 @@ function legalTransferCards(state, seat) {
 // at once, same as several players sitting at a real table all deciding
 // whether to throw in before the defender is allowed to act.
 function runningSeats(state) {
+  // "beaten-pause" (see checkWaveClosure) is a display-only hold before the
+  // discard actually happens - nobody owes a decision during it, so nobody's
+  // clock should drain for it either, on either side of the table.
+  if (state.phase === "beaten-pause") return [];
   if (state.phase === "open") return isActive(state, state.attackerSeat) ? [state.attackerSeat] : [];
   if (state.phase === "defend") return isActive(state, state.defenderSeat) ? [state.defenderSeat] : [];
   if (state.phase === "wave") {
@@ -317,8 +321,21 @@ function checkWaveClosure(state) {
   if (state.addedThisWave) {
     state.phase = "defend";
   } else {
-    resolveBout(state, "beaten");
+    // Don't discard immediately - hold everything exactly as it is (table,
+    // attacker/defender, hands) for realtime/durakRoomManager.js's 4s
+    // display pause, so both sides get a beat to see what was beaten before
+    // it actually clears. finishBeatenPause() below does the real work once
+    // that pause elapses.
+    state.phase = "beaten-pause";
   }
+}
+
+// Called by durakRoomManager.js once its 4s post-beaten pause elapses.
+// No-op if the pause was already short-circuited (e.g. removePlayer() reset
+// the bout early because the attacker/defender left mid-pause).
+function finishBeatenPause(state) {
+  if (state.phase !== "beaten-pause") return;
+  resolveBout(state, "beaten");
 }
 
 // rules is a snapshot taken at game creation - see durakRoomManager.js's
@@ -565,4 +582,5 @@ module.exports = {
   activeSeats,
   isActive,
   runningSeats,
+  finishBeatenPause,
 };

@@ -24,6 +24,11 @@ const MAX_PLAYERS = 6;
 const DISCONNECT_GRACE_MS = 60 * 1000;
 const FINISHED_ROOM_CLEANUP_MS = 2 * 60 * 1000;
 const READY_CHECK_MS = 45 * 1000;
+// How long a beaten table stays visible before engine.finishBeatenPause()
+// actually discards it - see durakEngine.js's "beaten-pause" phase. Nobody's
+// clock runs during this phase (runningSeats returns []), so this pause
+// never eats into either side's time budget.
+const BEATEN_PAUSE_MS = 4000;
 const GAME_KEY = "durak-multiplayer";
 const DEFAULT_RULES = { allowThrowIns: true, allowTransfers: false };
 
@@ -501,7 +506,7 @@ function handleGameAction(ws, meta, applyFn, msgType) {
   if (!room || room.status !== "playing") return sendError(ws, "not-playing");
   const seat = room.players.findIndex((p) => p.userId === meta.userId);
   if (seat < 0) return sendError(ws, "not-in-room");
-  const tableLenBefore = room.game.table.length;
+  const phaseBefore = room.game.phase;
   const defenderBefore = room.game.defenderSeat;
   const result = applyFn(room, seat);
   if (!result.ok) return sendError(ws, result.error);
@@ -516,17 +521,33 @@ function handleGameAction(ws, meta, applyFn, msgType) {
     // card appearing on the table the way an ordinary throw-in is, so this
     // gets an explicit callout even though it does leave that visible trace.
     broadcastAction(room, seat, "transfer");
-  } else if (tableLenBefore > 0 && room.game.table.length === 0) {
-    // The table just emptied without anyone taking - a throw-in/defend closed
-    // the wave with everything beaten. defenderBefore (captured before
-    // resolveBout() reassigns attacker/defender for the next bout) is who just
-    // beat it off.
+  } else if (phaseBefore !== "beaten-pause" && room.game.phase === "beaten-pause") {
+    // A throw-in/defend just closed the wave with everything beaten -
+    // defenderBefore (captured before the phase flip) is who beat it off.
+    // The table itself doesn't clear yet - see scheduleBeatenPause() below.
     broadcastAction(room, defenderBefore, "beaten");
   }
 
   syncClock(room); // may itself finish the game via a seat that hit zero mid-action
   if (room.game.phase === "finished") finalizeGame(room);
   broadcastRoom(room);
+  if (room.game.phase === "beaten-pause") scheduleBeatenPause(room);
+}
+
+// Lets everyone actually see the beaten table for BEATEN_PAUSE_MS before it's
+// discarded - runningSeats() returns [] during "beaten-pause" (see
+// durakEngine.js), so the syncClock() calls on either side of this timer
+// never charge the pause against anyone's clock, attacker or defender alike.
+// finishBeatenPause() is a no-op if something else (a player leaving
+// mid-pause, via engine.removePlayer) already moved the game past this phase.
+function scheduleBeatenPause(room) {
+  const timer = setTimeout(() => {
+    engine.finishBeatenPause(room.game);
+    syncClock(room);
+    if (room.game.phase === "finished") finalizeGame(room);
+    broadcastRoom(room);
+  }, BEATEN_PAUSE_MS);
+  timer.unref();
 }
 
 function onMessage(ws, meta, raw) {

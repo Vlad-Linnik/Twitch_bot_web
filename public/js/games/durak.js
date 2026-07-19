@@ -326,6 +326,10 @@
   // Set by afterBout() just before a table clear, read (and left as-is) by the
   // exit-animation removal loop in renderAll() - see afterBout()'s comment.
   let pendingExitTarget = "discard";
+  // True while a "beaten" bout is holding the table on screen before the
+  // discard actually happens - see afterBout(). Blocks all input via
+  // currentActor() so nobody can act on cards that are about to vanish.
+  let resolving = false;
 
   function sortHand(hand) {
     hand.sort((a, b) => {
@@ -356,7 +360,7 @@
   }
 
   function currentActor() {
-    if (over) return null;
+    if (over || resolving) return null;
     if (table.length && table[table.length - 1].defense === null) return defender;
     return attacker;
   }
@@ -385,6 +389,7 @@
     previouslyVisibleIds = new Set();
     firstRenderOfGame = true;
     previousAiHandCount = 0;
+    resolving = false;
     if (!silent) playSound("shuffle");
     deck = buildDeck();
     shuffle(deck);
@@ -459,19 +464,33 @@
           : d.toastOpponentBeat
     );
     if (kind === "beaten") {
-      table = [];
-      const newAttacker = defender;
-      const newDefender = attacker;
-      attacker = newAttacker;
-      defender = newDefender;
-      drawUpTo6(attacker);
-      drawUpTo6(defender);
-    } else {
-      // "taken": the table's cards were already merged into the taker's hand
-      // by the caller. Only the attacker draws back up - the taker already
-      // has plenty, and keeps attacking next bout.
-      drawUpTo6(attacker);
+      // Hold the beaten cards on the table for a beat so both players can
+      // see what was thrown/beaten before they're actually discarded -
+      // the delay only gates the clear/swap below, not rendering, so the
+      // table and toast stay exactly as they are for the full 4s.
+      resolving = true;
+      updateStatusAndButtons();
+      const id = gameId;
+      setTimeout(() => {
+        if (id !== gameId) return;
+        resolving = false;
+        table = [];
+        const newAttacker = defender;
+        const newDefender = attacker;
+        attacker = newAttacker;
+        defender = newDefender;
+        drawUpTo6(attacker);
+        drawUpTo6(defender);
+        boutCap = null;
+        checkGameOver();
+        nextAction();
+      }, 4000);
+      return;
     }
+    // "taken": the table's cards were already merged into the taker's hand
+    // by the caller. Only the attacker draws back up - the taker already
+    // has plenty, and keeps attacking next bout.
+    drawUpTo6(attacker);
     boutCap = null;
     checkGameOver();
     nextAction();
@@ -682,6 +701,10 @@
     takeBtn.hidden = true;
     bitoBtn.hidden = true;
     if (over) {
+      statusEl.textContent = "";
+      return;
+    }
+    if (resolving) {
       statusEl.textContent = "";
       return;
     }
