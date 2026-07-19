@@ -201,15 +201,35 @@ function broadcastRoom(room) {
   const meta = serializeRoomMeta(room);
   const clocks = buildClocksPayload(room);
   room.players.forEach((p, seat) => {
-    if (!p.ws) return;
+    // A player who explicitly left (removeFromRoom's "playing" branch) keeps
+    // p.ws valid on purpose - payOutEarlyFinisher still needs it for their
+    // one-time early-rating-change notice - but that same socket must NOT
+    // keep receiving this game's roomState after the client has already
+    // navigated itself back to the lobby, or the next roomState (from a
+    // player who stayed still taking turns) yanks them right back into the
+    // room view they just left. Same reasoning for spectatingOwnSeat - that
+    // socket is now routed through the room.spectators loop below instead.
+    if (!p.ws || p.left || p.spectatingOwnSeat) return;
     safeSend(p.ws, { type: "roomState", room: meta, game: engine.serializeForSeat(room.game, seat), clocks });
   });
   if (room.spectators && room.spectators.size) {
     // engine.serializeForSpectator() (unlike serializeForSeat) never includes
     // any seat's actual hand - a spectator sees exactly what's on the table,
-    // same as durakEngine.js's file banner promises.
-    const payload = { type: "roomState", room: meta, game: engine.serializeForSpectator(room.game), clocks, spectating: true };
-    for (const ws of room.spectators.keys()) safeSend(ws, payload);
+    // same as durakEngine.js's file banner promises. The exception is a
+    // migrated early finisher (info.ownSeat set, see
+    // migrateFinishersToSpectating) - they still get their own
+    // serializeForSeat view so the client's early-finish banner (which reads
+    // game.you/game.players[seat].finishRank) keeps working unchanged even
+    // though "spectating: true" now routes their Leave button through
+    // leaveWatch instead of leaveRoom.
+    const spectatorPayload = { type: "roomState", room: meta, game: engine.serializeForSpectator(room.game), clocks, spectating: true };
+    for (const [ws, info] of room.spectators) {
+      if (info.ownSeat != null) {
+        safeSend(ws, { type: "roomState", room: meta, game: engine.serializeForSeat(room.game, info.ownSeat), clocks, spectating: true });
+      } else {
+        safeSend(ws, spectatorPayload);
+      }
+    }
   }
 }
 
@@ -223,6 +243,11 @@ function makePlayerEntry(ws, meta) {
     ws,
     connected: true,
     left: false,
+    // Set by migrateFinishersToSpectating() the moment this seat's hand runs
+    // out and it locks in a finishRank while the rest of the table is still
+    // playing - true for the remainder of this room's life (never reset back
+    // to false), so it's a one-way seat->spectator transition, same as left.
+    spectatingOwnSeat: false,
     disconnectTimer: null,
     // Filled in asynchronously by loadPlayerProfile() below - null until then,
     // which the client renders as "no avatar / undecorated name / no rating"
@@ -286,7 +311,19 @@ function resumeIntoRoom(ws, meta, room) {
   }
   entry.ws = ws;
   entry.connected = true;
-  meta.roomId = room.id;
+  // A seat already migrated to spectating (migrateFinishersToSpectating) had
+  // its socket routed through room.spectators, not meta.roomId - a refresh
+  // closes that old socket (onClose cleans the stale Map entry via
+  // meta.watchRoomId) but the player.entry itself, and its spectatingOwnSeat
+  // flag, survive the disconnect, so resume the same way instead of
+  // dropping them back into a seated player's routing.
+  if (entry.spectatingOwnSeat) {
+    meta.roomId = null;
+    meta.watchRoomId = room.id;
+    room.spectators.set(ws, { userId: entry.userId, displayName: entry.displayName, ownSeat: room.players.indexOf(entry) });
+  } else {
+    meta.roomId = room.id;
+  }
   // Only while still "playing" - a reconnect into an already-"finished" room
   // (its 2-minute post-game cleanup window) must NOT re-run finalizeGame,
   // which would double-credit that game's Elo changes.
@@ -489,16 +526,44 @@ function payOutNewlyResolvedSeats(room, before) {
   }
 }
 
+// Auto-transitions a seat that just ran out of cards and locked in a
+// finishRank (NOT a leaveRank - a leave/timeout/disconnect already goes
+// through removeFromRoom's "playing" branch, which marks the seat `left`
+// itself) from an active player slot into room.spectators. Reuses the
+// spectator lifecycle wholesale (broadcastRoom's spectator loop, the
+// spectatorCount shown in the lobby, evictSpectators on room teardown,
+// handleLeaveWatch's clean removal) instead of leaving a "done but still
+// technically seated" player entry that every future broadcastRoom would
+// have to remember to skip - that's exactly the class of bug that let a
+// player who explicitly left mid-game keep getting yanked back into the
+// room (stale room.players entry, still routed a live socket).
+function migrateFinishersToSpectating(room, before) {
+  room.game.players.forEach((p, seat) => {
+    if (before[seat].finishRank != null || p.finishRank == null) return; // not a fresh finish this call
+    const entry = room.players[seat];
+    if (!entry || entry.left || entry.spectatingOwnSeat || !entry.ws) return;
+    entry.spectatingOwnSeat = true;
+    room.spectators.set(entry.ws, { userId: entry.userId, displayName: entry.displayName, ownSeat: seat });
+    const meta = socketMeta.get(entry.ws);
+    if (meta) {
+      meta.roomId = null;
+      meta.watchRoomId = room.id;
+    }
+  });
+}
+
 // The single post-engine-call routing rule every call site below shares: if
 // this call finished the WHOLE game, the final settlement (finalizeGame/
 // updateRatings) already knows every seat's real placement, so paying seats
 // out individually first would only need undoing - skip straight there.
-// Otherwise, pay out whichever seat(s) just newly got a permanent placement.
+// Otherwise, pay out whichever seat(s) just newly got a permanent placement,
+// then move any seat that finished (not left) into spectating.
 function settleAfter(room, before) {
   if (room.game.phase === "finished") {
     finalizeGame(room);
   } else {
     payOutNewlyResolvedSeats(room, before);
+    migrateFinishersToSpectating(room, before);
   }
 }
 
