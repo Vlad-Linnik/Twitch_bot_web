@@ -470,7 +470,7 @@
       // Hold the beaten cards on the table for a beat so both players can
       // see what was thrown/beaten before they're actually discarded -
       // the delay only gates the clear/swap below, not rendering, so the
-      // table and toast stay exactly as they are for the full 4s.
+      // table and toast stay exactly as they are for the full 2s.
       resolving = true;
       updateStatusAndButtons();
       const id = gameId;
@@ -487,7 +487,7 @@
         boutCap = null;
         checkGameOver();
         nextAction();
-      }, 4000);
+      }, 2000);
       return;
     }
     // "taken": the table's cards were already merged into the taker's hand

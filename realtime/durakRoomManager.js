@@ -29,7 +29,7 @@ const READY_CHECK_MS = 45 * 1000;
 // actually discards it - see durakEngine.js's "beaten-pause" phase. Nobody's
 // clock runs during this phase (runningSeats returns []), so this pause
 // never eats into either side's time budget.
-const BEATEN_PAUSE_MS = 4000;
+const BEATEN_PAUSE_MS = 2000;
 const GAME_KEY = "durak-multiplayer";
 const DEFAULT_RULES = { allowThrowIns: true, allowTransfers: false };
 // The fixed sticker set players can react with mid-game (public/js/games/
