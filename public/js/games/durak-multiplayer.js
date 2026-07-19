@@ -238,6 +238,18 @@
   let lastRatingChanges = null;
   let pendingTakeSeat = null; // set by handleMessage()'s "action" branch, consumed by renderTable()
 
+  // --- Lobby join notification ---------------------------------------------
+  // Tracks which userIds were already in the lobby's player list as of the
+  // last render, so a genuinely new arrival (an id not seen before) plays a
+  // sound while a reconnect (durakRoomManager.js keeps a disconnected lobby
+  // player's entry - and userId - around for a 60s grace period, just
+  // flipping connected false->true) stays silent. Keyed to the room id so a
+  // fresh lobby (created/joined after leaving a previous one) doesn't compare
+  // against a stale roster; null on the very first render of a lobby so
+  // seeing your own already-present self for the first time never fires it.
+  let previousLobbyPlayerIds = null;
+  let previousLobbyPlayerRoomId = null;
+
   // --- Per-player time budget (chess-clock style) -------------------------
   // The server only sends a fresh {remainingMs, runningSeats, serverNow}
   // snapshot when something actually happens (an action, a leave, or its own
@@ -564,6 +576,17 @@
       tableWrapEl.hidden = true;
       clocksSnapshot = null;
       stopClockTicking();
+
+      if (previousLobbyPlayerRoomId !== room.id) {
+        previousLobbyPlayerIds = null;
+        previousLobbyPlayerRoomId = room.id;
+      }
+      const currentPlayerIds = new Set(room.players.map((p) => p.userId));
+      if (previousLobbyPlayerIds) {
+        const isNewArrival = [...currentPlayerIds].some((id) => !previousLobbyPlayerIds.has(id));
+        if (isNewArrival) playSound("notification");
+      }
+      previousLobbyPlayerIds = currentPlayerIds;
     } else if (room.status === "starting") {
       // The ready check - see durakRoomManager.js's handleStartGame(). No
       // game/table exists yet, so tableWrapEl stays hidden through this
@@ -609,6 +632,8 @@
     stopClockTicking();
     stopReadyCheckTicking();
     readyCheckSoundPlayedFor = null;
+    previousLobbyPlayerIds = null;
+    previousLobbyPlayerRoomId = null;
     switchView(false);
   });
   resultBackBtn.addEventListener("click", () => {
@@ -619,6 +644,8 @@
     stopClockTicking();
     stopReadyCheckTicking();
     readyCheckSoundPlayedFor = null;
+    previousLobbyPlayerIds = null;
+    previousLobbyPlayerRoomId = null;
     switchView(false);
   });
   copyLinkBtn.addEventListener("click", () => {
