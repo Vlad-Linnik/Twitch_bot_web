@@ -249,7 +249,7 @@ router.get("/admin/visits", requireAdmin, async (req, res, next) => {
     // be a field on GameScores). Union the keys rather than mapping one list,
     // since either collection can be momentarily ahead of the other.
     const playersByGame = new Map(gameCounts.map((g) => [g._id, g.count]));
-    const sessionsByGame = new Map(playCounts.map((g) => [g._id, g.playCount]));
+    const sessionsByGame = new Map(playCounts.map((g) => [g.game, g.playCount]));
     const gameKeys = new Set([...playersByGame.keys(), ...sessionsByGame.keys()]);
     const maxSessions = Math.max(...sessionsByGame.values(), 1);
 
