@@ -453,21 +453,28 @@
     readyAcceptBtn.blur();
   });
 
-  // --- Host-editable game rules --------------------------------------------
-  // Only meaningful while the room is still "lobby" (see renderRoom()) -
-  // server-enforced too (durakRoomManager.js's handleSetRules rejects
-  // non-host senders and any status other than "lobby"), this is just the UI
-  // reflecting that same gate so a non-host or a too-late click never looks
-  // like it should have worked.
+  // --- Game rules: host-editable in the lobby, read-only display in-game ---
+  // Editing is only meaningful while the room is still "lobby" - server-
+  // enforced too (durakRoomManager.js's handleSetRules rejects non-host
+  // senders and any status other than "lobby"), so the checkboxes are only
+  // ever interactive there. The panel itself stays visible (but locked) once
+  // "playing" starts, purely so players can see which of the two house rules
+  // (throw-ins / perevod) this match is actually running with - hidden again
+  // only for "starting" (ready check, no rules to show settled yet) and
+  // "finished".
 
   function renderRulesPanel(rules, amHost, roomStatus) {
-    rulesPanelEl.hidden = roomStatus !== "lobby";
+    rulesPanelEl.hidden = roomStatus !== "lobby" && roomStatus !== "playing";
     if (!rules) return;
+    const editable = amHost && roomStatus === "lobby";
     ruleThrowInsEl.checked = rules.allowThrowIns !== false;
-    ruleThrowInsEl.disabled = !amHost;
+    ruleThrowInsEl.disabled = !editable;
     ruleTransfersEl.checked = rules.allowTransfers === true;
-    ruleTransfersEl.disabled = !amHost;
-    rulesHostHintEl.hidden = amHost;
+    ruleTransfersEl.disabled = !editable;
+    // The "only the host can change this" hint only makes sense in the
+    // lobby - during play nobody can change it, host included, so showing
+    // it there would misleadingly suggest someone else could.
+    rulesHostHintEl.hidden = editable || roomStatus !== "lobby";
   }
 
   ruleThrowInsEl.addEventListener("change", () => {

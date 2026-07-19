@@ -302,10 +302,11 @@
           <p id="dmp-waiting-hint" class="text-xs text-neutral-500 mt-2" hidden><%= t('games.durakMultiplayer.waitingForPlayers') %></p>
         </div>
 
-        <%# Host-editable game rules - only meaningful (and only shown) while the
-            room is still "lobby". Locked in at "starting"/"playing" (the toggle
-            just hides along with dmp-start-btn/dmp-waiting-hint), so it never
-            drifts from what the ready-checked game actually plays with. %>
+        <%# Host-editable game rules - only editable while the room is still
+            "lobby" (durakRoomManager.js's handleSetRules enforces this
+            server-side too). The panel itself stays visible, read-only, once
+            "playing" starts, purely to show which rules this match is
+            running with - hidden again for "starting"/"finished". %>
         <div id="dmp-rules-panel" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 mb-4">
           <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.durakMultiplayer.rulesPanelTitle') %></p>
           <label class="flex items-start gap-2 cursor-pointer">
