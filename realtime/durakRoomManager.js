@@ -83,6 +83,7 @@ function buildLobbySnapshot() {
     .map((r) => ({
       id: r.id,
       hostDisplayName: r.players.length ? r.players[0].displayName : "?",
+      hostRating: r.players.length ? r.players[0].rating : null,
       playerCount: r.players.length,
       maxPlayers: MAX_PLAYERS,
       avgRating: averageRating(r.players),
@@ -96,7 +97,7 @@ function buildLobbySnapshot() {
     .filter((r) => r.status === "playing")
     .map((r) => ({
       id: r.id,
-      players: r.players.map((p) => ({ displayName: p.displayName, left: p.left })),
+      players: r.players.map((p) => ({ displayName: p.displayName, left: p.left, rating: p.rating })),
       playerCount: r.players.length,
       spectatorCount: r.spectators.size,
       avgRating: averageRating(r.players),
@@ -345,14 +346,19 @@ function removeFromRoom(room, userId, reason) {
   if (room.status === "playing") {
     const seat = room.players.findIndex((p) => p.userId === userId);
     if (seat < 0) return;
+    const before = snapshotResolution(room);
     engine.removePlayer(room.game, seat, reason);
     room.players[seat].left = true;
     userActiveRoom.delete(userId);
-    syncClock(room); // the active seat set changed - re-tick and reschedule expiry
-    if (room.game.phase === "finished") {
-      finalizeGame(room);
-    }
+    syncClock(room); // the active seat set changed - re-tick and reschedule expiry, and may itself forfeit another seat whose clock had already run out
+    settleAfter(room, before);
     broadcastRoom(room);
+    // A bystander leaving/timing out mid-wave can itself close the wave
+    // (checkWaveClosure inside engine.removePlayer) straight into
+    // "beaten-pause" - same as any other wave-closing action, that needs its
+    // own display-pause timer scheduled, or the table would sit there
+    // forever with nothing left to trigger finishBeatenPause().
+    if (room.game.phase === "beaten-pause") scheduleBeatenPause(room);
     return;
   }
   userActiveRoom.delete(userId);
@@ -404,11 +410,96 @@ function scheduleClockTimer(room) {
   const ms = durakClock.msUntilNextExpiry(room.clocks);
   if (ms == null) return;
   room.clockTimer = setTimeout(() => {
+    const before = snapshotResolution(room);
     syncClock(room);
-    if (room.game.phase === "finished") finalizeGame(room);
+    settleAfter(room, before);
     broadcastRoom(room);
+    // See removeFromRoom's identical check - a clock-forfeited bystander can
+    // close the wave straight into "beaten-pause" too.
+    if (room.game.phase === "beaten-pause") scheduleBeatenPause(room);
   }, ms);
   room.clockTimer.unref();
+}
+
+// A seat's placement is permanently locked the instant its finishRank OR
+// leaveRank is set (buildPlacements keeps either no matter how the rest of
+// the game plays out - the one exception, "left-early-win" retroactively
+// elevating a lone forced-win survivor above every other seat, including
+// ones that had already finished or left for real, is an accepted rare edge
+// case rather than something worth threading a retroactive correction for),
+// so there's no reason to make that player wait out the rest of the table
+// before they see their new rating or start another game - see
+// payOutNewlyResolvedSeats' call sites for exactly when either rank can
+// newly land.
+//
+// `place` for every seat that's neither finished nor left yet is set to
+// whichever side of this seat's own rank is already certain to hold for that
+// pairwise comparison: one worse (finishRank + 1) if THIS seat just finished
+// (still-active opponents are guaranteed to end up ranked below a finisher),
+// or one better (leaveRank - 1) if THIS seat just left (still-active
+// opponents - and even a LATER leaver, who always gets a better leaveRank
+// than an earlier one - are guaranteed to end up ranked above a quitter). A
+// leaving player earns their placement exactly like a finisher does, just
+// counted from the opposite end - not a separate, harsher penalty.
+async function payOutEarlyFinisher(room, seat) {
+  try {
+    const ratings = await room.preGameRatingsPromise;
+    const userIds = room.players.map((p) => p.userId);
+    const me = room.game.players[seat];
+    const isLeaver = me.finishRank == null; // the other branch (finishRank set) takes priority when both could theoretically apply
+    const myRank = isLeaver ? me.leaveRank : me.finishRank;
+    const entries = room.game.players.map((p, s) => {
+      if (s === seat) return { rating: ratings.get(String(userIds[s])), place: myRank };
+      if (p.finishRank != null) return { rating: ratings.get(String(userIds[s])), place: p.finishRank };
+      if (p.leaveRank != null) return { rating: ratings.get(String(userIds[s])), place: p.leaveRank };
+      return { rating: ratings.get(String(userIds[s])), place: isLeaver ? myRank - 1 : myRank + 1 };
+    });
+    const delta = durakElo.computeSingleEloDelta(entries, seat);
+    room.ratingPayouts[seat] = { place: myRank, delta };
+    await gameScoresRepo.applyEloDelta(GAME_KEY, userIds[seat], delta, durakElo.DEFAULT_RATING);
+    const player = room.players[seat];
+    if (player && player.ws) {
+      safeSend(player.ws, { type: "ratingChanges", roomId: room.id, early: true, changes: [{ seat, place: myRank, delta }] });
+    }
+  } catch (err) {
+    console.error("[durakRoomManager] failed to pay out an early-resolved seat's rating:", err);
+  }
+}
+
+// A snapshot of each seat's resolution state, taken right before any engine
+// call that might newly resolve one (checkOutPlayers via a bout resolving,
+// or removePlayer via a leave/timeout/clock-forfeit) - settleAfter() diffs
+// against this afterward to catch whichever seat(s) just got a permanent
+// placement.
+function snapshotResolution(room) {
+  return room.game.players.map((p) => ({ finishRank: p.finishRank, leaveRank: p.leaveRank }));
+}
+
+function payOutNewlyResolvedSeats(room, before) {
+  const newlyResolved = room.game.players
+    .map((p, seat) => seat)
+    .filter((seat) => {
+      const b = before[seat];
+      const p = room.game.players[seat];
+      return (b.finishRank == null && p.finishRank != null) || (b.leaveRank == null && p.leaveRank != null);
+    });
+  for (const seat of newlyResolved) {
+    const promise = payOutEarlyFinisher(room, seat).finally(() => room.pendingEarlyPayouts.delete(seat));
+    room.pendingEarlyPayouts.set(seat, promise);
+  }
+}
+
+// The single post-engine-call routing rule every call site below shares: if
+// this call finished the WHOLE game, the final settlement (finalizeGame/
+// updateRatings) already knows every seat's real placement, so paying seats
+// out individually first would only need undoing - skip straight there.
+// Otherwise, pay out whichever seat(s) just newly got a permanent placement.
+function settleAfter(room, before) {
+  if (room.game.phase === "finished") {
+    finalizeGame(room);
+  } else {
+    payOutNewlyResolvedSeats(room, before);
+  }
 }
 
 // Every seat gets an Elo update, regardless of result.kind - durakElo's
@@ -421,15 +512,53 @@ function scheduleClockTimer(room) {
 async function updateRatings(room) {
   const userIds = room.players.map((p) => p.userId);
   try {
+    // Any early payout kicked off before this game finished might still be
+    // mid-flight (its DB round-trip hasn't resolved yet) - wait for all of
+    // them so the ratingPayouts ledger below is fully caught up before
+    // deciding who's already been paid.
+    if (room.pendingEarlyPayouts && room.pendingEarlyPayouts.size) {
+      await Promise.all(room.pendingEarlyPayouts.values());
+    }
     const placements = durakElo.buildPlacements(room.game);
-    const ratings = await gameScoresRepo.getRatings(GAME_KEY, userIds, durakElo.DEFAULT_RATING);
+    const ratings = await room.preGameRatingsPromise;
     const entries = placements.map(({ seat, place }) => ({ rating: ratings.get(String(userIds[seat])), place }));
-    const deltas = durakElo.computeEloDeltas(entries);
-    room.ratingChanges = placements.map(({ seat, place }, i) => ({ seat, place, delta: deltas[i] }));
+    const paidOut = room.ratingPayouts || [];
+    const nobodyPaidYet = placements.every(({ seat }) => !paidOut[seat]);
+
+    // The match's very last resolveBout is always what flips the game to
+    // "finished" (durakEngine.js's checkOutPlayers/removePlayer), and that
+    // always leaves at least one seat (whoever's left active, or the durak)
+    // not yet finished at that instant - so at least one seat is guaranteed
+    // to still be owed here; "everyone was already paid early" never happens.
+    let changes;
+    if (nobodyPaidYet) {
+      // The common case - nobody left early, so this is the very first (and
+      // only) rating computation for the match. Every 2-player game always
+      // takes this path: going out with only one opponent left ends the game
+      // in the same instant (durakEngine.js's checkOutPlayers), so there's
+      // never a still-playing table to pay someone out ahead of. Full
+      // simultaneous settlement, same as before this feature existed - every
+      // seat's delta comes from ONE computeEloDeltas call, so the whole
+      // match's deltas still net to exactly zero.
+      const deltas = durakElo.computeEloDeltas(entries);
+      changes = placements.map(({ seat, place }, i) => ({ seat, place, delta: deltas[i] }));
+    } else {
+      // At least one seat already got paid mid-game - its delta is final and
+      // can't be revised now that the player may already be off playing
+      // somewhere else, so only the seats still owed get computed here, each
+      // settled on its own (see computeSingleEloDelta's comment for why this
+      // can't reuse computeEloDeltas' batch zero-sum fixup, and
+      // payOutEarlyFinisher's comment for the same tradeoff applied earlier).
+      changes = placements.map(({ seat, place }) =>
+        paidOut[seat] ? { seat, place, delta: paidOut[seat].delta } : { seat, place, delta: durakElo.computeSingleEloDelta(entries, seat) }
+      );
+    }
+
+    room.ratingChanges = changes;
     await Promise.all(
-      room.ratingChanges.map(({ seat, delta }) =>
-        gameScoresRepo.applyEloDelta(GAME_KEY, userIds[seat], delta, durakElo.DEFAULT_RATING)
-      )
+      changes
+        .filter(({ seat }) => !paidOut[seat])
+        .map(({ seat, delta }) => gameScoresRepo.applyEloDelta(GAME_KEY, userIds[seat], delta, durakElo.DEFAULT_RATING))
     );
     broadcastRatingChanges(room);
   } catch (err) {
@@ -439,7 +568,7 @@ async function updateRatings(room) {
 
 function broadcastRatingChanges(room) {
   if (!room.ratingChanges) return;
-  const payload = { type: "ratingChanges", changes: room.ratingChanges };
+  const payload = { type: "ratingChanges", roomId: room.id, changes: room.ratingChanges };
   for (const p of room.players) safeSend(p.ws, payload);
   if (room.spectators) for (const ws of room.spectators.keys()) safeSend(ws, payload);
 }
@@ -635,6 +764,34 @@ function beginGame(room) {
   room.status = "playing";
   room.game = engine.createGame(room.players.map((p) => p.userId), room.rules);
   room.clocks = durakClock.createClocks(room.players.length);
+  // Frozen once, the moment the game starts - every Elo computation for this
+  // game (an early payout the instant a seat goes out, and whoever's still
+  // active when it truly ends) reads from this same snapshot instead of
+  // re-querying mid-game, so one seat's early payout can never change the
+  // rating another seat's payout - early or final - computes against. Not
+  // awaited here (same fire-and-forget DB round-trip pattern as
+  // loadPlayerProfile) - nothing needs it until the first payout, early or
+  // final, which is always at least one full action away.
+  const userIds = room.players.map((p) => p.userId);
+  room.preGameRatingsPromise = gameScoresRepo
+    .getRatings(GAME_KEY, userIds, durakElo.DEFAULT_RATING)
+    .catch((err) => {
+      console.error("[durakRoomManager] failed to snapshot pre-game ratings:", err);
+      return new Map(userIds.map((id) => [id, durakElo.DEFAULT_RATING]));
+    });
+  // Per-seat payout ledger - null until that seat's Elo has actually been
+  // applied (either early, mid-game, or as part of the final settlement).
+  // updateRatings() consults this so a seat already paid early never gets
+  // paid again (or its locked-in delta silently overwritten) once the whole
+  // match finally ends.
+  room.ratingPayouts = new Array(room.players.length).fill(null);
+  // seat -> in-flight payOutEarlyFinisher() promise, for however long its DB
+  // round-trip is still outstanding. updateRatings() awaits every entry here
+  // before reading ratingPayouts - an early payout is kicked off
+  // fire-and-forget, so without this a fast enough final action (someone
+  // else immediately finishing the match) could read the ledger before the
+  // early payout actually landed and pay that seat a second time.
+  room.pendingEarlyPayouts = new Map();
   syncClock(room);
   broadcastRoom(room);
   broadcastLobby();
@@ -708,6 +865,7 @@ function handleGameAction(ws, meta, applyFn, msgType) {
   if (seat < 0) return sendError(ws, "not-in-room");
   const phaseBefore = room.game.phase;
   const defenderBefore = room.game.defenderSeat;
+  const before = snapshotResolution(room);
   const result = applyFn(room, seat);
   if (!result.ok) return sendError(ws, result.error);
 
@@ -729,7 +887,7 @@ function handleGameAction(ws, meta, applyFn, msgType) {
   }
 
   syncClock(room); // may itself finish the game via a seat that hit zero mid-action
-  if (room.game.phase === "finished") finalizeGame(room);
+  settleAfter(room, before);
   broadcastRoom(room);
   if (room.game.phase === "beaten-pause") scheduleBeatenPause(room);
 }
@@ -742,10 +900,15 @@ function handleGameAction(ws, meta, applyFn, msgType) {
 // mid-pause, via engine.removePlayer) already moved the game past this phase.
 function scheduleBeatenPause(room) {
   const timer = setTimeout(() => {
+    const before = snapshotResolution(room);
     engine.finishBeatenPause(room.game);
     syncClock(room);
-    if (room.game.phase === "finished") finalizeGame(room);
+    settleAfter(room, before);
     broadcastRoom(room);
+    // See removeFromRoom's identical check - syncClock's clock-forfeit above
+    // can itself close the FRESH bout's wave straight into another
+    // "beaten-pause" (e.g. the new attacker's clock had also already run out).
+    if (room.game.phase === "beaten-pause") scheduleBeatenPause(room);
   }, BEATEN_PAUSE_MS);
   timer.unref();
 }
@@ -830,9 +993,12 @@ function onClose(ws, meta) {
     return;
   }
   if (room.status === "playing") {
-    syncClock(room);
-    if (room.game.phase === "finished") finalizeGame(room);
+    const before = snapshotResolution(room);
+    syncClock(room); // this disconnect alone doesn't forfeit anyone (that's what disconnectTimer below is for) - but may still surface an unrelated seat's clock having already run out
+    settleAfter(room, before);
     broadcastRoom(room);
+    // See removeFromRoom's identical check.
+    if (room.game.phase === "beaten-pause") scheduleBeatenPause(room);
     entry.disconnectTimer = setTimeout(() => {
       if (entry.connected) return; // reconnected before the timer fired
       removeFromRoom(room, meta.userId, "timeout");

@@ -225,6 +225,17 @@ function nextFinishRank(state) {
   return used.length ? Math.max(...used) + 1 : 1;
 }
 
+// Mirrors nextFinishRank but counts DOWN from n (worst) instead of up from 1
+// (best) - a player who leaves/times out mid-game never gets to finish, but
+// still earns a real, ordered placement rather than a flat "last place" tie
+// with every other quitter: whoever quit FIRST had the most game left to
+// give up on, so they're ranked worse than someone who quit later (see
+// removePlayer below and durakElo.js's buildPlacements, which reads this).
+function nextLeaveRank(state) {
+  const used = state.players.map((p) => p.leaveRank).filter((r) => r != null);
+  return used.length ? Math.min(...used) - 1 : state.players.length;
+}
+
 function checkOutPlayers(state) {
   if (state.deck.length > 0) return;
   const beforeActive = activeSeats(state);
@@ -349,7 +360,7 @@ function createGame(playerIds, rules) {
   const trumpSuit = trumpCard.suit;
   deck.push(trumpCard); // bottom of the reserve - drawn last, same as a real deck
 
-  const players = playerIds.map((id) => ({ id, hand: [], out: false, left: false, finishRank: null }));
+  const players = playerIds.map((id) => ({ id, hand: [], out: false, left: false, finishRank: null, leaveRank: null }));
   for (let i = 0; i < 6; i++) {
     for (const p of players) {
       if (deck.length === 0) break;
@@ -503,6 +514,7 @@ function removePlayer(state, seat, reason) {
   player.hand = [];
   player.left = true;
   player.leftReason = reason;
+  player.leaveRank = nextLeaveRank(state);
 
   if (state.phase === "finished") return state;
 
@@ -525,8 +537,28 @@ function removePlayer(state, seat, reason) {
 
   if (seat === state.attackerSeat || seat === state.defenderSeat) {
     state.table = [];
+    // The abandoned table's cards are discarded outright, not returned to
+    // anyone (see this function's header comment) - which can leave a
+    // bystander who'd already thrown several cards into now-aborted bouts
+    // sitting at 0 cards without ever having gone through checkOutPlayers. A
+    // normal resolveBout always draws every active hand back up to 6 (deck
+    // permitting) before starting the next bout; this reset has to do the
+    // same, or the next attacker chosen below could have nothing left to
+    // open with. checkOutPlayers right after is the same rule every other
+    // draw-up gets: a still-0 hand only means "actually out" once the deck
+    // is ALSO empty - otherwise this was exactly the refill they were owed.
+    drawUpPhase(state, activeSeats(state));
+    checkOutPlayers(state);
+    if (state.phase === "finished") return state;
     const nextAttacker = nextActiveSeatAfter(state, seat);
     startNewBout(state, nextAttacker);
+  } else {
+    // A bystander leaving mid-wave might have just left nobody eligible able
+    // to throw in or pass (or left only seats with nothing legal to add) -
+    // checkWaveClosure normally only re-runs reactively after a throw-in/
+    // pass/defend, so without this the wave could sit stuck forever with no
+    // seat able to act until the defender's own turn arrives some other way.
+    checkWaveClosure(state);
   }
   return state;
 }

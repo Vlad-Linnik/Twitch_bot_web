@@ -323,6 +323,15 @@
   // once they land.
   let lastGame = null; // set by renderTable() whenever game.result is present
   let lastRatingChanges = null;
+  // My own Elo delta for the seat I've already finished in, while the rest of
+  // the table is still playing - a separate stash from lastRatingChanges
+  // (which resets on every non-result roomState, see renderTable()) since
+  // this one needs to survive every subsequent roomState broadcast for the
+  // REST of this same match, right up until game.result finally lands.
+  // updateEarlyFinishBanner() clears it back to null the moment my own
+  // finishRank is null again - i.e. a genuinely new game, not just someone
+  // else's move in this one.
+  let myEarlyRatingChange = null;
   let pendingTakeSeat = null; // set by handleMessage()'s "action" branch, consumed by renderTable()
 
   // --- Lobby join notification ---------------------------------------------
@@ -544,8 +553,31 @@
       resetRoomUiState();
       showToast(d.kickedToast);
     } else if (msg.type === "ratingChanges") {
-      lastRatingChanges = msg.changes;
-      if (lastRoom && lastGame && !resultOverlayEl.hidden) renderStandings(lastRoom, lastGame);
+      if (msg.early) {
+        const mine = msg.changes.find((c) => c.seat === mySeat);
+        if (mine) {
+          // roomId matching my current room means I'm still sitting there
+          // watching the rest of the match play out (a normal early
+          // finisher) - update the in-context banner. Anything else - most
+          // commonly a player who just LEFT (realtime/durakRoomManager.js
+          // pays a leaver out the same way, but leaving is what triggers the
+          // payout, so by the time its DB round-trip resolves I'm already
+          // back in the lobby with no game on screen to show a banner on;
+          // could also just be the stray old-room race this used to be the
+          // sole guard against) - surface it as a toast instead so it isn't
+          // silently lost.
+          if (msg.roomId === currentRoomId) {
+            myEarlyRatingChange = mine;
+            if (lastRenderedGame) updateEarlyFinishBanner(lastRenderedGame);
+          } else {
+            const sign = mine.delta > 0 ? "+" : "";
+            showToast(fillTemplate(d.toastRatingChangeTpl, { RANK: mine.place, DELTA: sign + mine.delta }));
+          }
+        }
+      } else {
+        lastRatingChanges = msg.changes;
+        if (lastRoom && lastGame && !resultOverlayEl.hidden) renderStandings(lastRoom, lastGame);
+      }
     } else if (msg.type === "error") {
       showToast(errorText(msg.code));
     }
@@ -624,7 +656,11 @@
       const info = document.createElement("div");
       const hostLine = document.createElement("p");
       hostLine.className = "text-sm text-neutral-200";
-      hostLine.textContent = d.hostPrefix + " " + r.hostDisplayName;
+      hostLine.append(d.hostPrefix + " ");
+      const hostNameSpan = document.createElement("span");
+      hostNameSpan.textContent = r.hostDisplayName;
+      hostNameSpan.title = ratingTooltip(r.hostRating);
+      hostLine.appendChild(hostNameSpan);
       const countLine = document.createElement("p");
       countLine.className = "text-xs text-neutral-500";
       countLine.textContent =
@@ -659,7 +695,13 @@
       const info = document.createElement("div");
       const namesLine = document.createElement("p");
       namesLine.className = "text-sm text-neutral-200 truncate max-w-xs";
-      namesLine.textContent = r.players.map((p) => p.displayName + (p.left ? " ✗" : "")).join(", ");
+      r.players.forEach((p, i) => {
+        if (i > 0) namesLine.append(", ");
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = p.displayName + (p.left ? " ✗" : "");
+        nameSpan.title = ratingTooltip(p.rating);
+        namesLine.appendChild(nameSpan);
+      });
       const countLine = document.createElement("p");
       countLine.className = "text-xs text-neutral-500";
       countLine.textContent =
@@ -683,6 +725,10 @@
     let out = tpl || "";
     for (const key of Object.keys(vars)) out = out.split("__" + key + "__").join(String(vars[key]));
     return out;
+  }
+
+  function ratingTooltip(rating) {
+    return rating != null ? fillTemplate(d.playerRatingTpl, { RATING: rating }) : d.playerRatingUnknown;
   }
 
   createRoomBtn.addEventListener("click", () => {
@@ -875,6 +921,34 @@
     return "";
   }
 
+  // Shown from the moment MY OWN seat empties its hand with the reserve gone
+  // (durakEngine.js's checkOutPlayers sets finishRank) until the whole game
+  // actually ends (game.result) - the gap where I'm done playing but others
+  // still are. realtime/durakRoomManager.js's payOutEarlyFinisher pays this
+  // seat's Elo delta out the instant finishRank is set (no more waiting for
+  // the rest of the table - see its own comment for why that's safe), so
+  // once myEarlyRatingChange lands (a few tens of ms later, over its own
+  // "ratingChanges" message) this shows the real number instead of a
+  // "wait for the game to end" placeholder. Called both from renderTable()
+  // (every roomState) and directly from the "ratingChanges" handler (so the
+  // banner updates the instant the delta arrives, without waiting on the
+  // next roomState from someone else's move).
+  function updateEarlyFinishBanner(game) {
+    const seat = game.you ? game.you.seat : null;
+    const myFinishRank = seat != null ? game.players[seat].finishRank : null;
+    // Not finished (yet, or a fresh game since the last time I was) - nothing
+    // to show, and nothing worth remembering from a previous finish either.
+    if (myFinishRank == null) myEarlyRatingChange = null;
+    earlyFinishBannerEl.hidden = !(myFinishRank != null && !game.result);
+    if (earlyFinishBannerEl.hidden) return;
+    if (myEarlyRatingChange) {
+      const sign = myEarlyRatingChange.delta > 0 ? "+" : "";
+      earlyFinishBannerEl.textContent = fillTemplate(d.earlyFinishRatedTpl, { RANK: myFinishRank, DELTA: sign + myEarlyRatingChange.delta });
+    } else {
+      earlyFinishBannerEl.textContent = fillTemplate(d.earlyFinishTpl, { RANK: myFinishRank });
+    }
+  }
+
   function renderTable(room, game, justDealt) {
     if (!game) return;
     // Read by the local-redraw calls in renderHand()/showActionChoice()/the
@@ -898,15 +972,8 @@
     // I'm done (finishRank set) but the game isn't over yet (others are still
     // playing, only possible with 3+ seats - see durakEngine.js's
     // checkOutPlayers) - say so now instead of leaving an empty hand looking
-    // like nothing happened. The rating delta isn't knowable yet (Elo here
-    // needs every seat's final placement - see durakElo.js), only the place;
-    // once game.result actually lands, showResult()/renderStandings() takes
-    // over with the real standings, so this banner is hidden by then.
-    const myFinishRank = mySeat != null ? game.players[mySeat].finishRank : null;
-    earlyFinishBannerEl.hidden = !(myFinishRank != null && !game.result);
-    if (!earlyFinishBannerEl.hidden) {
-      earlyFinishBannerEl.textContent = fillTemplate(d.earlyFinishTpl, { RANK: myFinishRank });
-    }
+    // like nothing happened.
+    updateEarlyFinishBanner(game);
 
     // Opponents: every other seat. Seated players see them starting from the
     // seat after their own, so the row reads left-to-right the way people are

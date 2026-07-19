@@ -204,7 +204,11 @@
          data-match-player-count-tpl="<%= t('games.durakMultiplayer.matchPlayerCountTpl', { count: '__COUNT__' }) %>"
          data-spectator-count-tpl="<%= t('games.durakMultiplayer.spectatorCountTpl', { count: '__COUNT__' }) %>"
          data-avg-rating-tpl="<%= t('games.durakMultiplayer.avgRatingTpl', { rating: '__RATING__' }) %>"
+         data-player-rating-tpl="<%= t('games.durakMultiplayer.playerRatingTpl', { rating: '__RATING__' }) %>"
+         data-player-rating-unknown="<%= t('games.durakMultiplayer.playerRatingUnknown') %>"
          data-early-finish-tpl="<%= t('games.durakMultiplayer.earlyFinishTpl', { rank: '__RANK__' }) %>"
+         data-early-finish-rated-tpl="<%= t('games.durakMultiplayer.earlyFinishRatedTpl', { rank: '__RANK__', delta: '__DELTA__' }) %>"
+         data-toast-rating-change-tpl="<%= t('games.durakMultiplayer.toastRatingChangeTpl', { rank: '__RANK__', delta: '__DELTA__' }) %>"
          data-leave-confirm="<%= t('games.durakMultiplayer.leaveConfirm') %>"
          data-stop-watching="<%= t('games.durakMultiplayer.stopWatching') %>"
          data-spectating-badge="<%= t('games.durakMultiplayer.spectatingBadge') %>"
@@ -278,11 +282,11 @@
                   serializeRoomMeta puts spectatorCount on every roomState push,
                   not just the spectator-facing one) - hidden entirely at 0 so
                   an unwatched game doesn't show a stray "0 watching". %>
-              <span id="dmp-spectator-count" class="text-xs text-neutral-500" hidden></span>
+              <span id="dmp-spectator-count" class="text-xs font-medium text-cyan-400" hidden></span>
               <%# Shown from room creation through the whole game (durakRoomManager.js's
                   serializeRoomMeta computes avgRating on every roomState push, not
                   just once) - hidden entirely while nobody seated has a rated game yet. %>
-              <span id="dmp-avg-rating" class="text-xs text-neutral-500" hidden></span>
+              <span id="dmp-avg-rating" class="text-xs font-medium text-amber-400" hidden></span>
             </div>
             <div class="flex items-center gap-2">
               <span id="dmp-spectating-badge" class="text-xs text-purple-400" hidden><%= t('games.durakMultiplayer.spectatingBadge') %></span>
@@ -374,10 +378,12 @@
                 reserve gone (durakEngine.js's checkOutPlayers sets
                 finishRank) until the whole game actually ends (game.result) -
                 the gap where I'm done playing but others still are, which
-                otherwise looked like nothing happened. Only the place is
-                knowable this early; the Elo delta needs every seat's final
-                placement, so it isn't shown until showResult()/renderStandings()
-                take over once game.result lands. %>
+                otherwise looked like nothing happened. realtime/durakRoomManager.js's
+                payOutEarlyFinisher pays this seat's Elo delta out immediately
+                (no more waiting on the rest of the table), so
+                durak-multiplayer.js's updateEarlyFinishBanner() upgrades this
+                from a placeholder to the real rating change within a moment
+                of it landing over its own "ratingChanges" message. %>
             <p id="dmp-early-finish-banner" hidden
                class="text-center text-sm font-medium text-purple-300 bg-purple-500/10 border-b border-purple-800/50 py-1.5 px-3 rounded-t-lg"></p>
             <div class="px-3 pt-3">

@@ -29,6 +29,23 @@ function expectedScore(ratingA, ratingB) {
   return 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
 }
 
+// One entry's unrounded share of the pairwise exchange against every other
+// entry - the shared core both computeEloDeltas (a full, simultaneous
+// settlement) and computeSingleEloDelta (one seat, settled on its own) build
+// on. Pairwise Elo is zero-sum FOR A GIVEN PAIR regardless of when each
+// side's contribution actually gets rounded - see computeSingleEloDelta's
+// comment for why that matters.
+function rawDelta(entries, i, kFactor) {
+  let total = 0;
+  for (let j = 0; j < entries.length; j++) {
+    if (i === j) continue;
+    const expected = expectedScore(entries[i].rating, entries[j].rating);
+    const actual = entries[i].place === entries[j].place ? 0.5 : entries[i].place < entries[j].place ? 1 : 0;
+    total += actual - expected;
+  }
+  return (kFactor * total) / (entries.length - 1);
+}
+
 // entries: [{ rating, place }], one per seat, in seat order. `place` is a
 // 1-based (or 0-based, only relative order matters) finishing rank where
 // LOWER is better; equal `place` values are a tie. Returns a same-length,
@@ -38,17 +55,49 @@ function computeEloDeltas(entries, { kFactor = K_FACTOR } = {}) {
   const deltas = new Array(n).fill(0);
   if (n < 2) return deltas;
 
-  for (let i = 0; i < n; i++) {
-    let total = 0;
-    for (let j = 0; j < n; j++) {
-      if (i === j) continue;
-      const expected = expectedScore(entries[i].rating, entries[j].rating);
-      const actual = entries[i].place === entries[j].place ? 0.5 : entries[i].place < entries[j].place ? 1 : 0;
-      total += actual - expected;
-    }
-    deltas[i] = Math.round((kFactor * total) / (n - 1));
+  // raw holds each player's unrounded share - pairwise Elo is zero-sum, so
+  // raw always sums to ~0 (floating-point noise only). Rounding each entry
+  // independently can still leave the integer total a point or two off zero
+  // (see durakElo.test.js's "deltas sum to zero" case) - fixed up below.
+  const raw = entries.map((_, i) => rawDelta(entries, i, kFactor));
+  for (let i = 0; i < n; i++) deltas[i] = Math.round(raw[i]);
+
+  // Largest-remainder fixup: nudge whichever entries' rounding strayed
+  // furthest from their raw value by +-1 until the match's total is exactly
+  // zero, so a game can never quietly create or destroy rating points.
+  let deficit = -deltas.reduce((sum, v) => sum + v, 0);
+  if (deficit !== 0) {
+    const bySlack = raw
+      .map((r, i) => ({ i, slack: r - deltas[i] }))
+      .sort((a, b) => (deficit > 0 ? b.slack - a.slack : a.slack - b.slack));
+    for (let k = 0; k < Math.abs(deficit); k++) deltas[bySlack[k].i] += deficit > 0 ? 1 : -1;
   }
+
   return deltas;
+}
+
+// Settles a single seat's delta in isolation, for a player durakRoomManager.js
+// is paying out THE MOMENT they finish rather than making them wait for the
+// rest of the table (see its payOutEarlyFinisher) - every other seat in
+// `entries` may be a real, already-locked placement OR a "hasn't finished yet"
+// placeholder (any place number worse than this seat's own - see the caller),
+// since this seat's own delta only needs each pairwise (actual - expected)
+// against opponents whose relative order to THIS seat is already certain, not
+// their eventual placement relative to EACH OTHER.
+//
+// Deliberately skips computeEloDeltas' largest-remainder fixup: that
+// redistribution only makes sense across seats being settled together in one
+// call, and here every other row is synthetic and will never itself be paid
+// from this call, so nudging one to zero out this call's total would just be
+// noise. The rounding this seat's own delta gets is still off by at most 0.5,
+// same bound as any other seat's rounding - see durakRoomManager.js's
+// updateRatings() for how the seats still active when the match truly ends
+// get the batch fixup back, and why paying some seats out earlier means the
+// match as a whole is no longer guaranteed to net to exactly zero (an
+// accepted, small cost of not making early finishers wait).
+function computeSingleEloDelta(entries, seatIndex, { kFactor = K_FACTOR } = {}) {
+  if (entries.length < 2) return 0;
+  return Math.round(rawDelta(entries, seatIndex, kFactor));
 }
 
 // Turns a finished realtime/durakEngine.js `state` into a per-seat finishing
@@ -64,24 +113,36 @@ function computeEloDeltas(entries, { kFactor = K_FACTOR } = {}) {
 //     calls the outcome a draw between them (see durakEngine.js's
 //     checkOutPlayers), and Elo should treat a declared draw as an actual
 //     tie ("игроки у которых ничья" split evenly), not a hidden ranking.
-//  3. `result.kind === "durak"`: the sole non-finisher (result.loserSeat) is
-//     placed one worse than anyone who ever finished - "дурак теряет
-//     больше всех".
-//  4. `result.kind === "left-early-win"`: the survivor (result.winnerSeat) is
+//  3. A seat that left/timed out mid-game (state.players[seat].leaveRank set)
+//     keeps that rank too - counted DOWN from n (worst) in leaving order, so
+//     leaving is never a flat "everyone who quit ties for last" penalty:
+//     whoever quit first is ranked worse than whoever quit later, exactly
+//     the same way an earlier finisher outranks a later one. No separate
+//     penalty beyond the placement itself - a quitter's Elo comes from
+//     pairwise comparisons against this rank like anyone else's.
+//  4. `result.kind === "durak"`: the sole seat that never finished OR left
+//     (result.loserSeat) is placed one worse than the best-ranked FINISHER
+//     (not leaver - see maxFinishPlace below) - "дурак теряет больше всех"
+//     among people who actually finished, but still beats every quitter for
+//     having stuck the game out to the end.
+//  5. `result.kind === "left-early-win"`: the survivor (result.winnerSeat) is
 //     placed at rank 0, better than anyone, including seats that had already
 //     finished normally before the others quit - there's no principled way
 //     to rank a forfeit win against a normal finish, so it's treated as the
 //     best possible outcome.
-//  5. Anything still unplaced (players who left/timed out without ever
-//     finishing, or - in the rare "everyone quit" empty draw - just never
-//     resolved) shares the single worst rank: quitting is treated as at
-//     least as bad as being the seat that never got out.
+//  6. Anything still unplaced (shouldn't normally happen - every seat is
+//     accounted for by 1-5 above once the game has actually ended - kept as
+//     a defensive fallback) shares the single worst rank.
 function buildPlacements(state) {
   const n = state.players.length;
   const place = new Array(n).fill(null);
 
+  let maxFinishPlace = 0;
   state.players.forEach((p, seat) => {
-    if (p.finishRank != null) place[seat] = p.finishRank;
+    if (p.finishRank != null) {
+      place[seat] = p.finishRank;
+      if (p.finishRank > maxFinishPlace) maxFinishPlace = p.finishRank;
+    }
   });
 
   const result = state.result || {};
@@ -94,18 +155,23 @@ function buildPlacements(state) {
     }
   }
 
-  let maxPlace = place.reduce((m, v) => (v != null && v > m ? v : m), 0);
+  state.players.forEach((p, seat) => {
+    if (place[seat] == null && p.leaveRank != null) place[seat] = p.leaveRank;
+  });
 
   if (result.kind === "durak") {
-    maxPlace += 1;
-    place[result.loserSeat] = maxPlace;
+    place[result.loserSeat] = maxFinishPlace + 1;
   }
 
   if (result.kind === "left-early-win") {
     place[result.winnerSeat] = 0;
   }
 
-  const worst = maxPlace + 1;
+  // Derived from the FINAL place[] values (post draw-retie), not
+  // maxFinishPlace - a retied draw can lower a seat's place below its raw
+  // sequential finishRank, and this fallback must reflect what actually got
+  // assigned, not what almost got assigned before the retie stepped in.
+  const worst = Math.max(0, ...place.filter((v) => v != null)) + 1;
   for (let seat = 0; seat < n; seat++) {
     if (place[seat] == null) place[seat] = worst;
   }
@@ -113,4 +179,4 @@ function buildPlacements(state) {
   return place.map((p, seat) => ({ seat, place: p }));
 }
 
-module.exports = { DEFAULT_RATING, K_FACTOR, expectedScore, computeEloDeltas, buildPlacements };
+module.exports = { DEFAULT_RATING, K_FACTOR, expectedScore, computeEloDeltas, computeSingleEloDelta, buildPlacements };
