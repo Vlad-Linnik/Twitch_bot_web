@@ -3,7 +3,6 @@ const express = require("express");
 const helmet = require("helmet");
 const path = require("path");
 const env = require("./config/env");
-const createSessionMiddleware = require("./middleware/session");
 const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
@@ -11,7 +10,13 @@ const csrf = require("./middleware/csrf");
 const siteVisits = require("./middleware/siteVisits");
 const safeJson = require("./lib/safeJson");
 
-function createApp() {
+// sessionMiddleware is built once in index.js and passed in, rather than each
+// constructed here, so realtime/socketServer.js's WebSocket upgrade handler
+// can run requests through the exact same express-session instance (same
+// MongoStore connection, same secret) to recover req.session for an
+// authenticated WS connection - two independently-constructed instances would
+// have identical config but not literally be "the same session store handle".
+function createApp(sessionMiddleware) {
   const app = express();
 
   if (env.isProduction) app.set("trust proxy", 1);
@@ -52,7 +57,7 @@ function createApp() {
   app.use(express.static(path.join(__dirname, "public")));
   app.use(siteVisits);
   app.use(express.urlencoded({ extended: false }));
-  app.use(createSessionMiddleware());
+  app.use(sessionMiddleware);
   app.use(attachUser);
   app.use(i18nMiddleware);
   app.use(navMenuMiddleware);

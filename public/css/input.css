@@ -305,3 +305,50 @@ html.js .save-fab.save-visible {
     opacity: 1;
   }
 }
+
+/* 2048: tile sliding + pop animations (public/js/games/2048.js). Position
+   (left/top, percentage-based so the board scales with no dpr math) and the
+   pop keyframes (transform: scale, on the inner element) are split across two
+   nested elements on purpose - animating both left/top and transform on the
+   SAME element would make a merge's scale keyframe stomp the slide-in-progress
+   translate every frame. Durations here must match MOVE_MS/SPAWN_MS in that file. */
+.g2048-tile-pos {
+  transition: left 120ms ease-in-out, top 120ms ease-in-out;
+}
+@keyframes g2048-spawn {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.g2048-spawn {
+  animation: g2048-spawn 160ms ease-out;
+}
+@keyframes g2048-merge {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.g2048-merge {
+  animation: g2048-merge 160ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .g2048-tile-pos {
+    transition: none;
+  }
+  .g2048-spawn,
+  .g2048-merge {
+    animation: none;
+  }
+}

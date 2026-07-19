@@ -13,6 +13,8 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const ownerTokensRepo = require("../db/ownerTokensRepo");
 const adminHealthRepo = require("../db/adminHealthRepo");
 const siteVisitsRepo = require("../db/siteVisitsRepo");
+const gameScoresRepo = require("../db/gameScoresRepo");
+const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 
@@ -217,16 +219,51 @@ router.post("/admin/settings-log/:id/delete", settingsWriteLimiter, requireAdmin
 
 const VISITS_CHART_DAYS = 30;
 
+// Maps a GameScores `game` key to the same display name already used on its own
+// /games/* page - durak-multiplayer has no per-game page of its own (it's a mode
+// within /games/durak), so it gets its own admin-only label instead.
+const GAME_LABEL_KEYS = {
+  "falling-blocks": "games.fallingBlocks.name",
+  "pipe-dodger": "games.pipeDodger.name",
+  "2048": "games.2048.name",
+  "durak-multiplayer": "admin.gameDurakOnline",
+};
+
 // Named "/admin/visits", not "/admin/statistics" - routes/statistics.js already owns a
 // "/:channel/statistics" route mounted earlier in routes/index.js, which would otherwise swallow
 // this as channel="admin" (see that file's own wildcard-ordering warnings).
 router.get("/admin/visits", requireAdmin, async (req, res, next) => {
   try {
-    const dailyVisits = await siteVisitsRepo.getDailyVisits(VISITS_CHART_DAYS);
+    const [dailyVisits, gameCounts, playCounts] = await Promise.all([
+      siteVisitsRepo.getDailyVisits(VISITS_CHART_DAYS),
+      gameScoresRepo.getGameCounts(),
+      gameSessionStatsRepo.getPlayCounts(),
+    ]);
     const totalVisits = dailyVisits.reduce((sum, d) => sum + d.count, 0);
     const todayVisits = dailyVisits[dailyVisits.length - 1]?.count || 0;
 
-    res.render("adminVisits", { tab: "statistics", dailyVisits, totalVisits, todayVisits });
+    // Two independent counters, merged by game key: gameCounts is
+    // distinct-player counts (GameScores has one doc per (game, userId)),
+    // playCounts is total completed sessions/matches (GameSessionStats, one
+    // $inc per finished run - see that repo's comment for why it can't just
+    // be a field on GameScores). Union the keys rather than mapping one list,
+    // since either collection can be momentarily ahead of the other.
+    const playersByGame = new Map(gameCounts.map((g) => [g._id, g.count]));
+    const sessionsByGame = new Map(playCounts.map((g) => [g._id, g.playCount]));
+    const gameKeys = new Set([...playersByGame.keys(), ...sessionsByGame.keys()]);
+    const maxSessions = Math.max(...sessionsByGame.values(), 1);
+
+    const games = [...gameKeys]
+      .map((key) => ({
+        key,
+        label: GAME_LABEL_KEYS[key] ? res.locals.t(GAME_LABEL_KEYS[key]) : key,
+        players: playersByGame.get(key) || 0,
+        sessions: sessionsByGame.get(key) || 0,
+        pct: Math.round(((sessionsByGame.get(key) || 0) / maxSessions) * 100),
+      }))
+      .sort((a, b) => b.sessions - a.sessions);
+
+    res.render("adminVisits", { tab: "statistics", dailyVisits, totalVisits, todayVisits, games });
   } catch (err) {
     next(err);
   }

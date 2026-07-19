@@ -1,13 +1,23 @@
 const express = require("express");
 const gameScoresRepo = require("../db/gameScoresRepo");
+const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
+const requireLogin = require("../middleware/requireLogin");
 
 const router = express.Router();
 
 const GAME_FALLING_BLOCKS = "falling-blocks";
 const GAME_PIPE_DODGER = "pipe-dodger";
+const GAME_2048 = "2048";
+// Durak's leaderboard ranks online (multiplayer) Elo rating only - a
+// vs-computer win never reaches the server at all (see
+// public/js/games/durak.js). realtime/durakRoomManager.js's finalizeGame
+// computes and persists this key's rating (realtime/durakElo.js) after every
+// multiplayer game. New players start at a hidden 300 rating and don't get a
+// GameScores doc - so don't appear here - until their first game finishes.
+const GAME_DURAK_ONLINE = "durak-multiplayer";
 const TOP_LIMIT = 10;
 // Sanity cap on submitted scores. The game itself can't validate a client-run
 // score, but a legitimate marathon run stays far below this - anything above is
@@ -74,6 +84,41 @@ router.get("/games/pipe-dodger", async (req, res, next) => {
   }
 });
 
+router.get("/games/2048", async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_2048, req.user ? req.user.userId : null);
+    res.render("game2048", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// /games/durak is a single page hosting both a vs-computer board and a
+// multiplayer lobby/room (public/js/games/durak-mode-select.js toggles
+// between them client-side) - open to every visitor, including logged-out
+// ones (the "play with people" option just renders as a login link for them,
+// see views/gameDurak.ejs). The leaderboard shown here is online-wins-only
+// (GAME_DURAK_ONLINE); the vs-computer side never submits a score.
+async function renderDurak(req, res, next, autoJoinRoomId) {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_DURAK_ONLINE, req.user ? req.user.userId : null);
+    res.render("gameDurak", { leaderboard, autoJoinRoomId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+router.get("/games/durak", (req, res, next) => renderDurak(req, res, next, null));
+
+// A shareable deep link into a specific open multiplayer room - requires
+// login (same as joining any room) since there's no point rendering it for a
+// visitor who can't join. The client attempts to join this room id once its
+// WebSocket connects (unless it auto-resumes into a different room it's
+// already seated in).
+router.get("/games/durak/room/:roomId", requireLogin, (req, res, next) =>
+  renderDurak(req, res, next, req.params.roomId)
+);
+
 function requireLoginJson(req, res, next) {
   if (!req.user) return res.status(401).json({ ok: false, error: "auth" });
   next();
@@ -95,6 +140,7 @@ router.post(
     }
     try {
       await gameScoresRepo.submitScore(GAME_FALLING_BLOCKS, req.user.userId, score);
+      await gameSessionStatsRepo.recordPlay(GAME_FALLING_BLOCKS);
       const leaderboard = await buildLeaderboard(GAME_FALLING_BLOCKS, req.user.userId);
       res.json({ ok: true, ...leaderboard });
     } catch (err) {
@@ -116,6 +162,7 @@ router.post(
     }
     try {
       await gameScoresRepo.submitScore(GAME_PIPE_DODGER, req.user.userId, score);
+      await gameSessionStatsRepo.recordPlay(GAME_PIPE_DODGER);
       const leaderboard = await buildLeaderboard(GAME_PIPE_DODGER, req.user.userId);
       res.json({ ok: true, ...leaderboard });
     } catch (err) {
@@ -123,5 +170,32 @@ router.post(
     }
   }
 );
+
+// Same shape as falling-blocks'/pipe-dodger's score.json, for public/js/games/2048.js.
+router.post(
+  "/games/2048/score.json",
+  settingsWriteLimiter,
+  requireLoginJson,
+  verifyToken,
+  async (req, res, next) => {
+    const score = Number.parseInt(req.body.score, 10);
+    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
+      return res.status(400).json({ ok: false, error: "score" });
+    }
+    try {
+      await gameScoresRepo.submitScore(GAME_2048, req.user.userId, score);
+      await gameSessionStatsRepo.recordPlay(GAME_2048);
+      const leaderboard = await buildLeaderboard(GAME_2048, req.user.userId);
+      res.json({ ok: true, ...leaderboard });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// No /games/durak/score.json - Durak has no client-callable score endpoint at
+// all. Vs-computer wins never leave the browser (localStorage only); online
+// wins are credited server-side when a multiplayer game concludes (see
+// realtime/durakRoomManager.js's finalizeGame).
 
 module.exports = router;

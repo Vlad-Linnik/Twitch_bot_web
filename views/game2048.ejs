@@ -1,0 +1,130 @@
+<%- include('partials/head', { title: t('games.2048.name') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.2048.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.2048.backToGames') %></a>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-6 items-center sm:items-start justify-center">
+    <%# Leaderboard: top 10, plus the visitor's own row (with its real rank) as an
+        11th line when they're ranked below the top. Row markup here must stay in
+        sync with lbRow() in public/js/games/2048.js. data-csrf is only present for
+        logged-in visitors - its absence is how the client knows not to attempt
+        saving. Ordered last on mobile (below the board). Same pattern as
+        gameFallingBlocks.ejs / gamePipeDodger.ejs. %>
+    <aside id="g2048-leaderboard"
+           class="w-full sm:w-56 order-last sm:order-none rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+           <% if (user) { %>data-submit-url="/games/2048/score.json" data-csrf="<%= csrfToken %>"<% } %>
+           data-empty-label="<%= t('games.2048.leaderboardEmpty') %>">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.2048.leaderboardTitle') %></p>
+      <ol id="g2048-lb-list" class="space-y-0.5">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="text-sm text-neutral-500 py-1"><%= t('games.2048.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+            <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+          </li>
+        <% }) %>
+      </ol>
+      <div id="g2048-lb-me" class="mt-1 pt-1 border-t border-neutral-800" <% if (!leaderboard.myRow) { %>hidden<% } %>>
+        <ol id="g2048-lb-me-row">
+          <% if (leaderboard.myRow) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+              <span class="flex-1 truncate text-purple-300"
+                    <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+            </li>
+          <% } %>
+        </ol>
+      </div>
+      <% if (!user) { %>
+        <p class="text-xs text-neutral-500 mt-3">
+          <%= t('games.2048.loginToSave') %>
+          <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+        </p>
+      <% } %>
+    </aside>
+
+    <%# The board is plain DOM (not canvas) - each tile is an absolutely positioned
+        percentage-based element (public/js/games/2048.js), so it scales
+        responsively without any devicePixelRatio math. The overlay (start / won /
+        game over) sits on top; all its text is server-rendered here - the client
+        only toggles which pieces are visible via the data-* labels below. %>
+    <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 shrink-0">
+      <div id="g2048-board"
+           class="relative touch-none select-none rounded-lg bg-neutral-950 w-[324px] h-[324px] sm:w-[360px] sm:h-[360px]">
+        <div id="g2048-cells" class="absolute inset-0"></div>
+        <div id="g2048-tiles" class="absolute inset-0"></div>
+      </div>
+
+      <div id="g2048-overlay"
+           data-title-start="<%= t('games.2048.name') %>"
+           data-title-won="<%= t('games.2048.won') %>"
+           data-title-over="<%= t('games.2048.gameOver') %>"
+           data-button-start="<%= t('games.2048.start') %>"
+           data-button-keep-playing="<%= t('games.2048.keepPlaying') %>"
+           data-button-again="<%= t('games.2048.playAgain') %>"
+           data-final-score-label="<%= t('games.2048.finalScore') %>"
+           data-hint="<%= t('games.2048.swipeHint') %>"
+           class="absolute inset-3 rounded-lg bg-neutral-950/80 backdrop-blur-sm grid place-items-center text-center">
+        <div class="px-4">
+          <h2 id="g2048-overlay-title" class="text-xl font-semibold text-neutral-100 mb-1"></h2>
+          <p id="g2048-overlay-score" class="text-sm text-neutral-400 mb-4" hidden></p>
+          <button type="button" id="g2048-overlay-button"
+                  class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"></button>
+          <p id="g2048-overlay-hint" class="text-xs text-neutral-500 mt-4"></p>
+        </div>
+      </div>
+
+      <%# Shown instead of navigating away when a link is clicked mid-game (see
+          2048.js's click interceptor) - browser tab close/refresh gets the
+          native beforeunload prompt instead, which can't offer a save choice. %>
+      <dialog id="g2048-leave-confirm-dialog"
+              class="w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-200 p-8 m-auto backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+        <h2 class="text-xl font-semibold text-neutral-100 mb-2"><%= t('games.2048.leaveConfirmTitle') %></h2>
+        <p class="text-base text-neutral-400 mb-8"><%= t('games.2048.leaveConfirmBody') %></p>
+        <div class="flex flex-wrap justify-end gap-3">
+          <button type="button" id="g2048-leave-cancel"
+                  class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.2048.leaveCancel') %></button>
+          <button type="button" id="g2048-leave-discard"
+                  class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.2048.leaveDiscard') %></button>
+          <button type="button" id="g2048-leave-save"
+                  class="px-5 py-2.5 text-base font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.2048.leaveSave') %></button>
+        </div>
+      </dialog>
+    </div>
+
+    <div class="w-full sm:w-56 grid grid-cols-2 sm:grid-cols-1 gap-4">
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex justify-between items-baseline mb-2">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.2048.score') %></span>
+          <span id="g2048-score" class="text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.2048.best') %></span>
+          <span id="g2048-best" class="text-sm text-purple-400 tabular-nums">0</span>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.2048.controlsTitle') %></p>
+        <ul class="text-sm text-neutral-400 space-y-1.5">
+          <li class="flex justify-between gap-2"><span><%= t('games.2048.controlsMove') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&larr;&uarr;&rarr;&darr;</kbd></li>
+        </ul>
+        <p class="text-xs text-neutral-500 mt-3 mb-3"><%= t('games.2048.swipeHint') %></p>
+        <button type="button" id="g2048-newgame"
+                class="w-full px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.2048.newGame') %></button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/js/games/2048.js" defer></script>
+<%- include('partials/foot') %>

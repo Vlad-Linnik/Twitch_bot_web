@@ -87,6 +87,30 @@
         </div>
       </div>
     <% } %>
+
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1 mt-10"><%= t('admin.gamesHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.gamesIntro') %></p>
+
+    <% if (!games.length) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.gamesEmpty') %></p>
+    <% } else { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 space-y-3">
+        <% games.forEach(function (g) { %>
+          <div>
+            <div class="flex justify-between items-baseline text-sm mb-1">
+              <span class="text-neutral-200"><%= g.label %></span>
+              <span class="text-neutral-400 tabular-nums">
+                <%= fmtNumber(g.sessions) %> <%= t('admin.gamesSessionsUnit') %>
+                · <%= fmtNumber(g.players) %> <%= t('admin.gamesPlayersUnit') %>
+              </span>
+            </div>
+            <div class="h-2 rounded-full bg-neutral-800 overflow-hidden">
+              <div class="h-full bg-purple-500 rounded-full" style="width: <%= g.pct %>%"></div>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
   </section>
 </main>
 

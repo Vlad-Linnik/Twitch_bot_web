@@ -9,16 +9,10 @@ const botRequestsRepo = require("../db/botRequestsRepo");
 const { parseRequestForm, MESSAGE_MAX_LENGTH } = require("../lib/requestBotValidation");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
+const requireLogin = require("../middleware/requireLogin");
 const env = require("../config/env");
 
 const router = express.Router();
-
-function requireLogin(req, res, next) {
-  if (!req.user) {
-    return res.status(401).render("errors/403", { requiredLevel: null });
-  }
-  next();
-}
 
 router.get("/request-bot", requireLogin, async (req, res, next) => {
   try {

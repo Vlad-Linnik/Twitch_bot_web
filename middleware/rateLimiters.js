@@ -47,4 +47,47 @@ const searchLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { authLimiter, settingsWriteLimiter, autosaveLimiter, statsReadLimiter, searchLimiter };
+// express-rate-limit is request/response-shaped (reads req, increments via its
+// store per matched HTTP request) and doesn't fit a WebSocket message handler,
+// which never goes through Express's request cycle. Pulling in a second
+// rate-limiting dependency for one low-frequency action (multiplayer Durak
+// room creation) would fight the library rather than use it, and contradicts
+// the lean/2GB-VPS philosophy above. This is a tiny hand-rolled fixed-window
+// counter instead - one Map, a periodic unref'd sweep, no dependency. Keep it
+// this minimal; it's meant for occasional actions like "create a room", not a
+// general-purpose limiter.
+function createSimpleLimiter({ windowMs, max }) {
+  const hits = new Map(); // key -> { count, resetAt }
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) {
+      if (entry.resetAt <= now) hits.delete(key);
+    }
+  }, windowMs);
+  sweep.unref();
+
+  return function allow(key) {
+    const now = Date.now();
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (entry.count >= max) return false;
+    entry.count += 1;
+    return true;
+  };
+}
+
+// 5 rooms per 10 minutes per user - room creation is a one-off lobby action,
+// not something a legitimate player does repeatedly in a short window.
+const durakRoomCreateLimiter = createSimpleLimiter({ windowMs: 10 * 60 * 1000, max: 5 });
+
+module.exports = {
+  authLimiter,
+  settingsWriteLimiter,
+  autosaveLimiter,
+  statsReadLimiter,
+  searchLimiter,
+  durakRoomCreateLimiter,
+};

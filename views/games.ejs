@@ -54,6 +54,47 @@
       <h2 class="text-lg font-semibold text-neutral-100 group-hover:text-purple-300 transition-colors"><%= t('games.pipeDodger.name') %></h2>
       <p class="text-sm text-neutral-500 mt-1"><%= t('games.pipeDodger.cardDescription') %></p>
     </a>
+
+    <a href="/games/2048"
+       class="group block rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-purple-500/50 transition-colors">
+      <%# Decorative preview - original inline SVG, a few merged tiles on a grid. %>
+      <div class="mb-4 h-28 rounded-lg bg-neutral-950 border border-neutral-800 grid place-items-center overflow-hidden">
+        <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+          <rect x="35" y="5" width="80" height="80" rx="4" fill="#262626"/>
+          <rect x="41" y="11" width="32" height="32" rx="3" fill="#e5e5e5"/>
+          <rect x="77" y="11" width="32" height="32" rx="3" fill="#38bdf8"/>
+          <rect x="41" y="47" width="32" height="32" rx="3" fill="#a855f7"/>
+          <rect x="77" y="47" width="32" height="32" rx="3" fill="#fbbf24"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold text-neutral-100 group-hover:text-purple-300 transition-colors"><%= t('games.2048.name') %></h2>
+      <p class="text-sm text-neutral-500 mt-1"><%= t('games.2048.cardDescription') %></p>
+    </a>
+
+    <%# Durak: one card for both modes now - /games/durak itself is a mode-select
+        page (vs computer, open to everyone; with people, login-gated inline
+        rather than by hiding this card - see routes/games.js and
+        views/gameDurak.ejs). %>
+    <a href="/games/durak"
+       class="group block rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-purple-500/50 transition-colors">
+      <%# Decorative preview - original inline SVG, two fanned playing cards with a trump suit peeking out. %>
+      <div class="mb-4 h-28 rounded-lg bg-neutral-950 border border-neutral-800 grid place-items-center overflow-hidden">
+        <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+          <g transform="translate(75,48) rotate(-14)">
+            <rect x="-19" y="-27" width="38" height="54" rx="4" fill="#e5e5e5" stroke="#171717" stroke-width="1"/>
+            <text x="-13" y="-14" font-size="12" font-family="sans-serif" fill="#dc2626">K</text>
+            <text x="-13" y="-2" font-size="12" font-family="sans-serif" fill="#dc2626">♥</text>
+          </g>
+          <g transform="translate(75,48) rotate(14)">
+            <rect x="-19" y="-27" width="38" height="54" rx="4" fill="#fafafa" stroke="#171717" stroke-width="1"/>
+            <text x="7" y="20" font-size="12" font-family="sans-serif" fill="#171717" transform="rotate(180)">A</text>
+            <text x="7" y="8" font-size="12" font-family="sans-serif" fill="#171717" transform="rotate(180)">♠</text>
+          </g>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold text-neutral-100 group-hover:text-purple-300 transition-colors"><%= t('games.durak.name') %></h2>
+      <p class="text-sm text-neutral-500 mt-1"><%= t('games.durak.cardDescription') %></p>
+    </a>
   </div>
 </main>
 
