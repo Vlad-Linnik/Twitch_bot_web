@@ -178,6 +178,7 @@
          data-status-attack="<%= t('games.durakMultiplayer.statusYourAttack') %>"
          data-status-throwin="<%= t('games.durakMultiplayer.statusYourThrowIn') %>"
          data-status-defend="<%= t('games.durakMultiplayer.statusYourDefend') %>"
+         data-status-choose-target="<%= t('games.durakMultiplayer.statusChooseTarget') %>"
          data-status-waiting="<%= t('games.durakMultiplayer.statusWaiting') %>"
          data-players-count-tpl="<%= t('games.durakMultiplayer.playersCount', { count: '__COUNT__', max: '__MAX__' }) %>"
          data-ready-accepted-tpl="<%= t('games.durakMultiplayer.readyCheckAcceptedTpl', { accepted: '__ACCEPTED__', total: '__TOTAL__' }) %>"
@@ -202,6 +203,9 @@
          data-watch-label="<%= t('games.durakMultiplayer.watchLabel') %>"
          data-match-player-count-tpl="<%= t('games.durakMultiplayer.matchPlayerCountTpl', { count: '__COUNT__' }) %>"
          data-spectator-count-tpl="<%= t('games.durakMultiplayer.spectatorCountTpl', { count: '__COUNT__' }) %>"
+         data-avg-rating-tpl="<%= t('games.durakMultiplayer.avgRatingTpl', { rating: '__RATING__' }) %>"
+         data-early-finish-tpl="<%= t('games.durakMultiplayer.earlyFinishTpl', { rank: '__RANK__' }) %>"
+         data-leave-confirm="<%= t('games.durakMultiplayer.leaveConfirm') %>"
          data-stop-watching="<%= t('games.durakMultiplayer.stopWatching') %>"
          data-spectating-badge="<%= t('games.durakMultiplayer.spectatingBadge') %>"
          data-role-attacking="<%= t('games.durakMultiplayer.roleAttacking') %>"
@@ -275,6 +279,10 @@
                   not just the spectator-facing one) - hidden entirely at 0 so
                   an unwatched game doesn't show a stray "0 watching". %>
               <span id="dmp-spectator-count" class="text-xs text-neutral-500" hidden></span>
+              <%# Shown from room creation through the whole game (durakRoomManager.js's
+                  serializeRoomMeta computes avgRating on every roomState push, not
+                  just once) - hidden entirely while nobody seated has a rated game yet. %>
+              <span id="dmp-avg-rating" class="text-xs text-neutral-500" hidden></span>
             </div>
             <div class="flex items-center gap-2">
               <span id="dmp-spectating-badge" class="text-xs text-purple-400" hidden><%= t('games.durakMultiplayer.spectatingBadge') %></span>
@@ -338,6 +346,13 @@
                 #dmp-hand-panel). Absolutely positioned in the board's own
                 top-right corner so it doesn't take a row of its own in the
                 layout above. %>
+            <%# Transient game-event narration (pass/take/beaten/transfer/timeout -
+                see durak-multiplayer.js's narrateAction/showToast) shown right on
+                the board while it's on screen, instead of the #dmp-connstatus line
+                far above the lobby/room view - which goes unnoticed once a game is
+                underway, since attention is on the board itself by then. %>
+            <p id="dmp-board-toast" hidden
+               class="absolute top-2 left-1/2 -translate-x-1/2 z-10 max-w-[85%] truncate rounded-lg bg-neutral-800/90 px-3 py-1 text-xs text-neutral-200 shadow"></p>
             <div id="dmp-stickers" class="absolute top-2 right-2 z-10 flex gap-1.5" hidden>
               <button type="button" data-sticker-id="subprise"
                       class="w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 p-1 transition-colors"
@@ -355,6 +370,16 @@
                 <img src="/images/games/durak/stickers/jokerge.png" alt="<%= t('games.durakMultiplayer.stickerJokerge') %>" class="w-full h-full object-contain">
               </button>
             </div>
+            <%# Shown from the moment MY OWN seat empties its hand with the
+                reserve gone (durakEngine.js's checkOutPlayers sets
+                finishRank) until the whole game actually ends (game.result) -
+                the gap where I'm done playing but others still are, which
+                otherwise looked like nothing happened. Only the place is
+                knowable this early; the Elo delta needs every seat's final
+                placement, so it isn't shown until showResult()/renderStandings()
+                take over once game.result lands. %>
+            <p id="dmp-early-finish-banner" hidden
+               class="text-center text-sm font-medium text-purple-300 bg-purple-500/10 border-b border-purple-800/50 py-1.5 px-3 rounded-t-lg"></p>
             <div class="px-3 pt-3">
               <%# flex-nowrap (not wrap) - up to 5 opponents (6-player room) must
                   stay in one row, left-to-right in turn order, or the reading
@@ -408,14 +433,21 @@
             </div>
           </div>
 
-          <%# Shown only when a clicked card is legal BOTH as a defend and as a
-              transfer at once - a trump matching the table's rank (see
-              durakEngine.js's canTransfer() comment) - so the player picks
-              which one they meant instead of the client silently guessing. %>
+          <%# Shown whenever a clicked card's action is ambiguous: legal both
+              as a defend and as a transfer at once (a trump matching the
+              table's rank - see durakEngine.js's canTransfer() comment), or
+              able to beat more than one undefended table card (any trump
+              against several same-rank attacks) - so the player picks
+              instead of the client silently guessing. The prompt text is
+              swapped by durak-multiplayer.js's showActionChoice() depending
+              on which case applies; data-prompt-target/-transfer hold both
+              translated variants since only one is baked into the DOM. %>
           <div id="dmp-action-choice" hidden
+               data-prompt-transfer="<%= t('games.durakMultiplayer.chooseActionPrompt') %>"
+               data-prompt-target="<%= t('games.durakMultiplayer.chooseBeatTargetPrompt') %>"
                class="absolute inset-3 sm:inset-4 rounded-lg bg-neutral-950/85 backdrop-blur-sm grid place-items-center text-center z-20">
             <div class="px-4">
-              <p class="text-sm text-neutral-300 mb-4"><%= t('games.durakMultiplayer.chooseActionPrompt') %></p>
+              <p id="dmp-action-choice-prompt" class="text-sm text-neutral-300 mb-4"></p>
               <div class="flex gap-3 justify-center">
                 <button type="button" id="dmp-choice-beat-btn"
                         class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-medium transition-colors"><%= t('games.durakMultiplayer.beat') %></button>

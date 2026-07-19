@@ -241,6 +241,7 @@
   // --- DOM refs ----------------------------------------------------------------
 
   const connStatusEl = document.getElementById("dmp-connstatus");
+  const boardToastEl = document.getElementById("dmp-board-toast");
   const lobbyViewEl = document.getElementById("dmp-lobby-view");
   const roomViewEl = document.getElementById("dmp-room-view");
   const roomListEl = document.getElementById("dmp-room-list");
@@ -252,6 +253,8 @@
   const roomCodeEl = document.getElementById("dmp-room-code");
   const copyLinkBtn = document.getElementById("dmp-copy-link-btn");
   const spectatorCountEl = document.getElementById("dmp-spectator-count");
+  const avgRatingEl = document.getElementById("dmp-avg-rating");
+  const earlyFinishBannerEl = document.getElementById("dmp-early-finish-banner");
   const spectatingBadgeEl = document.getElementById("dmp-spectating-badge");
   const startBtn = document.getElementById("dmp-start-btn");
   const leaveBtn = document.getElementById("dmp-leave-btn");
@@ -271,6 +274,7 @@
   const readyWaitingEl = document.getElementById("dmp-ready-waiting");
 
   const actionChoiceEl = document.getElementById("dmp-action-choice");
+  const actionChoicePromptEl = document.getElementById("dmp-action-choice-prompt");
   const choiceBeatBtn = document.getElementById("dmp-choice-beat-btn");
   const choiceTransferBtn = document.getElementById("dmp-choice-transfer-btn");
 
@@ -585,11 +589,25 @@
     return map[code] || d.errGeneric;
   }
 
+  let boardToastTimer = null;
+
   function showToast(text) {
-    // No toast component on the site yet - the status line is the least
-    // disruptive place to surface a transient error without adding one.
-    setConnStatus(text);
-    setTimeout(() => setConnStatus(""), 4000);
+    // While the board is on screen (an active room, any status), narrate
+    // right on it - #dmp-connstatus sits far above the lobby/room view and
+    // goes unnoticed once a game is underway, since attention is on the
+    // board by then. Otherwise (still in the lobby, nothing to show it on)
+    // fall back to the original top status line.
+    if (!roomViewEl.hidden && !tableWrapEl.hidden) {
+      boardToastEl.textContent = text;
+      boardToastEl.hidden = false;
+      clearTimeout(boardToastTimer);
+      boardToastTimer = setTimeout(() => {
+        boardToastEl.hidden = true;
+      }, 4000);
+    } else {
+      setConnStatus(text);
+      setTimeout(() => setConnStatus(""), 4000);
+    }
   }
 
   // --- Lobby rendering -----------------------------------------------------
@@ -609,7 +627,9 @@
       hostLine.textContent = d.hostPrefix + " " + r.hostDisplayName;
       const countLine = document.createElement("p");
       countLine.className = "text-xs text-neutral-500";
-      countLine.textContent = fillTemplate(d.playersCountTpl, { COUNT: r.playerCount, MAX: r.maxPlayers });
+      countLine.textContent =
+        fillTemplate(d.playersCountTpl, { COUNT: r.playerCount, MAX: r.maxPlayers }) +
+        (r.avgRating != null ? " · " + fillTemplate(d.avgRatingTpl, { RATING: r.avgRating }) : "");
       info.append(hostLine, countLine);
 
       const joinBtn = document.createElement("button");
@@ -644,7 +664,8 @@
       countLine.className = "text-xs text-neutral-500";
       countLine.textContent =
         fillTemplate(d.matchPlayerCountTpl, { COUNT: r.playerCount }) +
-        (r.spectatorCount > 0 ? " · " + fillTemplate(d.spectatorCountTpl, { COUNT: r.spectatorCount }) : "");
+        (r.spectatorCount > 0 ? " · " + fillTemplate(d.spectatorCountTpl, { COUNT: r.spectatorCount }) : "") +
+        (r.avgRating != null ? " · " + fillTemplate(d.avgRatingTpl, { RATING: r.avgRating }) : "");
       info.append(namesLine, countLine);
 
       const watchBtn = document.createElement("button");
@@ -687,6 +708,8 @@
     spectatingBadgeEl.hidden = !isSpectating;
     spectatorCountEl.hidden = !room.spectatorCount;
     if (room.spectatorCount) spectatorCountEl.textContent = fillTemplate(d.spectatorCountTpl, { COUNT: room.spectatorCount });
+    avgRatingEl.hidden = room.avgRating == null;
+    if (room.avgRating != null) avgRatingEl.textContent = fillTemplate(d.avgRatingTpl, { RATING: room.avgRating });
 
     const amHost = !isSpectating && room.hostUserId === myUserId;
 
@@ -769,6 +792,12 @@
       // otherwise wouldn't get reset).
       mySeat = msg.game && msg.game.you ? msg.game.you.seat : null;
       clocksSnapshot = msg.clocks || null;
+      // A genuinely new authoritative state supersedes any in-progress
+      // multi-target beat pick (hand/table may have changed under it) -
+      // unlike renderTable() itself, which is also called for purely local
+      // redraws while a pick is still pending and must NOT clear it.
+      pendingDefendCard = null;
+      pendingDefendIndices = [];
       renderTable(room, msg.game, justDealt);
       if (msg.game && msg.game.result) {
         stopClockTicking(); // game over - the snapshot is now static, no need to keep polling
@@ -800,6 +829,17 @@
     startBtn.blur();
   });
   leaveBtn.addEventListener("click", () => {
+    // Leaving mid-hand forfeits it outright (durakEngine.js's removePlayer()
+    // never redistributes the abandoned hand) - confirm first so a stray
+    // click doesn't cost a game that was still winnable. No confirmation
+    // needed once the hand's already empty (lobby, or already finished/out) -
+    // there's nothing left to lose by leaving.
+    const game = lastRenderedGame;
+    const stillPlaying = game && !game.result && game.you && game.you.hand.length > 0;
+    if (stillPlaying && !window.confirm(d.leaveConfirm)) {
+      leaveBtn.blur();
+      return;
+    }
     send({ type: "leaveRoom" });
     leaveBtn.blur();
     resetRoomUiState();
@@ -837,6 +877,11 @@
 
   function renderTable(room, game, justDealt) {
     if (!game) return;
+    // Read by the local-redraw calls in renderHand()/showActionChoice()/the
+    // table-loop below, which don't otherwise have access to this render's
+    // room/game params (renderHand is a separate top-level function).
+    lastRenderedRoom = room;
+    lastRenderedGame = game;
     // A fresh roomState always supersedes whatever the beat-vs-transfer
     // chooser (if open) was about - e.g. the clock ran out mid-choice and the
     // server force-took the bout for them. Re-shown fresh if still relevant.
@@ -849,6 +894,19 @@
     // Spectators (no seat of their own) can watch but not react - same gate
     // as the hand panel above.
     if (stickersEl) stickersEl.hidden = mySeat == null;
+
+    // I'm done (finishRank set) but the game isn't over yet (others are still
+    // playing, only possible with 3+ seats - see durakEngine.js's
+    // checkOutPlayers) - say so now instead of leaving an empty hand looking
+    // like nothing happened. The rating delta isn't knowable yet (Elo here
+    // needs every seat's final placement - see durakElo.js), only the place;
+    // once game.result actually lands, showResult()/renderStandings() takes
+    // over with the real standings, so this banner is hidden by then.
+    const myFinishRank = mySeat != null ? game.players[mySeat].finishRank : null;
+    earlyFinishBannerEl.hidden = !(myFinishRank != null && !game.result);
+    if (!earlyFinishBannerEl.hidden) {
+      earlyFinishBannerEl.textContent = fillTemplate(d.earlyFinishTpl, { RANK: myFinishRank });
+    }
 
     // Opponents: every other seat. Seated players see them starting from the
     // seat after their own, so the row reads left-to-right the way people are
@@ -963,11 +1021,24 @@
     previousTableFilled = filledCount;
 
     tableCardsEl.textContent = "";
-    game.table.forEach((pair) => {
+    game.table.forEach((pair, index) => {
       const wrap = document.createElement("div");
-      wrap.className = "relative w-16 h-[5.5rem]";
+      // pendingDefendCard/pendingDefendIndices (set by renderHand()'s
+      // ambiguous-defend branch or the multi-target beat-picker above): this
+      // undefended pair is one of several the pending card could legally
+      // beat, so it's a live click target instead of just a display.
+      const isTarget = pendingDefendCard && !pair.defense && pendingDefendIndices.includes(index);
+      wrap.className = "relative w-16 h-[5.5rem]" + (isTarget ? " ring-2 ring-rose-500 rounded-md cursor-pointer" : "");
       wrap.appendChild(positionAbsolute(buildCardEl(pair.attack), "top-0 left-0"));
       if (pair.defense) wrap.appendChild(positionAbsolute(buildCardEl(pair.defense), "top-2 left-2"));
+      if (isTarget) {
+        const card = pendingDefendCard;
+        wrap.addEventListener("click", () => {
+          pendingDefendCard = null;
+          pendingDefendIndices = [];
+          send({ type: "defend", tableIndex: index, card });
+        });
+      }
       tableCardsEl.appendChild(wrap);
     });
 
@@ -1006,16 +1077,36 @@
         isLegal = true;
         onClick = () => send({ type: "open", card });
       } else if (isDefending) {
-        const defendEntry = legal.defendable.find((entry) => entry.options.some((c) => cardsEqual(c, card)));
+        const matchingEntries = legal.defendable.filter((entry) => entry.options.some((c) => cardsEqual(c, card)));
         const canTransferThis = (legal.transferCards || []).some((c) => cardsEqual(c, card));
-        if (defendEntry && canTransferThis) {
-          // A trump matching the table's rank is legal both ways (see
-          // durakEngine.js's canTransfer() comment) - ask instead of guessing.
+        if (pendingDefendCard && cardsEqual(pendingDefendCard, card)) {
+          // Already awaiting a table-target click for this exact card -
+          // clicking it again cancels the pending pick instead of restarting it.
           isLegal = true;
-          onClick = () => showActionChoice(card, defendEntry);
-        } else if (defendEntry) {
+          onClick = () => {
+            pendingDefendCard = null;
+            pendingDefendIndices = [];
+            renderTable(lastRenderedRoom, lastRenderedGame, false);
+          };
+        } else if (matchingEntries.length > 1 && !canTransferThis) {
+          // Can beat several undefended cards but transfer isn't in play at
+          // all - no real ambiguity to ask about, just go straight to
+          // table-click targeting (see renderTable()'s table-loop below).
           isLegal = true;
-          onClick = () => send({ type: "defend", tableIndex: defendEntry.index, card });
+          onClick = () => {
+            pendingDefendCard = card;
+            pendingDefendIndices = matchingEntries.map((e) => e.index);
+            renderTable(lastRenderedRoom, lastRenderedGame, false);
+          };
+        } else if (matchingEntries.length >= 1 && canTransferThis) {
+          // Ambiguous: transfer is a genuine alternative to beating (whether
+          // there's exactly one card this could beat, or several) - ask
+          // instead of guessing.
+          isLegal = true;
+          onClick = () => showActionChoice(card, matchingEntries, canTransferThis);
+        } else if (matchingEntries.length === 1) {
+          isLegal = true;
+          onClick = () => send({ type: "defend", tableIndex: matchingEntries[0].index, card });
         } else if (canTransferThis) {
           isLegal = true;
           onClick = () => send({ type: "transfer", card });
@@ -1028,10 +1119,12 @@
       // upward - same "expand touch target" ::before trick as durak.js's
       // renderPlayerHand(), see that comment. gap-2 on #dmp-hand (see
       // gameDurak.ejs) keeps neighboring cards' expanded areas from overlapping.
+      const isPendingThisCard = pendingDefendCard && cardsEqual(pendingDefendCard, card);
       const el = buildCardEl(
         card,
         isLegal
-          ? "cursor-pointer hover:-translate-y-2 transition-transform before:content-[''] before:absolute before:-top-2 before:-left-1 before:-right-1 before:-bottom-1"
+          ? "cursor-pointer hover:-translate-y-2 transition-transform before:content-[''] before:absolute before:-top-2 before:-left-1 before:-right-1 before:-bottom-1" +
+              (isPendingThisCard ? " -translate-y-2 ring-2 ring-rose-500 rounded-md" : "")
           : "opacity-40 pointer-events-none"
       );
       if (isLegal) el.addEventListener("click", onClick);
@@ -1041,32 +1134,64 @@
   }
 
   // --- Beat-vs-transfer chooser ---------------------------------------------
-  // Only ever shown for the rare card that's simultaneously a legal defend
-  // AND a legal transfer (a trump matching the attack's rank) - see
-  // renderHand() above and durakEngine.js's canTransfer().
+  // Shown whenever transfer is a real alternative to beating for the clicked
+  // card (a trump matching the table's rank - see durakEngine.js's
+  // canTransfer()) - whether it can beat exactly one undefended table card or
+  // several at once (a trump beats every non-trump attack regardless of rank,
+  // and several same-rank attacks can sit undefended together - see
+  // renderHand() below). Pure multi-target-with-no-transfer skips this
+  // modal entirely and goes straight to table-click targeting instead (see
+  // renderHand()'s matchingEntries.length > 1 && !canTransferThis branch).
   let pendingChoiceCard = null;
-  let pendingChoiceEntry = null;
+  let pendingChoiceEntries = [];
 
-  function showActionChoice(card, defendEntry) {
+  function showActionChoice(card, defendEntries, canTransfer) {
     pendingChoiceCard = card;
-    pendingChoiceEntry = defendEntry;
+    pendingChoiceEntries = defendEntries;
+    choiceTransferBtn.hidden = !canTransfer;
+    actionChoicePromptEl.textContent =
+      defendEntries.length > 1 ? actionChoiceEl.dataset.promptTarget : actionChoiceEl.dataset.promptTransfer;
     actionChoiceEl.hidden = false;
   }
   function hideActionChoice() {
     actionChoiceEl.hidden = true;
     pendingChoiceCard = null;
-    pendingChoiceEntry = null;
+    pendingChoiceEntries = [];
   }
   choiceBeatBtn.addEventListener("click", () => {
-    if (pendingChoiceCard && pendingChoiceEntry) {
-      send({ type: "defend", tableIndex: pendingChoiceEntry.index, card: pendingChoiceCard });
+    if (!pendingChoiceCard || !pendingChoiceEntries.length) {
+      hideActionChoice();
+      return;
     }
-    hideActionChoice();
+    if (pendingChoiceEntries.length === 1) {
+      send({ type: "defend", tableIndex: pendingChoiceEntries[0].index, card: pendingChoiceCard });
+      hideActionChoice();
+    } else {
+      // Still ambiguous even with transfer ruled out - hand off to
+      // table-click targeting (see renderTable()'s table-loop below) instead
+      // of guessing which of several undefended cards was meant.
+      pendingDefendCard = pendingChoiceCard;
+      pendingDefendIndices = pendingChoiceEntries.map((e) => e.index);
+      hideActionChoice();
+      renderTable(lastRenderedRoom, lastRenderedGame, false);
+    }
   });
   choiceTransferBtn.addEventListener("click", () => {
     if (pendingChoiceCard) send({ type: "transfer", card: pendingChoiceCard });
     hideActionChoice();
   });
+
+  // --- Multi-target beat picker ----------------------------------------------
+  // Set once the player has committed to beating (not transferring) a card
+  // that can legally cover more than one undefended table card - the specific
+  // table card is then chosen by clicking it directly (see renderTable()'s
+  // table-loop and renderHand()'s cancel-by-reclicking below), so the actual
+  // click target lives on the board, not in a modal that would have to cover
+  // (and thus block clicks on) the very cards being chosen between.
+  let pendingDefendCard = null;
+  let pendingDefendIndices = [];
+  let lastRenderedRoom = null;
+  let lastRenderedGame = null;
 
   function renderStatusAndButtons(game) {
     if (!game.legal) {
@@ -1085,7 +1210,8 @@
       statusEl.textContent = "";
       return;
     }
-    if (game.legal.canOpen) statusEl.textContent = d.statusAttack;
+    if (pendingDefendCard) statusEl.textContent = d.statusChooseTarget;
+    else if (game.legal.canOpen) statusEl.textContent = d.statusAttack;
     else if (game.legal.defendable.length) statusEl.textContent = d.statusDefend;
     else if (game.legal.canThrowIn.length || game.legal.canPass) statusEl.textContent = d.statusThrowin;
     else statusEl.textContent = d.statusWaiting;

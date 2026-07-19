@@ -467,6 +467,13 @@ function applyTransfer(state, seat, card) {
   // eligible seat (isEligibleWaveSeat only ever excludes the CURRENT
   // defenderSeat, which just changed) - the new defender is whoever's next.
   state.defenderSeat = nextActiveSeatAfter(state, oldDefender);
+  // boutCap was set from the OLD defender's hand size (applyOpen) and
+  // canTransfer() only checked the new defender can cover what's on the table
+  // right now - it says nothing about further throw-ins the resumed wave is
+  // about to allow. Re-tighten (never loosen) to the new defender's actual
+  // hand size so the wave can't hand them more undefended cards than they
+  // hold cards to beat.
+  state.boutCap = Math.min(state.boutCap, state.players[state.defenderSeat].hand.length);
   state.phase = "wave";
   state.addedThisWave = true;
   state.passedSeats = new Set();

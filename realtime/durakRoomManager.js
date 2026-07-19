@@ -68,6 +68,15 @@ function isCardShape(card) {
 
 // --- Lobby ---------------------------------------------------------------
 
+// null until at least one seated player has a known rating - loadPlayerProfile
+// leaves first-timers' `rating` at null (see its own comment), so an
+// all-first-timers room reports "no rating yet" instead of a misleading 0.
+function averageRating(players) {
+  const rated = players.map((p) => p.rating).filter((r) => r != null);
+  if (!rated.length) return null;
+  return Math.round(rated.reduce((sum, r) => sum + r, 0) / rated.length);
+}
+
 function buildLobbySnapshot() {
   const openRooms = [...rooms.values()]
     .filter((r) => r.status === "lobby")
@@ -76,6 +85,7 @@ function buildLobbySnapshot() {
       hostDisplayName: r.players.length ? r.players[0].displayName : "?",
       playerCount: r.players.length,
       maxPlayers: MAX_PLAYERS,
+      avgRating: averageRating(r.players),
     }));
   // Rooms with a game already underway - shown separately so a visitor can
   // see who's playing right now and, unlike openRooms, watch instead of join
@@ -89,6 +99,7 @@ function buildLobbySnapshot() {
       players: r.players.map((p) => ({ displayName: p.displayName, left: p.left })),
       playerCount: r.players.length,
       spectatorCount: r.spectators.size,
+      avgRating: averageRating(r.players),
     }));
   return { type: "lobbyState", rooms: openRooms, playingRooms };
 }
@@ -132,6 +143,11 @@ function serializeRoomMeta(room) {
     status: room.status,
     rules: room.rules,
     spectatorCount: room.spectators ? room.spectators.size : 0,
+    // Sent on every roomState push regardless of status, so it's visible
+    // both in the pre-start lobby (right after creating/joining a room) and
+    // throughout the game itself - the same field, never recomputed
+    // differently for either phase.
+    avgRating: averageRating(room.players),
     players: room.players.map((p) => ({
       userId: p.userId,
       login: p.login,
