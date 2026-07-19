@@ -901,7 +901,17 @@ function resolveReadyCheckTimeout(room) {
 // those look identical).
 function broadcastAction(room, seat, action) {
   const payload = { type: "action", seat, action };
-  for (const p of room.players) safeSend(p.ws, payload);
+  // Same players-loop exclusions as broadcastRoom(): a player who left keeps
+  // p.ws valid (payOutEarlyFinisher needs it) but has no room view left to
+  // narrate an action onto - without this check their client falls back to
+  // showToast()'s connStatus line, so the game they abandoned keeps
+  // narrating itself there indefinitely. A spectatingOwnSeat early finisher
+  // gets this same payload through the spectators loop below instead - not
+  // filtering them out here would double-deliver it to the same socket.
+  for (const p of room.players) {
+    if (!p.ws || p.left || p.spectatingOwnSeat) continue;
+    safeSend(p.ws, payload);
+  }
   if (room.spectators) for (const ws of room.spectators.keys()) safeSend(ws, payload);
 }
 
@@ -910,7 +920,12 @@ function broadcastAction(room, seat, action) {
 // (no engine call, no syncClock, no room-state re-broadcast needed).
 function broadcastSticker(room, seat, stickerId) {
   const payload = { type: "sticker", seat, stickerId };
-  for (const p of room.players) safeSend(p.ws, payload);
+  // See broadcastAction() above for why left/spectatingOwnSeat players are
+  // excluded from this loop.
+  for (const p of room.players) {
+    if (!p.ws || p.left || p.spectatingOwnSeat) continue;
+    safeSend(p.ws, payload);
+  }
   if (room.spectators) for (const ws of room.spectators.keys()) safeSend(ws, payload);
 }
 
