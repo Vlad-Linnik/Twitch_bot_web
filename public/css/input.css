@@ -590,35 +590,13 @@ html.js .save-fab.save-visible {
   }
 }
 
-/* Match-3 abilities (public/js/games/match3.js): a charged-up ability button
-   pulses gently until tapped (arming it), and the armed button gets a solid
-   highlight instead - both read at a glance without needing to compare bar
-   fill percentages. */
-@keyframes m3-ability-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgb(168 85 247 / 0.55); }
-  50% { box-shadow: 0 0 0 4px rgb(168 85 247 / 0); }
-}
-.m3-ability-ready {
-  border-color: rgb(168 85 247 / 0.6) !important; /* purple-500 */
-  animation: m3-ability-pulse 1.6s ease-in-out infinite;
-}
-.m3-ability-armed {
-  border-color: rgb(216 180 254 / 1) !important; /* purple-300 */
-  background-color: rgb(88 28 135 / 0.35) !important;
-  animation: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .m3-ability-ready {
-    animation: none;
-  }
-}
-
-/* Hover preview of an armed ability's target cells (see match3.js's
-   previewAbility) - a dashed amber outline distinct from both the
-   tap-to-select purple outline and the invalid-swap shake. */
-.m3-cell-ability-preview {
-  outline: 2px dashed rgb(251 191 36 / 0.9); /* amber-400 */
-  outline-offset: -2px;
+/* Match-3 shape bonuses (public/js/games/match3.js's showCombo): the combo
+   callout gets a warmer amber tint and a slightly bigger pop instead of the
+   plain purple "Combo" one whenever a step's match shape triggered a bonus
+   blast (see match3Engine.js's classifyGroupShape) - reuses m3-combo-pop's
+   keyframe/timing, just an alternate palette layered on top. */
+.m3-combo-special {
+  background-color: rgb(217 119 6 / 0.95); /* amber-600 */
 }
 
 /* Battleship (public/js/games/battleship.js): gap-less 10x10 board. Ship
