@@ -93,11 +93,48 @@
       <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
         <div class="flex justify-between items-baseline mb-2">
           <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.match3.timeLeft') %></span>
-          <span id="m3-time" class="text-lg font-semibold text-neutral-100 tabular-nums">5:00</span>
+          <span id="m3-time" class="text-lg font-semibold text-neutral-100 tabular-nums">3:00</span>
         </div>
         <div class="flex justify-between items-baseline">
           <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.match3.score') %></span>
           <span id="m3-score" class="text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+        </div>
+      </div>
+
+      <div id="m3-abilities" class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.match3.abilitiesTitle') %></p>
+        <p class="text-xs text-neutral-500 mb-3"><%= t('games.match3.abilitiesHint') %></p>
+        <div class="space-y-2">
+          <button type="button" data-ability="line" disabled
+                  class="w-full text-left rounded-lg border border-neutral-800 bg-neutral-950 p-2 disabled:opacity-50 transition-colors">
+            <span class="flex items-center gap-2 text-sm text-neutral-200">
+              <span aria-hidden="true">✛</span>
+              <span class="flex-1 truncate"><%= t('games.match3.abilityLine') %></span>
+            </span>
+            <span class="m3-ability-meter mt-1.5 block h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+              <span class="m3-ability-meter-fill block h-full rounded-full bg-purple-500" style="width: 0%"></span>
+            </span>
+          </button>
+          <button type="button" data-ability="area" disabled
+                  class="w-full text-left rounded-lg border border-neutral-800 bg-neutral-950 p-2 disabled:opacity-50 transition-colors">
+            <span class="flex items-center gap-2 text-sm text-neutral-200">
+              <span aria-hidden="true">▦</span>
+              <span class="flex-1 truncate"><%= t('games.match3.abilityArea') %></span>
+            </span>
+            <span class="m3-ability-meter mt-1.5 block h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+              <span class="m3-ability-meter-fill block h-full rounded-full bg-purple-500" style="width: 0%"></span>
+            </span>
+          </button>
+          <button type="button" data-ability="type" disabled
+                  class="w-full text-left rounded-lg border border-neutral-800 bg-neutral-950 p-2 disabled:opacity-50 transition-colors">
+            <span class="flex items-center gap-2 text-sm text-neutral-200">
+              <span aria-hidden="true">✦</span>
+              <span class="flex-1 truncate"><%= t('games.match3.abilityType') %></span>
+            </span>
+            <span class="m3-ability-meter mt-1.5 block h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+              <span class="m3-ability-meter-fill block h-full rounded-full bg-purple-500" style="width: 0%"></span>
+            </span>
+          </button>
         </div>
       </div>
 

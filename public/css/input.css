@@ -590,6 +590,37 @@ html.js .save-fab.save-visible {
   }
 }
 
+/* Match-3 abilities (public/js/games/match3.js): a charged-up ability button
+   pulses gently until tapped (arming it), and the armed button gets a solid
+   highlight instead - both read at a glance without needing to compare bar
+   fill percentages. */
+@keyframes m3-ability-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(168 85 247 / 0.55); }
+  50% { box-shadow: 0 0 0 4px rgb(168 85 247 / 0); }
+}
+.m3-ability-ready {
+  border-color: rgb(168 85 247 / 0.6) !important; /* purple-500 */
+  animation: m3-ability-pulse 1.6s ease-in-out infinite;
+}
+.m3-ability-armed {
+  border-color: rgb(216 180 254 / 1) !important; /* purple-300 */
+  background-color: rgb(88 28 135 / 0.35) !important;
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .m3-ability-ready {
+    animation: none;
+  }
+}
+
+/* Hover preview of an armed ability's target cells (see match3.js's
+   previewAbility) - a dashed amber outline distinct from both the
+   tap-to-select purple outline and the invalid-swap shake. */
+.m3-cell-ability-preview {
+  outline: 2px dashed rgb(251 191 36 / 0.9); /* amber-400 */
+  outline-offset: -2px;
+}
+
 /* Battleship (public/js/games/battleship.js): gap-less 10x10 board. Ship
    sprites and hit/kill marks are absolute overlays positioned in plain
    percentages (10% per cell), layered above the cell buttons by z-index. */

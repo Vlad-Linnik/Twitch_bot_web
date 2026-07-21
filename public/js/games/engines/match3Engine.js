@@ -208,13 +208,21 @@ function refillGrid(grid, typeCount, rng) {
 // whole game loop.
 const MAX_CASCADE_STEPS = 50;
 
-function resolveCascade(grid, typeCount, rng) {
+// Shared loop behind resolveCascade/resolveAbilityClear below: clear a step's
+// groups, gravity+refill, record the step, then keep re-scanning the grid for
+// further matches until it stabilizes. `firstGroups`, when given, is used
+// verbatim for step 1 instead of a findMatches() scan - that's what lets an
+// ability's arbitrary cell selection (a whole row, an area, every crystal of
+// one type) go through the exact same clear/animate/score pipeline as a
+// regular match, cascades included.
+function resolveFromGroups(grid, typeCount, rng, firstGroups) {
   const random = rng || Math.random;
   const steps = [];
   let totalCleared = 0;
+  let groups = firstGroups;
   while (steps.length < MAX_CASCADE_STEPS) {
-    const groups = findMatches(grid);
-    if (groups.length === 0) break;
+    if (groups === undefined) groups = findMatches(grid);
+    if (!groups || groups.length === 0) break;
     let clearedCount = 0;
     const clearedCells = [];
     for (const group of groups) {
@@ -235,8 +243,80 @@ function resolveCascade(grid, typeCount, rng) {
       newCells,
       gridAfter: grid.map((row) => row.slice()),
     });
+    groups = undefined; // every step after the first always comes from a fresh scan
   }
   return { steps, totalCleared };
+}
+
+function resolveCascade(grid, typeCount, rng) {
+  return resolveFromGroups(grid, typeCount, rng, undefined);
+}
+
+// Clears an arbitrary, caller-chosen set of cells as a single group (an
+// ability blast rather than a matched run), then lets any gravity-exposed
+// matches cascade normally - same clear/animate/score pipeline as a regular
+// swap via resolveCascade above, just seeded with a hand-picked first group
+// instead of one findMatches() finds on its own.
+function resolveAbilityClear(grid, cells, typeCount, rng) {
+  return resolveFromGroups(grid, typeCount, rng, [cells]);
+}
+
+function getRowCells(grid, r) {
+  const cols = grid[0].length;
+  const cells = [];
+  for (let c = 0; c < cols; c++) cells.push([r, c]);
+  return cells;
+}
+
+function getColCells(grid, c) {
+  const rows = grid.length;
+  const cells = [];
+  for (let r = 0; r < rows; r++) cells.push([r, c]);
+  return cells;
+}
+
+// The "line" ability's target set: the tapped cell's full row AND column
+// (a cross/plus shape) in one blast, deduped so the shared cell isn't
+// double-counted into groupSizes.
+function getCrossCells(grid, r, c) {
+  const seen = new Set();
+  const cells = [];
+  for (const cell of getRowCells(grid, r).concat(getColCells(grid, c))) {
+    const key = cell[0] + "," + cell[1];
+    if (!seen.has(key)) {
+      seen.add(key);
+      cells.push(cell);
+    }
+  }
+  return cells;
+}
+
+// The "area" ability's target set: a (2*radius+1)-side square centered on
+// the tapped cell, clipped at the board edges (radius 1 = 3x3 = 9 cells).
+function getAreaCells(grid, r, c, radius) {
+  const rows = grid.length;
+  const cols = grid[0].length;
+  const cells = [];
+  for (let rr = r - radius; rr <= r + radius; rr++) {
+    for (let cc = c - radius; cc <= c + radius; cc++) {
+      if (rr >= 0 && rr < rows && cc >= 0 && cc < cols) cells.push([rr, cc]);
+    }
+  }
+  return cells;
+}
+
+// The "type" ability's target set: every crystal on the board matching the
+// tapped cell's type.
+function getTypeCells(grid, type) {
+  const rows = grid.length;
+  const cols = grid[0].length;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c] === type) cells.push([r, c]);
+    }
+  }
+  return cells;
 }
 
 // Points for one resolveCascade() result - see this module's header comment
@@ -274,6 +354,12 @@ const api = {
   applyGravity,
   refillGrid,
   resolveCascade,
+  resolveAbilityClear,
+  getRowCells,
+  getColCells,
+  getCrossCells,
+  getAreaCells,
+  getTypeCells,
   computeCascadeScore,
   hasAnyLegalMove,
 };

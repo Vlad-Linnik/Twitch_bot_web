@@ -1,4 +1,4 @@
-// /games/match-3 - a timed crystal-matching marathon. 5 minutes on the clock,
+// /games/match-3 - a timed crystal-matching marathon. 3 minutes on the clock,
 // score as many points as possible: swap two adjacent crystals to create a
 // match of 3+, and any gravity-triggered cascade off that single swap scores
 // progressively more per step (see engines/match3Engine.js's
@@ -6,6 +6,15 @@
 // that engine module (loaded via <script> tag before this file - see
 // gameMatch3.ejs) so it's shared with the node:test suite, same split as
 // minesweeper.js/minesweeperEngine.js right next to these files.
+//
+// Abilities: every crystal cleared (matches and cascades alike) charges 3
+// meters at once (see ABILITY_DEFS below); once a meter is full its button
+// lights up and becomes clickable, arming that ability. The next board tap
+// then spends it instead of doing a normal select/swap - see handleTap's
+// armedAbility branch - clearing a hand-picked set of cells (a cross through
+// the tapped cell, a 3x3 area, or every crystal of the tapped type) through
+// the exact same clear/animate/score pipeline as a regular match
+// (engine.resolveAbilityClear), cascades included.
 (function () {
   "use strict";
 
@@ -16,7 +25,17 @@
   const ROWS = 8;
   const COLS = 8;
   const TYPE_COUNT = 6;
-  const RUN_MS = 5 * 60 * 1000;
+  const RUN_MS = 3 * 60 * 1000;
+
+  // How many crystals must be cleared (matches + cascades, any source) to
+  // charge each ability's meter to full - see the header comment above.
+  // Ordered cheapest-to-priciest to roughly match effect size: a cross
+  // through one cell < a 3x3 area < wiping every crystal of one type.
+  const ABILITY_DEFS = {
+    line: { threshold: 45 },
+    area: { threshold: 65 },
+    type: { threshold: 100 },
+  };
 
   // Tinted "socket" backdrop per crystal type (kept subtle - the artwork
   // itself is what tells types apart) plus its sprite, sliced from a
@@ -122,6 +141,11 @@
   let busy = false;
   let selected = null; // {r,c} of the first tap in a two-tap swap
 
+  const abilityButtons = Array.from(document.querySelectorAll("#m3-abilities [data-ability]"));
+  let abilityCharge = { line: 0, area: 0, type: 0 };
+  let armedAbility = null; // key of the ability awaiting its target tap, or null
+  let previewCells = []; // cells currently highlighted by armed-ability hover
+
   function fmtTime(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
     const m = Math.floor(total / 60);
@@ -145,6 +169,8 @@
         el.type = "button";
         el.className = "m3-cell";
         el.addEventListener("click", () => handleTap(r, c));
+        el.addEventListener("mouseenter", () => previewAbility(r, c));
+        el.addEventListener("mouseleave", clearAbilityPreview);
         cellEls[r][c] = el;
         root.appendChild(el);
       }
@@ -271,6 +297,10 @@
 
   function handleTap(r, c) {
     if (state !== "running" || busy) return;
+    if (armedAbility) {
+      activateAbility(armedAbility, r, c);
+      return;
+    }
     if (!selected) {
       selected = { r, c };
       renderCell(r, c);
@@ -316,8 +346,15 @@
     }
   }
 
-  function resolveAndScore() {
-    const { steps } = engine.resolveCascade(grid, TYPE_COUNT, Math.random);
+  // Shared tail end of both a normal swap's cascade and an ability's blast:
+  // animate the steps, score them, and refresh the grid if it's gone stuck.
+  // `chargesAbilities` is false for an ability's own resolution - only a
+  // genuine swap-triggered match/cascade should feed the meters, otherwise a
+  // big enough ability blast re-charges its own meter through its cascade
+  // and lets it fire again almost immediately (caught via live E2E testing:
+  // firing "line" cleared ~44 crystals, which alone put its own 45-threshold
+  // meter back at 98%).
+  function finishResolution(steps, chargesAbilities) {
     animateCascadeSteps(steps, 0, () => {
       const gained = engine.computeCascadeScore(steps);
       if (gained > 0) {
@@ -325,13 +362,103 @@
         scoreEl.textContent = score;
         showCombo(steps.length, gained);
       }
+      if (chargesAbilities) {
+        let totalCleared = 0;
+        for (const step of steps) totalCleared += step.clearedCount;
+        if (totalCleared > 0) gainAbilityCharge(totalCleared);
+      }
       if (!engine.hasAnyLegalMove(grid)) {
         grid = freshGrid();
         renderAll();
       }
       busy = false;
+      updateAbilityUI();
     });
   }
+
+  function resolveAndScore() {
+    const { steps } = engine.resolveCascade(grid, TYPE_COUNT, Math.random);
+    finishResolution(steps, true);
+  }
+
+  // --- Abilities ---------------------------------------------------------
+
+  function abilityTargetCells(key, r, c) {
+    if (key === "line") return engine.getCrossCells(grid, r, c);
+    if (key === "area") return engine.getAreaCells(grid, r, c, 1);
+    return engine.getTypeCells(grid, grid[r][c]);
+  }
+
+  function clearAbilityPreview() {
+    for (const [r, c] of previewCells) cellEls[r][c].classList.remove("m3-cell-ability-preview");
+    previewCells = [];
+  }
+
+  function previewAbility(r, c) {
+    if (!armedAbility || state !== "running" || busy) return;
+    clearAbilityPreview();
+    previewCells = abilityTargetCells(armedAbility, r, c);
+    for (const [pr, pc] of previewCells) cellEls[pr][pc].classList.add("m3-cell-ability-preview");
+  }
+
+  function gainAbilityCharge(clearedCount) {
+    for (const key of Object.keys(ABILITY_DEFS)) {
+      abilityCharge[key] = Math.min(ABILITY_DEFS[key].threshold, abilityCharge[key] + clearedCount);
+    }
+  }
+
+  function updateAbilityUI() {
+    for (const btn of abilityButtons) {
+      const key = btn.dataset.ability;
+      const def = ABILITY_DEFS[key];
+      const charge = abilityCharge[key];
+      const ready = charge >= def.threshold;
+      const fill = btn.querySelector(".m3-ability-meter-fill");
+      if (fill) fill.style.width = Math.min(100, (charge / def.threshold) * 100) + "%";
+      btn.disabled = !ready || state !== "running" || busy;
+      btn.classList.toggle("m3-ability-ready", ready);
+      btn.classList.toggle("m3-ability-armed", armedAbility === key);
+    }
+    root.style.cursor = armedAbility ? "crosshair" : "";
+  }
+
+  function setArmedAbility(key) {
+    if (selected) {
+      const prev = selected;
+      selected = null;
+      renderCell(prev.r, prev.c);
+    }
+    armedAbility = armedAbility === key ? null : key;
+    clearAbilityPreview();
+    updateAbilityUI();
+  }
+
+  function activateAbility(key, r, c) {
+    const cells = abilityTargetCells(key, r, c);
+    abilityCharge[key] = 0;
+    armedAbility = null;
+    clearAbilityPreview();
+    updateAbilityUI();
+    busy = true;
+    const { steps } = engine.resolveAbilityClear(grid, cells, TYPE_COUNT, Math.random);
+    finishResolution(steps, false);
+  }
+
+  for (const btn of abilityButtons) {
+    btn.addEventListener("click", () => {
+      if (state !== "running" || busy || abilityCharge[btn.dataset.ability] < ABILITY_DEFS[btn.dataset.ability].threshold) return;
+      playSound("select");
+      setArmedAbility(btn.dataset.ability);
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && armedAbility) {
+      armedAbility = null;
+      clearAbilityPreview();
+      updateAbilityUI();
+    }
+  });
 
   function tick() {
     const remaining = deadline - Date.now();
@@ -348,6 +475,9 @@
     scoreEl.textContent = "0";
     selected = null;
     busy = false;
+    armedAbility = null;
+    previewCells = [];
+    abilityCharge = { line: 0, area: 0, type: 0 };
     grid = freshGrid();
     buildBoardDom();
     renderAll();
@@ -356,12 +486,16 @@
     hideOverlay();
     tick();
     tickHandle = setInterval(tick, 250);
+    updateAbilityUI();
   }
 
   function endRun() {
     state = "over";
     clearInterval(tickHandle);
     tickHandle = null;
+    armedAbility = null;
+    clearAbilityPreview();
+    updateAbilityUI();
     submitScore(score);
     showOverlay("over");
   }
@@ -509,4 +643,5 @@
   });
 
   showOverlay("start");
+  updateAbilityUI();
 })();
