@@ -5,16 +5,23 @@
 // can treat every handler uniformly.
 //
 // Deliberately much lighter than durakRoomManager.js: no lobby/room-code UI,
-// no spectators, no ready-check, no host privileges, no per-turn chess clock
-// - just FIFO auto-matchmaking (queue -> pair the first two waiting players),
-// a room, and a disconnect-grace-then-forfeit. Durak's room/lobby machinery
-// isn't reused directly (this repo's convention favors a fresh, purpose-built
-// module over forcing a new feature through code that already has plenty of
+// no ready-check owned by the room itself (that part IS shared, see below),
+// no host privileges, no per-turn chess clock - just FIFO auto-matchmaking
+// (queue -> pair the first two waiting players), a room, and a
+// disconnect-grace-then-forfeit. Durak's room/lobby machinery isn't reused
+// directly (this repo's convention favors a fresh, purpose-built module over
+// forcing a new feature through code that already has plenty of
 // game-specific branching) - what IS reused verbatim is the session-auth
 // story (socketServer.js hands both managers the same `user` shape) and the
 // rating math (realtime/durakElo.js, db/gameScoresRepo.js's getRatings/
 // applyEloDelta - unchanged, called exactly like durakRoomManager.js's
 // updateRatings does for a plain 2-player case).
+//
+// Spectating (added later) DOES mirror durakRoomManager.js's shape fairly
+// closely - lobbySockets/broadcastLobby/enterLobby/evictSpectators are named
+// and behave the same way there and here, just scoped per-game (this factory
+// runs once per game, so "the lobby" here only ever means "this one game's
+// idle/queued viewers"). See handleWatchRoom/handleLeaveWatch below.
 "use strict";
 
 const crypto = require("crypto");
@@ -64,6 +71,7 @@ function createQuickMatchManager(config) {
   const rooms = new Map(); // roomId -> room
   const userActiveRoom = new Map(); // userId -> roomId, only while that room is playing
   const queue = []; // [{ userId, ws, meta, queuedAt }]
+  const lobbySockets = new Set(); // sockets on the idle/queued screen - not seated, not spectating
 
   function genRoomId() {
     let id;
@@ -82,9 +90,110 @@ function createQuickMatchManager(config) {
     for (const entry of queue) safeSend(entry.ws, payload);
   }
 
+  // --- Lobby (idle-screen queue count + "who's playing now" list) ---------
+  // Mirrors durakRoomManager.js's own lobbySockets/buildLobbySnapshot/
+  // broadcastLobby/enterLobby/evictSpectators, scoped to this one game.
+
+  function buildLobbySnapshot() {
+    const playingRooms = [...rooms.values()]
+      .filter((r) => r.status === "playing")
+      .map((r) => ({
+        id: r.id,
+        players: r.players.map((p) => ({ displayName: p.meta.displayName, connected: p.connected })),
+        spectatorCount: r.spectators.size,
+      }));
+    return { type: "lobbyState", queueSize: queue.length, playingRooms };
+  }
+
+  function sendLobbySnapshot(ws) {
+    safeSend(ws, buildLobbySnapshot());
+  }
+
+  function broadcastLobby() {
+    const snapshot = buildLobbySnapshot();
+    for (const ws of lobbySockets) safeSend(ws, snapshot);
+  }
+
+  function enterLobby(ws, meta) {
+    meta.roomId = null;
+    lobbySockets.add(ws);
+    sendLobbySnapshot(ws);
+  }
+
+  // A room with spectators is torn down (cleanupRoom) - there's no game left
+  // to watch, so every spectator drops straight back into the lobby view,
+  // same reasoning as durakRoomManager.js's own evictSpectators.
+  function evictSpectators(room) {
+    if (!room.spectators.size) return;
+    for (const [ws, m] of room.spectators) {
+      m.watchRoomId = null;
+      enterLobby(ws, m);
+    }
+    room.spectators.clear();
+  }
+
+  // Queue size affects two different audiences: sockets already queued (the
+  // existing "queueUpdate" broadcast, unchanged) and idle-screen viewers who
+  // haven't queued yet (the new lobbyState broadcast) - without this second
+  // half, the idle "N players searching" label could never update itself.
+  function queueSizeChanged() {
+    broadcastQueueSize();
+    broadcastLobby();
+  }
+
   function opponentInfoFor(room, seat) {
     const opp = room.players[otherSeat(seat)];
     return { displayName: opp.meta.displayName, login: opp.meta.login };
+  }
+
+  // --- Spectating ------------------------------------------------------------
+  // Read-only: a spectator is never added to room.players and never touches
+  // engine state. engine.serializeForSpectator (when the engine defines one -
+  // only battleshipEngine.js and backgammonEngine.js need to, see their own
+  // comments) is what keeps hidden information away from a spectator; engines
+  // with nothing to hide (pong, connect four) fall back to serializeForSeat,
+  // which for them is already seat-agnostic.
+  function spectatorPayloadFor(room) {
+    const serialize = engine.serializeForSpectator || ((s) => engine.serializeForSeat(s, 0));
+    return {
+      state: serialize(room.state),
+      spectating: true,
+      players: room.players.map((p) => ({ displayName: p.meta.displayName })),
+    };
+  }
+
+  function broadcastSpectatorState(room, type, deadline) {
+    if (!room.spectators.size) return;
+    const payload = Object.assign({ type }, spectatorPayloadFor(room));
+    if (deadline !== undefined) payload.deadline = deadline;
+    for (const ws of room.spectators.keys()) safeSend(ws, payload);
+  }
+
+  function handleWatchRoom(ws, meta, roomId) {
+    if (meta.roomId || meta.watchRoomId) return sendError(ws, "already-in-room");
+    if (typeof roomId !== "string") return sendError(ws, "bad-request");
+    const room = rooms.get(roomId);
+    if (!room) return sendError(ws, "room-not-found");
+    // Only a room with a game actually in progress is watchable - "readycheck"
+    // has no state object worth showing yet, and "finished" is a stray race
+    // (the room fell out of buildLobbySnapshot's playingRooms the instant the
+    // game ended, so the UI shouldn't be offering a Watch button for it).
+    if (room.status !== "playing") return sendError(ws, "room-not-watchable");
+    lobbySockets.delete(ws);
+    room.spectators.set(ws, meta);
+    meta.watchRoomId = room.id;
+    safeSend(
+      ws,
+      Object.assign({ type: mode === "tick" ? "tick" : "state", deadline: deadlinePayload(room) }, spectatorPayloadFor(room))
+    );
+    broadcastLobby();
+  }
+
+  function handleLeaveWatch(ws, meta) {
+    const room = meta.watchRoomId ? rooms.get(meta.watchRoomId) : null;
+    meta.watchRoomId = null;
+    if (room && room.spectators.delete(ws)) broadcastLobby();
+    enterLobby(ws, meta);
   }
 
   function broadcastState(room) {
@@ -92,6 +201,7 @@ function createQuickMatchManager(config) {
     for (const p of room.players) {
       safeSend(p.ws, { type: "state", state: engine.serializeForSeat(room.state, p.seat), deadline });
     }
+    broadcastSpectatorState(room, "state", deadline);
   }
 
   // --- Phase deadlines (optional engine interface) -------------------------
@@ -156,6 +266,7 @@ function createQuickMatchManager(config) {
       for (const p of room.players) {
         safeSend(p.ws, { type: "tick", state: engine.serializeForSeat(room.state, p.seat) });
       }
+      broadcastSpectatorState(room, "tick");
       const result = engine.checkGameOver(room.state);
       if (result) finishGame(room, result.draw ? null : result.winnerSeat, !!result.draw);
     }, tickMs);
@@ -194,9 +305,12 @@ function createQuickMatchManager(config) {
         { userId: p0.userId, meta: p0.meta, ws: p0.ws, connected: true, seat: 0, disconnectTimer: null },
         { userId: p1.userId, meta: p1.meta, ws: p1.ws, connected: true, seat: 1, disconnectTimer: null },
       ],
+      spectators: new Map(), // ws -> meta, see handleWatchRoom
     };
     rooms.set(roomId, room);
     for (const p of room.players) p.meta.roomId = roomId;
+    lobbySockets.delete(a.ws);
+    lobbySockets.delete(b.ws);
     room.readyCheck.timer = setTimeout(() => resolveReadyCheckTimeout(room), READY_CHECK_MS);
     room.readyCheck.timer.unref();
     for (const p of room.players) {
@@ -264,6 +378,7 @@ function createQuickMatchManager(config) {
     }
     broadcastState(room);
     if (mode === "tick") startTick(room);
+    broadcastLobby(); // room just entered playingRooms
   }
 
   function resolveReadyCheckTimeout(room) {
@@ -285,11 +400,15 @@ function createQuickMatchManager(config) {
       p.meta.roomId = null;
       if (!p.connected || p.userId === excludeUserId) continue;
       if (accepted.has(p.userId)) requeue.push(p);
-      else safeSend(p.ws, { type: "matchCancelled" });
+      else {
+        safeSend(p.ws, { type: "matchCancelled" });
+        enterLobby(p.ws, p.meta);
+      }
     }
     for (const p of requeue) {
       const entry = { userId: p.userId, ws: p.ws, meta: p.meta, queuedAt: Date.now() };
       queue.push(entry);
+      lobbySockets.add(p.ws);
       safeSend(p.ws, { type: "queued", queueSize: queue.length, queuedAt: entry.queuedAt });
     }
     tryMatch();
@@ -297,11 +416,11 @@ function createQuickMatchManager(config) {
 
   function tryMatch() {
     while (queue.length >= 2) createRoom(...queue.splice(0, 2));
-    broadcastQueueSize();
+    queueSizeChanged();
   }
 
   function handleQueue(ws, meta) {
-    if (meta.roomId) return sendError(ws, "already-in-room");
+    if (meta.roomId || meta.watchRoomId) return sendError(ws, "already-in-room");
     if (queue.some((e) => e.userId === meta.userId)) return sendError(ws, "already-queued");
     if (!queueLimiter(meta.userId)) return sendError(ws, "rate-limited");
     const entry = { userId: meta.userId, ws, meta, queuedAt: Date.now() };
@@ -314,7 +433,7 @@ function createQuickMatchManager(config) {
     const idx = queue.findIndex((e) => e.userId === meta.userId);
     if (idx < 0) return;
     queue.splice(idx, 1);
-    broadcastQueueSize();
+    queueSizeChanged();
   }
 
   function findSelf(room, meta) {
@@ -398,6 +517,11 @@ function createQuickMatchManager(config) {
       if (userActiveRoom.get(p.userId) === room.id) userActiveRoom.delete(p.userId);
     }
     rooms.delete(room.id);
+    evictSpectators(room);
+    for (const p of room.players) {
+      if (p.connected && p.ws) enterLobby(p.ws, p.meta);
+    }
+    broadcastLobby();
   }
 
   function onMessage(ws, meta, raw) {
@@ -421,16 +545,28 @@ function createQuickMatchManager(config) {
         return handleInput(ws, meta, msg.input);
       case "resign":
         return handleResign(ws, meta);
+      case "watchRoom":
+        return handleWatchRoom(ws, meta, msg.roomId);
+      case "leaveWatch":
+        return handleLeaveWatch(ws, meta);
       default:
         return;
     }
   }
 
   function onClose(ws, meta) {
+    lobbySockets.delete(ws);
+
     const qIdx = queue.findIndex((e) => e.ws === ws);
     if (qIdx >= 0) {
       queue.splice(qIdx, 1);
-      broadcastQueueSize();
+      queueSizeChanged();
+    }
+
+    if (meta.watchRoomId) {
+      const watched = rooms.get(meta.watchRoomId);
+      meta.watchRoomId = null;
+      if (watched && watched.spectators.delete(ws)) broadcastLobby();
     }
 
     const room = meta.roomId ? rooms.get(meta.roomId) : null;
@@ -457,6 +593,7 @@ function createQuickMatchManager(config) {
     const opponent = room.players[otherSeat(player.seat)];
     safeSend(opponent.ws, { type: "opponentDisconnected" });
     if (mode === "tick") pauseTick(room);
+    broadcastLobby(); // freshens this room's "connected" badge for spectators/lobby viewers
 
     player.disconnectTimer = setTimeout(() => {
       if (player.connected) return; // reconnected before the timer fired
@@ -466,7 +603,7 @@ function createQuickMatchManager(config) {
   }
 
   function handleConnection(ws, user) {
-    const meta = { userId: String(user.userId), login: user.login, displayName: user.displayName, roomId: null };
+    const meta = { userId: String(user.userId), login: user.login, displayName: user.displayName, roomId: null, watchRoomId: null };
     ws.on("message", (raw) => onMessage(ws, meta, raw));
     ws.on("close", () => onClose(ws, meta));
 
@@ -495,10 +632,15 @@ function createQuickMatchManager(config) {
           deadline: deadlinePayload(room),
         });
         safeSend(ws, { type: "state", state: engine.serializeForSeat(room.state, player.seat), deadline: deadlinePayload(room) });
+        broadcastLobby();
+        return;
       }
     }
-    // Otherwise a fresh connection - the client sends {type:"queue"} once
-    // ready, no auto-action needed here.
+    // Otherwise a fresh connection (or a stale userActiveRoom entry with no
+    // matching seat) - drop into the lobby view so the idle screen has a live
+    // queue count and match list right away, before the client ever sends
+    // {type:"queue"}.
+    enterLobby(ws, meta);
   }
 
   return { handleConnection };

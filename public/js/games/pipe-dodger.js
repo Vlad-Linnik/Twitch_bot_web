@@ -91,7 +91,8 @@
     if (!base) return;
     try {
       const node = base.cloneNode(true);
-      node.volume = opts && opts.volume != null ? opts.volume : base.volume;
+      const master = window.gameVolume ? window.gameVolume.get() : 1;
+      node.volume = (opts && opts.volume != null ? opts.volume : base.volume) * master;
       node.playbackRate = (opts && opts.rate) || 1;
       node.play().catch(() => {});
     } catch (_) {

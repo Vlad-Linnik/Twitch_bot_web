@@ -164,6 +164,7 @@
   },
   "games": {
     "title": "Мини-игры",
+    "volume": "Громкость звука",
     "fallingBlocks": {
       "name": "Падающие блоки",
       "cardDescription": "Складывайте падающие фигуры, собирайте линии и бейте свой рекорд.",
@@ -446,7 +447,16 @@
       "readyCheckWaiting": "Ждём подтверждения соперника…",
       "readyCountdownTpl": "осталось {{seconds}} с",
       "readyAcceptedTpl": "принято {{accepted}}/{{total}}",
-      "matchCancelled": "Матч отменён — соперник не подтвердил готовность."
+      "matchCancelled": "Матч отменён — соперник не подтвердил готовность.",
+      "ongoingMatchesTitle": "Идущие матчи",
+      "ongoingMatchesEmpty": "Сейчас нет идущих матчей.",
+      "matchVsTpl": "{{p1}} против {{p2}}",
+      "watchLabel": "Смотреть",
+      "spectatorCountTpl": "{{count}} смотрят",
+      "spectatingBadge": "Вы смотрите этот матч",
+      "stopWatching": "Прекратить просмотр",
+      "spectateTurnTpl": "Ход игрока {{name}}",
+      "spectatePlacementWaiting": "Игроки расставляют флот…"
     },
     "battleship": {
       "name": "Морской бой",

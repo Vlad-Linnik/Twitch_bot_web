@@ -412,7 +412,11 @@ function applyOpen(state, seat, card) {
   const taken = takeCardByValue(state.players[seat].hand, card);
   if (!taken) return err("not-in-hand");
   state.table.push({ attack: taken, defense: null });
-  state.boutCap = Math.min(6, state.players[state.defenderSeat].hand.length);
+  // House rule: the very first bout of the game caps at 5 attack cards
+  // (not 6) even though the first defender holds a full 6-card hand -
+  // gives them a guaranteed card left to draw back up with immediately.
+  const cap = state.boutIndex === 1 ? 5 : 6;
+  state.boutCap = Math.min(cap, state.players[state.defenderSeat].hand.length);
   state.phase = "wave";
   state.addedThisWave = true;
   state.passedSeats = new Set();

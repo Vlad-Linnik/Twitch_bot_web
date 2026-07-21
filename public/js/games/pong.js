@@ -41,6 +41,7 @@
     countEl: document.getElementById("pong-queue-count"),
     timeEl: document.getElementById("pong-queue-time"),
   });
+  window.wireQuickMatchLobby(client);
 
   const screens = {
     idle: document.getElementById("pong-screen-idle"),
@@ -54,10 +55,22 @@
   const resultOverlay = document.getElementById("pong-result");
   const resultTitle = document.getElementById("pong-result-title");
   const resultBody = document.getElementById("pong-result-body");
+  const resignBtn = document.getElementById("pong-resign");
 
   let youAreSeat = 0;
   let mirror = false; // true when we're seat 1, so we always see our own paddle on the left
   let currentDir = 0;
+  let spectating = false; // local "have we already run spectate-entry setup" flag - see spectateCtl below for the shared badge/button state
+
+  window.wireQuickMatchSpectating(client, {
+    badgeEl: document.getElementById("pong-spectating-badge"),
+    stopBtn: document.getElementById("pong-stop-watching-btn"),
+    onExit: () => {
+      spectating = false;
+      stopLoop();
+      showScreen("idle");
+    },
+  });
 
   let snapshot = null; // last authoritative state pushed by the server
   let snapshotAt = 0; // performance.now() when it arrived
@@ -190,7 +203,7 @@
       // toCanvasX() mirrors the x coordinate but the paddle's own width
       // still needs to extend toward court-center from that mirrored edge.
       const drawX = mirror ? toCanvasX(px) - paddleW : toCanvasX(px);
-      ctx.fillStyle = seat === youAreSeat ? "#c084fc" : "#e5e5e5";
+      ctx.fillStyle = !spectating && seat === youAreSeat ? "#c084fc" : "#e5e5e5";
       ctx.fillRect(drawX, toCanvasY(drawn.paddleY[seat]) - paddleH / 2, paddleW, paddleH);
     });
 
@@ -227,6 +240,7 @@
   }
 
   window.addEventListener("keydown", (event) => {
+    if (spectating) return;
     if (!KEY_UP.has(event.code) && !KEY_DOWN.has(event.code)) return;
     if (screens.game.hidden) return;
     event.preventDefault();
@@ -234,6 +248,7 @@
     recomputeDir();
   });
   window.addEventListener("keyup", (event) => {
+    if (spectating) return;
     heldKeys.delete(event.code);
     recomputeDir();
   });
@@ -248,10 +263,37 @@
     showScreen("game");
     resultOverlay.hidden = true;
     opponentBanner.hidden = true;
+    resignBtn.hidden = false;
   });
 
-  client.on("tick", (msg) => applySnapshot(msg.state));
-  client.on("state", (msg) => applySnapshot(msg.state));
+  // A spectator's first "state"/"tick" (msg.spectating true) needs the same
+  // one-time screen-entry setup client.on("matched") does for a seated
+  // player - matched is never sent to a spectator, so this is that entry
+  // point instead. `spectating` (this file's own flag, distinct from
+  // spectateCtl's internal one) exists purely to make that setup run once.
+  function enterSpectateView() {
+    spectating = true;
+    youAreSeat = 0;
+    mirror = false;
+    currentDir = 0;
+    heldKeys.clear();
+    snapshot = null;
+    view = null;
+    error = { ballX: 0, ballY: 0, paddleY: [0, 0] };
+    showScreen("game");
+    resultOverlay.hidden = true;
+    opponentBanner.hidden = true;
+    resignBtn.hidden = true;
+  }
+
+  client.on("tick", (msg) => {
+    if (msg.spectating && !spectating) enterSpectateView();
+    applySnapshot(msg.state);
+  });
+  client.on("state", (msg) => {
+    if (msg.spectating && !spectating) enterSpectateView();
+    applySnapshot(msg.state);
+  });
 
   client.on("gameOver", (msg) => {
     const won = msg.result === "decided" && msg.winnerSeat === youAreSeat;

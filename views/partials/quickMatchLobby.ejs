@@ -1,0 +1,20 @@
+<%# Shared "who's playing right now" panel for the 4 quick-match games
+    (Battleship, Pong, Connect Four, Backgammon). Included once inside each
+    game's #<prefix>-screen-idle, so it's visible before the visitor ever
+    clicks Find Opponent. Fixed ids, wired by public/js/games/quickMatchClient.js's
+    window.wireQuickMatchLobby(), driven by the server's "lobbyState" broadcast
+    (realtime/quickMatchManager.js). i18n templates are passed through data-*
+    attributes, same technique views/partials/quickMatchReadyCheck.ejs uses. %>
+<div id="qm-lobby-panel"
+     data-watch-label="<%= t('games.quickMatch.watchLabel') %>"
+     data-match-vs-tpl="<%= t('games.quickMatch.matchVsTpl') %>"
+     data-spectator-count-tpl="<%= t('games.quickMatch.spectatorCountTpl') %>"
+     class="mt-6 text-left">
+  <p class="text-sm text-neutral-500 mb-4 text-center">
+    <%= t('games.quickMatch.playersSearching') %>: <span id="qm-lobby-queue-count" class="tabular-nums text-neutral-200">0</span>
+  </p>
+  <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.quickMatch.ongoingMatchesTitle') %></p>
+  <ul id="qm-lobby-list" class="space-y-2">
+    <li id="qm-lobby-list-empty" class="text-sm text-neutral-500 py-2"><%= t('games.quickMatch.ongoingMatchesEmpty') %></li>
+  </ul>
+</div>

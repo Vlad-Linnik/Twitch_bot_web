@@ -207,7 +207,7 @@
     if (!base) return;
     try {
       const node = base.cloneNode(true);
-      node.volume = base.volume;
+      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
       node.play().catch(() => {});
     } catch (_) {
       /* audio unsupported/blocked - the game keeps working silently */

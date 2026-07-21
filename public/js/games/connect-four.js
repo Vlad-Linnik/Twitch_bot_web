@@ -16,6 +16,7 @@
     countEl: document.getElementById("c4-queue-count"),
     timeEl: document.getElementById("c4-queue-time"),
   });
+  window.wireQuickMatchLobby(client);
 
   const screens = {
     idle: document.getElementById("c4-screen-idle"),
@@ -30,6 +31,16 @@
   const resultBody = document.getElementById("c4-result-body");
   const timerEl = document.getElementById("c4-timer");
   const colorBadge = document.getElementById("c4-color-badge");
+  const resignBtn = document.getElementById("c4-resign");
+
+  window.wireQuickMatchSpectating(client, {
+    badgeEl: document.getElementById("c4-spectating-badge"),
+    stopBtn: document.getElementById("c4-stop-watching-btn"),
+    onExit: () => {
+      spectating = false;
+      showScreen("idle");
+    },
+  });
 
   // --- Sound (cloneNode()-per-play pattern shared with the other on-site
   // games, e.g. battleship.js, so it can't cut itself off on a fast rematch).
@@ -40,7 +51,7 @@
   function playSound(base) {
     try {
       const node = base.cloneNode(true);
-      node.volume = base.volume;
+      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
       node.play().catch(() => {});
     } catch (_) {
       /* audio blocked/unsupported - the game keeps working silently */
@@ -48,6 +59,8 @@
   }
 
   let youAreSeat = 0;
+  let spectating = false;
+  let spectatePlayerNames = null;
   let columnEls = [];
   let cellEls = [];
   // Previous grid, so render() can diff and only animate cells that just
@@ -134,6 +147,7 @@
         el.type = "button";
         el.className = "c4-cell";
         el.addEventListener("click", () => {
+          if (spectating) return;
           lastClickedRow[c] = r;
           client.send("move", { move: { col: c } });
         });
@@ -162,7 +176,11 @@
     }
     lastGrid = state.grid;
     if (state.winnerSeat != null || state.draw) return;
-    statusEl.textContent = state.turnSeat === youAreSeat ? statusEl.dataset.yourTurn : statusEl.dataset.opponentTurn;
+    if (spectating) {
+      statusEl.textContent = statusEl.dataset.spectateTurnTpl.replace("{{name}}", spectatePlayerNames[state.turnSeat]);
+    } else {
+      statusEl.textContent = state.turnSeat === youAreSeat ? statusEl.dataset.yourTurn : statusEl.dataset.opponentTurn;
+    }
   }
 
   client.on("matched", (msg) => {
@@ -177,9 +195,21 @@
       colorBadge.className = "c4-color-badge " + (youAreSeat === 0 ? "c4-color-badge-p0" : "c4-color-badge-p1");
     }
     setDeadline(msg.deadline);
+    resignBtn.hidden = false;
   });
 
   client.on("state", (msg) => {
+    if (msg.spectating && !spectating) {
+      spectating = true;
+      youAreSeat = 0;
+      spectatePlayerNames = msg.players.map((p) => p.displayName);
+      showScreen("game");
+      resultOverlay.hidden = true;
+      opponentBanner.hidden = true;
+      if (colorBadge) colorBadge.hidden = true;
+      resignBtn.hidden = true;
+      buildBoard();
+    }
     setDeadline(msg.deadline);
     render(msg.state);
   });

@@ -41,7 +41,9 @@
     const base = SOUNDS[name];
     if (!base) return;
     try {
-      base.cloneNode(true).play().catch(() => {});
+      const node = base.cloneNode(true);
+      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
+      node.play().catch(() => {});
     } catch (_) {
       /* audio unsupported/blocked - the game keeps working silently */
     }

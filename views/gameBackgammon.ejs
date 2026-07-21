@@ -12,6 +12,7 @@
       <p class="text-neutral-400 mb-4"><%= t('games.backgammon.intro') %></p>
       <button type="button" id="bg-queue-button"
               class="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.quickMatch.findOpponent') %></button>
+      <%- include('partials/quickMatchLobby') %>
     </div>
 
     <div id="bg-screen-queued" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
@@ -26,6 +27,7 @@
       <div id="bg-opponent-banner" hidden class="mb-3 px-4 py-2 rounded-lg bg-amber-500/15 text-amber-300 text-sm text-center">
         <%= t('games.quickMatch.opponentDisconnected') %>
       </div>
+      <p id="bg-spectating-badge" hidden class="text-xs text-purple-400 text-center mb-2"><%= t('games.quickMatch.spectatingBadge') %></p>
 
       <div class="flex items-center justify-between gap-3 mb-3">
         <span id="bg-color-badge" hidden
@@ -35,7 +37,8 @@
         <p id="bg-status" class="text-neutral-300"
            data-your-roll="<%= t('games.backgammon.yourRoll') %>"
            data-your-move="<%= t('games.backgammon.yourMove') %>"
-           data-opponent-turn="<%= t('games.backgammon.opponentTurn') %>"></p>
+           data-opponent-turn="<%= t('games.backgammon.opponentTurn') %>"
+           data-spectate-turn-tpl="<%= t('games.quickMatch.spectateTurnTpl') %>"></p>
         <div class="flex items-center gap-2">
           <span id="bg-timer" hidden class="px-2.5 py-1 rounded-md bg-neutral-800 text-neutral-200 text-sm font-medium tabular-nums"></span>
           <span class="text-xs text-neutral-500"><%= t('games.backgammon.turnNumber') %></span>
@@ -72,6 +75,8 @@
                 class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.backgammon.roll') %></button>
         <button type="button" id="bg-resign"
                 class="px-4 py-2 rounded-lg text-neutral-400 hover:bg-neutral-800 text-sm transition-colors"><%= t('games.quickMatch.resign') %></button>
+        <button type="button" id="bg-stop-watching-btn" hidden
+                class="px-4 py-2 rounded-lg text-neutral-400 hover:bg-neutral-800 text-sm transition-colors"><%= t('games.quickMatch.stopWatching') %></button>
       </div>
 
       <div id="bg-result" hidden class="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
@@ -112,6 +117,8 @@
 </main>
 
 <%- include('partials/quickMatchReadyCheck') %>
+<%- include('partials/gameVolumeControl') %>
+<script src="/js/games/gameVolume.js" defer></script>
 <script src="/js/games/quickMatchClient.js" defer></script>
 <script src="/js/games/backgammon.js" defer></script>
 <%- include('partials/foot') %>

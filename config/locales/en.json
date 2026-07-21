@@ -164,6 +164,7 @@
   },
   "games": {
     "title": "Mini-Games",
+    "volume": "Sound volume",
     "fallingBlocks": {
       "name": "Falling Blocks",
       "cardDescription": "Stack the falling pieces, clear lines and chase your best score.",
@@ -446,7 +447,16 @@
       "readyCheckWaiting": "Waiting for your opponent to accept…",
       "readyCountdownTpl": "{{seconds}}s left",
       "readyAcceptedTpl": "{{accepted}}/{{total}} accepted",
-      "matchCancelled": "Match cancelled — your opponent didn't accept."
+      "matchCancelled": "Match cancelled — your opponent didn't accept.",
+      "ongoingMatchesTitle": "Matches in progress",
+      "ongoingMatchesEmpty": "No matches in progress right now.",
+      "matchVsTpl": "{{p1}} vs {{p2}}",
+      "watchLabel": "Watch",
+      "spectatorCountTpl": "{{count}} watching",
+      "spectatingBadge": "You're watching this match",
+      "stopWatching": "Stop watching",
+      "spectateTurnTpl": "{{name}}'s turn",
+      "spectatePlacementWaiting": "Players are placing their fleets…"
     },
     "battleship": {
       "name": "Battleship",

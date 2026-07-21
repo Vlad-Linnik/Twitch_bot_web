@@ -17,6 +17,7 @@
     countEl: document.getElementById("bg-queue-count"),
     timeEl: document.getElementById("bg-queue-time"),
   });
+  window.wireQuickMatchLobby(client);
 
   const screens = {
     idle: document.getElementById("bg-screen-idle"),
@@ -40,10 +41,22 @@
   const resultBody = document.getElementById("bg-result-body");
   const timerEl = document.getElementById("bg-timer");
   const colorBadge = document.getElementById("bg-color-badge");
+  const resignBtn = document.getElementById("bg-resign");
 
   let youAreSeat = 0;
   let latestState = null;
   let selectedFrom = null; // point index (0-23) or null
+  let spectating = false;
+  let spectatePlayerNames = null;
+
+  window.wireQuickMatchSpectating(client, {
+    badgeEl: document.getElementById("bg-spectating-badge"),
+    stopBtn: document.getElementById("bg-stop-watching-btn"),
+    onExit: () => {
+      spectating = false;
+      showScreen("idle");
+    },
+  });
 
   // Long nardy travel-position math, hand-kept in sync with
   // lib/backgammonEngine.js's copy (no bundler/shared code between server
@@ -81,7 +94,7 @@
   function playSound(base) {
     try {
       const node = base.cloneNode(true);
-      node.volume = base.volume;
+      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
       node.play().catch(() => {});
     } catch (_) {
       /* audio unsupported/blocked - the game keeps working silently */
@@ -122,10 +135,14 @@
   // Board quadrants are assigned by TRAVEL position relative to the viewing
   // seat, not by fixed absolute point ranges - since travelPos() is already
   // seat-relative, this makes EVERY viewer see their own head point bottom-
-  // left and their own home top-right, without any CSS flip/rotation: BL =
-  // travel positions 0-5 (own start), BR = 6-11, TL = 12-17, TR = 18-23 (own
-  // home). Points within a quadrant are ordered by ascending travel position
-  // left to right.
+  // left and their own home top-left (directly above the start, same side -
+  // matching the real board, where home is the quadrant adjacent to the head
+  // quadrant, not the diagonal corner), without any CSS flip/rotation: BL =
+  // travel positions 0-5 (own start), BR = 6-11, TR = 12-17, TL = 18-23 (own
+  // home). That traces a single clockwise loop around the board's perimeter
+  // (BL -> BR -> TR -> TL) rather than cutting diagonally across the middle.
+  // Points within a quadrant are ordered by ascending travel position left to
+  // right.
   function quadrantIndices(seat, startPos) {
     const out = [];
     for (let p = startPos; p < startPos + 6; p++) out.push(travelIdx(seat, p));
@@ -143,8 +160,8 @@
     quadBR.textContent = "";
     fillQuad(quadBL, quadrantIndices(youAreSeat, 0), "bottom", false);
     fillQuad(quadBR, quadrantIndices(youAreSeat, 6), "bottom", true);
-    fillQuad(quadTL, quadrantIndices(youAreSeat, 12), "top", false);
-    fillQuad(quadTR, quadrantIndices(youAreSeat, 18), "top", true);
+    fillQuad(quadTR, quadrantIndices(youAreSeat, 12), "top", false);
+    fillQuad(quadTL, quadrantIndices(youAreSeat, 18), "top", true);
   }
 
   // `shiftShade` flips which shade starts the quad, purely so triangles right
@@ -220,10 +237,12 @@
 
     turnValueEl.textContent = state.turnNumber;
 
-    const myTurn = state.turnSeat === youAreSeat;
+    const myTurn = !spectating && state.turnSeat === youAreSeat;
     rollButton.hidden = !(myTurn && state.turnPhase === "roll");
 
-    if (myTurn) {
+    if (spectating) {
+      statusEl.textContent = statusEl.dataset.spectateTurnTpl.replace("{{name}}", spectatePlayerNames[state.turnSeat]);
+    } else if (myTurn) {
       statusEl.textContent = state.turnPhase === "roll" ? statusEl.dataset.yourRoll : statusEl.dataset.yourMove;
     } else {
       statusEl.textContent = statusEl.dataset.opponentTurn;
@@ -249,7 +268,7 @@
   }
 
   function handlePointClick(idx) {
-    if (!latestState || latestState.turnSeat !== youAreSeat || latestState.turnPhase !== "move") return;
+    if (spectating || !latestState || latestState.turnSeat !== youAreSeat || latestState.turnPhase !== "move") return;
     if (selectedFrom === null) {
       const owner = latestState.points[idx] > 0 ? 0 : latestState.points[idx] < 0 ? 1 : null;
       if (owner !== youAreSeat) return;
@@ -261,7 +280,7 @@
   }
 
   offZoneEl?.addEventListener("click", () => {
-    if (selectedFrom === null) return;
+    if (spectating || selectedFrom === null) return;
     sendMove(selectedFrom, "off");
   });
 
@@ -364,9 +383,24 @@
       colorBadge.className = "px-2.5 py-1 rounded-md text-sm font-medium " + (youAreSeat === 0 ? "bg-neutral-100 text-neutral-900" : "bg-neutral-950 text-neutral-100 border border-neutral-700");
     }
     setDeadline(msg.deadline);
+    resignBtn.hidden = false;
   });
 
   client.on("state", (msg) => {
+    if (msg.spectating && !spectating) {
+      spectating = true;
+      youAreSeat = 0;
+      selectedFrom = null;
+      lastBoardKey = null;
+      lastDiceKey = null;
+      spectatePlayerNames = msg.players.map((p) => p.displayName);
+      showScreen("game");
+      resultOverlay.hidden = true;
+      opponentBanner.hidden = true;
+      if (colorBadge) colorBadge.hidden = true;
+      resignBtn.hidden = true;
+      buildBoard();
+    }
     setDeadline(msg.deadline);
     handleStateUpdate(msg.state);
   });
@@ -391,6 +425,7 @@
   client.on("error", (msg) => console.error("[backgammon] server error:", msg.error));
 
   rollButton?.addEventListener("click", () => {
+    if (spectating) return;
     client.send("move", { move: { type: "roll" } });
   });
 

@@ -48,7 +48,7 @@
     if (!base) return;
     try {
       const node = base.cloneNode(true);
-      node.volume = base.volume;
+      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
       node.play().catch(() => {});
     } catch (_) {
       /* audio blocked/unsupported - the game keeps working silently */
@@ -61,6 +61,7 @@
     countEl: byId("bs-queue-count"),
     timeEl: byId("bs-queue-time"),
   });
+  window.wireQuickMatchLobby(client);
 
   const screens = { idle: byId("bs-screen-idle"), queued: byId("bs-screen-queued"), game: byId("bs-screen-game") };
   const placementPanel = byId("bs-placement");
@@ -78,6 +79,27 @@
   const placementGrid = byId("bs-placement-grid");
   const myBoardGrid = byId("bs-my-board");
   const oppBoardGrid = byId("bs-opp-board");
+  const resignBtn = byId("bs-resign");
+  const spectatePanel = byId("bs-spectate");
+  const spectateWaitingEl = byId("bs-spectate-waiting");
+  const spectateBoardsEl = byId("bs-spectate-boards");
+  const spectateNameEls = [byId("bs-spectate-name-0"), byId("bs-spectate-name-1")];
+  const spectateBoardEls = [byId("bs-spectate-board-0"), byId("bs-spectate-board-1")];
+
+  let spectating = false;
+  let spectatePlayerNames = null;
+
+  window.wireQuickMatchSpectating(client, {
+    badgeEl: byId("bs-spectating-badge"),
+    stopBtn: byId("bs-stop-watching-btn"),
+    onExit: () => {
+      spectating = false;
+      placementPanel.hidden = true;
+      battlePanel.hidden = true;
+      spectatePanel.hidden = true;
+      showScreen("idle");
+    },
+  });
 
   let youAreSeat = null;
   let orientation = "horizontal"; // horizontal | vertical
@@ -441,6 +463,24 @@
     renderBoard(oppBoardGrid, [], state.opponentShots || {}, state.opponentSunkShips || [], handleFireClick);
   }
 
+  // Fair-view spectator render: both boards use the SAME "shots + sunk ships
+  // only, never an unsunk ship's cells" treatment renderBoard already gives a
+  // seated player's view of their opponent - just applied to both sides at
+  // once, since a spectator has no seat of their own to see the truth for.
+  // The server's serializeForSpectator (lib/battleshipEngine.js) is what
+  // actually enforces this - this function only ever draws what it's given.
+  function renderSpectatePhase(state) {
+    const waiting = state.phase === "placement";
+    spectateWaitingEl.hidden = !waiting;
+    spectateBoardsEl.hidden = waiting;
+    if (waiting) return;
+    statusEl.textContent = statusEl.dataset.spectateTurnTpl.replace("{{name}}", spectatePlayerNames[state.turnSeat]);
+    for (let seat = 0; seat < 2; seat++) {
+      spectateNameEls[seat].textContent = spectatePlayerNames[seat];
+      renderBoard(spectateBoardEls[seat], [], state.boards[seat].shots, state.boards[seat].sunkShips, null);
+    }
+  }
+
   // One sound per state update, keyed to the most severe newly-marked cell
   // across BOTH boards (kill > hit > miss), so being attacked is audible too.
   function playForDiff(state) {
@@ -510,6 +550,7 @@
     showScreen("game");
     placementPanel.hidden = false;
     battlePanel.hidden = true;
+    spectatePanel.hidden = true;
     resultOverlay.hidden = true;
     opponentBanner.hidden = true;
     if (rotateBtn) rotateBtn.textContent = rotateBtn.dataset.horizontal;
@@ -517,11 +558,27 @@
     resetPlacement();
     statusEl.textContent = statusEl.dataset.placementHint;
     setDeadline(msg.deadline);
+    resignBtn.hidden = false;
   });
 
   client.on("state", (msg) => {
     setDeadline(msg.deadline);
     const state = msg.state;
+    if (msg.spectating) {
+      if (!spectating) {
+        spectating = true;
+        spectatePlayerNames = msg.players.map((p) => p.displayName);
+        showScreen("game");
+        resultOverlay.hidden = true;
+        opponentBanner.hidden = true;
+        placementPanel.hidden = true;
+        battlePanel.hidden = true;
+        spectatePanel.hidden = false;
+        resignBtn.hidden = true;
+      }
+      renderSpectatePhase(state);
+      return;
+    }
     if (state.phase !== "battle" && state.phase !== "finished") return; // still placing
     if (!placementPanel.hidden) {
       placementPanel.hidden = true;
