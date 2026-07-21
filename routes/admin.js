@@ -12,6 +12,7 @@ const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const ownerTokensRepo = require("../db/ownerTokensRepo");
 const adminHealthRepo = require("../db/adminHealthRepo");
+const botHeartbeatRepo = require("../db/botHeartbeatRepo");
 const siteVisitsRepo = require("../db/siteVisitsRepo");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
@@ -19,18 +20,23 @@ const profileCacheRepo = require("../db/profileCacheRepo");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 
 const REJECT_REASON_MAX_LENGTH = 300;
+// The bot writes a fresh heartbeat doc every 30s (TwitchBot's index.js) - anything older than a
+// few missed writes means either the process is stuck badly enough to skip its own heartbeat
+// write, or it's down entirely, so treat it the same as "offline" either way.
+const BOT_HEARTBEAT_STALE_MS = 90 * 1000;
 
 const router = express.Router();
 const requireAdmin = requireLevel(0);
 
 router.get("/admin", requireAdmin, async (req, res, next) => {
   try {
-    const [pendingRequests, resolvedRequests, channels, tokenChannelIds, counts] = await Promise.all([
+    const [pendingRequests, resolvedRequests, channels, tokenChannelIds, counts, botHeartbeat] = await Promise.all([
       botRequestsRepo.listPending(),
       botRequestsRepo.listResolved(),
       channelsRepo.listAll(),
       ownerTokensRepo.listChannelIds(),
       adminHealthRepo.getCollectionCounts(),
+      botHeartbeatRepo.getBotHeartbeat(),
     ]);
 
     // Avatars for the pending queue - resolved-request rows just show the stored login.
@@ -41,6 +47,9 @@ router.get("/admin", requireAdmin, async (req, res, next) => {
     // An enabled channel with no stored owner refresh token gets no scheduled moderator
     // sync (twitch/moderatorSyncScheduler.js) until its owner logs in to the site once.
     const channelsWithoutToken = enabledChannels.filter((c) => !tokenIds.has(c.channelId));
+
+    const botHeartbeatAgeMs = botHeartbeat ? Date.now() - new Date(botHeartbeat.updatedAt).getTime() : null;
+    const botOnline = Boolean(botHeartbeat) && botHeartbeat.status === "ok" && botHeartbeatAgeMs < BOT_HEARTBEAT_STALE_MS;
 
     res.render("admin", {
       tab: "overview",
@@ -53,6 +62,7 @@ router.get("/admin", requireAdmin, async (req, res, next) => {
         channelsEnabled: enabledChannels.length,
         channelsDisabled: channels.length - enabledChannels.length,
         channelsWithoutToken: channelsWithoutToken.map((c) => c.channelLogin),
+        bot: botHeartbeat ? { ...botHeartbeat, online: botOnline, ageMs: botHeartbeatAgeMs } : null,
       },
       flash: req.query.flash || null,
     });

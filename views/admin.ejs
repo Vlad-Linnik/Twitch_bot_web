@@ -47,6 +47,73 @@
     <% } %>
   </section>
 
+  <%# --- Bot connection status ------------------------------------------- %>
+  <%
+    const fmtAgo = (ms) => {
+      if (ms == null) return '—';
+      const s = Math.round(ms / 1000);
+      let value;
+      if (s < 60) value = `${s}s`;
+      else if (s < 3600) value = `${Math.round(s / 60)}m`;
+      else value = `${Math.round(s / 3600)}h`;
+      return t('admin.botAgo', { value });
+    };
+    const bot = health.bot;
+  %>
+  <section class="mb-12">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.botHeading') %></h2>
+    <% if (!bot) { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-sm text-neutral-500">
+        <%= t('admin.botNoData') %>
+      </div>
+    <% } else { %>
+      <div class="rounded-lg border <%= bot.online ? 'border-neutral-800' : 'border-red-800/60' %> bg-neutral-900/60 px-4 py-3 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-2.5 h-2.5 rounded-full <%= bot.online ? 'bg-green-500' : 'bg-red-500' %>"></span>
+          <span class="font-medium <%= bot.online ? 'text-green-300' : 'text-red-300' %>">
+            <%= bot.online ? t('admin.botOnline') : t('admin.botOffline') %>
+          </span>
+          <span class="text-xs text-neutral-500">
+            <%= t('admin.botLastHeartbeat') %> <%= fmtAgo(bot.ageMs) %>
+          </span>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.botLastActivity') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtAgo(bot.lastActivityAt ? (Date.now() - new Date(bot.lastActivityAt).getTime()) : null) %></p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.botMemory') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= bot.memoryUsageMB %> MB</p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.botCpu') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= bot.cpuPercent %>%</p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.botChannels') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= (bot.connectedChannels || []).length %></p>
+        </div>
+      </div>
+      <p class="mt-2 text-xs text-neutral-600 font-mono"><%= (bot.connectedChannels || []).join(', ') %></p>
+
+      <% if ((bot.recentErrors || []).length > 0) { %>
+        <div class="mt-3 rounded-md border border-neutral-800 bg-neutral-950/60 px-4 py-3">
+          <p class="text-xs text-neutral-500 mb-2"><%= t('admin.botRecentErrors') %></p>
+          <div class="max-h-56 overflow-y-auto space-y-1">
+            <% [...bot.recentErrors].reverse().forEach((e) => { %>
+              <p class="text-xs font-mono text-neutral-400 break-all">
+                <span class="text-neutral-600"><%= new Date(e.at).toLocaleString(dateLocale) %></span>
+                <%= e.message %>
+              </p>
+            <% }) %>
+          </div>
+        </div>
+      <% } %>
+    <% } %>
+  </section>
+
   <%# --- Bot-join requests ---------------------------------------------- %>
   <section class="mb-12">
     <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.requestsHeading') %></h2>

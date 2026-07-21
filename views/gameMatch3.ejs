@@ -1,0 +1,114 @@
+<%- include('partials/head', { title: t('games.match3.name') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.match3.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.match3.backToGames') %></a>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-6 items-start justify-center">
+    <%# Leaderboard - identical pattern to gameMinesweeper.ejs / game2048.ejs;
+        row markup must stay in sync with lbRow() in public/js/games/match3.js. %>
+    <aside id="m3-leaderboard"
+           class="w-full sm:w-56 order-last sm:order-none rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+           <% if (user) { %>data-submit-url="/games/match-3/score.json" data-csrf="<%= csrfToken %>"<% } %>
+           data-empty-label="<%= t('games.match3.leaderboardEmpty') %>">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.match3.leaderboardTitle') %></p>
+      <ol id="m3-lb-list" class="space-y-0.5">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="text-sm text-neutral-500 py-1"><%= t('games.match3.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+            <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+          </li>
+        <% }) %>
+      </ol>
+      <div id="m3-lb-me" class="mt-1 pt-1 border-t border-neutral-800" <% if (!leaderboard.myRow) { %>hidden<% } %>>
+        <ol id="m3-lb-me-row">
+          <% if (leaderboard.myRow) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+              <span class="flex-1 truncate text-purple-300"
+                    <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+            </li>
+          <% } %>
+        </ol>
+      </div>
+      <% if (!user) { %>
+        <p class="text-xs text-neutral-500 mt-3">
+          <%= t('games.match3.loginToSave') %>
+          <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+        </p>
+      <% } %>
+    </aside>
+
+    <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 w-full sm:w-[420px] max-w-full">
+      <div id="m3-board"
+           class="grid gap-1 w-full rounded-lg bg-neutral-950 p-2 select-none"
+           style="grid-template-columns: repeat(8, minmax(0, 1fr)); aspect-ratio: 8 / 8;"></div>
+
+      <div id="m3-shards" class="absolute inset-0 pointer-events-none overflow-visible"></div>
+
+      <div id="m3-combo"
+           data-label="<%= t('games.match3.combo') %>"
+           class="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-purple-500/90 text-white text-xs font-semibold opacity-0 pointer-events-none"></div>
+
+      <div id="m3-overlay"
+           data-title-start="<%= t('games.match3.name') %>"
+           data-title-over="<%= t('games.match3.gameOver') %>"
+           data-button-start="<%= t('games.match3.start') %>"
+           data-button-again="<%= t('games.match3.playAgain') %>"
+           data-final-score-label="<%= t('games.match3.finalScore') %>"
+           class="absolute inset-3 rounded-lg bg-neutral-950/90 backdrop-blur-sm grid place-items-center text-center">
+        <div class="px-4">
+          <h2 id="m3-overlay-title" class="text-xl font-semibold text-neutral-100 mb-1"></h2>
+          <p id="m3-overlay-score" class="text-sm text-neutral-400 mb-4" hidden></p>
+          <button type="button" id="m3-overlay-button"
+                  class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"></button>
+        </div>
+      </div>
+
+      <dialog id="m3-leave-confirm-dialog"
+              class="w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-200 p-8 m-auto backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+        <h2 class="text-xl font-semibold text-neutral-100 mb-2"><%= t('games.match3.leaveConfirmTitle') %></h2>
+        <p class="text-base text-neutral-400 mb-8"><%= t('games.match3.leaveConfirmBody') %></p>
+        <div class="flex flex-wrap justify-end gap-3">
+          <button type="button" id="m3-leave-cancel"
+                  class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.match3.leaveCancel') %></button>
+          <button type="button" id="m3-leave-discard"
+                  class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.match3.leaveDiscard') %></button>
+          <button type="button" id="m3-leave-save"
+                  class="px-5 py-2.5 text-base font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.match3.leaveSave') %></button>
+        </div>
+      </dialog>
+    </div>
+
+    <div class="w-full sm:w-56 grid grid-cols-2 sm:grid-cols-1 gap-4">
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex justify-between items-baseline mb-2">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.match3.timeLeft') %></span>
+          <span id="m3-time" class="text-lg font-semibold text-neutral-100 tabular-nums">5:00</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.match3.score') %></span>
+          <span id="m3-score" class="text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.match3.controlsTitle') %></p>
+        <p class="text-sm text-neutral-400"><%= t('games.match3.controlsHint') %></p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/js/games/engines/match3Engine.js"></script>
+<script src="/js/games/match3.js" defer></script>
+<%- include('partials/foot') %>

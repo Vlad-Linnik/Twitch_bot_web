@@ -97,4 +97,9 @@ module.exports = {
   searchLimiter,
   durakRoomCreateLimiter,
   durakStickerLimiter,
+  // Exported so realtime/quickMatchManager.js can build its own per-game
+  // queue-join limiter the same hand-rolled way durakRoomCreateLimiter/
+  // durakStickerLimiter already do above, instead of adding yet another
+  // named export here per new game.
+  createSimpleLimiter,
 };

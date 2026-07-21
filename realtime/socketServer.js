@@ -1,14 +1,46 @@
-// WebSocket bootstrap for multiplayer Durak. Owns the one WebSocketServer for
-// the whole app and the http server's "upgrade" event - everything downstream
-// (rooms, lobby, game state) lives in durakRoomManager.js, which never touches
-// sockets/HTTP directly except through the thin handle this hands it.
+// WebSocket bootstrap - owns the one WebSocketServer for the whole app and the
+// http server's "upgrade" event. Dispatches by URL path to whichever handler
+// is registered for it (durakRoomManager for multiplayer Durak, a
+// quickMatchManager instance per new online game) - everything downstream
+// (rooms, matchmaking, game state) lives in those handler modules, which
+// never touch sockets/HTTP directly except through the thin handle this hands
+// them (handleConnection(ws, user)).
 "use strict";
 
 const { WebSocketServer } = require("ws");
 const durakRoomManager = require("./durakRoomManager");
+const { createQuickMatchManager } = require("./quickMatchManager");
+const battleshipEngine = require("../lib/battleshipEngine");
+const pongEngine = require("../lib/pongEngine");
+const connectFourEngine = require("../lib/connectFourEngine");
+const backgammonEngine = require("../lib/backgammonEngine");
 
-const WS_PATH = "/ws/durak-multiplayer";
 const HEARTBEAT_MS = 30 * 1000;
+
+// path -> { handleConnection(ws, user) }. Every one of the 4 new online games
+// is rated (see the implementation plan) - a plain createQuickMatchManager
+// call per game, same factory, different engine/mode.
+function buildHandlers() {
+  const handlers = new Map();
+  handlers.set("/ws/durak-multiplayer", durakRoomManager);
+  handlers.set(
+    "/ws/battleship",
+    createQuickMatchManager({ game: "battleship", rated: true, mode: "turn-based", engine: battleshipEngine })
+  );
+  handlers.set(
+    "/ws/pong",
+    createQuickMatchManager({ game: "pong", rated: true, mode: "tick", engine: pongEngine, tickMs: 33 })
+  );
+  handlers.set(
+    "/ws/connect-four",
+    createQuickMatchManager({ game: "connect-four", rated: true, mode: "turn-based", engine: connectFourEngine })
+  );
+  handlers.set(
+    "/ws/backgammon",
+    createQuickMatchManager({ game: "backgammon", rated: true, mode: "turn-based", engine: backgammonEngine })
+  );
+  return handlers;
+}
 
 // A stub `res` for running the upgrade request through the real
 // express-session middleware instance (the standard "share the session
@@ -47,6 +79,7 @@ function isSameOriginUpgrade(req) {
 
 function attachSocketServer(httpServer, sessionMiddleware) {
   const wss = new WebSocketServer({ noServer: true });
+  const handlers = buildHandlers();
 
   httpServer.on("upgrade", (req, socket, head) => {
     let pathname;
@@ -56,7 +89,8 @@ function attachSocketServer(httpServer, sessionMiddleware) {
       socket.destroy();
       return;
     }
-    if (pathname !== WS_PATH) {
+    const handler = handlers.get(pathname);
+    if (!handler) {
       socket.destroy();
       return;
     }
@@ -72,17 +106,13 @@ function attachSocketServer(httpServer, sessionMiddleware) {
         return;
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit("connection", ws, req, user);
+        ws.isAlive = true;
+        ws.on("pong", () => {
+          ws.isAlive = true;
+        });
+        handler.handleConnection(ws, user);
       });
     });
-  });
-
-  wss.on("connection", (ws, req, user) => {
-    ws.isAlive = true;
-    ws.on("pong", () => {
-      ws.isAlive = true;
-    });
-    durakRoomManager.handleConnection(ws, user);
   });
 
   // Dead sockets (sleep, backgrounding, a yanked network cable) don't always

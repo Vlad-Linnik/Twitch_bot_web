@@ -1,0 +1,134 @@
+<%- include('partials/head', { title: t('games.battleship.name') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.battleship.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.battleship.backToGames') %></a>
+  </div>
+
+    <div id="bs-root" data-ws-path="/ws/battleship" class="max-w-2xl mx-auto">
+      <div id="bs-screen-idle" class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
+        <p class="text-neutral-400 mb-4"><%= t('games.battleship.intro') %></p>
+        <button type="button" id="bs-queue-button"
+                class="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.quickMatch.findOpponent') %></button>
+      </div>
+
+      <div id="bs-screen-queued" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
+        <p class="text-neutral-300 mb-2"><%= t('games.quickMatch.searchingForOpponent') %></p>
+        <p class="text-sm text-neutral-500 mb-1"><%= t('games.quickMatch.playersSearching') %>: <span id="bs-queue-count" class="tabular-nums text-neutral-200">1</span></p>
+        <p class="text-sm text-neutral-500 mb-6"><%= t('games.quickMatch.searchTime') %>: <span id="bs-queue-time" class="tabular-nums text-neutral-200">0:00</span></p>
+        <button type="button" id="bs-cancel-queue"
+                class="px-5 py-2.5 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors"><%= t('games.quickMatch.cancelSearch') %></button>
+      </div>
+
+      <div id="bs-screen-game" hidden>
+        <div id="bs-opponent-banner" hidden class="mb-3 px-4 py-2 rounded-lg bg-amber-500/15 text-amber-300 text-sm text-center">
+          <%= t('games.quickMatch.opponentDisconnected') %>
+        </div>
+
+        <div class="flex items-center justify-center gap-3 mb-3">
+          <p id="bs-status" class="text-center text-neutral-300"
+             data-placement-hint="<%= t('games.battleship.placementHint') %>"
+             data-waiting-opponent="<%= t('games.battleship.waitingOpponentPlacement') %>"
+             data-your-turn="<%= t('games.battleship.yourTurn') %>"
+             data-opponent-turn="<%= t('games.battleship.opponentTurn') %>"></p>
+          <span id="bs-timer" hidden
+                data-placement-label="<%= t('games.battleship.placementTime') %>"
+                data-battle-label="<%= t('games.battleship.battleTime') %>"
+                class="px-2.5 py-1 rounded-md bg-neutral-800 text-neutral-200 text-sm font-medium tabular-nums"></span>
+        </div>
+
+        <div id="bs-placement">
+          <div class="flex flex-col sm:flex-row gap-6 items-start justify-center">
+            <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-3 w-full sm:w-[380px] max-w-full">
+              <div id="bs-placement-grid" class="bs-board"></div>
+            </div>
+            <div class="w-full sm:w-56 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+              <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.battleship.fleet') %></p>
+              <div id="bs-ship-palette" class="space-y-1.5 mb-3"></div>
+              <p class="text-[11px] text-neutral-500 mb-3"><%= t('games.battleship.noTouchHint') %></p>
+              <button type="button" id="bs-rotate"
+                      data-horizontal="<%= t('games.battleship.rotateHorizontal') %>"
+                      data-vertical="<%= t('games.battleship.rotateVertical') %>"
+                      class="w-full mb-2 px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.battleship.rotateHorizontal') %></button>
+              <div class="grid grid-cols-2 gap-2 mb-2">
+                <button type="button" id="bs-undo"
+                        class="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.battleship.undo') %></button>
+                <button type="button" id="bs-auto-place"
+                        class="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.battleship.autoPlace') %></button>
+              </div>
+              <button type="button" id="bs-reset-placement"
+                      class="w-full mb-3 px-3 py-2 rounded-lg text-neutral-400 hover:bg-neutral-800 text-sm transition-colors"><%= t('games.battleship.resetPlacement') %></button>
+              <button type="button" id="bs-ready-btn" disabled
+                      class="w-full px-3 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium transition-colors"><%= t('games.battleship.ready') %></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="bs-battle" hidden>
+          <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <div class="flex-1 max-w-[380px]">
+              <p class="text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('games.battleship.myBoard') %></p>
+              <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-2">
+                <div id="bs-my-board" class="bs-board"></div>
+              </div>
+            </div>
+            <div class="flex-1 max-w-[380px]">
+              <p class="text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('games.battleship.opponentBoard') %></p>
+              <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-2">
+                <div id="bs-opp-board" class="bs-board"></div>
+              </div>
+            </div>
+          </div>
+          <div class="text-center mt-4">
+            <button type="button" id="bs-resign"
+                    class="px-4 py-2 rounded-lg text-neutral-400 hover:bg-neutral-800 text-sm transition-colors"><%= t('games.quickMatch.resign') %></button>
+          </div>
+        </div>
+
+        <div id="bs-result" hidden class="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
+          <h2 id="bs-result-title" data-win="<%= t('games.battleship.youWin') %>" data-lose="<%= t('games.battleship.youLose') %>"
+              data-draw="<%= t('games.battleship.draw') %>"
+              class="text-xl font-semibold text-neutral-100 mb-2"></h2>
+          <p id="bs-result-body" data-rating-tpl="<%= t('games.quickMatch.ratingChangeTpl') %>" class="text-sm text-neutral-400 mb-4"></p>
+          <button type="button" id="bs-play-again"
+                  class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.battleship.playAgain') %></button>
+        </div>
+      </div>
+    </div>
+
+    <%# Rating leaderboard - same pattern as gameDurak.ejs's, since Battleship
+        is rated (Elo) like the other 3 online games; this is server-rendered
+        once and never updated client-side (ratings only change when someone
+        elsewhere finishes a rated game). %>
+    <aside class="max-w-sm mx-auto mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.battleship.leaderboardTitle') %></p>
+      <ol class="space-y-0.5">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="text-sm text-neutral-500 py-1"><%= t('games.battleship.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+            <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+          </li>
+        <% }) %>
+        <% if (leaderboard.myRow) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10 mt-1 pt-1 border-t border-neutral-800">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+            <span class="flex-1 truncate text-purple-300"
+                  <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+          </li>
+        <% } %>
+      </ol>
+    </aside>
+</main>
+
+<%- include('partials/quickMatchReadyCheck') %>
+<script src="/js/games/quickMatchClient.js" defer></script>
+<script src="/js/games/battleship.js" defer></script>
+<%- include('partials/foot') %>

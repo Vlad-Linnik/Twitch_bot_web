@@ -11,6 +11,15 @@ const router = express.Router();
 const GAME_FALLING_BLOCKS = "falling-blocks";
 const GAME_PIPE_DODGER = "pipe-dodger";
 const GAME_2048 = "2048";
+const GAME_MINESWEEPER = "minesweeper";
+const GAME_MATCH3 = "match-3";
+// Battleship/Pong/Connect Four/Backgammon are all rated (Elo, via
+// realtime/quickMatchManager.js + realtime/durakElo.js) - same
+// "bestScore field holds a live rating" convention as GAME_DURAK_ONLINE.
+const GAME_BATTLESHIP = "battleship";
+const GAME_PONG = "pong";
+const GAME_CONNECT_FOUR = "connect-four";
+const GAME_BACKGAMMON = "backgammon";
 // Durak's leaderboard ranks online (multiplayer) Elo rating only - a
 // vs-computer win never reaches the server at all (see
 // public/js/games/durak.js). realtime/durakRoomManager.js's finalizeGame
@@ -88,6 +97,64 @@ router.get("/games/2048", async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_2048, req.user ? req.user.userId : null);
     res.render("game2048", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/games/minesweeper", async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_MINESWEEPER, req.user ? req.user.userId : null);
+    res.render("gameMinesweeper", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/games/match-3", async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_MATCH3, req.user ? req.user.userId : null);
+    res.render("gameMatch3", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Battleship, Pong, Connect Four and Backgammon are online-only (auto-
+// matchmaking via realtime/quickMatchManager.js) - there's no anonymous/
+// vs-computer mode to render, so unlike Durak these are requireLogin-gated
+// at the route, same as Durak's own room-deep-link route.
+router.get("/games/battleship", requireLogin, async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_BATTLESHIP, req.user.userId);
+    res.render("gameBattleship", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/games/pong", requireLogin, async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_PONG, req.user.userId);
+    res.render("gamePong", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/games/connect-four", requireLogin, async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_CONNECT_FOUR, req.user.userId);
+    res.render("gameConnectFour", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/games/backgammon", requireLogin, async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_BACKGAMMON, req.user.userId);
+    res.render("gameBackgammon", { leaderboard });
   } catch (err) {
     next(err);
   }
@@ -186,6 +253,50 @@ router.post(
       await gameScoresRepo.submitScore(GAME_2048, req.user.userId, score);
       await gameSessionStatsRepo.recordPlay(GAME_2048);
       const leaderboard = await buildLeaderboard(GAME_2048, req.user.userId);
+      res.json({ ok: true, ...leaderboard });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Same shape as the other three score.json routes, for public/js/games/minesweeper.js.
+router.post(
+  "/games/minesweeper/score.json",
+  settingsWriteLimiter,
+  requireLoginJson,
+  verifyToken,
+  async (req, res, next) => {
+    const score = Number.parseInt(req.body.score, 10);
+    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
+      return res.status(400).json({ ok: false, error: "score" });
+    }
+    try {
+      await gameScoresRepo.submitScore(GAME_MINESWEEPER, req.user.userId, score);
+      await gameSessionStatsRepo.recordPlay(GAME_MINESWEEPER);
+      const leaderboard = await buildLeaderboard(GAME_MINESWEEPER, req.user.userId);
+      res.json({ ok: true, ...leaderboard });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Same shape as the other score.json routes, for public/js/games/match3.js.
+router.post(
+  "/games/match-3/score.json",
+  settingsWriteLimiter,
+  requireLoginJson,
+  verifyToken,
+  async (req, res, next) => {
+    const score = Number.parseInt(req.body.score, 10);
+    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
+      return res.status(400).json({ ok: false, error: "score" });
+    }
+    try {
+      await gameScoresRepo.submitScore(GAME_MATCH3, req.user.userId, score);
+      await gameSessionStatsRepo.recordPlay(GAME_MATCH3);
+      const leaderboard = await buildLeaderboard(GAME_MATCH3, req.user.userId);
       res.json({ ok: true, ...leaderboard });
     } catch (err) {
       next(err);

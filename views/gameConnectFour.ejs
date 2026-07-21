@@ -1,0 +1,91 @@
+<%- include('partials/head', { title: t('games.connectFour.name') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-3xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.connectFour.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.connectFour.backToGames') %></a>
+  </div>
+
+  <div id="c4-root" data-ws-path="/ws/connect-four" class="max-w-xl mx-auto">
+    <div id="c4-screen-idle" class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
+      <p class="text-neutral-400 mb-4"><%= t('games.connectFour.intro') %></p>
+      <button type="button" id="c4-queue-button"
+              class="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.quickMatch.findOpponent') %></button>
+    </div>
+
+    <div id="c4-screen-queued" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
+      <p class="text-neutral-300 mb-2"><%= t('games.quickMatch.searchingForOpponent') %></p>
+      <p class="text-sm text-neutral-500 mb-1"><%= t('games.quickMatch.playersSearching') %>: <span id="c4-queue-count" class="tabular-nums text-neutral-200">1</span></p>
+      <p class="text-sm text-neutral-500 mb-6"><%= t('games.quickMatch.searchTime') %>: <span id="c4-queue-time" class="tabular-nums text-neutral-200">0:00</span></p>
+      <button type="button" id="c4-cancel-queue"
+              class="px-5 py-2.5 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors"><%= t('games.quickMatch.cancelSearch') %></button>
+    </div>
+
+    <div id="c4-screen-game" hidden>
+      <div id="c4-opponent-banner" hidden class="mb-3 px-4 py-2 rounded-lg bg-amber-500/15 text-amber-300 text-sm text-center">
+        <%= t('games.quickMatch.opponentDisconnected') %>
+      </div>
+      <div class="flex items-center justify-center gap-3 mb-3">
+        <span id="c4-color-badge" hidden
+              data-p0="<%= t('games.connectFour.youArePurple') %>"
+              data-p1="<%= t('games.connectFour.youAreYellow') %>"
+              class="px-2.5 py-1 rounded-md text-sm font-medium"></span>
+        <p id="c4-status" class="text-center text-neutral-300"
+           data-your-turn="<%= t('games.connectFour.yourTurn') %>"
+           data-opponent-turn="<%= t('games.connectFour.opponentTurn') %>"></p>
+        <span id="c4-timer" hidden class="px-2.5 py-1 rounded-md bg-neutral-800 text-neutral-200 text-sm font-medium tabular-nums"></span>
+      </div>
+      <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+        <div id="c4-board" class="grid gap-2 w-full rounded-lg bg-sky-900/40 p-2"></div>
+
+        <div id="c4-result" hidden
+             class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl bg-neutral-950/90 backdrop-blur-sm p-8 text-center">
+          <h2 id="c4-result-title"
+              data-win="<%= t('games.connectFour.youWin') %>"
+              data-lose="<%= t('games.connectFour.youLose') %>"
+              data-draw="<%= t('games.connectFour.draw') %>"
+              class="text-xl font-semibold text-neutral-100 mb-2"></h2>
+          <p id="c4-result-body" data-rating-tpl="<%= t('games.quickMatch.ratingChangeTpl') %>" class="text-sm text-neutral-400 mb-4"></p>
+          <button type="button" id="c4-play-again"
+                  class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.connectFour.playAgain') %></button>
+        </div>
+      </div>
+      <div class="text-center mt-3">
+        <button type="button" id="c4-resign"
+                class="px-4 py-2 rounded-lg text-neutral-400 hover:bg-neutral-800 text-sm transition-colors"><%= t('games.quickMatch.resign') %></button>
+      </div>
+    </div>
+  </div>
+
+  <%# Rating leaderboard - same pattern as gameBattleship.ejs's/gamePong.ejs's. %>
+  <aside class="max-w-sm mx-auto mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+    <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.connectFour.leaderboardTitle') %></p>
+    <ol class="space-y-0.5">
+      <% if (leaderboard.rows.length === 0) { %>
+        <li class="text-sm text-neutral-500 py-1"><%= t('games.connectFour.leaderboardEmpty') %></li>
+      <% } %>
+      <% leaderboard.rows.forEach(function(row) { %>
+        <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+          <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+          <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+          <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+        </li>
+      <% }) %>
+      <% if (leaderboard.myRow) { %>
+        <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10 mt-1 pt-1 border-t border-neutral-800">
+          <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+          <span class="flex-1 truncate text-purple-300"
+                <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+          <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+        </li>
+      <% } %>
+    </ol>
+  </aside>
+</main>
+
+<%- include('partials/quickMatchReadyCheck') %>
+<script src="/js/games/quickMatchClient.js" defer></script>
+<script src="/js/games/connect-four.js" defer></script>
+<%- include('partials/foot') %>

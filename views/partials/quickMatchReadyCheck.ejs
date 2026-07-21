@@ -1,0 +1,21 @@
+<%# Shared ready-check popup for the 4 quick-match games (Battleship, Pong,
+    Connect Four, Backgammon). Wired by public/js/games/quickMatchClient.js's
+    window.wireQuickMatchReadyCheck() via these fixed ids - a game view just
+    includes this partial and its client calls that helper once. i18n templates
+    are passed to the (static) client through data-* attributes, same technique
+    the per-game status lines already use. %>
+<div id="qm-ready-check" hidden
+     data-countdown-tpl="<%= t('games.quickMatch.readyCountdownTpl') %>"
+     data-accepted-tpl="<%= t('games.quickMatch.readyAcceptedTpl') %>"
+     data-vs-tpl="<%= t('games.quickMatch.readyVsTpl') %>"
+     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+  <div class="w-full max-w-sm rounded-xl border border-purple-700/60 bg-neutral-900 p-6 text-center shadow-2xl">
+    <p class="text-base font-semibold text-neutral-100 mb-1"><%= t('games.quickMatch.readyCheckTitle') %></p>
+    <p id="qm-ready-vs" class="text-sm text-neutral-400 mb-4"></p>
+    <p id="qm-ready-countdown" class="text-3xl font-bold text-purple-400 tabular-nums mb-3"></p>
+    <p id="qm-ready-count" class="text-sm text-neutral-400 mb-4"></p>
+    <button type="button" id="qm-ready-accept-btn"
+            class="px-6 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.quickMatch.readyCheckAccept') %></button>
+    <p id="qm-ready-waiting" hidden class="text-sm text-neutral-500 mt-3"><%= t('games.quickMatch.readyCheckWaiting') %></p>
+  </div>
+</div>
