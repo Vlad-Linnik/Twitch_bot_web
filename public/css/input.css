@@ -599,6 +599,57 @@ html.js .save-fab.save-visible {
   background-color: rgb(217 119 6 / 0.95); /* amber-600 */
 }
 
+/* Match-3 big-blast feedback (public/js/games/match3.js's
+   BIG_CLEAR_THRESHOLD): a step clearing a lot of cells at once (a merged
+   cascade, or a shape bonus's column/row/area/type blast) shakes and flashes
+   the whole board, not just the individual cleared cells. */
+@keyframes m3-board-shake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-6px, 3px); }
+  30% { transform: translate(5px, -4px); }
+  45% { transform: translate(-4px, -3px); }
+  60% { transform: translate(4px, 3px); }
+  75% { transform: translate(-3px, 2px); }
+  90% { transform: translate(2px, -2px); }
+}
+@keyframes m3-board-flash {
+  0% { box-shadow: inset 0 0 0 0 rgb(251 191 36 / 0); }
+  20% { box-shadow: inset 0 0 40px 10px rgb(251 191 36 / 0.55); }
+  100% { box-shadow: inset 0 0 0 0 rgb(251 191 36 / 0); }
+}
+.m3-board-blast {
+  animation:
+    m3-board-shake 420ms ease-in-out,
+    m3-board-flash 420ms ease-out;
+}
+
+/* A big blast's crystals fly off past the board's own edge as whole sprites
+   (not just confetti shards) - see match3.js's spawnFlyingCrystal. Scales
+   down as it travels (unlike a shard, which barely shrinks) so it reads as
+   "receding into the distance" rather than just sliding off flat. */
+.m3-flying-crystal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.45));
+  animation: m3-crystal-fly var(--m3-fly-ms, 800ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes m3-crystal-fly {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--rot)) scale(0.55);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .m3-board-blast {
+    animation: none;
+  }
+}
+
 /* Battleship (public/js/games/battleship.js): gap-less 10x10 board. Ship
    sprites and hit/kill marks are absolute overlays positioned in plain
    percentages (10% per cell), layered above the cell buttons by z-index. */

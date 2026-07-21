@@ -49,12 +49,14 @@
   };
   for (const audio of Object.values(SOUNDS)) audio.volume = 0.5;
 
-  function playSound(name) {
+  function playSound(name, options) {
     const base = SOUNDS[name];
     if (!base) return;
     try {
       const node = base.cloneNode(true);
-      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
+      const volumeMult = (options && options.volumeMult) || 1;
+      node.volume = Math.min(1, base.volume * (window.gameVolume ? window.gameVolume.get() : 1) * volumeMult);
+      if (options && options.rate) node.playbackRate = options.rate;
       node.play().catch(() => {});
     } catch (_) {
       /* audio unsupported/blocked - the game keeps working silently */
@@ -66,6 +68,14 @@
   const SHATTER_MS = 260;
   const SWAP_MS = 150;
   const FALL_MS = 260;
+
+  // A step clearing this many cells or more (a merged cascade, or a shape
+  // bonus's column/row/area/type blast - see match3Engine.js's
+  // classifyGroupShape) gets the bigger treatment: a board shake + flash,
+  // denser/further-flying shards, and a deeper layered boom on top of the
+  // normal shatter sound - see animateCascadeSteps below.
+  const BIG_CLEAR_THRESHOLD = 8;
+  const BOARD_BLAST_MS = 420;
 
   // Real pixel stride between adjacent cells (accounts for the board's grid
   // gap, not just cell width) - measured fresh each time rather than cached
@@ -84,19 +94,19 @@
   const SHARD_COLORS = ["#fb7185", "#38bdf8", "#34d399", "#c084fc", "#fb923c", "#f5f5f5"];
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function spawnShards(r, c) {
+  function spawnShards(r, c, big) {
     if (!shardsRoot || reduceMotion) return;
     const rootRect = shardsRoot.getBoundingClientRect();
     const cellRect = cellEls[r][c].getBoundingClientRect();
     const x = cellRect.left + cellRect.width / 2 - rootRect.left;
     const y = cellRect.top + cellRect.height / 2 - rootRect.top;
-    const count = 6 + Math.floor(Math.random() * 3);
+    const count = (big ? 9 : 6) + Math.floor(Math.random() * 3);
     for (let i = 0; i < count; i++) {
       const shard = document.createElement("span");
       shard.className = "m3-shard";
       const angle = Math.random() * Math.PI * 2;
-      const dist = 36 + Math.random() * 90;
-      const size = 5 + Math.random() * 6;
+      const dist = (big ? 60 : 36) + Math.random() * (big ? 130 : 90);
+      const size = (big ? 6 : 5) + Math.random() * 6;
       shard.style.left = x + "px";
       shard.style.top = y + "px";
       shard.style.width = size + "px";
@@ -109,6 +119,42 @@
       shard.addEventListener("animationend", () => shard.remove(), { once: true });
       shardsRoot.appendChild(shard);
     }
+  }
+
+  // A big blast (see BIG_CLEAR_THRESHOLD) also launches the actual crystal
+  // sprite itself - not just confetti shards - tumbling off past the edge
+  // of the board, for a "the whole thing is exploding outward" read. Reads
+  // the cell's own current background-image rather than tracking each
+  // step's per-cell type separately: at the moment this fires, the cascade
+  // has already been resolved in the engine, but this cell's DOM element
+  // hasn't been repainted for the step yet, so its background-image is
+  // still the pre-clear crystal - exactly the sprite that should fly off.
+  function spawnFlyingCrystal(r, c) {
+    if (!shardsRoot || reduceMotion) return;
+    const bgImage = cellEls[r][c].style.backgroundImage;
+    if (!bgImage) return;
+    const rootRect = shardsRoot.getBoundingClientRect();
+    const cellRect = cellEls[r][c].getBoundingClientRect();
+    const x = cellRect.left + cellRect.width / 2 - rootRect.left;
+    const y = cellRect.top + cellRect.height / 2 - rootRect.top;
+    const angle = Math.random() * Math.PI * 2;
+    // Far enough that a crystal launched from any cell clears the board's
+    // own box, regardless of which corner/edge it starts from.
+    const dist = Math.max(rootRect.width, rootRect.height) * (0.75 + Math.random() * 0.45);
+    const size = cellRect.width * (0.8 + Math.random() * 0.35);
+    const crystal = document.createElement("span");
+    crystal.className = "m3-flying-crystal bg-contain bg-center bg-no-repeat";
+    crystal.style.left = x + "px";
+    crystal.style.top = y + "px";
+    crystal.style.width = size + "px";
+    crystal.style.height = size + "px";
+    crystal.style.backgroundImage = bgImage;
+    crystal.style.setProperty("--tx", Math.cos(angle) * dist + "px");
+    crystal.style.setProperty("--ty", Math.sin(angle) * dist + "px");
+    crystal.style.setProperty("--rot", Math.floor(Math.random() * 720 - 360) + "deg");
+    crystal.style.setProperty("--m3-fly-ms", Math.floor(650 + Math.random() * 300) + "ms");
+    crystal.addEventListener("animationend", () => crystal.remove(), { once: true });
+    shardsRoot.appendChild(crystal);
   }
 
   const scoreEl = document.getElementById("m3-score");
@@ -220,14 +266,23 @@
     }
     const step = steps[i];
     const stride = measureStride();
+    const isBigBlast = step.clearedCells.length >= BIG_CLEAR_THRESHOLD;
 
     playSound("shatter");
+    if (isBigBlast) {
+      playSound("shatter", { rate: 0.6, volumeMult: 1.15 }); // layered deeper boom
+      root.classList.remove("m3-board-blast");
+      void root.offsetWidth;
+      root.classList.add("m3-board-blast");
+      setTimeout(() => root.classList.remove("m3-board-blast"), BOARD_BLAST_MS);
+    }
     for (const [r, c] of step.clearedCells) {
       const el = cellEls[r][c];
+      if (isBigBlast) spawnFlyingCrystal(r, c);
       el.classList.remove("m3-cell-shatter");
       void el.offsetWidth;
       el.classList.add("m3-cell-shatter");
-      spawnShards(r, c);
+      spawnShards(r, c, isBigBlast);
     }
 
     setTimeout(() => {
