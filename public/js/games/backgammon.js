@@ -1,4 +1,4 @@
-// /games/backgammon - online 1v1 international backgammon via auto-
+// /games/backgammon - online 1v1 long backgammon (long nardy) via auto-
 // matchmaking (realtime/quickMatchManager.js + lib/backgammonEngine.js).
 // Server fully authoritative and there's no hidden info in backgammon at
 // all, but this client still never re-derives legality itself
@@ -27,7 +27,6 @@
   const quadTR = document.getElementById("bg-quad-tr");
   const quadBL = document.getElementById("bg-quad-bl");
   const quadBR = document.getElementById("bg-quad-br");
-  const barEl = document.getElementById("bg-bar");
   const offEl0 = document.getElementById("bg-off-0");
   const offEl1 = document.getElementById("bg-off-1");
   const offZoneEl = document.getElementById("bg-bear-off-zone");
@@ -44,7 +43,22 @@
 
   let youAreSeat = 0;
   let latestState = null;
-  let selectedFrom = null; // point index (0-23), "bar", or null
+  let selectedFrom = null; // point index (0-23) or null
+
+  // Long nardy travel-position math, hand-kept in sync with
+  // lib/backgammonEngine.js's copy (no bundler/shared code between server
+  // lib/ and client public/js/ in this repo). travelPos(seat, idx) = 0 at
+  // that seat's own head/start point, 23 at the last point before bearing
+  // off; travelIdx() is its inverse. Seat 0 heads from point 24 (index 23)
+  // with no wraparound; seat 1 heads from point 12 (index 11) and wraps
+  // around past point 1/24 to reach its home.
+  const TRAVEL_START = [23, 11];
+  function travelPos(seat, idx) {
+    return (((TRAVEL_START[seat] - idx) % 24) + 24) % 24;
+  }
+  function travelIdx(seat, pos) {
+    return (((TRAVEL_START[seat] - pos) % 24) + 24) % 24;
+  }
 
   // A stack shows real checkers up to this many; beyond that, the top
   // checker also carries the actual count so tall stacks stay readable
@@ -105,12 +119,18 @@
     for (const key of Object.keys(screens)) screens[key].hidden = key !== name;
   }
 
-  // Top row: points 24..13 (idx 23..12), left to right, split by the bar into
-  // a 24-19 left quadrant and an 18-13 right quadrant.
-  // Bottom row: points 1..12 (idx 0..11), left to right, split into 1-6 left
-  // and 7-12 right - the real 4-quadrant layout, not one flat 12-wide strip.
-  const TOP_IDX = [23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12];
-  const BOTTOM_IDX = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  // Board quadrants are assigned by TRAVEL position relative to the viewing
+  // seat, not by fixed absolute point ranges - since travelPos() is already
+  // seat-relative, this makes EVERY viewer see their own head point bottom-
+  // left and their own home top-right, without any CSS flip/rotation: BL =
+  // travel positions 0-5 (own start), BR = 6-11, TL = 12-17, TR = 18-23 (own
+  // home). Points within a quadrant are ordered by ascending travel position
+  // left to right.
+  function quadrantIndices(seat, startPos) {
+    const out = [];
+    for (let p = startPos; p < startPos + 6; p++) out.push(travelIdx(seat, p));
+    return out;
+  }
 
   function pointEl(idx) {
     return root.querySelector('[data-point="' + idx + '"]');
@@ -121,10 +141,10 @@
     quadTR.textContent = "";
     quadBL.textContent = "";
     quadBR.textContent = "";
-    fillQuad(quadTL, TOP_IDX.slice(0, 6), "top", false);
-    fillQuad(quadTR, TOP_IDX.slice(6), "top", true);
-    fillQuad(quadBL, BOTTOM_IDX.slice(0, 6), "bottom", false);
-    fillQuad(quadBR, BOTTOM_IDX.slice(6), "bottom", true);
+    fillQuad(quadBL, quadrantIndices(youAreSeat, 0), "bottom", false);
+    fillQuad(quadBR, quadrantIndices(youAreSeat, 6), "bottom", true);
+    fillQuad(quadTL, quadrantIndices(youAreSeat, 12), "top", false);
+    fillQuad(quadTR, quadrantIndices(youAreSeat, 18), "top", true);
   }
 
   // `shiftShade` flips which shade starts the quad, purely so triangles right
@@ -191,16 +211,10 @@
     latestState = state;
     for (let i = 0; i < 24; i++) renderPoint(i, state.points[i]);
 
-    barEl.textContent = "";
-    barEl.classList.toggle("bg-point-selected", selectedFrom === "bar");
-    barEl.classList.toggle("bg-point-target", isLegalTarget("bar"));
-    appendCheckers(barEl, state.bar[0]);
-    appendCheckers(barEl, -state.bar[1]);
-
     if (offZoneEl) offZoneEl.classList.toggle("bg-bear-off-target", isLegalTarget("off"));
 
-    offEl0.textContent = state.borneOff[0];
-    offEl1.textContent = state.borneOff[1];
+    offEl0.textContent = state.borneOff[youAreSeat];
+    offEl1.textContent = state.borneOff[youAreSeat === 0 ? 1 : 0];
 
     renderDice(diceOverride || state.movesRemaining);
 
@@ -218,22 +232,20 @@
 
   // Backgammon has no hidden info, so a die value is always mechanically
   // derivable from the (from, to) pair the player clicked - this just
-  // reverses lib/backgammonEngine.js's own from/die -> to formulas rather
-  // than asking the player to pick a die first.
+  // reverses lib/backgammonEngine.js's own from/die -> to formulas (via the
+  // same travel-position math) rather than asking the player to pick a die
+  // first.
   function inferDie(from, to) {
     const state = latestState;
     if (!state) return null;
-    if (from === "bar") {
-      return youAreSeat === 0 ? 24 - to : to + 1;
-    }
     if (to === "off") {
-      const exact = youAreSeat === 0 ? from + 1 : 24 - from;
+      const exact = 24 - travelPos(youAreSeat, from);
       if (state.movesRemaining.includes(exact)) return exact;
       // Oversized-die bear-off: fall back to the largest remaining die and
       // let the server confirm this is actually the farthest-back checker.
       return Math.max(...state.movesRemaining);
     }
-    return Math.abs(to - from);
+    return travelPos(youAreSeat, to) - travelPos(youAreSeat, from);
   }
 
   function handlePointClick(idx) {
@@ -247,14 +259,6 @@
     }
     sendMove(selectedFrom, idx);
   }
-
-  barEl?.addEventListener("click", () => {
-    if (!latestState || latestState.turnSeat !== youAreSeat || latestState.turnPhase !== "move") return;
-    if (latestState.bar[youAreSeat] > 0) {
-      selectedFrom = "bar";
-      render(latestState);
-    }
-  });
 
   offZoneEl?.addEventListener("click", () => {
     if (selectedFrom === null) return;
@@ -306,7 +310,7 @@
   let lastDiceKey = null;
 
   function boardKey(state) {
-    return JSON.stringify([state.points, state.bar, state.borneOff]);
+    return JSON.stringify([state.points, state.borneOff]);
   }
 
   function handleStateUpdate(state) {
