@@ -13,13 +13,12 @@ const GAME_PIPE_DODGER = "pipe-dodger";
 const GAME_2048 = "2048";
 const GAME_MINESWEEPER = "minesweeper";
 const GAME_MATCH3 = "match-3";
-// Battleship/Pong/Connect Four/Backgammon are all rated (Elo, via
+// Battleship/Pong/Connect Four are all rated (Elo, via
 // realtime/quickMatchManager.js + realtime/durakElo.js) - same
 // "bestScore field holds a live rating" convention as GAME_DURAK_ONLINE.
 const GAME_BATTLESHIP = "battleship";
 const GAME_PONG = "pong";
 const GAME_CONNECT_FOUR = "connect-four";
-const GAME_BACKGAMMON = "backgammon";
 // Durak's leaderboard ranks online (multiplayer) Elo rating only - a
 // vs-computer win never reaches the server at all (see
 // public/js/games/durak.js). realtime/durakRoomManager.js's finalizeGame
@@ -120,10 +119,10 @@ router.get("/games/match-3", async (req, res, next) => {
   }
 });
 
-// Battleship, Pong, Connect Four and Backgammon are online-only (auto-
-// matchmaking via realtime/quickMatchManager.js) - there's no anonymous/
-// vs-computer mode to render, so unlike Durak these are requireLogin-gated
-// at the route, same as Durak's own room-deep-link route.
+// Battleship, Pong and Connect Four are online-only (auto-matchmaking via
+// realtime/quickMatchManager.js) - there's no anonymous/vs-computer mode to
+// render, so unlike Durak these are requireLogin-gated at the route, same
+// as Durak's own room-deep-link route.
 router.get("/games/battleship", requireLogin, async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_BATTLESHIP, req.user.userId);
@@ -146,15 +145,6 @@ router.get("/games/connect-four", requireLogin, async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_CONNECT_FOUR, req.user.userId);
     res.render("gameConnectFour", { leaderboard });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/games/backgammon", requireLogin, async (req, res, next) => {
-  try {
-    const leaderboard = await buildLeaderboard(GAME_BACKGAMMON, req.user.userId);
-    res.render("gameBackgammon", { leaderboard });
   } catch (err) {
     next(err);
   }

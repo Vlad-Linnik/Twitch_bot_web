@@ -1,9 +1,9 @@
-// Shared WebSocket connection helper for the 4 auto-matchmaking online games
-// (Battleship, Pong, Connect Four, Backgammon). Deliberately the ONE exception
+// Shared WebSocket connection helper for the auto-matchmaking online games
+// (Battleship, Pong, Connect Four). Deliberately the ONE exception
 // to this repo's "every on-site game owns its own independent client script"
-// convention (see durak-multiplayer.js's header comment) - these 4 games
+// convention (see durak-multiplayer.js's header comment) - these games
 // share near-identical connect/reconnect/queue/dispatch plumbing, and
-// duplicating it 4 times would just be drift risk. Rendering, input, and
+// duplicating it per game would just be drift risk. Rendering, input, and
 // animation stay 100% bespoke per game (battleship.js, pong.js, etc.) - this
 // file only ever touches the WebSocket itself.
 //

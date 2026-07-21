@@ -1,5 +1,5 @@
-// Generic auto-matchmaking room manager for the 4 new online-only 1v1 games
-// (Battleship, Pong, Connect Four, Backgammon) - createQuickMatchManager(config)
+// Generic auto-matchmaking room manager for the new online-only 1v1 games
+// (Battleship, Pong, Connect Four) - createQuickMatchManager(config)
 // returns { handleConnection(ws, user) }, the same shape realtime/
 // durakRoomManager.js exports, so realtime/socketServer.js's path registry
 // can treat every handler uniformly.
@@ -149,8 +149,8 @@ function createQuickMatchManager(config) {
   // --- Spectating ------------------------------------------------------------
   // Read-only: a spectator is never added to room.players and never touches
   // engine state. engine.serializeForSpectator (when the engine defines one -
-  // only battleshipEngine.js and backgammonEngine.js need to, see their own
-  // comments) is what keeps hidden information away from a spectator; engines
+  // only battleshipEngine.js needs to, see its own comments) is what keeps
+  // hidden information away from a spectator; engines
   // with nothing to hide (pong, connect four) fall back to serializeForSeat,
   // which for them is already seat-agnostic.
   function spectatorPayloadFor(room) {
@@ -289,7 +289,7 @@ function createQuickMatchManager(config) {
   // cancelled (cancelReadyCheck) if someone doesn't in time.
   function createRoom(a, b) {
     // Randomized seat assignment - who queued first shouldn't determine who
-    // gets Connect Four's first move or Backgammon's opening roll advantage.
+    // gets Connect Four's first move advantage.
     const [p0, p1] = Math.random() < 0.5 ? [a, b] : [b, a];
     const roomId = genRoomId();
     const room = {

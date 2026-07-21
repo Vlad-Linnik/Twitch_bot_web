@@ -513,27 +513,6 @@
       "backToGames": "All games",
       "leaderboardTitle": "Top 10 by online rating",
       "leaderboardEmpty": "No ratings yet — be the first!"
-    },
-    "backgammon": {
-      "name": "Backgammon",
-      "cardDescription": "Long backgammon (long nardy) — no hitting, race all 15 checkers home. Online only, rated.",
-      "intro": "Find an opponent and race all your checkers around the board to home — no captures in long nardy, just a straight race.",
-      "yourRoll": "Your turn — roll the dice",
-      "yourMove": "Your turn — move a checker",
-      "opponentTurn": "Opponent's turn…",
-      "youAreWhite": "You are: white",
-      "youAreBlack": "You are: black",
-      "turnNumber": "Move",
-      "borneOffYou": "Your borne off",
-      "borneOffOpponent": "Opponent borne off",
-      "bearOffZone": "Bear off",
-      "roll": "Roll dice",
-      "youWin": "You win!",
-      "youLose": "You lose",
-      "playAgain": "Play again",
-      "backToGames": "All games",
-      "leaderboardTitle": "Top 10 by online rating",
-      "leaderboardEmpty": "No ratings yet — be the first!"
     }
   },
   "statistics": {

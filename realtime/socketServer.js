@@ -13,7 +13,6 @@ const { createQuickMatchManager } = require("./quickMatchManager");
 const battleshipEngine = require("../lib/battleshipEngine");
 const pongEngine = require("../lib/pongEngine");
 const connectFourEngine = require("../lib/connectFourEngine");
-const backgammonEngine = require("../lib/backgammonEngine");
 
 const HEARTBEAT_MS = 30 * 1000;
 
@@ -34,10 +33,6 @@ function buildHandlers() {
   handlers.set(
     "/ws/connect-four",
     createQuickMatchManager({ game: "connect-four", rated: true, mode: "turn-based", engine: connectFourEngine })
-  );
-  handlers.set(
-    "/ws/backgammon",
-    createQuickMatchManager({ game: "backgammon", rated: true, mode: "turn-based", engine: backgammonEngine })
   );
   return handlers;
 }
