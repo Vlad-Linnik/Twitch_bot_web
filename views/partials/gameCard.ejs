@@ -1,0 +1,9 @@
+<%# One /games hub card. Expects: game ({url, nameKey, descKey, preview}). %>
+<a href="<%= game.url %>"
+   class="group block rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-purple-500/50 transition-colors">
+  <div class="mb-4 h-28 rounded-lg bg-neutral-950 border border-neutral-800 grid place-items-center overflow-hidden">
+    <%- game.preview %>
+  </div>
+  <h2 class="text-lg font-semibold text-neutral-100 group-hover:text-purple-300 transition-colors"><%= t(game.nameKey) %></h2>
+  <p class="text-sm text-neutral-500 mt-1"><%= t(game.descKey) %></p>
+</a>

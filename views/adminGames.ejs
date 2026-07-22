@@ -1,0 +1,152 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabGames') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <% if (flash) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('admin.games.flash.' + flash) %>
+    </div>
+  <% } %>
+
+  <%# --- Visibility (admin) ------------------------------------------- %>
+  <section class="mb-12">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.games.visibilityHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.games.visibilityHint') %></p>
+
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-neutral-900 text-neutral-400">
+          <tr>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.games.colGame') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.games.colVisible') %></th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800">
+          <% games.forEach(function(g) { %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+              <td class="px-4 py-2 text-neutral-200"><%= t(g.nameKey) %></td>
+              <td class="px-4 py-2">
+                <% if (g.hidden) { %>
+                  <span class="text-neutral-500"><%= t('admin.games.hidden') %></span>
+                <% } else { %>
+                  <span class="text-green-400"><%= t('admin.games.visible') %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <form method="post" action="/admin/games/<%= g.id %>/toggle-visibility" data-transition="instant" class="inline-block">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <input type="hidden" name="hidden" value="<%= g.hidden ? '0' : '1' %>" />
+                  <% if (g.hidden) { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.games.show') %></button>
+                  <% } else { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors"><%= t('admin.games.hide') %></button>
+                  <% } %>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <%# --- Categories (moderator) ---------------------------------------- %>
+  <section>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.games.categoriesHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.games.categoriesHint') %></p>
+
+    <%
+      // Every category needs a name per supported locale (config/i18n.js's
+      // SUPPORTED_LOCALES) so it displays correctly regardless of the /games
+      // visitor's language - see db/gameCatalogRepo.js. This admin page always
+      // shows/edits both language fields at once, regardless of the admin's
+      // own locale.
+      function categoryLabel(c) {
+        return (c.names && (c.names[locale] || c.names.en || c.names.ru)) || '';
+      }
+    %>
+
+    <form method="post" action="/admin/games/categories" data-transition="instant" class="flex items-end flex-wrap gap-2 mb-6">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.games.nameEnLabel') %></label>
+        <input type="text" name="name_en" maxlength="60" required
+               class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.games.nameRuLabel') %></label>
+        <input type="text" name="name_ru" maxlength="60" required
+               class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+      </div>
+      <button type="submit" class="px-3 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium transition-colors"><%= t('admin.games.addCategory') %></button>
+    </form>
+
+    <% if (categories.length === 0) { %>
+      <p class="text-sm text-neutral-500 mb-6"><%= t('admin.games.categoriesEmpty') %></p>
+    <% } else { %>
+      <div class="space-y-2 mb-8">
+        <% categories.forEach(function(c) { %>
+          <div class="flex items-center flex-wrap gap-2 rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-2">
+            <form method="post" action="/admin/games/categories/<%= c._id %>/rename" data-transition="instant" class="flex items-center flex-wrap gap-2 flex-1">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <input type="text" name="name_en" value="<%= (c.names && c.names.en) || '' %>" maxlength="60" required
+                     placeholder="<%= t('admin.games.nameEnLabel') %>"
+                     class="flex-1 min-w-[8rem] rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-2 py-1 focus:outline-none focus:border-purple-600" />
+              <input type="text" name="name_ru" value="<%= (c.names && c.names.ru) || '' %>" maxlength="60" required
+                     placeholder="<%= t('admin.games.nameRuLabel') %>"
+                     class="flex-1 min-w-[8rem] rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-2 py-1 focus:outline-none focus:border-purple-600" />
+              <button type="submit" class="px-2 py-1 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.games.rename') %></button>
+            </form>
+            <form method="post" action="/admin/games/categories/<%= c._id %>/delete" data-transition="instant">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="px-2 py-1 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors"><%= t('admin.games.delete') %></button>
+            </form>
+          </div>
+        <% }) %>
+      </div>
+
+      <div class="rounded-lg border border-neutral-800 overflow-hidden">
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.games.colGame') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.games.colCategory') %></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% games.forEach(function(g) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+                <td class="px-4 py-2 text-neutral-200"><%= t(g.nameKey) %></td>
+                <td class="px-4 py-2">
+                  <form method="post" action="/admin/games/<%= g.id %>/category" data-transition="instant" class="flex items-center gap-2">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <select name="categoryId"
+                            class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-2 py-1 focus:outline-none focus:border-purple-600">
+                      <option value=""<%= g.categoryId ? '' : ' selected' %>><%= t('admin.games.noCategory') %></option>
+                      <% categories.forEach(function(c) { %>
+                        <option value="<%= c._id %>"<%= g.categoryId === String(c._id) ? ' selected' : '' %>><%= categoryLabel(c) %></option>
+                      <% }) %>
+                    </select>
+                    <button type="submit" class="px-2 py-1 rounded-md border border-purple-800 text-purple-300 hover:bg-purple-500/10 text-xs font-medium transition-colors"><%= t('admin.games.save') %></button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    <% } %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

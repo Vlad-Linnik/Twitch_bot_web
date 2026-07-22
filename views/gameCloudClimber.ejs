@@ -1,0 +1,128 @@
+<%- include('partials/head', { title: t('games.cloudClimber.name') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.cloudClimber.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.cloudClimber.backToGames') %></a>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-6 items-center sm:items-start justify-center">
+    <%# Leaderboard: top 10, plus the visitor's own row (with its real rank) as an
+        11th line when they're ranked below the top. Row markup here must stay in
+        sync with lbRow() in public/js/games/cloud-climber.js, which re-renders
+        these rows from the score.json response after a game over. data-csrf is
+        only present for logged-in visitors - its absence is how the client knows
+        not to attempt saving. Ordered last on mobile (below the board). Same
+        pattern as gamePipeDodger.ejs / pipe-dodger.js. %>
+    <aside id="cc-leaderboard"
+           class="w-full sm:w-56 order-last sm:order-none rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+           <% if (user) { %>data-submit-url="/games/cloud-climber/score.json" data-csrf="<%= csrfToken %>"<% } %>
+           data-empty-label="<%= t('games.cloudClimber.leaderboardEmpty') %>">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.cloudClimber.leaderboardTitle') %></p>
+      <ol id="cc-lb-list" class="space-y-0.5">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="text-sm text-neutral-500 py-1"><%= t('games.cloudClimber.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+            <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+          </li>
+        <% }) %>
+      </ol>
+      <div id="cc-lb-me" class="mt-1 pt-1 border-t border-neutral-800" <% if (!leaderboard.myRow) { %>hidden<% } %>>
+        <ol id="cc-lb-me-row">
+          <% if (leaderboard.myRow) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+              <span class="flex-1 truncate text-purple-300"
+                    <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+            </li>
+          <% } %>
+        </ol>
+      </div>
+      <% if (!user) { %>
+        <p class="text-xs text-neutral-500 mt-3">
+          <%= t('games.cloudClimber.loginToSave') %>
+          <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+        </p>
+      <% } %>
+    </aside>
+
+    <%# The board. The overlay (start / pause / game over) sits on top of the canvas;
+        all its text is server-rendered here - public/js/games/cloud-climber.js only
+        toggles which pieces are visible via the data-* labels below. No sprite
+        assets yet (see CLAUDE.md note in the JS file) - everything is drawn with
+        plain canvas shapes; textures can be layered in later the same way
+        pipe-dodger's were. Same fixed internal resolution + dpr-scaling approach. %>
+    <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 shrink-0">
+      <canvas id="cc-board" width="360" height="600"
+              class="block touch-none rounded-lg bg-neutral-950 w-[324px] h-[540px] sm:w-auto sm:h-[min(600px,calc(100dvh_-_11rem))]"></canvas>
+
+      <div id="cc-overlay"
+           data-title-start="<%= t('games.cloudClimber.name') %>"
+           data-title-paused="<%= t('games.cloudClimber.paused') %>"
+           data-title-over="<%= t('games.cloudClimber.gameOver') %>"
+           data-button-start="<%= t('games.cloudClimber.start') %>"
+           data-button-resume="<%= t('games.cloudClimber.resume') %>"
+           data-button-again="<%= t('games.cloudClimber.playAgain') %>"
+           data-final-score-label="<%= t('games.cloudClimber.finalScore') %>"
+           data-tap-hint="<%= t('games.cloudClimber.tapHint') %>"
+           class="absolute inset-3 rounded-lg bg-neutral-950/80 backdrop-blur-sm grid place-items-center text-center">
+        <div class="px-4">
+          <h2 id="cc-overlay-title" class="text-xl font-semibold text-neutral-100 mb-1"></h2>
+          <p id="cc-overlay-score" class="text-sm text-neutral-400 mb-4" hidden></p>
+          <button type="button" id="cc-overlay-button"
+                  class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"></button>
+          <p id="cc-overlay-hint" class="text-xs text-neutral-500 mt-4"></p>
+        </div>
+      </div>
+    </div>
+
+    <%# Shown instead of navigating away when a link is clicked mid-game (see
+        cloud-climber.js's click interceptor) - browser tab close/refresh gets
+        the native beforeunload prompt instead, which can't offer a save choice. %>
+    <dialog id="cc-leave-confirm-dialog"
+            class="w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-200 p-8 m-auto backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+      <h2 class="text-xl font-semibold text-neutral-100 mb-2"><%= t('games.cloudClimber.leaveConfirmTitle') %></h2>
+      <p class="text-base text-neutral-400 mb-8"><%= t('games.cloudClimber.leaveConfirmBody') %></p>
+      <div class="flex flex-wrap justify-end gap-3">
+        <button type="button" id="cc-leave-cancel"
+                class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.cloudClimber.leaveCancel') %></button>
+        <button type="button" id="cc-leave-discard"
+                class="px-5 py-2.5 text-base rounded-lg text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"><%= t('games.cloudClimber.leaveDiscard') %></button>
+        <button type="button" id="cc-leave-save"
+                class="px-5 py-2.5 text-base font-medium rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.cloudClimber.leaveSave') %></button>
+      </div>
+    </dialog>
+
+    <div class="w-full sm:w-56 grid grid-cols-2 sm:grid-cols-1 gap-4">
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex justify-between items-baseline mb-2">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.cloudClimber.score') %></span>
+          <span id="cc-score" class="text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.cloudClimber.best') %></span>
+          <span id="cc-best" class="text-sm text-purple-400 tabular-nums">0</span>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.cloudClimber.controlsTitle') %></p>
+        <ul class="text-sm text-neutral-400 space-y-1.5">
+          <li class="flex justify-between gap-2"><span><%= t('games.cloudClimber.controlsMove') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">← →</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.cloudClimber.controlsPause') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">P</kbd></li>
+        </ul>
+        <p class="text-xs text-neutral-500 mt-3"><%= t('games.cloudClimber.tapHint') %></p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/js/games/cloud-climber.js" defer></script>
+<%- include('partials/foot') %>

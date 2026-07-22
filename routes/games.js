@@ -1,7 +1,9 @@
 const express = require("express");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
+const gameCatalogRepo = require("../db/gameCatalogRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
+const gamesCatalog = require("../data/gamesCatalog");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const requireLogin = require("../middleware/requireLogin");
@@ -13,6 +15,7 @@ const GAME_PIPE_DODGER = "pipe-dodger";
 const GAME_2048 = "2048";
 const GAME_MINESWEEPER = "minesweeper";
 const GAME_MATCH3 = "match-3";
+const GAME_CLOUD_CLIMBER = "cloud-climber";
 // Battleship/Pong/Connect Four are all rated (Elo, via
 // realtime/quickMatchManager.js + realtime/durakElo.js) - same
 // "bestScore field holds a live rating" convention as GAME_DURAK_ONLINE.
@@ -70,8 +73,38 @@ async function buildLeaderboard(game, userId) {
 // leaderboard (db/gameScoresRepo.js, web-only database). The chat mini-game
 // commands (!muteduel, !совет) are listed on the Commands page's "Mini-games"
 // category instead, since they're chat commands, not on-site games.
-router.get("/games", (req, res) => {
-  res.render("games");
+//
+// Visibility (hide a game entirely) and category grouping are admin/moderator
+// controls (/admin/games, db/gameCatalogRepo.js) layered on top of the static
+// data/gamesCatalog.js list - a game with no GameSettings doc is visible and
+// uncategorized, so this page renders exactly as before until an admin
+// actually hides something or creates a category.
+router.get("/games", async (req, res, next) => {
+  try {
+    const [settingsMap, categories] = await Promise.all([
+      gameCatalogRepo.getSettingsMap(),
+      gameCatalogRepo.listCategories(),
+    ]);
+
+    const visible = gamesCatalog.filter((g) => !settingsMap.get(g.id)?.hidden);
+    const byCategory = new Map(categories.map((c) => [String(c._id), []]));
+    const uncategorized = [];
+    visible.forEach((g) => {
+      const categoryId = settingsMap.get(g.id)?.categoryId;
+      const key = categoryId ? String(categoryId) : null;
+      if (key && byCategory.has(key)) byCategory.get(key).push(g);
+      else uncategorized.push(g);
+    });
+
+    const groups = categories
+      .map((c) => ({ category: c, games: byCategory.get(String(c._id)) }))
+      .concat([{ category: null, games: uncategorized }])
+      .filter((group) => group.games.length > 0);
+
+    res.render("games", { groups });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get("/games/falling-blocks", async (req, res, next) => {
@@ -114,6 +147,15 @@ router.get("/games/match-3", async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_MATCH3, req.user ? req.user.userId : null);
     res.render("gameMatch3", { leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/games/cloud-climber", async (req, res, next) => {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_CLOUD_CLIMBER, req.user ? req.user.userId : null);
+    res.render("gameCloudClimber", { leaderboard });
   } catch (err) {
     next(err);
   }
@@ -287,6 +329,28 @@ router.post(
       await gameScoresRepo.submitScore(GAME_MATCH3, req.user.userId, score);
       await gameSessionStatsRepo.recordPlay(GAME_MATCH3);
       const leaderboard = await buildLeaderboard(GAME_MATCH3, req.user.userId);
+      res.json({ ok: true, ...leaderboard });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Same shape as the other score.json routes, for public/js/games/cloud-climber.js.
+router.post(
+  "/games/cloud-climber/score.json",
+  settingsWriteLimiter,
+  requireLoginJson,
+  verifyToken,
+  async (req, res, next) => {
+    const score = Number.parseInt(req.body.score, 10);
+    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
+      return res.status(400).json({ ok: false, error: "score" });
+    }
+    try {
+      await gameScoresRepo.submitScore(GAME_CLOUD_CLIMBER, req.user.userId, score);
+      await gameSessionStatsRepo.recordPlay(GAME_CLOUD_CLIMBER);
+      const leaderboard = await buildLeaderboard(GAME_CLOUD_CLIMBER, req.user.userId);
       res.json({ ok: true, ...leaderboard });
     } catch (err) {
       next(err);

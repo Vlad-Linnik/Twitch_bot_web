@@ -16,6 +16,9 @@ const botHeartbeatRepo = require("../db/botHeartbeatRepo");
 const siteVisitsRepo = require("../db/siteVisitsRepo");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
+const gameCatalogRepo = require("../db/gameCatalogRepo");
+const gamesCatalog = require("../data/gamesCatalog");
+const { SUPPORTED_LOCALES } = require("../config/i18n");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 
@@ -284,6 +287,125 @@ router.get("/admin/actions", requireAdmin, async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const log = await adminActionLogsRepo.listRecent({ page });
     res.render("adminActions", { tab: "actions", ...log });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Tier-0 only, same as the rest of /admin - see ../CLAUDE.md's answer on why
+// both the "hide from the public /games hub" (admin) and "group into
+// categories" (moderator) controls live in this one tier-0 tab rather than
+// being split across separate permission tiers: the on-site games are
+// site-wide, not per-channel, so there's no natural per-channel moderator
+// scope for either control - unlike settings.js's per-channel pages.
+const CATEGORY_NAME_MAX_LENGTH = 60;
+
+// Every category needs a name in every locale the site supports
+// (config/i18n.js's SUPPORTED_LOCALES) so it reads correctly regardless of
+// the visitor's language - see gameCatalogRepo.js's `names` map.
+function parseCategoryNames(body) {
+  const names = {};
+  for (const locale of SUPPORTED_LOCALES) {
+    const raw = body[`name_${locale}`];
+    names[locale] = typeof raw === "string" ? raw.trim().slice(0, CATEGORY_NAME_MAX_LENGTH) : "";
+  }
+  return names;
+}
+
+function categoryNamesValid(names) {
+  return SUPPORTED_LOCALES.every((locale) => names[locale]);
+}
+
+router.get("/admin/games", requireAdmin, async (req, res, next) => {
+  try {
+    const [settingsMap, categories] = await Promise.all([
+      gameCatalogRepo.getSettingsMap(),
+      gameCatalogRepo.listCategories(),
+    ]);
+    const games = gamesCatalog.map((g) => {
+      const settings = settingsMap.get(g.id);
+      return {
+        id: g.id,
+        nameKey: g.nameKey,
+        hidden: Boolean(settings?.hidden),
+        categoryId: settings?.categoryId ? String(settings.categoryId) : "",
+      };
+    });
+    res.render("adminGames", { tab: "games", games, categories, flash: req.query.flash || null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/games/:id/toggle-visibility", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const game = gamesCatalog.find((g) => g.id === req.params.id);
+    if (!game) return res.redirect("/admin/games");
+    const hidden = req.body.hidden === "1";
+    await gameCatalogRepo.setHidden(game.id, hidden);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: hidden ? "game.hide" : "game.show",
+      target: game.id,
+    });
+    res.redirect(`/admin/games?flash=${hidden ? "gameHidden" : "gameShown"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/games/:id/category", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const game = gamesCatalog.find((g) => g.id === req.params.id);
+    if (!game) return res.redirect("/admin/games");
+    const categoryId = typeof req.body.categoryId === "string" ? req.body.categoryId.trim() : "";
+    await gameCatalogRepo.setCategory(game.id, categoryId || null);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "game.setCategory",
+      target: game.id,
+      details: categoryId || null,
+    });
+    res.redirect("/admin/games?flash=gameCategorized");
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/games/categories", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const names = parseCategoryNames(req.body);
+    if (!categoryNamesValid(names)) return res.redirect("/admin/games?flash=categoryNameRequired");
+    const category = await gameCatalogRepo.createCategory(names);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "gameCategory.create",
+      target: String(category._id),
+      details: names.en,
+    });
+    res.redirect("/admin/games?flash=categoryCreated");
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/games/categories/:id/rename", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const names = parseCategoryNames(req.body);
+    if (!categoryNamesValid(names)) return res.redirect("/admin/games?flash=categoryNameRequired");
+    await gameCatalogRepo.renameCategory(req.params.id, names);
+    await adminActionLogsRepo.logAction({ admin: req.user, action: "gameCategory.rename", target: req.params.id, details: names.en });
+    res.redirect("/admin/games?flash=categoryRenamed");
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/games/categories/:id/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    await gameCatalogRepo.deleteCategory(req.params.id);
+    await adminActionLogsRepo.logAction({ admin: req.user, action: "gameCategory.delete", target: req.params.id });
+    res.redirect("/admin/games?flash=categoryDeleted");
   } catch (err) {
     next(err);
   }

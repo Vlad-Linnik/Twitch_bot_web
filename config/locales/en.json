@@ -221,6 +221,31 @@
       "leaveDiscard": "Leave without saving",
       "leaveCancel": "Keep playing"
     },
+    "cloudClimber": {
+      "name": "Cloud Climber",
+      "cardDescription": "Bounce from platform to platform, grab springs and jetpacks, and climb as high as you can.",
+      "score": "Score",
+      "best": "Best",
+      "controlsTitle": "Controls",
+      "controlsMove": "Move",
+      "controlsPause": "Pause",
+      "tapHint": "Drag, or use ←/→ (A/D), to steer",
+      "start": "Start",
+      "paused": "Paused",
+      "resume": "Resume",
+      "gameOver": "Game over",
+      "finalScore": "Score",
+      "playAgain": "Play again",
+      "backToGames": "All games",
+      "leaderboardTitle": "Top 10",
+      "leaderboardEmpty": "No scores yet — be the first!",
+      "loginToSave": "Log in to save your score to the leaderboard.",
+      "leaveConfirmTitle": "Leave the game?",
+      "leaveConfirmBody": "Your game is still in progress. Save your current score before you go, or leave without saving?",
+      "leaveSave": "Save & leave",
+      "leaveDiscard": "Leave without saving",
+      "leaveCancel": "Keep playing"
+    },
     "2048": {
       "name": "2048",
       "cardDescription": "Slide and merge tiles to reach 2048 and beyond.",
@@ -970,6 +995,7 @@
     "subtitle": "Bot-join requests, channels, and service health.",
     "tabOverview": "Overview",
     "tabStatistics": "Statistics",
+    "tabGames": "Games",
     "tabSettingsLog": "Settings log",
     "tabActions": "Admin actions",
     "visitsToday": "Visits today",
@@ -983,6 +1009,36 @@
     "gamesSessionsUnit": "sessions",
     "gamesPlayersUnit": "players",
     "gameDurakOnline": "Durak (online)",
+    "games": {
+      "visibilityHeading": "Game visibility",
+      "visibilityHint": "Hidden games disappear from the public /games hub immediately - their own page and score submission keep working for anyone with the direct link.",
+      "colGame": "Game",
+      "colVisible": "Status",
+      "visible": "Visible",
+      "hidden": "Hidden",
+      "show": "Show",
+      "hide": "Hide",
+      "categoriesHeading": "Categories",
+      "categoriesHint": "Group games into sections on the /games hub, e.g. \"Interesting games\" / \"Boring games\". A game with no category falls into the unlabeled section at the end. Each category needs a name in every supported language, so it always reads correctly for visitors on either locale.",
+      "nameEnLabel": "Name (English)",
+      "nameRuLabel": "Name (Russian)",
+      "addCategory": "Add",
+      "categoriesEmpty": "No categories yet - the hub shows a flat list until you add one.",
+      "rename": "Rename",
+      "delete": "Delete",
+      "colCategory": "Category",
+      "noCategory": "— none —",
+      "save": "Save",
+      "flash": {
+        "gameHidden": "Game hidden from the /games hub.",
+        "gameShown": "Game shown on the /games hub.",
+        "gameCategorized": "Category assignment saved.",
+        "categoryCreated": "Category created.",
+        "categoryRenamed": "Category renamed.",
+        "categoryDeleted": "Category deleted. Games in it are now uncategorized.",
+        "categoryNameRequired": "Category name can't be empty."
+      }
+    },
     "flash": {
       "approved": "Request approved and channel registered. The bot joins the channel within a minute.",
       "rejected": "Request rejected.",
@@ -1057,6 +1113,16 @@
         "disable": "Channel disabled",
         "homepageShow": "Channel shown on home page",
         "homepageHide": "Channel hidden from home page"
+      },
+      "game": {
+        "hide": "Game hidden",
+        "show": "Game shown",
+        "setCategory": "Game category changed"
+      },
+      "gameCategory": {
+        "create": "Game category created",
+        "rename": "Game category renamed",
+        "delete": "Game category deleted"
       }
     }
   }
