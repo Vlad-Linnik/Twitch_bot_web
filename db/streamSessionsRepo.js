@@ -10,6 +10,7 @@ const { ObjectId } = require("mongodb");
 const { connect } = require("./connection");
 const { createCache } = require("../lib/queryCache");
 const { buildCategorySegments, messageBucketMs } = require("../lib/streamSessionHelpers");
+const { getBoxArtUrls } = require("../twitch/gameBoxArt");
 const limits = require("../config/statsLimits");
 
 let collections;
@@ -118,12 +119,22 @@ async function getSessionChartData(channel, session) {
       getMessageBuckets(channel.channelLogin, session.startedAt, session.endedAt),
     ]);
 
+    const categorySegments = buildCategorySegments(viewerSamples, session.endedAt || new Date());
+    // Enrich each segment with the category's box-art URL (fail-soft: an outage just leaves
+    // segments imageless). Done here, not in the pure buildCategorySegments helper, so that
+    // helper stays IO-free/unit-testable - and the whole payload is cached per-session, so this
+    // Helix round-trip happens about once per stream, not per page view.
+    const boxArt = await getBoxArtUrls(categorySegments.map((s) => s.category));
+    for (const seg of categorySegments) {
+      if (seg.category && boxArt.has(seg.category)) seg.boxArtUrl = boxArt.get(seg.category);
+    }
+
     return {
       session: { id: String(session._id), startedAt: session.startedAt, endedAt: session.endedAt },
       viewerSamples,
       messageBuckets: messageRate.buckets,
       messageBucketMs: messageRate.bucketMs,
-      categorySegments: buildCategorySegments(viewerSamples, session.endedAt || new Date()),
+      categorySegments,
     };
   });
 }

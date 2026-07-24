@@ -27,7 +27,8 @@
   <% } %>
 
   <!-- Stream stats: viewers + chat rate over one stream, category segments along the bottom.
-       Both series share ONE y-axis (no dual-axis) - see public/js/stream-chart.js. -->
+       Independent y-axes: viewers on the left (red), messages on the right (blue) - see
+       public/js/stream-chart.js. -->
   <section class="mb-12" data-component="streamchart">
     <div class="flex items-center justify-between mb-3 gap-4 flex-wrap">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.streamChart.title') %></h2>
@@ -60,18 +61,22 @@
         </span>
       </div>
       <div class="flex items-stretch gap-2">
+        <%# Left axis = viewers (labels tinted to match the red viewer line). %>
         <div id="stream-chart-yaxis"
-             class="w-10 shrink-0 flex flex-col justify-between items-end text-[10px] leading-none text-neutral-500 tabular-nums py-0.5"></div>
+             class="w-10 shrink-0 flex flex-col justify-between items-end text-[10px] leading-none tabular-nums py-0.5"></div>
         <div class="relative flex-1 min-w-0">
           <svg id="stream-chart" class="w-full h-48" viewBox="0 0 800 200" preserveAspectRatio="none" role="img"
                aria-label="<%= t('statistics.streamChart.title') %>"></svg>
           <div id="stream-chart-tooltip"
                class="hidden absolute pointer-events-none z-10 rounded-md border border-neutral-700 bg-neutral-950/95 px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"></div>
         </div>
+        <%# Right axis = messages, its own scale (labels tinted to match the blue message line). %>
+        <div id="stream-chart-yaxis-right"
+             class="w-10 shrink-0 flex flex-col justify-between items-start text-[10px] leading-none tabular-nums py-0.5"></div>
       </div>
       <div id="stream-chart-xaxis"
-           class="flex justify-between text-[10px] leading-none text-neutral-500 tabular-nums mt-1.5 ml-12"></div>
-      <div id="stream-chart-categories" class="flex mt-2 ml-12 rounded overflow-hidden border border-neutral-800 text-[10px] h-5"></div>
+           class="flex justify-between text-[10px] leading-none text-neutral-500 tabular-nums mt-1.5 mx-12"></div>
+      <div id="stream-chart-categories" class="flex mt-2 mx-12 rounded overflow-hidden border border-neutral-800 text-[10px] h-8"></div>
     </div>
   </section>
 

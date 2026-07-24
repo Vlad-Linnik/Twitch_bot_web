@@ -1,9 +1,11 @@
 // /<channel>/statistics/chat - viewer count + chat-rate-per-bucket over one stream, with the
-// stream's category shown as segments along the bottom. Both series share ONE y-axis (a dual-axis
-// chart with two independent scales is a classic distortion of how the reader compares the two
-// lines) - the tradeoff is that a channel whose viewer count and message rate differ by an order
-// of magnitude will show one series reading nearly flat, which is an honest reflection of the
-// data, not a chart bug.
+// stream's category shown as coloured segments along the bottom. The two series use INDEPENDENT
+// y-axes - viewers on the left (red), messages on the right (blue) - because a channel with 4000
+// viewers and 100-400 messages/min would otherwise pin the message line flat against the floor,
+// hiding all of its shape. The two axes are colour-matched to their series (and to the legend
+// swatches) so the reader can tell which scale reads which line; the tooltip still reports the
+// raw values of both at once, so the exact numbers are never ambiguous even though the scales
+// differ.
 //
 // Vanilla + inline SVG, same house style as user-dashboard.js/statistics-chat.js - no charting
 // library. Two things this chart needs that the others don't: point X position is computed from
@@ -12,6 +14,10 @@
 // show as a real gap rather than being silently smoothed over; and the session picker plus every
 // axis/tooltip label is built with the visitor's OWN browser timezone - no explicit `timeZone`
 // appears anywhere in this file, so Intl/Date fall back to it automatically.
+//
+// Lines are drawn with a shape-preserving monotone cubic spline (Fritsch-Carlson), so the curve
+// reads smoothly instead of angular WITHOUT inventing data: monotone interpolation is guaranteed
+// not to overshoot, so no phantom viewer spike or dip ever appears between two real samples.
 (function () {
   "use strict";
 
@@ -33,6 +39,7 @@
   const liveBadge = $("stream-live-badge");
   const svg = $("stream-chart");
   const yAxis = $("stream-chart-yaxis");
+  const yAxisRight = $("stream-chart-yaxis-right");
   const xAxis = $("stream-chart-xaxis");
   const categoriesEl = $("stream-chart-categories");
   const tooltip = $("stream-chart-tooltip");
@@ -54,6 +61,16 @@
   const CHART_W = 800;
   const CHART_H = 200;
   const PLOT_PAD = 4;
+
+  // Distinct, reasonably CVD-separable hues cycled across the DISTINCT categories a stream hops
+  // through - assigned by first-appearance order and remembered per name, so the same game keeps
+  // the same colour everywhere it appears in the strip. Identity still comes from the label +
+  // box art + tooltip; the colour is a highlight, not the sole signal (a variety stream can pass
+  // through more games than any fixed palette has hues, at which point colours repeat).
+  const CATEGORY_PALETTE = [
+    "#8b5cf6", "#06b6d4", "#f59e0b", "#ec4899", "#22c55e",
+    "#f43f5e", "#3b82f6", "#eab308", "#14b8a6", "#a855f7",
+  ];
 
   // Locale (number/date FORMAT style) follows the site's own chosen language, same as every
   // other chart on this site (user-dashboard.js's Intl calls) - but no explicit `timeZone` is
@@ -114,12 +131,15 @@
     }
   }
 
-  function fillYAxis(max) {
-    yAxis.textContent = "";
+  // One axis column (left = viewers, right = messages). `color` tints the tick labels to match
+  // that axis's own series, since the two axes now carry different scales.
+  function fillYAxis(target, max, color) {
+    target.textContent = "";
     for (const value of [max, max / 2, 0]) {
       const span = document.createElement("span");
       span.textContent = numCompact.format(Math.round(value));
-      yAxis.appendChild(span);
+      span.style.color = color;
+      target.appendChild(span);
     }
   }
 
@@ -136,31 +156,57 @@
 
   // ---------------------------------------------------------------------------------------
   // Category strip - plain HTML segments (not SVG), widths proportional to real elapsed time.
-  // Alternating neutral shades separate adjacent segments regardless of how many distinct games
-  // appear in one stream (a variety stream can hop through more games than any fixed categorical
-  // palette could assign a distinct, CVD-safe hue to) - identity comes from the label/tooltip,
-  // never from the shade.
+  // Each distinct category gets its own highlight colour (a soft tint + a solid accent bar) and,
+  // when Twitch has cover art for it, its box-art thumbnail. Colour is keyed to the category name
+  // so the same game reads identically wherever it recurs; identity still comes primarily from the
+  // label + art + tooltip (the palette repeats past 10 distinct games). A narrow segment simply
+  // clips its own thumbnail/label via overflow-hidden - no width threshold to tune.
   // ---------------------------------------------------------------------------------------
+  const colorForCategory = (name, assigned) => {
+    if (!assigned.has(name)) assigned.set(name, CATEGORY_PALETTE[assigned.size % CATEGORY_PALETTE.length]);
+    return assigned.get(name);
+  };
+
   function renderCategories(segments, startMs, endMs) {
     categoriesEl.textContent = "";
     const totalMs = endMs - startMs;
     if (totalMs <= 0) return;
+    const assigned = new Map();
 
-    segments.forEach((seg, i) => {
+    segments.forEach((seg) => {
       const segStart = new Date(seg.startAt).getTime();
       const segEnd = new Date(seg.endAt).getTime();
       const widthPct = ((segEnd - segStart) / totalMs) * 100;
       if (widthPct <= 0) return;
 
       const label = seg.category || "—";
+      const color = seg.category ? colorForCategory(seg.category, assigned) : "#525252";
+
       const div = document.createElement("div");
       div.style.width = `${widthPct}%`;
-      div.style.background = i % 2 === 0 ? "#262626" : "#1f1f1f";
-      div.className = "flex items-center justify-center truncate px-1 text-neutral-400";
-      div.textContent = label; // category names come from Twitch, not chat - textContent on principle anyway
+      div.style.background = `${color}26`; // ~15% tint over the dark surface
+      div.style.borderBottom = `2px solid ${color}`;
+      div.className = "relative flex items-center gap-1 overflow-hidden min-w-0 text-neutral-200";
       div.title = `${label} — ${dateTimeFmt.format(segStart)} → ${
         seg.endAt ? dateTimeFmt.format(segEnd) : "…"
       }`;
+
+      if (seg.boxArtUrl) {
+        const img = document.createElement("img");
+        img.src = seg.boxArtUrl;
+        img.alt = "";
+        img.loading = "lazy";
+        img.className = "h-full w-auto shrink-0 object-cover";
+        // A hotlink/CDN hiccup must never leave a broken-image icon - drop back to colour + label.
+        img.onerror = () => img.remove();
+        div.appendChild(img);
+      }
+
+      const span = document.createElement("span");
+      span.className = "truncate px-1"; // category names come from Twitch, not chat - textContent anyway
+      span.textContent = label;
+      div.appendChild(span);
+
       categoriesEl.appendChild(div);
     });
   }
@@ -168,24 +214,69 @@
   // ---------------------------------------------------------------------------------------
   // Line series
   // ---------------------------------------------------------------------------------------
-  function buildLinePath(points, startMs, endMs, max) {
-    if (points.length === 0) return "";
-    let d = "";
-    points.forEach((p, i) => {
-      const x = xFor(p.t, startMs, endMs).toFixed(1);
-      const y = yFor(p.value, max, CHART_H).toFixed(1);
-      d += `${i === 0 ? "M" : "L"} ${x} ${y} `;
-    });
-    return d.trim();
+  const screenPoints = (points, startMs, endMs, max) =>
+    points.map((p) => ({ x: xFor(p.t, startMs, endMs), y: yFor(p.value, max, CHART_H) }));
+
+  // Fritsch-Carlson monotone cubic Hermite spline over the screen-space points. Shape-preserving:
+  // the tangent clamp guarantees the curve never overshoots the data, so smoothing introduces no
+  // value the raw samples didn't contain (no invented peak between two points). X spacing is the
+  // real elapsed-time spacing, which this handles because it works from the actual dx per segment.
+  function buildSmoothPath(pts) {
+    const n = pts.length;
+    if (n === 0) return "";
+    if (n === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    if (n === 2) {
+      return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)} L ${pts[1].x.toFixed(1)} ${pts[1].y.toFixed(1)}`;
+    }
+
+    const dx = [];
+    const slope = [];
+    for (let i = 0; i < n - 1; i++) {
+      dx[i] = pts[i + 1].x - pts[i].x;
+      slope[i] = dx[i] === 0 ? 0 : (pts[i + 1].y - pts[i].y) / dx[i];
+    }
+
+    const m = new Array(n);
+    m[0] = slope[0];
+    m[n - 1] = slope[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      m[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
+    }
+    // Clamp tangents so each segment stays monotone (no overshoot).
+    for (let i = 0; i < n - 1; i++) {
+      if (slope[i] === 0) {
+        m[i] = 0;
+        m[i + 1] = 0;
+        continue;
+      }
+      const a = m[i] / slope[i];
+      const b = m[i + 1] / slope[i];
+      const h = a * a + b * b;
+      if (h > 9) {
+        const tau = 3 / Math.sqrt(h);
+        m[i] = tau * a * slope[i];
+        m[i + 1] = tau * b * slope[i];
+      }
+    }
+
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const c1x = pts[i].x + dx[i] / 3;
+      const c1y = pts[i].y + (m[i] * dx[i]) / 3;
+      const c2x = pts[i + 1].x - dx[i] / 3;
+      const c2y = pts[i + 1].y - (m[i + 1] * dx[i]) / 3;
+      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${pts[i + 1].x.toFixed(1)} ${pts[i + 1].y.toFixed(1)}`;
+    }
+    return d;
   }
 
-  function addEndDot(points, color, startMs, endMs, max) {
-    if (points.length === 0) return;
-    const last = points[points.length - 1];
+  function addEndDot(pts, color) {
+    if (pts.length === 0) return;
+    const last = pts[pts.length - 1];
     svg.appendChild(
       el("circle", {
-        cx: xFor(last.t, startMs, endMs).toFixed(1),
-        cy: yFor(last.value, max, CHART_H).toFixed(1),
+        cx: last.x.toFixed(1),
+        cy: last.y.toFixed(1),
         r: 4,
         fill: color,
         stroke: "#171717",
@@ -330,29 +421,36 @@
       value: b.count,
     }));
 
-    const max = Math.max(1, ...viewerPoints.map((p) => p.value), ...messagePoints.map((p) => p.value));
+    // Independent scales per series (see the header comment) - each is normalised to its own max
+    // so both lines use the full plot height regardless of the other's magnitude.
+    const maxViewers = Math.max(1, ...viewerPoints.map((p) => p.value));
+    const maxMessages = Math.max(1, ...messagePoints.map((p) => p.value));
 
     drawGridlines();
-    fillYAxis(max);
+    fillYAxis(yAxis, maxViewers, VIEWER_COLOR);
+    if (yAxisRight) fillYAxis(yAxisRight, maxMessages, MESSAGE_COLOR);
     fillXAxis(startMs, endMs);
     renderCategories(data.categorySegments || [], startMs, endMs);
 
+    const viewerScreen = screenPoints(viewerPoints, startMs, endMs, maxViewers);
+    const messageScreen = screenPoints(messagePoints, startMs, endMs, maxMessages);
+
     svg.appendChild(
       el("path", {
-        d: buildLinePath(viewerPoints, startMs, endMs, max),
+        d: buildSmoothPath(viewerScreen),
         fill: "none", stroke: VIEWER_COLOR, "stroke-width": "2",
         "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke",
       })
     );
     svg.appendChild(
       el("path", {
-        d: buildLinePath(messagePoints, startMs, endMs, max),
+        d: buildSmoothPath(messageScreen),
         fill: "none", stroke: MESSAGE_COLOR, "stroke-width": "2",
         "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke",
       })
     );
-    addEndDot(viewerPoints, VIEWER_COLOR, startMs, endMs, max);
-    addEndDot(messagePoints, MESSAGE_COLOR, startMs, endMs, max);
+    addEndDot(viewerScreen, VIEWER_COLOR);
+    addEndDot(messageScreen, MESSAGE_COLOR);
 
     setupCrosshair(viewerPoints, messagePoints, startMs, endMs);
   }
