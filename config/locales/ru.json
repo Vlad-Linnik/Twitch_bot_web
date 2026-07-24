@@ -595,7 +595,16 @@
     "filterExclude": "Исключить",
     "filterSelected": "выбр.",
     "filterClear": "Сбросить",
-    "noFilteredActions": "Нет действий, подходящих под фильтры."
+    "noFilteredActions": "Нет действий, подходящих под фильтры.",
+    "streamChart": {
+      "title": "Статистика стрима",
+      "viewers": "Зрители",
+      "messages": "Сообщения",
+      "live": "В ЭФИРЕ",
+      "selectStream": "Выбрать стрим",
+      "loading": "Загрузка…",
+      "noSessions": "Данные о стримах пока не собраны — загляните после следующего стрима канала."
+    }
   },
   "channelSettings": {
     "titleSuffix": "настройки",

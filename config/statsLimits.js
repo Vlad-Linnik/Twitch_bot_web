@@ -79,6 +79,14 @@ const MAX_USERNAME_SUGGESTION_CANDIDATES = 500;
 // ~30k docs x ~172B is a few MB of scanning - comfortably inside the budget.
 const MAX_SEARCH_FUZZY_CANDIDATES = 30000;
 
+// Per-stream viewer/message-rate chart on /statistics/chat. The dropdown lists at most this many
+// past sessions (newest first) - ~2 months of daily streaming, comfortably past what anyone
+// would actually scroll to. The chart's message-rate series is bucketed (see
+// lib/streamSessionHelpers.js's messageBucketMs) to stay under this many points regardless of
+// how long a single stream ran, so an "IRL" marathon stream can't blow up the SVG path length.
+const MAX_STREAM_SESSIONS_LISTED = 60;
+const MAX_STREAM_CHART_POINTS = 400;
+
 // How long a computed stats result (cloud, leaderboard, per-user standing/heatmap/mentions...) is
 // reused - see lib/queryCache.js, shared by wordStatsRepo/statsRepo/userStatsRepo. None of this is
 // real-time data; nobody can tell a 10-minute-old word cloud or leaderboard from a live one, and
@@ -152,6 +160,8 @@ module.exports = {
   DEFAULT_LEADERBOARD,
   MAX_LEADERBOARD,
   EMOTE_CLOUD_SIZE,
+  MAX_STREAM_SESSIONS_LISTED,
+  MAX_STREAM_CHART_POINTS,
   MAX_SEARCH_RESULTS,
   MAX_SEARCH_USERS,
   MAX_SEARCH_TERM_LENGTH,

@@ -595,7 +595,16 @@
     "filterExclude": "Exclude",
     "filterSelected": "selected",
     "filterClear": "Clear",
-    "noFilteredActions": "No actions match the filters."
+    "noFilteredActions": "No actions match the filters.",
+    "streamChart": {
+      "title": "Stream stats",
+      "viewers": "Viewers",
+      "messages": "Messages",
+      "live": "LIVE",
+      "selectStream": "Select stream",
+      "loading": "Loading…",
+      "noSessions": "No stream data collected yet — check back after the channel's next stream."
+    }
   },
   "channelSettings": {
     "titleSuffix": "settings",

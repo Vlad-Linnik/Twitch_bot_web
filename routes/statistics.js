@@ -15,6 +15,7 @@ const profileCacheRepo = require("../db/profileCacheRepo");
 const wordStatsRepo = require("../db/wordStatsRepo");
 const userStatsRepo = require("../db/userStatsRepo");
 const searchRepo = require("../db/searchRepo");
+const streamSessionsRepo = require("../db/streamSessionsRepo");
 const { withEmoteImages } = require("../twitch/emoteImages");
 const { requireLevel, computePermission } = require("../middleware/permissions");
 const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters");
@@ -146,7 +147,7 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
 
     const period = limits.resolvePeriod(req.query.period, { max: limits.MAX_CLOUD_PERIOD });
 
-    const [totals, leaderboard, wordCloud, emoteCloud, trackedEmoteCount, broadcaster, permission] =
+    const [totals, leaderboard, wordCloud, emoteCloud, trackedEmoteCount, broadcaster, permission, sessions] =
       await Promise.all([
         statsRepo.getChannelTotals(channel.channelLogin),
         statsRepo.getLeaderboard(channel.channelLogin, TOP_CHATTERS),
@@ -157,7 +158,23 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
         // falls back to a monogram and the default text color.
         profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
         computePermission(req.user?.userId ?? null, channel.channelLogin),
+        streamSessionsRepo.listSessions(channel.channelId),
       ]);
+
+    // The stream-stats chart's first paint mirrors every other component on this page: the
+    // server renders the DEFAULT (newest session) so there's no flash of empty state, and the
+    // client only re-fetches (stream-stats.json) when the visitor picks a different session.
+    const streamChart = sessions.length
+      ? await streamSessionsRepo.getSessionChartData(channel, sessions[0])
+      : null;
+    // Sent to the client as plain {id, startedAt, endedAt} - stream-chart.js builds the session
+    // picker (grouped by LOCAL calendar date) and every axis label from these in the visitor's
+    // own timezone; nothing here is formatted server-side.
+    const sessionList = sessions.map((s) => ({
+      id: String(s._id),
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+    }));
 
     // Twitch chat color per top chatter - TOP_CHATTERS lookups against the local profile cache
     // (each one only hits Helix when its entry is missing/stale). Fail-soft: no color, no problem.
@@ -183,6 +200,8 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       emoteCloud: { period: emoteCloud.period, emotes },
       canModerate: permission <= 2,
       tab: "chat",
+      sessions: sessionList,
+      streamChart,
     });
   } catch (err) {
     next(err);
@@ -374,6 +393,22 @@ router.get("/:channel/stats.json", statsReadLimiter, async (req, res, next) => {
       default:
         return res.status(400).json({ error: "unknown_component" });
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The stream-stats chart's session picker - fetched only when the visitor picks a session other
+// than the newest one (which the page already rendered server-side).
+router.get("/:channel/stream-stats.json", statsReadLimiter, async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    if (!channel) return res.status(404).json({ error: "unknown_channel" });
+
+    const session = await streamSessionsRepo.getSessionById(channel.channelId, req.query.session);
+    if (!session) return res.status(404).json({ error: "unknown_session" });
+
+    res.json(await streamSessionsRepo.getSessionChartData(channel, session));
   } catch (err) {
     next(err);
   }
