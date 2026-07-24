@@ -19,25 +19,38 @@ async function ensureInitialized() {
   await collection.createIndex({ game: 1, userId: 1 }, { unique: true });
   // The leaderboard read path: top-N by score for one game.
   await collection.createIndex({ game: 1, bestScore: -1 });
+  // getDeathMarksPage's read path (currently only cloud-climber writes
+  // deathClimb, but the index is harmless/unused for games that don't).
+  await collection.createIndex({ game: 1, deathClimb: 1 });
   return collection;
 }
 
-async function submitScore(game, userId, score) {
+// deathClimb is optional, game-specific metadata (currently only
+// public/js/games/cloud-climber.js sends one - see its death-marker
+// feature) describing where THIS best-scoring run ended, not the score
+// itself - stored alongside bestScore so it only moves in step with an
+// actual improvement, same improve-only semantics as the score.
+async function submitScore(game, userId, score, deathClimb) {
   const col = await ensureInitialized();
   const now = new Date();
   const id = String(userId);
+  const hasClimb = Number.isFinite(deathClimb);
+  const setFields = { bestScore: score, achievedAt: now };
+  if (hasClimb) setFields.deathClimb = deathClimb;
   // Improve-only update: the bestScore filter both keeps worse runs from
   // overwriting a better one and guards the race between two concurrent
   // submits (the losing writer simply matches nothing).
   const improved = await col.updateOne(
     { game, userId: id, bestScore: { $lt: score } },
-    { $set: { bestScore: score, achievedAt: now } }
+    { $set: setFields }
   );
   if (improved.matchedCount > 0) return;
   try {
+    const insertFields = { bestScore: score, achievedAt: now, createdAt: now };
+    if (hasClimb) insertFields.deathClimb = deathClimb;
     await col.updateOne(
       { game, userId: id },
-      { $setOnInsert: { bestScore: score, achievedAt: now, createdAt: now } },
+      { $setOnInsert: insertFields },
       { upsert: true }
     );
   } catch (err) {
@@ -115,7 +128,20 @@ async function getUserBestAndRank(game, userId) {
   const doc = await col.findOne({ game, userId: String(userId) });
   if (!doc) return null;
   const higher = await col.countDocuments({ game, bestScore: { $gt: doc.bestScore } });
-  return { bestScore: doc.bestScore, rank: higher + 1 };
+  return { bestScore: doc.bestScore, rank: higher + 1, deathClimb: doc.deathClimb ?? null };
+}
+
+// One page (up to `limit`, sorted ascending) of other players' best-run death
+// climbs, strictly above `afterClimb` - the client (cloud-climber.js) pages
+// through this 20 at a time as its own climb approaches the last-loaded
+// mark, rather than fetching every death mark for every player up front.
+// excludeUserId leaves the requesting player's own row out, since their own
+// deaths are already shown from their browser's local marks.
+async function getDeathMarksPage(game, afterClimb, limit, excludeUserId) {
+  const col = await ensureInitialized();
+  const query = { game, deathClimb: { $exists: true, $gt: afterClimb } };
+  if (excludeUserId != null) query.userId = { $ne: String(excludeUserId) };
+  return col.find(query).sort({ deathClimb: 1 }).limit(limit).toArray();
 }
 
 // Distinct-player counts per game (one doc per (game, userId), so this counts
@@ -129,4 +155,13 @@ async function getGameCounts() {
   return col.aggregate([{ $group: { _id: "$game", count: { $sum: 1 } } }, { $sort: { count: -1 } }]).toArray();
 }
 
-module.exports = { submitScore, getRatings, getRawRatings, applyEloDelta, getTop, getUserBestAndRank, getGameCounts };
+module.exports = {
+  submitScore,
+  getRatings,
+  getRawRatings,
+  applyEloDelta,
+  getTop,
+  getUserBestAndRank,
+  getDeathMarksPage,
+  getGameCounts,
+};

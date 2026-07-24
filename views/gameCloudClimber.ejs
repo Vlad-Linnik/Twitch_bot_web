@@ -55,13 +55,30 @@
 
     <%# The board. The overlay (start / pause / game over) sits on top of the canvas;
         all its text is server-rendered here - public/js/games/cloud-climber.js only
-        toggles which pieces are visible via the data-* labels below. No sprite
-        assets yet (see CLAUDE.md note in the JS file) - everything is drawn with
-        plain canvas shapes; textures can be layered in later the same way
-        pipe-dodger's were. Same fixed internal resolution + dpr-scaling approach. %>
+        toggles which pieces are visible via the data-* labels below. Player sprite
+        + sound effects live in public/img/games/cloud-climber/ and
+        public/sounds/games/cloud-climber/ respectively; platforms/monsters/boosts
+        are still drawn with plain canvas shapes. Same fixed internal resolution +
+        dpr-scaling approach as the other on-site games. %>
     <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 shrink-0">
+      <%# data-player-name/data-anonymous-label feed the death-marker feature
+          (cloud-climber.js's recordOwnDeathMark()/drawDeathMarks()) - this
+          visitor's own past deaths are localStorage-only and never sent
+          anywhere, so an anonymous visitor still gets a usable label for
+          their own marks even with no displayName. A logged-in player's best
+          run also stores its death height server-side (GameScores.deathClimb)
+          so OTHER players can see where they died - see
+          /games/cloud-climber/death-marks.json in routes/games.js. %>
       <canvas id="cc-board" width="360" height="600"
+              data-player-name="<%= user ? user.displayName : '' %>"
+              data-anonymous-label="<%= t('games.cloudClimber.deathMarkerAnonymous') %>"
               class="block touch-none rounded-lg bg-neutral-950 w-[324px] h-[540px] sm:w-auto sm:h-[min(600px,calc(100dvh_-_11rem))]"></canvas>
+
+      <%# Touch-only equivalent of Space/↑ - fires a shot straight up. Desktop
+          players have the keyboard, but dragging the board is already used for
+          steering so touch needs its own dedicated control. %>
+      <button type="button" id="cc-shoot-btn" aria-label="<%= t('games.cloudClimber.controlsShoot') %>"
+              class="absolute bottom-6 right-6 w-14 h-14 rounded-full bg-purple-600/90 hover:bg-purple-500 active:bg-purple-700 text-white text-2xl leading-none grid place-items-center shadow-lg select-none touch-none focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400">&#8593;</button>
 
       <div id="cc-overlay"
            data-title-start="<%= t('games.cloudClimber.name') %>"
@@ -116,6 +133,7 @@
         <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.cloudClimber.controlsTitle') %></p>
         <ul class="text-sm text-neutral-400 space-y-1.5">
           <li class="flex justify-between gap-2"><span><%= t('games.cloudClimber.controlsMove') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">← →</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.cloudClimber.controlsShoot') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">Space</kbd></li>
           <li class="flex justify-between gap-2"><span><%= t('games.cloudClimber.controlsPause') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">P</kbd></li>
         </ul>
         <p class="text-xs text-neutral-500 mt-3"><%= t('games.cloudClimber.tapHint') %></p>
@@ -124,5 +142,7 @@
   </div>
 </main>
 
+<%- include('partials/gameVolumeControl') %>
+<script src="/js/games/gameVolume.js" defer></script>
 <script src="/js/games/cloud-climber.js" defer></script>
 <%- include('partials/foot') %>

@@ -228,8 +228,9 @@
       "best": "Best",
       "controlsTitle": "Controls",
       "controlsMove": "Move",
+      "controlsShoot": "Shoot",
       "controlsPause": "Pause",
-      "tapHint": "Drag, or use ←/→ (A/D), to steer",
+      "tapHint": "Drag, or use ←/→ (A/D), to steer. Space (or the button) shoots up - one hit kills a monster, one touch kills you.",
       "start": "Start",
       "paused": "Paused",
       "resume": "Resume",
@@ -244,7 +245,8 @@
       "leaveConfirmBody": "Your game is still in progress. Save your current score before you go, or leave without saving?",
       "leaveSave": "Save & leave",
       "leaveDiscard": "Leave without saving",
-      "leaveCancel": "Keep playing"
+      "leaveCancel": "Keep playing",
+      "deathMarkerAnonymous": "Player"
     },
     "2048": {
       "name": "2048",

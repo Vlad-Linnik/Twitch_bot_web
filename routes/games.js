@@ -34,6 +34,11 @@ const TOP_LIMIT = 10;
 // score, but a legitimate marathon run stays far below this - anything above is
 // a forged request, not a game.
 const MAX_SCORE = 2000000;
+// Same idea for cloud-climber's optional deathClimb (px of climb reached in
+// the run that scored, not the score itself - see the death-marker feature
+// in public/js/games/cloud-climber.js and db/gameScoresRepo.js's submitScore).
+const MAX_CLIMB = 2000000;
+const DEATH_MARKS_PAGE_SIZE = 20;
 
 // Top 10 rows plus (when the visitor is logged in and ranked below them) their
 // own row with its real rank - the view renders that as the 11th line. Names
@@ -337,6 +342,8 @@ router.post(
 );
 
 // Same shape as the other score.json routes, for public/js/games/cloud-climber.js.
+// deathClimb is optional (only sent on an actual death, not a leave-and-save
+// beacon) - see gameScoresRepo.submitScore's comment.
 router.post(
   "/games/cloud-climber/score.json",
   settingsWriteLimiter,
@@ -347,8 +354,16 @@ router.post(
     if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
       return res.status(400).json({ ok: false, error: "score" });
     }
+    let deathClimb;
+    if (req.body.deathClimb !== undefined) {
+      const climb = Number.parseInt(req.body.deathClimb, 10);
+      if (!Number.isInteger(climb) || climb < 0 || climb > MAX_CLIMB) {
+        return res.status(400).json({ ok: false, error: "deathClimb" });
+      }
+      deathClimb = climb;
+    }
     try {
-      await gameScoresRepo.submitScore(GAME_CLOUD_CLIMBER, req.user.userId, score);
+      await gameScoresRepo.submitScore(GAME_CLOUD_CLIMBER, req.user.userId, score, deathClimb);
       await gameSessionStatsRepo.recordPlay(GAME_CLOUD_CLIMBER);
       const leaderboard = await buildLeaderboard(GAME_CLOUD_CLIMBER, req.user.userId);
       res.json({ ok: true, ...leaderboard });
@@ -357,6 +372,31 @@ router.post(
     }
   }
 );
+
+// Paginated "other players' death marks" for cloud-climber.js's death-marker
+// feature - up to DEATH_MARKS_PAGE_SIZE (20) per call, sorted by climb
+// ascending and strictly after ?after=, so the client can page through
+// however many players have died as its own climb approaches the
+// last-loaded batch instead of fetching every mark up front. Public (no
+// login required to view), same as the page itself; a logged-in visitor's
+// own row is excluded since their own deaths are already shown from their
+// browser's local marks.
+router.get("/games/cloud-climber/death-marks.json", async (req, res, next) => {
+  try {
+    const afterRaw = Number.parseInt(req.query.after, 10);
+    const after = Number.isFinite(afterRaw) ? afterRaw : -1;
+    const excludeUserId = req.user ? req.user.userId : null;
+    const docs = await gameScoresRepo.getDeathMarksPage(GAME_CLOUD_CLIMBER, after, DEATH_MARKS_PAGE_SIZE, excludeUserId);
+    const profiles = await profileCacheRepo.getOrFetchProfiles(docs.map((d) => d.userId));
+    const marks = docs.map((d) => {
+      const profile = profiles.get(String(d.userId));
+      return { name: (profile && profile.displayName) || "…", climb: d.deathClimb };
+    });
+    res.json({ ok: true, marks });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // No /games/durak/score.json - Durak has no client-callable score endpoint at
 // all. Vs-computer wins never leave the browser (localStorage only); online
