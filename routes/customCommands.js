@@ -57,6 +57,7 @@ router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async
       announceColor: c.announceColor || "primary",
       enabled: c.enabled !== false,
       categoryTexts: c.categoryTexts || [],
+      modOnly: !!c.modOnly,
     }));
 
     res.render("customCommands", {
@@ -142,6 +143,7 @@ router.post(
         announceColor: req.body.announceColor,
         enabled: before ? before.enabled !== false : true,
         categoryTexts,
+        modOnly: req.body.modOnly,
       });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
 

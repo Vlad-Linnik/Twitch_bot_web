@@ -18,6 +18,7 @@
   const pin = document.getElementById("pin");
   const announce = document.getElementById("announce");
   const announceColor = document.getElementById("announceColor");
+  const modOnly = document.getElementById("modOnly");
   const heading = document.getElementById("form-heading");
   const cancel = document.getElementById("cancel-edit");
   const conflict = document.getElementById("pin-conflict");
@@ -95,6 +96,7 @@
       pin.checked = button.dataset.pin === "1";
       announce.checked = button.dataset.announce === "1";
       if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
+      modOnly.checked = button.dataset.modOnly === "1";
 
       let overrides = [];
       try {

@@ -98,7 +98,7 @@
     "access": {
       "mod": "mod",
       "all": "all",
-      "allPinExempt": "all (mod-only if pinned or announced)",
+      "allPinExempt": "all (mod-only if \"only moderators\" is set for that command; pinning itself only happens when a mod triggers it)",
       "allExceptionListed": "all (or mod/exception-listed)"
     },
     "category": {
@@ -899,11 +899,13 @@
     "toggleEnabled": "Enable or disable this command",
     "timer": "Auto-post (sec)",
     "timerOff": "off",
-    "pin": "Pin to chat when posted (moderators only)",
+    "pin": "Pin to chat when posted (only pins if a moderator triggered it; auto-posts always pin)",
     "pinned": "pinned",
-    "announce": "Send as a chat announcement (highlighted, colored; only moderators will be able to trigger the command)",
+    "announce": "Send as a chat announcement (highlighted, colored)",
     "announceColor": "Color",
     "announced": "announcement",
+    "modOnly": "Only moderators can trigger this command",
+    "modOnlyBadge": "mods only",
     "color": {
       "primary": "Default",
       "blue": "Blue",

@@ -16,7 +16,7 @@
   const COURT_HEIGHT = 300;
   const PADDLE_WIDTH = 10;
   const PADDLE_HEIGHT = 60;
-  const PADDLE_SPEED = 300; // units/sec - only used for local extrapolation
+  const PADDLE_SPEED = 420; // units/sec - only used for local extrapolation
   const BALL_RADIUS = 6;
   const TARGET_SCORE = 7;
 
@@ -35,6 +35,24 @@
   const SMOOTH_TAU_MS = 60; // error half-life; lower = snappier, higher = smoother
   const SNAP_DISTANCE = 40; // units - beyond this it's a real jump (new point), snap
   const MAX_EXTRAPOLATE_MS = 250; // don't keep dead-reckoning through a stalled tick
+
+  // Your OWN paddle is deliberately NOT drawn from the snapshot path above.
+  // Re-deriving it every frame as snapshot.y + heldDir * speed * snapshotAge
+  // looks like prediction but isn't: that snapshot.y only reflects your
+  // keypress a full round-trip after you made it, so every arriving tick
+  // re-bases the paddle onto a stale position and the error-decay turns the
+  // resulting backward tug into a visible wobble. (The ball has no such
+  // problem - its vx/vy in the snapshot are already correct - which is why
+  // the ball reads as smooth and the paddle didn't.) Instead we run a real
+  // local simulation: integrate the held key from the *previous local*
+  // position every frame and let the server correct it only when the two can
+  // be compared without ambiguity. While you hold a key the local paddle
+  // legitimately leads the server by one round-trip; when you release, the
+  // server keeps moving for that same round-trip and lands on the same spot,
+  // so the gap closes on its own with no correction needed at all.
+  const RECONCILE_TAU_MS = 250; // gentle pull toward the server, only when both agree we're stopped
+  const RESYNC_DISTANCE = 90; // units - past this it's drift we can't ease away, adopt the server's value
+  const MAX_FRAME_DT_MS = 100; // clamp a backgrounded-tab frame gap, same as the engine's step() does
 
   const client = window.createQuickMatchClient(root.dataset.wsPath);
   window.wireQuickMatchQueueDisplay(client, {
@@ -77,6 +95,9 @@
   let view = null; // { ballX, ballY, paddleY: [y0, y1] } - what's actually drawn
   let error = { ballX: 0, ballY: 0, paddleY: [0, 0] }; // last correction, decaying to zero
   let rafHandle = null;
+  let localOwnY = null; // our own paddle's locally simulated position; null = adopt the server's next snapshot
+  let lastFrameAt = 0; // performance.now() of the previous rAF frame, for the local sim's dt
+  let lastScoreKey = ""; // scores as sent; a change means the server recentred both paddles
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -110,15 +131,33 @@
     return {
       ballX: clamp(ball.x + ball.vx * dt, -BALL_RADIUS, COURT_WIDTH + BALL_RADIUS),
       ballY: y,
-      paddleY: snapshot.paddles.map((paddle, seat) => {
-        // For our own paddle we integrate the key held *right now* instead of
-        // the direction the last snapshot knew about - that's the bit that
-        // makes our own paddle feel free of input lag. The server still owns
-        // the real position; any drift is eased away below.
-        const dir = seat === youAreSeat ? currentDir : paddle.dir;
-        return clamp(paddle.y + dir * PADDLE_SPEED * dt, PADDLE_HEIGHT / 2, COURT_HEIGHT - PADDLE_HEIGHT / 2);
-      }),
+      // Every seat is dead-reckoned from the direction the snapshot itself
+      // carries. Our own seat is computed here too (it's the reconciliation
+      // reference, and what a spectator / the frozen game-over frame draws),
+      // but during play frame() overwrites it with the local simulation below.
+      paddleY: snapshot.paddles.map((paddle) =>
+        clamp(paddle.y + paddle.dir * PADDLE_SPEED * dt, PADDLE_HEIGHT / 2, COURT_HEIGHT - PADDLE_HEIGHT / 2)
+      ),
     };
+  }
+
+  // Our own paddle, integrated from where we last drew it rather than from the
+  // (round-trip-stale) snapshot - see RECONCILE_TAU_MS above for why.
+  function stepOwnPaddle(dt) {
+    const server = snapshot.paddles[youAreSeat];
+    const minY = PADDLE_HEIGHT / 2;
+    const maxY = COURT_HEIGHT - PADDLE_HEIGHT / 2;
+    if (localOwnY == null || Math.abs(localOwnY - server.y) > RESYNC_DISTANCE) localOwnY = server.y;
+    localOwnY = clamp(localOwnY + currentDir * PADDLE_SPEED * dt, minY, maxY);
+    // Correct only in the one state where a gap is unambiguously our drift and
+    // not just our legitimate round-trip lead: we've stopped pressing AND the
+    // server has acknowledged the stop. Pulling while either side still thinks
+    // the paddle is moving would drag us back toward the stale position and
+    // re-create exactly the input lag this is here to remove.
+    if (currentDir === 0 && server.dir === 0) {
+      localOwnY += (server.y - localOwnY) * (1 - Math.exp((-dt * 1000) / RECONCILE_TAU_MS));
+    }
+    return localOwnY;
   }
 
   // Correction is applied as a *decaying error offset* on top of the
@@ -140,19 +179,30 @@
 
   function frame(now) {
     rafHandle = requestAnimationFrame(frame);
-    if (!snapshot) return;
+    if (!snapshot) {
+      lastFrameAt = now;
+      return;
+    }
+    const frameDt = Math.min(Math.max(now - lastFrameAt, 0), MAX_FRAME_DT_MS) / 1000;
+    lastFrameAt = now;
     const target = extrapolate(now - snapshotAt);
     const decay = decayedError(now - snapshotAt);
+    const paddleY = target.paddleY.map((y, seat) => y + error.paddleY[seat] * decay);
+    // A spectator has no own paddle to predict - both are just remote seats.
+    if (!spectating) paddleY[youAreSeat] = stepOwnPaddle(frameDt);
     view = {
       ballX: target.ballX + error.ballX * decay,
       ballY: target.ballY + error.ballY * decay,
-      paddleY: target.paddleY.map((y, seat) => y + error.paddleY[seat] * decay),
+      paddleY: paddleY,
     };
     render(snapshot, view);
   }
 
   function startLoop() {
-    if (rafHandle == null) rafHandle = requestAnimationFrame(frame);
+    if (rafHandle == null) {
+      lastFrameAt = performance.now(); // so the first frame's dt is ~0, not "since page load"
+      rafHandle = requestAnimationFrame(frame);
+    }
   }
 
   function stopLoop() {
@@ -167,6 +217,15 @@
     const drawn = view;
     snapshot = state;
     snapshotAt = performance.now();
+    // A scored point recentres both paddles server-side - a teleport, not
+    // drift, and the one case the local simulation can't reason its way out
+    // of. Detecting it off the score (rather than off a distance threshold)
+    // keeps the threshold free to stay large enough for a high-ping lead.
+    const scoreKey = state.scores.join(":");
+    if (scoreKey !== lastScoreKey) {
+      lastScoreKey = scoreKey;
+      localOwnY = null;
+    }
     const fresh = extrapolate(0);
     if (!drawn) {
       error = { ballX: 0, ballY: 0, paddleY: fresh.paddleY.map(() => 0) };
@@ -174,7 +233,11 @@
       error = {
         ballX: offsetFor(drawn.ballX, fresh.ballX),
         ballY: offsetFor(drawn.ballY, fresh.ballY),
-        paddleY: fresh.paddleY.map((y, seat) => offsetFor(drawn.paddleY[seat], y)),
+        // Our own seat carries no error term - stepOwnPaddle() owns that
+        // paddle's drawn position outright and does its own reconciliation.
+        paddleY: fresh.paddleY.map((y, seat) =>
+          !spectating && seat === youAreSeat ? 0 : offsetFor(drawn.paddleY[seat], y)
+        ),
       };
     }
     startLoop();
@@ -252,13 +315,24 @@
     heldKeys.delete(event.code);
     recomputeDir();
   });
+  // Alt-tabbing away mid-hold means the matching keyup lands on another window
+  // and never reaches us - the paddle would keep travelling into the wall and
+  // stay stuck there until the key was pressed and released again.
+  window.addEventListener("blur", () => {
+    if (heldKeys.size === 0) return;
+    heldKeys.clear();
+    recomputeDir();
+  });
 
   client.on("matched", (msg) => {
     youAreSeat = msg.youAreSeat;
     mirror = youAreSeat === 1;
     currentDir = 0;
+    heldKeys.clear();
     snapshot = null;
     view = null;
+    localOwnY = null;
+    lastScoreKey = "";
     error = { ballX: 0, ballY: 0, paddleY: [0, 0] };
     showScreen("game");
     resultOverlay.hidden = true;
@@ -279,6 +353,8 @@
     heldKeys.clear();
     snapshot = null;
     view = null;
+    localOwnY = null;
+    lastScoreKey = "";
     error = { ballX: 0, ballY: 0, paddleY: [0, 0] };
     showScreen("game");
     resultOverlay.hidden = true;
@@ -306,9 +382,11 @@
     heldKeys.clear();
     currentDir = 0;
     // Nothing moves after the final point - freeze on the last snapshot
-    // rather than burning a rAF loop behind the result overlay.
+    // rather than burning a rAF loop behind the result overlay. Freeze on the
+    // frame we already drew when there is one, so our own locally-simulated
+    // paddle doesn't visibly snap back to the server's value on the way out.
     stopLoop();
-    if (snapshot) render(snapshot, extrapolate(0));
+    if (snapshot) render(snapshot, view || extrapolate(0));
   });
 
   client.on("opponentDisconnected", () => {
