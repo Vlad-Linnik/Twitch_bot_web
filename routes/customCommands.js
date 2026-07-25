@@ -20,11 +20,13 @@ const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const {
   parseCommand,
+  checkAliasConflicts,
   normalizeName,
   MIN_TIMER_SECONDS,
   MAX_RESULT_LENGTH,
   MAX_CATEGORY_LENGTH,
   MAX_CATEGORY_OVERRIDES,
+  MAX_ALIASES,
   ANNOUNCEMENT_COLORS,
 } = require("../lib/commandValidation");
 
@@ -58,6 +60,7 @@ router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async
       enabled: c.enabled !== false,
       categoryTexts: c.categoryTexts || [],
       modOnly: !!c.modOnly,
+      aliases: c.aliases || [],
     }));
 
     res.render("customCommands", {
@@ -67,8 +70,13 @@ router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async
       maxResultLength: MAX_RESULT_LENGTH,
       maxCategoryLength: MAX_CATEGORY_LENGTH,
       maxCategoryOverrides: MAX_CATEGORY_OVERRIDES,
+      maxAliases: MAX_ALIASES,
       announcementColors: ANNOUNCEMENT_COLORS,
       error: req.query.error || null,
+      // Only meaningful alongside error === "alias_conflict"/"name_conflict" - which existing
+      // command the rejected name/alias collided with, so the banner can name it instead of just
+      // saying "try something else".
+      conflictsWith: req.query.conflictsWith || null,
       saved: req.query.saved || null,
     });
   } catch (err) {
@@ -144,8 +152,19 @@ router.post(
         enabled: before ? before.enabled !== false : true,
         categoryTexts,
         modOnly: req.body.modOnly,
+        aliases: req.body.aliases,
       });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
+
+      // A name/alias can't collide with another command's name or alias in this channel - the
+      // bot's trigger lookup can't tell two commands apart if they both claim the same trigger.
+      // Excludes the command being saved itself, so re-saving it with its own unchanged name/
+      // aliases isn't flagged as conflicting with itself.
+      const others = (await customCommandsRepo.list(channel.channelLogin)).filter((c) => c.command !== parsed.command.command);
+      const conflict = checkAliasConflicts(parsed.command.command, parsed.command.aliases, others);
+      if (!conflict.ok) {
+        return res.redirect(`${back}?error=${conflict.error}&conflictsWith=${encodeURIComponent(conflict.conflictsWith)}`);
+      }
 
       const after = await customCommandsRepo.save(channel.channelLogin, parsed.command);
       await settingsChangeLogRepo.logChange({
