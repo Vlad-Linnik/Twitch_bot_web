@@ -296,6 +296,7 @@
   const ruleTransfersEl = document.getElementById("dmp-rule-transfers");
   const ruleDeckSizeEl = document.getElementById("dmp-rule-deck-size");
   const rulesHostHintEl = document.getElementById("dmp-rules-host-hint");
+  const rulesSummaryEl = document.getElementById("dmp-rules-summary");
 
   const readyCheckEl = document.getElementById("dmp-ready-check");
   const readyCountdownEl = document.getElementById("dmp-ready-countdown");
@@ -483,18 +484,21 @@
     readyAcceptBtn.blur();
   });
 
-  // --- Game rules: host-editable in the lobby, read-only display in-game ---
+  // --- Game rules: host-editable form in the lobby, one-line recap in-game -
   // Editing is only meaningful while the room is still "lobby" - server-
   // enforced too (durakRoomManager.js's handleSetRules rejects non-host
   // senders and any status other than "lobby"), so the checkboxes are only
-  // ever interactive there. The panel itself stays visible (but locked) once
-  // "playing" starts, purely so players can see which house rules (throw-ins
-  // / perevod / deck size) this match is actually running with - hidden
-  // again only for "starting" (ready check, no rules to show settled yet)
-  // and "finished".
+  // ever interactive there, and the full form is only shown there. Once
+  // "playing" starts, #dmp-rules-summary takes over: same information (which
+  // house rules - throw-ins / perevod / deck size - this match is running
+  // with), but as a single compact line instead of re-showing the whole
+  // disabled form, since the board now sits directly above it (see the DOM-
+  // order comment on #dmp-table-wrap in gameDurak.ejs). Both stay hidden for
+  // "starting" (ready check, no rules to show settled yet) and "finished".
 
   function renderRulesPanel(rules, amHost, roomStatus) {
-    rulesPanelEl.hidden = roomStatus !== "lobby" && roomStatus !== "playing";
+    rulesPanelEl.hidden = roomStatus !== "lobby";
+    rulesSummaryEl.hidden = roomStatus !== "playing";
     if (!rules) return;
     const editable = amHost && roomStatus === "lobby";
     ruleThrowInsEl.checked = rules.allowThrowIns !== false;
@@ -510,6 +514,14 @@
     // lobby - during play nobody can change it, host included, so showing
     // it there would misleadingly suggest someone else could.
     rulesHostHintEl.hidden = editable || roomStatus !== "lobby";
+
+    if (roomStatus === "playing") {
+      const rd = rulesSummaryEl.dataset;
+      const throwIns = rules.allowThrowIns !== false ? rd.throwinsOn : rd.throwinsOff;
+      const transfers = rules.allowTransfers === true ? rd.transfersOn : rd.transfersOff;
+      const deck = String(rules.deckSize) === "52" ? rd.deck52 : rd.deck36;
+      rulesSummaryEl.textContent = rd.label + " " + [throwIns, transfers, deck].join(" · ");
+    }
   }
 
   ruleThrowInsEl.addEventListener("change", () => {

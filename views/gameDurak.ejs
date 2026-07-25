@@ -306,57 +306,14 @@
           <p id="dmp-waiting-hint" class="text-xs text-neutral-500 mt-2" hidden><%= t('games.durakMultiplayer.waitingForPlayers') %></p>
         </div>
 
-        <%# Host-editable game rules - only editable while the room is still
-            "lobby" (durakRoomManager.js's handleSetRules enforces this
-            server-side too). The panel itself stays visible, read-only, once
-            "playing" starts, purely to show which rules this match is
-            running with - hidden again for "starting"/"finished". %>
-        <div id="dmp-rules-panel" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 mb-4">
-          <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.durakMultiplayer.rulesPanelTitle') %></p>
-          <label class="flex items-start gap-2 cursor-pointer">
-            <input type="checkbox" id="dmp-rule-throwins" checked
-                   class="mt-0.5 rounded border-neutral-700 bg-neutral-800 text-purple-600 focus:ring-purple-500 focus:ring-offset-neutral-900">
-            <span>
-              <span class="block text-sm text-neutral-200"><%= t('games.durakMultiplayer.ruleAllowThrowIns') %></span>
-              <span class="block text-xs text-neutral-500"><%= t('games.durakMultiplayer.ruleAllowThrowInsDesc') %></span>
-            </span>
-          </label>
-          <label class="flex items-start gap-2 cursor-pointer mt-3">
-            <input type="checkbox" id="dmp-rule-transfers"
-                   class="mt-0.5 rounded border-neutral-700 bg-neutral-800 text-purple-600 focus:ring-purple-500 focus:ring-offset-neutral-900">
-            <span>
-              <span class="block text-sm text-neutral-200"><%= t('games.durakMultiplayer.ruleAllowTransfers') %></span>
-              <span class="block text-xs text-neutral-500"><%= t('games.durakMultiplayer.ruleAllowTransfersDesc') %></span>
-            </span>
-          </label>
-          <div class="mt-3">
-            <label for="dmp-rule-deck-size" class="block text-sm text-neutral-200"><%= t('games.durakMultiplayer.ruleDeckSize') %></label>
-            <p class="text-xs text-neutral-500"><%= t('games.durakMultiplayer.ruleDeckSizeDesc') %></p>
-            <select id="dmp-rule-deck-size"
-                    class="mt-1.5 rounded border-neutral-700 bg-neutral-800 text-sm text-neutral-200 focus:ring-purple-500 focus:ring-offset-neutral-900">
-              <option value="auto"><%= t('games.durakMultiplayer.ruleDeckSizeAuto') %></option>
-              <option value="36"><%= t('games.durakMultiplayer.ruleDeckSize36') %></option>
-              <option value="52"><%= t('games.durakMultiplayer.ruleDeckSize52') %></option>
-            </select>
-          </div>
-          <p id="dmp-rules-host-hint" class="text-xs text-neutral-600 mt-2" hidden><%= t('games.durakMultiplayer.rulesHostOnlyHint') %></p>
-        </div>
-
-        <%# Ready check - shown only while room.status === "starting" (see
-            durakRoomManager.js's handleStartGame()). Every seat, host included,
-            must click Accept within the 45s window or get dropped from the room -
-            the whole point is catching someone who's still connected but has
-            mentally left the lobby before they get dragged into a live game. %>
-        <div id="dmp-ready-check" hidden class="rounded-xl border border-purple-700/60 bg-neutral-900 p-6 mb-4 text-center">
-          <p class="text-base font-semibold text-neutral-100 mb-1"><%= t('games.durakMultiplayer.readyCheckTitle') %></p>
-          <p class="text-sm text-neutral-400 mb-4"><%= t('games.durakMultiplayer.readyCheckSubtitle') %></p>
-          <p id="dmp-ready-countdown" class="text-2xl font-bold text-purple-400 tabular-nums mb-4"></p>
-          <p id="dmp-ready-count" class="text-sm text-neutral-400 mb-4"></p>
-          <button type="button" id="dmp-ready-accept-btn"
-                  class="px-6 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.durakMultiplayer.readyCheckAccept') %></button>
-          <p id="dmp-ready-waiting" hidden class="text-sm text-neutral-500 mt-3"><%= t('games.durakMultiplayer.readyCheckWaiting') %></p>
-        </div>
-
+        <%# The board comes right after the room header, before the rules
+            panel and ready check - so getting into a live hand never needs a
+            scroll past either of those, in the room view and in read-only
+            spectator/watch-hub embeds alike. Both hidden panels below take no
+            layout space (roomStatus never has table-wrap AND ready-check
+            visible at once - durak-multiplayer.js's renderRoom() flips
+            table-wrap only once status leaves "starting"), so this order
+            costs nothing while they're the ones being shown instead. %>
         <div id="dmp-table-wrap" class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4" hidden>
           <div id="dmp-board" class="relative rounded-lg bg-neutral-950 border border-neutral-800 min-h-[420px] flex flex-col">
             <%# Sticker reactions - a fixed 3-image set (durakRoomManager.js
@@ -477,6 +434,72 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <%# Host-editable game rules - only shown, and only editable, while
+            the room is still "lobby" (durakRoomManager.js's handleSetRules
+            enforces this server-side too). Once "playing" starts this full
+            form is replaced by #dmp-rules-summary below - a one-line,
+            read-only recap instead of the same checkboxes/descriptions
+            re-shown disabled, which used to push the (now board-first)
+            table further down than a settled ruleset needs. %>
+        <div id="dmp-rules-panel" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 mb-4">
+          <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.durakMultiplayer.rulesPanelTitle') %></p>
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" id="dmp-rule-throwins" checked
+                   class="mt-0.5 rounded border-neutral-700 bg-neutral-800 text-purple-600 focus:ring-purple-500 focus:ring-offset-neutral-900">
+            <span>
+              <span class="block text-sm text-neutral-200"><%= t('games.durakMultiplayer.ruleAllowThrowIns') %></span>
+              <span class="block text-xs text-neutral-500"><%= t('games.durakMultiplayer.ruleAllowThrowInsDesc') %></span>
+            </span>
+          </label>
+          <label class="flex items-start gap-2 cursor-pointer mt-3">
+            <input type="checkbox" id="dmp-rule-transfers"
+                   class="mt-0.5 rounded border-neutral-700 bg-neutral-800 text-purple-600 focus:ring-purple-500 focus:ring-offset-neutral-900">
+            <span>
+              <span class="block text-sm text-neutral-200"><%= t('games.durakMultiplayer.ruleAllowTransfers') %></span>
+              <span class="block text-xs text-neutral-500"><%= t('games.durakMultiplayer.ruleAllowTransfersDesc') %></span>
+            </span>
+          </label>
+          <div class="mt-3">
+            <label for="dmp-rule-deck-size" class="block text-sm text-neutral-200"><%= t('games.durakMultiplayer.ruleDeckSize') %></label>
+            <p class="text-xs text-neutral-500"><%= t('games.durakMultiplayer.ruleDeckSizeDesc') %></p>
+            <select id="dmp-rule-deck-size"
+                    class="mt-1.5 rounded border-neutral-700 bg-neutral-800 text-sm text-neutral-200 focus:ring-purple-500 focus:ring-offset-neutral-900">
+              <option value="auto"><%= t('games.durakMultiplayer.ruleDeckSizeAuto') %></option>
+              <option value="36"><%= t('games.durakMultiplayer.ruleDeckSize36') %></option>
+              <option value="52"><%= t('games.durakMultiplayer.ruleDeckSize52') %></option>
+            </select>
+          </div>
+          <p id="dmp-rules-host-hint" class="text-xs text-neutral-600 mt-2" hidden><%= t('games.durakMultiplayer.rulesHostOnlyHint') %></p>
+        </div>
+
+        <%# Compact read-only recap shown only while "playing" - see the
+            comment on #dmp-rules-panel above. Built client-side from these
+            data-* fragments (durak-multiplayer.js's renderRulesPanel) since
+            which combination applies depends on the room's live rules. %>
+        <p id="dmp-rules-summary" hidden class="text-xs text-neutral-500 mt-3 mb-4"
+           data-label="<%= t('games.durakMultiplayer.rulesSummaryLabel') %>"
+           data-throwins-on="<%= t('games.durakMultiplayer.ruleThrowInsOnLabel') %>"
+           data-throwins-off="<%= t('games.durakMultiplayer.ruleThrowInsOffLabel') %>"
+           data-transfers-on="<%= t('games.durakMultiplayer.ruleTransfersOnLabel') %>"
+           data-transfers-off="<%= t('games.durakMultiplayer.ruleTransfersOffLabel') %>"
+           data-deck-36="<%= t('games.durakMultiplayer.ruleDeckSize36') %>"
+           data-deck-52="<%= t('games.durakMultiplayer.ruleDeckSize52') %>"></p>
+
+        <%# Ready check - shown only while room.status === "starting" (see
+            durakRoomManager.js's handleStartGame()). Every seat, host included,
+            must click Accept within the 45s window or get dropped from the room -
+            the whole point is catching someone who's still connected but has
+            mentally left the lobby before they get dragged into a live game. %>
+        <div id="dmp-ready-check" hidden class="rounded-xl border border-purple-700/60 bg-neutral-900 p-6 mb-4 text-center">
+          <p class="text-base font-semibold text-neutral-100 mb-1"><%= t('games.durakMultiplayer.readyCheckTitle') %></p>
+          <p class="text-sm text-neutral-400 mb-4"><%= t('games.durakMultiplayer.readyCheckSubtitle') %></p>
+          <p id="dmp-ready-countdown" class="text-2xl font-bold text-purple-400 tabular-nums mb-4"></p>
+          <p id="dmp-ready-count" class="text-sm text-neutral-400 mb-4"></p>
+          <button type="button" id="dmp-ready-accept-btn"
+                  class="px-6 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.durakMultiplayer.readyCheckAccept') %></button>
+          <p id="dmp-ready-waiting" hidden class="text-sm text-neutral-500 mt-3"><%= t('games.durakMultiplayer.readyCheckWaiting') %></p>
         </div>
       </section>
     </div>

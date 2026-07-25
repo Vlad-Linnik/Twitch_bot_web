@@ -16,6 +16,7 @@
 const crypto = require("crypto");
 const engine = require("./sunduchkiEngine");
 const durakElo = require("./durakElo"); // pairwise-round-robin Elo math is fully game-agnostic - see that file's own header
+const durakClock = require("./durakClock"); // chess-clock time budget bookkeeping is fully game-agnostic too - see that file's own header
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const userProfileService = require("../db/userProfileService");
@@ -26,12 +27,6 @@ const MAX_PLAYERS = 6;
 const DISCONNECT_GRACE_MS = 60 * 1000;
 const FINISHED_ROOM_CLEANUP_MS = 2 * 60 * 1000;
 const READY_CHECK_MS = 45 * 1000;
-// Unlike Durak's per-player whole-game time BUDGET (durakClock.js), only one
-// seat is ever "on the clock" at a time here (there's no simultaneous wave
-// phase) - a flat per-turn deadline is simpler and sufficient: act (ask, or
-// draw-and-pass when you hold nothing askable) within this window or the
-// turn resolves for you (see onTurnTimeout).
-const TURN_MS = 30 * 1000;
 const GAME_KEY = "sunduchki-multiplayer";
 const DEFAULT_RULES = { deckSize: "36", questionTarget: "next" };
 // Same reasoning/shape as durakRoomCreateLimiter (middleware/rateLimiters.js's
@@ -178,21 +173,31 @@ function broadcastRoom(room) {
     return;
   }
   const meta = serializeRoomMeta(room);
-  const turnDeadline = room.turnDeadline || null;
+  const clocks = buildClocksPayload(room);
   room.players.forEach((p, seat) => {
     if (!p.ws || p.left) return;
-    safeSend(p.ws, { type: "roomState", room: meta, game: engine.serializeForSeat(room.game, seat), turnDeadline });
+    safeSend(p.ws, { type: "roomState", room: meta, game: engine.serializeForSeat(room.game, seat), clocks });
   });
   if (room.spectators && room.spectators.size) {
     const spectatorPayload = {
       type: "roomState",
       room: meta,
       game: engine.serializeForSpectator(room.game),
-      turnDeadline,
+      clocks,
       spectating: true,
     };
     for (const ws of room.spectators.keys()) safeSend(ws, spectatorPayload);
   }
+}
+
+// Same shape/rationale as durakRoomManager.js's buildClocksPayload: sends the
+// authoritative snapshot as of the last tick plus serverNow, so a client can
+// locally interpolate a live countdown for whichever seat is running between
+// snapshots instead of showing a stale, unmoving number.
+function buildClocksPayload(room) {
+  return room.clocks
+    ? { remainingMs: room.clocks.remainingMs, runningSeats: room.clocks.runningSeats, serverNow: room.clocks.lastTick }
+    : null;
 }
 
 // A lightweight event for narrating why a seat just vanished (timeout,
@@ -269,7 +274,10 @@ function resumeIntoRoom(ws, meta, room) {
   entry.ws = ws;
   entry.connected = true;
   meta.roomId = room.id;
-  if (room.status === "playing" && room.game.phase === "finished") finalizeGame(room);
+  if (room.status === "playing") {
+    syncClock(room); // refreshes remainingMs/lastTick so the resumed snapshot isn't stale
+    if (room.game.phase === "finished") finalizeGame(room);
+  }
   broadcastRoom(room);
 }
 
@@ -321,59 +329,62 @@ function removeFromRoom(room, userId, reason) {
     room.players[seat].left = true;
     userActiveRoom.delete(userId);
     broadcastPlayerLeft(room, seat, reason);
+    syncClock(room); // the active seat, and so whose clock runs, may have just changed
     broadcastRoom(room);
     if (room.game.phase === "finished") {
       finalizeGame(room);
-    } else {
-      scheduleTurnTimer(room); // the active seat may have just changed
     }
     return;
   }
   userActiveRoom.delete(userId);
 }
 
-// --- Per-turn timer ----------------------------------------------------------
-
-function clearTurnTimer(room) {
-  if (room.turnTimer) {
-    clearTimeout(room.turnTimer);
-    room.turnTimer = null;
+// --- Per-player time budget (chess-clock style) -----------------------------
+// Each seat gets durakClock.TOTAL_MS_PER_PLAYER (5 minutes) for the whole
+// game, ported wholesale from durakRoomManager.js's own syncClock/
+// scheduleClockTimer: durakClock.js is pure and game-agnostic (see its own
+// header), it only needs to be told which seats are currently "running" -
+// engine.runningSeats(state) here is just [activeSeat] while playing, since
+// Sunduchki (unlike Durak) never has more than one seat owing a decision at
+// once. userActiveRoom is deliberately left pointing at this room when a seat
+// times out so a later reconnect still finds it (and, once the game
+// finishes, the ratingChanges notice - see finalizeGame) - only cleaned up by
+// finalizeGame's own cleanup sweep.
+function syncClock(room) {
+  if (!room.clocks || room.status !== "playing") return;
+  for (let guard = 0; guard < MAX_PLAYERS + 1; guard++) {
+    const now = Date.now();
+    const running = room.game.phase === "finished" ? [] : engine.runningSeats(room.game);
+    durakClock.tick(room.clocks, now, running);
+    if (room.game.phase === "finished") break;
+    const expired = durakClock.expiredSeats(room.clocks);
+    if (!expired.length) break;
+    for (const seat of expired) {
+      engine.removePlayer(room.game, seat, "clock");
+      if (room.players[seat]) room.players[seat].left = true;
+      broadcastPlayerLeft(room, seat, "clock");
+    }
+    // A forfeited seat can change whose clock should run next - loop once
+    // more against the fresh state before scheduling, rather than scheduling
+    // off a stale runningSeats snapshot.
   }
-  room.turnDeadline = null;
+  scheduleClockTimer(room);
 }
 
-function scheduleTurnTimer(room) {
-  clearTurnTimer(room);
-  if (room.status !== "playing" || room.game.phase !== "playing") return;
-  room.turnDeadline = Date.now() + TURN_MS;
-  room.turnTimer = setTimeout(() => onTurnTimeout(room), TURN_MS);
-  room.turnTimer.unref();
-}
-
-// Fires when the active seat hasn't acted within TURN_MS. A seat with a real
-// choice to make (hasLegalAsk) forfeits, same as Durak's clock timeout - same
-// deliberate choice as durakRoomManager.js's syncClock: userActiveRoom is
-// left pointing at this room so a later reconnect still finds it (and, once
-// the game finishes, the ratingChanges notice - see finalizeGame), and only
-// gets cleaned up by finalizeGame's own cleanup sweep. A seat with NOTHING
-// legal to ask (must draw-and-pass) isn't actually ignoring a decision, so
-// it's auto-resolved rather than punished.
-function onTurnTimeout(room) {
-  if (!room || room.status !== "playing" || room.game.phase !== "playing") return;
-  const seat = room.game.activeSeat;
-  if (engine.hasLegalAsk(room.game, seat)) {
-    engine.removePlayer(room.game, seat, "clock");
-    if (room.players[seat]) room.players[seat].left = true;
-    broadcastPlayerLeft(room, seat, "clock");
-  } else {
-    engine.applyPassEmpty(room.game, seat);
+function scheduleClockTimer(room) {
+  if (room.clockTimer) {
+    clearTimeout(room.clockTimer);
+    room.clockTimer = null;
   }
-  broadcastRoom(room);
-  if (room.game.phase === "finished") {
-    finalizeGame(room);
-    return;
-  }
-  scheduleTurnTimer(room);
+  if (room.status !== "playing") return;
+  const ms = durakClock.msUntilNextExpiry(room.clocks);
+  if (ms == null) return;
+  room.clockTimer = setTimeout(() => {
+    syncClock(room);
+    broadcastRoom(room);
+    if (room.game.phase === "finished") finalizeGame(room);
+  }, ms);
+  room.clockTimer.unref();
 }
 
 // --- Scoring -----------------------------------------------------------------
@@ -409,7 +420,6 @@ function broadcastRatingChanges(room) {
 
 async function finalizeGame(room) {
   room.status = "finished";
-  clearTurnTimer(room);
   gameSessionStatsRepo.recordPlay(GAME_KEY).catch((err) => console.error("[sunduchkiRoomManager] failed to record play count:", err.message));
   await updateRatings(room);
   const cleanup = setTimeout(() => {
@@ -567,7 +577,8 @@ function beginGame(room) {
       console.error("[sunduchkiRoomManager] failed to snapshot pre-game ratings:", err);
       return new Map(userIds.map((id) => [id, durakElo.DEFAULT_RATING]));
     });
-  scheduleTurnTimer(room);
+  room.clocks = durakClock.createClocks(room.players.length);
+  syncClock(room);
   broadcastRoom(room);
   broadcastLobby();
 }
@@ -602,22 +613,25 @@ function resolveReadyCheckTimeout(room) {
 
 // --- Gameplay ----------------------------------------------------------------
 
+// syncClock runs BEFORE broadcastRoom (not after) so the roomState clients
+// receive already carries the freshly-recomputed clock snapshot instead of a
+// stale pre-action one - this ordering is exactly what the old flat per-turn
+// timer got backwards.
 function afterGameAction(room) {
+  syncClock(room);
   broadcastRoom(room);
   if (room.game.phase === "finished") {
     finalizeGame(room);
-    return;
   }
-  scheduleTurnTimer(room);
 }
 
-function handleAsk(ws, meta, targetSeat, rank) {
+function handleAsk(ws, meta, targetSeat, rank, suits) {
   const room = rooms.get(meta.roomId);
   if (!room || room.status !== "playing") return sendError(ws, "not-playing");
   const seat = room.players.findIndex((p) => p.userId === meta.userId);
   if (seat < 0) return sendError(ws, "not-in-room");
-  if (!Number.isInteger(targetSeat) || !Number.isInteger(rank)) return sendError(ws, "bad-request");
-  const result = engine.applyAsk(room.game, seat, targetSeat, rank);
+  if (!Number.isInteger(targetSeat) || !Number.isInteger(rank) || !Array.isArray(suits)) return sendError(ws, "bad-request");
+  const result = engine.applyAsk(room.game, seat, targetSeat, rank, suits);
   if (!result.ok) return sendError(ws, result.error);
   afterGameAction(room);
 }
@@ -661,7 +675,7 @@ function onMessage(ws, meta, raw) {
     case "kickPlayer":
       return handleKickPlayer(ws, meta, msg.userId);
     case "ask":
-      return handleAsk(ws, meta, msg.targetSeat, msg.rank);
+      return handleAsk(ws, meta, msg.targetSeat, msg.rank, msg.suits);
     case "passEmpty":
       return handlePassEmpty(ws, meta);
     default:
@@ -697,6 +711,12 @@ function onClose(ws, meta) {
       removeFromRoom(room, meta.userId, "timeout");
     }, DISCONNECT_GRACE_MS);
     entry.disconnectTimer.unref();
+    // This disconnect alone doesn't forfeit anyone (that's what
+    // disconnectTimer above is for) - but re-ticking now still surfaces an
+    // unrelated seat's clock having already run out, same as
+    // durakRoomManager.js's own onClose handling.
+    syncClock(room);
+    broadcastRoom(room);
   }
 }
 

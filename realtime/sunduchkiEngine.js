@@ -6,13 +6,19 @@
 //
 // Go-Fish family game: each of 2-6 players is dealt 4 cards, the rest form a
 // draw pile. On your turn you pick a target (constrained by rules.
-// questionTarget) and ask for a RANK you already hold at least one card of
-// (no bluffing - enforced here, not just by the client). The engine checks
-// the target's real hand and, if they hold any, transfers ALL of them to you
-// at once (honest reveal, not a blind guess) - this, plus every ask/result
-// being broadcast to the whole table (realtime/sunduchkiRoomManager.js's
-// job, not this file's), is what makes the game "logical": everyone can
-// listen and deduce who holds what, the same as at a real table. A hit lets
+// questionTarget), ask for a RANK you already hold at least one card of (no
+// bluffing on the rank - enforced here, not just by the client), then name
+// one or more SUITS of that rank you're claiming the target holds - suit
+// count doubling as the claimed quantity. This is a genuine guess, not a
+// no-bluffing check: since only one card of each exact rank+suit exists in
+// the deck, a suit already in the asker's own hand can never be a hit
+// (nobody else can hold an identical card), so no suit-level legality check
+// is needed beyond "well-formed" - an own-held suit is just always a miss.
+// The ask is all-or-nothing: every requested rank+suit must be in the
+// target's hand, or nothing transfers at all (this, plus every ask/result
+// being broadcast to the whole table - realtime/sunduchkiRoomManager.js's
+// job, not this file's - is what makes the game "logical": everyone can
+// listen and deduce who holds what, the same as at a real table). A hit lets
 // you go again; a miss draws one card from the deck and passes the turn.
 // Collecting all 4 cards of a rank lays the "chest" down immediately (always
 // public, per the house rule this repo's game was built with) and removes
@@ -108,6 +114,17 @@ function legalTargets(state, seat) {
 
 function hasLegalAsk(state, seat) {
   return legalAskRanks(state, seat).length > 0 && legalTargets(state, seat).length > 0;
+}
+
+// Sunduchki has exactly one active seat at a time (no simultaneous wave
+// phase like Durak's), so whoever owes the current decision is always just
+// the active seat - mirrors durakEngine.js's own runningSeats(state), which
+// realtime/durakClock.js's chess-clock bookkeeping is built to consume
+// generically (see that module's header - it deliberately knows nothing
+// about *whose* clock should run, only how to drain whichever seats it's told).
+function runningSeats(state) {
+  if (state.phase !== "playing") return [];
+  return isActive(state, state.activeSeat) ? [state.activeSeat] : [];
 }
 
 function ok(state) {
@@ -225,31 +242,39 @@ function createGame(playerIds, rules) {
   };
 }
 
-// The core turn action: seat asks targetSeat for rank. Validates seat is the
+// The core turn action: seat asks targetSeat for rank + suits (one or more
+// suits of that rank, quantity implied by how many). Validates seat is the
 // active player, targetSeat is a legal target under rules.questionTarget,
-// and seat actually holds >=1 card of rank (no-bluffing). On a hit, ALL of
-// the target's matching cards transfer at once (honest reveal - see file
-// banner) and any newly-completed chest is laid down immediately; the asker
-// keeps the turn. On a miss, the asker draws one card (if the deck has any)
-// and the turn passes to the next active seat clockwise.
-function applyAsk(state, seat, targetSeat, rank) {
+// seat actually holds >=1 card of rank (no-bluffing on the rank), and suits
+// is a well-formed, non-empty, duplicate-free subset of SUITS - see file
+// banner for why no suit-level legality check beyond that is needed. The ask
+// is all-or-nothing: a hit requires the target to hold EVERY requested
+// rank+suit combo; those exact cards transfer and any newly-completed chest
+// is laid down immediately, and the asker keeps the turn. Any missing
+// combo is a total miss - nothing transfers, the asker draws one card (if
+// the deck has any) and the turn passes to the next active seat clockwise.
+function applyAsk(state, seat, targetSeat, rank, suits) {
   if (state.phase !== "playing") return err("not-playing");
   if (seat !== state.activeSeat) return err("not-your-turn");
   if (!Number.isInteger(targetSeat) || !isActive(state, targetSeat) || targetSeat === seat) return err("bad-target");
   if (!legalTargets(state, seat).includes(targetSeat)) return err("target-not-allowed");
   if (!Number.isInteger(rank)) return err("bad-request");
   if (!legalAskRanks(state, seat).includes(rank)) return err("rank-not-legal");
+  if (!Array.isArray(suits) || suits.length === 0) return err("bad-request");
+  const requested = new Set(suits);
+  if (requested.size !== suits.length || [...requested].some((s) => !SUITS.includes(s))) return err("bad-request");
 
   const asker = state.players[seat];
   const target = state.players[targetSeat];
-  const matches = target.hand.filter((c) => c.rank === rank);
-  const hit = matches.length > 0;
+  const matches = target.hand.filter((c) => c.rank === rank && requested.has(c.suit));
+  const hit = matches.length === requested.size;
 
   if (hit) {
-    target.hand = target.hand.filter((c) => c.rank !== rank);
+    const matchedKeys = new Set(matches.map((c) => c.suit));
+    target.hand = target.hand.filter((c) => !(c.rank === rank && matchedKeys.has(c.suit)));
     asker.hand.push(...matches);
     const completedChests = layDownCompletedChests(state, seat);
-    pushLog(state, { askerSeat: seat, targetSeat, rank, hit: true, revealed: matches, completedChests });
+    pushLog(state, { askerSeat: seat, targetSeat, rank, suits: [...requested], hit: true, revealed: matches, completedChests });
   } else {
     let drawn = null;
     let completedChests = [];
@@ -258,7 +283,7 @@ function applyAsk(state, seat, targetSeat, rank) {
       asker.hand.push(drawn);
       completedChests = layDownCompletedChests(state, seat);
     }
-    pushLog(state, { askerSeat: seat, targetSeat, rank, hit: false, drawn, completedChests });
+    pushLog(state, { askerSeat: seat, targetSeat, rank, suits: [...requested], hit: false, drawn, completedChests });
     state.activeSeat = nextActiveSeatAfter(state, seat);
   }
 
@@ -416,6 +441,7 @@ module.exports = {
   legalAskRanks,
   legalTargets,
   hasLegalAsk,
+  runningSeats,
   activeSeats,
   isActive,
   claimedRanks,

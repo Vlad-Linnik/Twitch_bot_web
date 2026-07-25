@@ -1,6 +1,6 @@
 <%# Shared visual spectator cluster for multiplayer game rooms (Durak,
     Battleship, Pong, Connect Four) - a pile of little "viewer" icons in the
-    page's unused right-hand margin on wide screens, standing in for the
+    page's unused left-hand margin on wide screens, standing in for the
     numeric "N watching" text those pages already show elsewhere. Hidden below
     xl (no room there) via the class below, and hidden entirely at 0 viewers
     via inline style (see spectatorCluster.js) - inline style wins the
@@ -9,7 +9,7 @@
     through these fixed ids - a game view just includes this partial and its
     client calls that once, then feeds it a live spectator count. %>
 <div id="spectator-cluster"
-     class="hidden xl:flex fixed right-6 top-1/2 -translate-y-1/2 z-30 flex-col items-center gap-1.5 pointer-events-none">
+     class="hidden xl:flex fixed left-6 top-1/2 -translate-y-1/2 z-30 flex-col items-center gap-1.5 pointer-events-none">
   <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.spectatorsLabel') %></p>
   <div id="spectator-cluster-pile" class="relative w-40 h-40"></div>
 </div>

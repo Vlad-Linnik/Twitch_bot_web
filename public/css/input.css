@@ -388,6 +388,45 @@ html.js .save-fab.save-visible {
   }
 }
 
+/* Multiplayer Sunduchki: action badges over nicknames
+   (sunduchki-multiplayer.js's showActionBadge()), replacing the old
+   scrolling text log - same fresh-node-per-pop technique as
+   durak-sticker-pop above, just a text pill instead of an image. Duration
+   must match ACTION_BADGE_MS in that file. Horizontal centering is applied
+   on the wrapper element instead (see that function's own comment) since
+   this animates `transform` too and an animated transform always wins over
+   an inline one set on the same element. */
+@keyframes sunduchki-action-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+  25% {
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+}
+.sunduchki-action-pop {
+  animation: sunduchki-action-pop 1400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sunduchki-action-pop {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* Minesweeper (public/js/games/minesweeper.js): a single fixed 9x9 board,
    laid out in a 420px-wide card. Cells are plain <button>s sized by
    aspect-ratio + font-size only, no fixed pixel dimensions. font-size reads

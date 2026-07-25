@@ -45,6 +45,7 @@
   // Same card-rendering convention as durak-multiplayer.js (no image
   // sprites - every card is a small styled div built from {suit, rank}).
   const SUIT_SYMBOL = { S: "♠", H: "♥", D: "♦", C: "♣" };
+  const SUIT_ORDER = ["S", "H", "D", "C"]; // fixed display order for the suit picker
   const RANK_LABEL = { 11: "J", 12: "Q", 13: "K", 14: "A" };
 
   function rankLabel(rank) {
@@ -69,6 +70,32 @@
     center.textContent = suit ? SUIT_SYMBOL[suit] : "";
     el.append(topLeft, center);
     return el;
+  }
+
+  // sizeClass is required, not optional - same Tailwind cascade gotcha
+  // durak-multiplayer.js's own buildCardBackEl documents: "relative" (baked
+  // into buildCardEl's base class) always wins the position: cascade over a
+  // later "absolute" utility regardless of source order, so a hardcoded
+  // default size here would silently outrank whatever a caller passes.
+  function buildCardBackEl(sizeClass, extraClass) {
+    const el = document.createElement("div");
+    el.className =
+      sizeClass + " rounded-md border-2 border-purple-950 shrink-0 bg-purple-800 ring-1 ring-inset ring-purple-500/40" +
+      (extraClass ? " " + extraClass : "");
+    return el;
+  }
+
+  const CHEST_ICON_SRC = "/images/games/sunduchki/chest.png";
+
+  // The game's namesake icon (a collected "chest" of 4-of-a-kind) - used in
+  // place of a 📦 emoji everywhere a chest count is shown, so it's a real
+  // asset instead of relying on the viewer's emoji font.
+  function buildChestIconEl(sizeClass) {
+    const img = document.createElement("img");
+    img.src = CHEST_ICON_SRC;
+    img.alt = "";
+    img.className = (sizeClass || "w-3.5 h-3.5") + " inline-block shrink-0 align-middle object-contain";
+    return img;
   }
 
   function buildAvatarEl(p) {
@@ -186,6 +213,7 @@
   const ruleDeckSizeEl = document.getElementById("skp-rule-deck-size");
   const ruleQuestionTargetEl = document.getElementById("skp-rule-question-target");
   const rulesHostHintEl = document.getElementById("skp-rules-host-hint");
+  const rulesSummaryEl = document.getElementById("skp-rules-summary");
 
   const readyCheckEl = document.getElementById("skp-ready-check");
   const readyCountdownEl = document.getElementById("skp-ready-countdown");
@@ -194,15 +222,19 @@
   const readyWaitingEl = document.getElementById("skp-ready-waiting");
 
   const tableWrapEl = document.getElementById("skp-table-wrap");
+  const boardEl = document.getElementById("skp-board");
   const opponentsEl = document.getElementById("skp-opponents");
+  const deckEl = document.getElementById("skp-deck");
   const deckCountEl = document.getElementById("skp-deck-count");
-  const turnTimerEl = document.getElementById("skp-turn-timer");
   const statusEl = document.getElementById("skp-status");
-  const logEl = document.getElementById("skp-log");
   const targetPickerEl = document.getElementById("skp-target-picker");
   const targetPickerLabelEl = document.getElementById("skp-target-picker-label");
   const targetButtonsEl = document.getElementById("skp-target-buttons");
+  const suitPickerEl = document.getElementById("skp-suit-picker");
+  const suitPickerLabelEl = document.getElementById("skp-suit-picker-label");
+  const suitButtonsEl = document.getElementById("skp-suit-buttons");
   const handPanelEl = document.getElementById("skp-hand-panel");
+  const myClockEl = document.getElementById("skp-my-clock");
   const handEl = document.getElementById("skp-hand");
   const myChestsEl = document.getElementById("skp-my-chests");
   const myChestsCountEl = document.getElementById("skp-my-chests-count");
@@ -229,6 +261,9 @@
   // The rank picked from my own hand this turn - cleared on every fresh
   // roomState (a new turn/game) and once the ask is actually sent.
   let selectedRank = null;
+  // Suit(s) picked for that rank (step 2 of the ask) - a Set, cleared
+  // alongside selectedRank.
+  let selectedSuits = new Set();
   // Guards passEmpty from firing more than once for the same "nothing to ask
   // with" turn - reset whenever the active seat or my hand size changes.
   let autoPassSignature = null;
@@ -241,7 +276,7 @@
   // first render never treats its full starting hand as "newly arrived" cards.
   let previousHandKeys = null; // Set of "suit-rank" strings, my own hand only
   let previousChestCounts = null; // seat -> chest count, every seat
-  let previousLogLength = 0;
+  let previousLastLogKey = null; // JSON of the last-seen game.log entry - see renderTable's logEntryKey diffing
   let readyCheckSoundPlayedFor = null; // dedupes the notification sound against the ready check's deadline value
 
   function cardKey(card) {
@@ -341,7 +376,16 @@
         clock: d.actionClockTpl,
         kicked: d.actionKickedTpl,
       }[reason] || d.actionLeftTpl;
-    showToast(fillTemplate(tpl, { NAME: name }));
+    const text = fillTemplate(tpl, { NAME: name });
+    // A seat still on the table gets the badge anchored over its own
+    // nameplate, same as every other action; a seat that's already gone from
+    // lastRoom entirely (or if this client isn't seated/watching this room
+    // at all) falls back to the generic status-line toast.
+    if (lastRoom && lastRoom.players[seat] && (seat === mySeat || opponentsEl.querySelector('[data-seat="' + seat + '"]'))) {
+      showActionBadge(seat, text, "bg-amber-900/90 text-amber-100");
+    } else {
+      showToast(text);
+    }
   }
 
   function errorText(code) {
@@ -510,10 +554,16 @@
     readyAcceptBtn.blur();
   });
 
-  // --- Game rules ------------------------------------------------------------
+  // --- Game rules: host-editable form in the lobby, one-line recap in-game -
+  // Same split as durak-multiplayer.js's renderRulesPanel: the full form is
+  // lobby-only, and #skp-rules-summary takes over as a compact line once
+  // "playing" starts, so the board (now first in the DOM - see the comment
+  // on #skp-table-wrap in gameSunduchki.ejs) doesn't sit behind a full
+  // re-rendering of the settled ruleset.
 
   function renderRulesPanel(rules, amHost, roomStatus) {
-    rulesPanelEl.hidden = roomStatus !== "lobby" && roomStatus !== "playing";
+    rulesPanelEl.hidden = roomStatus !== "lobby";
+    rulesSummaryEl.hidden = roomStatus !== "playing";
     if (!rules) return;
     const editable = amHost && roomStatus === "lobby";
     ruleDeckSizeEl.value = String(rules.deckSize || "36");
@@ -521,6 +571,13 @@
     ruleQuestionTargetEl.value = rules.questionTarget || "next";
     ruleQuestionTargetEl.disabled = !editable;
     rulesHostHintEl.hidden = editable || roomStatus !== "lobby";
+
+    if (roomStatus === "playing") {
+      const rd = rulesSummaryEl.dataset;
+      const deck = String(rules.deckSize) === "52" ? rd.deck52 : rd.deck36;
+      const target = rules.questionTarget === "any" ? rd.targetAny : rd.targetNext;
+      rulesSummaryEl.textContent = rd.label + " " + [deck, target].join(" · ");
+    }
   }
 
   ruleDeckSizeEl.addEventListener("change", () => {
@@ -530,35 +587,97 @@
     send({ type: "setRules", rules: { questionTarget: ruleQuestionTargetEl.value } });
   });
 
-  // --- Turn timer --------------------------------------------------------------
+  // --- Per-player time budget (chess-clock style) -----------------------------
+  // Directly ported from durak-multiplayer.js's own clock section: the server
+  // only sends a fresh {remainingMs, runningSeats, serverNow} snapshot when
+  // something actually happens, not continuously - this client interpolates
+  // locally between snapshots so the displayed numbers still count down
+  // smoothly. myClockEl.title is set once at boot (see Boot section below);
+  // opponent clock badges are (re)built fresh every render inside
+  // renderOpponents, same as everything else there.
+  let clocksSnapshot = null;
+  let clockTickHandle = null;
 
-  let turnDeadline = null;
-  let turnTickHandle = null;
-
-  function renderTurnTimer() {
-    if (turnDeadline == null) {
-      turnTimerEl.hidden = true;
-      return;
-    }
-    const remainingSeconds = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
-    turnTimerEl.hidden = false;
-    turnTimerEl.title = d.timeRemainingTooltip;
-    turnTimerEl.textContent = remainingSeconds + "s";
-    turnTimerEl.classList.toggle("text-rose-500", remainingSeconds <= 10);
-    turnTimerEl.classList.toggle("text-neutral-500", remainingSeconds > 10);
+  function formatClock(ms) {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return m + ":" + String(s).padStart(2, "0");
   }
 
-  function stopTurnTicking() {
-    if (turnTickHandle) {
-      clearInterval(turnTickHandle);
-      turnTickHandle = null;
-    }
-    turnDeadline = null;
+  function displayedRemainingMs(seat) {
+    if (!clocksSnapshot || clocksSnapshot.remainingMs[seat] == null) return null;
+    const base = clocksSnapshot.remainingMs[seat];
+    const running = clocksSnapshot.runningSeats.includes(seat);
+    const elapsed = running ? Date.now() - clocksSnapshot.serverNow : 0;
+    return Math.max(0, base - elapsed);
   }
 
-  function ensureTurnTicking() {
-    if (turnTickHandle) return;
-    turnTickHandle = setInterval(renderTurnTimer, 250);
+  const LOW_TIME_MS = 30 * 1000;
+
+  function renderClockDisplays() {
+    if (!clocksSnapshot) return;
+    if (mySeat != null) {
+      const mine = displayedRemainingMs(mySeat);
+      if (mine != null) {
+        myClockEl.textContent = formatClock(mine);
+        myClockEl.classList.toggle("text-rose-500", mine < LOW_TIME_MS);
+        myClockEl.classList.toggle("text-neutral-400", mine >= LOW_TIME_MS);
+      }
+    }
+    opponentsEl.querySelectorAll("[data-clock-seat]").forEach((el) => {
+      const seat = Number(el.dataset.clockSeat);
+      const rem = displayedRemainingMs(seat);
+      if (rem == null) return;
+      el.textContent = formatClock(rem);
+      el.classList.toggle("text-rose-500", rem < LOW_TIME_MS);
+    });
+  }
+
+  function stopClockTicking() {
+    if (clockTickHandle) {
+      clearInterval(clockTickHandle);
+      clockTickHandle = null;
+    }
+  }
+
+  function ensureClockTicking() {
+    if (clockTickHandle) return;
+    clockTickHandle = setInterval(renderClockDisplays, 250);
+  }
+
+  // --- Action badges over nicknames --------------------------------------------
+  // Adapted from durak-multiplayer.js's showSticker(): anchors a small text
+  // pill over whoever the action is about via getBoundingClientRect, the same
+  // seat===mySeat -> handPanelEl / else -> opponentsEl's [data-seat] lookup.
+  // Replaces the old scrolling #skp-log entirely - every ask/hit/miss/pass/
+  // leave narrates itself over the acting seat's own nameplate instead.
+  const ACTION_BADGE_MS = 1400;
+
+  function showActionBadge(seat, text, colorClass) {
+    const anchor = seat === mySeat ? handPanelEl : opponentsEl.querySelector('[data-seat="' + seat + '"]');
+    if (!anchor || !boardEl) return;
+    const anchorRect = anchor.getBoundingClientRect();
+    const boardRect = boardEl.getBoundingClientRect();
+    // The horizontal-centering translateX(-50%) has to live on a separate,
+    // never-animated wrapper: the sunduchki-action-pop CSS class below also
+    // animates `transform` (for the pop/rise motion), and an animated
+    // `transform` always wins over whatever was set inline on the SAME
+    // element, silently dropping the centering for the animation's duration.
+    const wrap = document.createElement("div");
+    wrap.className = "absolute pointer-events-none";
+    wrap.style.left = anchorRect.left - boardRect.left + anchorRect.width / 2 + "px";
+    wrap.style.top = anchorRect.top - boardRect.top - 28 + "px";
+    wrap.style.transform = "translateX(-50%)";
+    wrap.style.zIndex = "30";
+    const badge = document.createElement("span");
+    badge.className =
+      "sunduchki-action-pop block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-lg " +
+      (colorClass || "bg-neutral-800 text-neutral-100");
+    badge.textContent = text;
+    wrap.appendChild(badge);
+    boardEl.appendChild(wrap);
+    setTimeout(() => wrap.remove(), ACTION_BADGE_MS);
   }
 
   // --- Room rendering ------------------------------------------------------
@@ -621,7 +740,8 @@
       readyCheckEl.hidden = true;
       stopReadyCheckTicking();
       tableWrapEl.hidden = true;
-      stopTurnTicking();
+      clocksSnapshot = null;
+      stopClockTicking();
 
       if (previousLobbyPlayerRoomId !== room.id) {
         previousLobbyPlayerIds = null;
@@ -637,7 +757,8 @@
       startBtn.hidden = true;
       waitingHintEl.hidden = true;
       tableWrapEl.hidden = true;
-      stopTurnTicking();
+      clocksSnapshot = null;
+      stopClockTicking();
       renderReadyCheck(msg.readyCheck);
     } else {
       readyCheckEl.hidden = true;
@@ -651,10 +772,10 @@
       const justDealt = tableWrapEl.hidden;
       tableWrapEl.hidden = false;
       mySeat = msg.game && msg.game.you ? msg.game.you.seat : null;
-      turnDeadline = msg.turnDeadline || null;
-      if (turnDeadline != null && !(msg.game && msg.game.result)) ensureTurnTicking();
-      else stopTurnTicking();
+      clocksSnapshot = msg.clocks || null;
       renderTable(room, msg.game, justDealt);
+      if (msg.game && msg.game.result) stopClockTicking(); // game over - the snapshot is now static, no need to keep polling
+      else ensureClockTicking();
     }
   }
 
@@ -663,14 +784,16 @@
     isSpectating = false;
     mySeat = null;
     selectedRank = null;
-    stopTurnTicking();
+    selectedSuits = new Set();
+    clocksSnapshot = null;
+    stopClockTicking();
     stopReadyCheckTicking();
     readyCheckSoundPlayedFor = null;
     previousLobbyPlayerIds = null;
     previousLobbyPlayerRoomId = null;
     previousHandKeys = null;
     previousChestCounts = null;
-    previousLogLength = 0;
+    previousLastLogKey = null;
     switchView(false);
   }
 
@@ -737,26 +860,45 @@
       nameSpan.className = "text-xs text-neutral-200 truncate max-w-[64px]";
       nameSpan.textContent = p.displayName;
       nameRow.appendChild(nameSpan);
+      // Stacked card-backs (ported from durak-multiplayer.js's own opponent
+      // hand rendering) instead of a bare "N 🂠" text count.
+      const backs = document.createElement("div");
+      backs.className = "flex";
+      for (let c = 0; c < Math.min(meta.handCount, 6); c++) {
+        const backEl = buildCardBackEl("w-4 h-6", c > 0 ? "-ml-2" : "");
+        if (justDealt) dealInAnimate(backEl, c);
+        backs.appendChild(backEl);
+      }
       const handCountSpan = document.createElement("span");
-      handCountSpan.className = "text-[11px] text-neutral-500 tabular-nums";
-      handCountSpan.textContent = meta.handCount + " 🂠";
+      handCountSpan.className = "text-[9px] text-neutral-500 tabular-nums";
+      handCountSpan.textContent = String(meta.handCount);
       const chestsSpan = document.createElement("span");
-      chestsSpan.className = "text-[11px] text-amber-400 tabular-nums";
-      chestsSpan.textContent = meta.chests.length ? "📦×" + meta.chests.length : "";
-      block.append(nameRow, handCountSpan, chestsSpan);
-      // Clickable as a target once a rank is selected and this seat is a
-      // legal target for my ask (server re-validates regardless).
+      chestsSpan.className = "flex items-center gap-0.5 text-[11px] text-amber-400 tabular-nums";
+      chestsSpan.hidden = meta.chests.length === 0;
+      if (meta.chests.length) {
+        chestsSpan.append(buildChestIconEl("w-3 h-3"), document.createTextNode("×" + meta.chests.length));
+      }
+      const clockBadge = document.createElement("p");
+      clockBadge.className = "text-[9px] font-mono tabular-nums text-neutral-500";
+      clockBadge.dataset.clockSeat = String(seat);
+      clockBadge.title = d.timeRemainingTooltip;
+      block.append(nameRow, backs, handCountSpan, chestsSpan, clockBadge);
+      // Clickable as a target once a rank AND at least one suit are picked
+      // and this seat is a legal target for my ask (server re-validates
+      // regardless).
       if (
         !isSpectating &&
         mySeat === game.activeSeat &&
         selectedRank != null &&
+        selectedSuits.size > 0 &&
         game.legal &&
         game.legal.targets.includes(seat)
       ) {
         block.classList.add("cursor-pointer", "ring-2", "ring-cyan-400", "hover:bg-cyan-500/10");
         block.addEventListener("click", () => {
-          send({ type: "ask", targetSeat: seat, rank: selectedRank });
+          send({ type: "ask", targetSeat: seat, rank: selectedRank, suits: [...selectedSuits] });
           selectedRank = null;
+          selectedSuits = new Set();
         });
       }
       opponentsEl.appendChild(block);
@@ -795,6 +937,7 @@
       if (isLegal) {
         el.addEventListener("click", () => {
           selectedRank = selectedRank === card.rank ? null : card.rank;
+          selectedSuits = new Set();
           renderTable(lastRoom, lastGame);
         });
       }
@@ -810,11 +953,56 @@
     previousHandKeys = currentHandKeys;
   }
 
+  // Step 2 of the ask: once a rank is picked, offer all 4 suits of that rank.
+  // Suits already in my own hand are shown but disabled/greyed - a single
+  // standard deck means an identical card can never exist anywhere else, so
+  // picking one of those could never be a hit (see sunduchkiEngine.js's file
+  // banner) - this is purely a playability hint, not a server-enforced rule.
+  // Multi-select (toggling membership in selectedSuits); the target step
+  // below only lights up once at least one suit is chosen, which doubles as
+  // this step's "confirm".
+  function renderSuitPicker(game) {
+    const showPicker = !isSpectating && mySeat === game.activeSeat && selectedRank != null && game.legal && game.legal.canAsk;
+    suitPickerEl.hidden = !showPicker;
+    suitButtonsEl.textContent = "";
+    if (!showPicker) return;
+    suitPickerLabelEl.textContent = d.pickSuitPrompt;
+    const ownedSuits = new Set(game.you.hand.filter((c) => c.rank === selectedRank).map((c) => c.suit));
+    for (const suit of SUIT_ORDER) {
+      const owned = ownedSuits.has(suit);
+      const isSelected = selectedSuits.has(suit);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      // Each branch owns its own complete text-color utility rather than
+      // layering one on top of a base class - two conflicting text-color
+      // utilities on one element leave the winner up to compiled stylesheet
+      // order, not this string's order (same Tailwind cascade gotcha
+      // durak-multiplayer.js's positionAbsolute() documents).
+      let colorClass;
+      if (owned) colorClass = "border-neutral-800 text-neutral-700 cursor-not-allowed";
+      else if (isSelected) colorClass = "border-cyan-400 bg-cyan-500/20 text-cyan-300";
+      else colorClass = "border-neutral-700 bg-neutral-800 hover:bg-purple-600 hover:text-white " + (isRed(suit) ? "text-red-500" : "text-neutral-200");
+      btn.className = "w-10 h-10 rounded-lg text-lg font-bold border transition-colors " + colorClass;
+      btn.textContent = SUIT_SYMBOL[suit];
+      btn.disabled = owned;
+      btn.title = owned ? d.suitOwnedHint : "";
+      if (!owned) {
+        btn.addEventListener("click", () => {
+          if (selectedSuits.has(suit)) selectedSuits.delete(suit);
+          else selectedSuits.add(suit);
+          renderTable(lastRoom, lastGame);
+        });
+      }
+      suitButtonsEl.appendChild(btn);
+    }
+  }
+
   function renderTargetPicker(game) {
     const showPicker =
       !isSpectating &&
       mySeat === game.activeSeat &&
       selectedRank != null &&
+      selectedSuits.size > 0 &&
       game.legal &&
       game.legal.targets.length > 1;
     targetPickerEl.hidden = !showPicker;
@@ -829,48 +1017,32 @@
       btn.className = "px-3 py-1 rounded-lg bg-neutral-800 hover:bg-purple-600 text-neutral-200 hover:text-white text-xs font-medium transition-colors";
       btn.textContent = p.displayName;
       btn.addEventListener("click", () => {
-        send({ type: "ask", targetSeat: seat, rank: selectedRank });
+        send({ type: "ask", targetSeat: seat, rank: selectedRank, suits: [...selectedSuits] });
         selectedRank = null;
+        selectedSuits = new Set();
       });
       targetButtonsEl.appendChild(btn);
     }
   }
 
-  function renderLog(game) {
-    logEl.textContent = "";
-    const nameOf = (seat) => (seat === mySeat ? d.youLabel : lastRoom.players[seat] ? lastRoom.players[seat].displayName : "?");
-    for (const entry of game.log) {
-      const li = document.createElement("li");
-      if (entry.pass) {
-        li.textContent = fillTemplate(d.logPassTpl, { NAME: nameOf(entry.askerSeat) });
-      } else if (entry.hit) {
-        li.textContent = fillTemplate(d.logHitTpl, {
-          ASKER: nameOf(entry.askerSeat),
-          TARGET: nameOf(entry.targetSeat),
-          RANK: rankLabel(entry.rank),
-          COUNT: entry.revealed.length,
-        });
-      } else {
-        li.textContent = fillTemplate(d.logMissTpl, {
-          ASKER: nameOf(entry.askerSeat),
-          TARGET: nameOf(entry.targetSeat),
-          RANK: rankLabel(entry.rank),
-        });
-      }
-      logEl.appendChild(li);
-      if (entry.completedChests && entry.completedChests.length) {
-        // Always the asker/active seat - sunduchkiEngine.js's
-        // layDownCompletedChests only ever runs on the active player's own
-        // hand, whether the 4th card arrived via a hit or a post-miss draw.
-        for (const rank of entry.completedChests) {
-          const chestLi = document.createElement("li");
-          chestLi.className = "text-amber-400";
-          chestLi.textContent = fillTemplate(d.logChestTpl, { NAME: nameOf(entry.askerSeat), RANK: rankLabel(rank) });
-          logEl.appendChild(chestLi);
-        }
-      }
+  // Spawns an anchored badge (over the acting seat's own nameplate) for one
+  // freshly-arrived public log entry - see spawnLogBadges' caller in
+  // renderTable for how "freshly arrived" is determined. Chest completions
+  // don't get their own badge here - chestFlourishAnimate (already triggered
+  // from renderOpponents/renderHand's own before/after chest-count diff)
+  // covers that payoff moment on the chest counter itself.
+  function spawnActionBadge(entry) {
+    if (entry.pass) {
+      showActionBadge(entry.askerSeat, d.badgePassTpl, "bg-neutral-700 text-neutral-200");
+    } else if (entry.hit) {
+      showActionBadge(
+        entry.askerSeat,
+        fillTemplate(d.badgeHitTpl, { RANK: rankLabel(entry.rank), COUNT: entry.revealed.length }),
+        "bg-emerald-700 text-emerald-50"
+      );
+    } else {
+      showActionBadge(entry.askerSeat, fillTemplate(d.badgeMissTpl, { RANK: rankLabel(entry.rank) }), "bg-rose-900 text-rose-100");
     }
-    logEl.scrollTop = logEl.scrollHeight;
   }
 
   function renderStatus(room, game) {
@@ -901,11 +1073,41 @@
     autoPassTimer = setTimeout(() => send({ type: "passEmpty" }), 700);
   }
 
+  function logEntryKey(entry) {
+    return JSON.stringify(entry);
+  }
+
+  function renderDeck(game) {
+    deckEl.textContent = "";
+    if (game.deckCount > 0) {
+      deckEl.appendChild(buildCardBackEl("w-14 h-20"));
+      if (game.deckCount > 1) deckEl.appendChild(buildCardBackEl("w-14 h-20", "-ml-11"));
+    }
+  }
+
   function renderTable(room, game, justDealt) {
     if (!game || !room) return;
     lastRoom = room;
     lastGame = game;
     deckCountEl.textContent = String(game.deckCount);
+    renderDeck(game);
+
+    // Which log entries are new since the last render, by content rather
+    // than array length: game.log is capped to the last 50 entries
+    // (sunduchkiEngine.js's serializePublicState), so once a long game hits
+    // that cap the array keeps shifting and its length plateaus - comparing
+    // lengths alone would silently stop detecting new entries. If the
+    // previously-last entry can't be found at all (the cap evicted it, or
+    // this is the very first render of a resumed/spectated room), fall back
+    // to treating only the current last entry as new rather than replaying
+    // a whole backlog of sounds/badges.
+    let newEntries = [];
+    if (!justDealt && game.log.length) {
+      const keys = game.log.map(logEntryKey);
+      const idx = previousLastLogKey ? keys.lastIndexOf(previousLastLogKey) : -1;
+      newEntries = idx >= 0 ? game.log.slice(idx + 1) : game.log.slice(-1);
+    }
+    previousLastLogKey = game.log.length ? logEntryKey(game.log[game.log.length - 1]) : null;
 
     if (justDealt) {
       // Fresh game - nothing rendered so far counts as "newly arrived" (see
@@ -914,28 +1116,27 @@
       // per-move "slide" cue.
       previousHandKeys = null;
       previousChestCounts = null;
-      previousLogLength = 0;
       playSound("shuffle");
-    } else if (game.log.length > previousLogLength) {
-      // A new public log entry landed since the last render - something
-      // moved (a hit's transfer, a miss's draw, or a pass's draw). This can
-      // also fire from a purely local re-render (e.g. selecting a rank),
-      // which is why it's gated on the log actually having grown rather than
+    } else if (newEntries.length) {
+      // This can also fire from a purely local re-render (e.g. selecting a
+      // rank), which is why it's gated on actual new entries rather than
       // just "not justDealt".
       playSound("slide");
+      for (const entry of newEntries) spawnActionBadge(entry);
     }
-    previousLogLength = game.log.length;
 
     const chestCountsBefore = previousChestCounts;
     renderOpponents(room, game, justDealt, chestCountsBefore);
     renderHand(game, justDealt, chestCountsBefore);
+    renderSuitPicker(game);
     renderTargetPicker(game);
-    renderLog(game);
     renderStatus(room, game);
     maybeAutoPass(game);
     previousChestCounts = new Map(game.players.map((p) => [p.seat, p.chests.length]));
+    myClockEl.title = d.timeRemainingTooltip;
+    renderClockDisplays(); // paint immediately - the 250ms interval alone would leave a blank flash
     if (game.result) {
-      stopTurnTicking();
+      stopClockTicking();
       showResult(room, game);
     } else {
       resultOverlayEl.hidden = true;

@@ -85,18 +85,19 @@
        data-left-result-title-tpl="<%= t('games.sunduchki.leftResultTitleTpl', { name: '__NAME__' }) %>"
        data-winner-label="<%= t('games.sunduchki.winnerLabel') %>"
        data-you-label="<%= t('games.sunduchki.youLabel') %>"
-       data-log-hit-tpl="<%= t('games.sunduchki.logHitTpl', { asker: '__ASKER__', target: '__TARGET__', rank: '__RANK__', count: '__COUNT__' }) %>"
-       data-log-miss-tpl="<%= t('games.sunduchki.logMissTpl', { asker: '__ASKER__', target: '__TARGET__', rank: '__RANK__' }) %>"
-       data-log-chest-tpl="<%= t('games.sunduchki.logChestTpl', { name: '__NAME__', rank: '__RANK__' }) %>"
-       data-log-pass-tpl="<%= t('games.sunduchki.logPassTpl', { name: '__NAME__' }) %>"
        data-action-left-tpl="<%= t('games.sunduchki.actionLeftTpl', { name: '__NAME__' }) %>"
        data-action-disconnect-tpl="<%= t('games.sunduchki.actionDisconnectTpl', { name: '__NAME__' }) %>"
        data-action-timeout-tpl="<%= t('games.sunduchki.actionTimeoutTpl', { name: '__NAME__' }) %>"
        data-action-clock-tpl="<%= t('games.sunduchki.actionClockTpl', { name: '__NAME__' }) %>"
        data-action-kicked-tpl="<%= t('games.sunduchki.actionKickedTpl', { name: '__NAME__' }) %>"
+       data-badge-hit-tpl="<%= t('games.sunduchki.badgeHitTpl', { rank: '__RANK__', count: '__COUNT__' }) %>"
+       data-badge-miss-tpl="<%= t('games.sunduchki.badgeMissTpl', { rank: '__RANK__' }) %>"
+       data-badge-pass-tpl="<%= t('games.sunduchki.badgePassTpl') %>"
        data-time-remaining-tooltip="<%= t('games.sunduchki.timeRemainingTooltip') %>"
        data-pick-target-prompt="<%= t('games.sunduchki.pickTargetPrompt') %>"
-       data-pick-rank-prompt="<%= t('games.sunduchki.pickRankPrompt') %>">
+       data-pick-rank-prompt="<%= t('games.sunduchki.pickRankPrompt') %>"
+       data-pick-suit-prompt="<%= t('games.sunduchki.pickSuitPrompt') %>"
+       data-suit-owned-hint="<%= t('games.sunduchki.suitOwnedHint') %>">
 
     <p id="skp-connstatus" class="text-sm text-neutral-500 mb-3"></p>
 
@@ -184,9 +185,80 @@
         <p id="skp-waiting-hint" class="text-xs text-neutral-500 mt-2" hidden><%= t('games.sunduchki.waitingForPlayers') %></p>
       </div>
 
-      <%# Host-editable game rules - only editable while the room is still
-          "lobby" (sunduchkiRoomManager.js's handleSetRules enforces this
-          server-side too). %>
+      <%# The board comes right after the room header, before the rules panel
+          and ready check - so getting into a live round never needs a scroll
+          past either of those, in the room view and in read-only
+          spectator/watch-hub embeds alike. Both hidden panels below take no
+          layout space (a room never has table-wrap AND ready-check visible
+          at once - sunduchki-multiplayer.js's renderRoom() flips table-wrap
+          only once status leaves "starting"), so this order costs nothing
+          while they're the ones being shown instead. %>
+      <div id="skp-table-wrap" class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4" hidden>
+        <div id="skp-board" class="relative rounded-lg bg-neutral-950 border border-neutral-800 min-h-[420px] flex flex-col">
+          <div class="px-3 pt-3">
+            <div id="skp-opponents" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <%# Deck pile - a plain stacked pair of card-backs (no trump card,
+              unlike Durak's own #dmp-deck, so nothing to reveal here). %>
+          <div class="flex items-center justify-center gap-2 px-3 py-2 text-xs text-neutral-500">
+            <div id="skp-deck" class="flex items-end"></div>
+            <span><%= t('games.sunduchki.deckLabel') %>: <span id="skp-deck-count" class="text-neutral-200 tabular-nums">0</span></span>
+          </div>
+
+          <p id="skp-status" class="text-center text-sm text-neutral-400 px-3 min-h-[1.5em]"></p>
+
+          <%# Step 2 of the ask (after picking a rank from your hand below):
+              pick one or more suits of that rank - see
+              sunduchki-multiplayer.js's renderSuitPicker(). %>
+          <div id="skp-suit-picker" class="px-3 pt-2" hidden>
+            <p class="text-xs text-neutral-500 mb-1.5" id="skp-suit-picker-label"></p>
+            <div id="skp-suit-buttons" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <%# Step 3: target picker - only shown once a rank AND suit(s) have
+              been picked and questionTarget="any" leaves more than one legal
+              option (a single legal target, or questionTarget="next",
+              instead sends on clicking that opponent's block directly). %>
+          <div id="skp-target-picker" class="px-3 pt-2" hidden>
+            <p class="text-xs text-neutral-500 mb-1.5" id="skp-target-picker-label"></p>
+            <div id="skp-target-buttons" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <div id="skp-hand-panel" class="px-3 pb-3 pt-2">
+            <div class="flex items-center justify-between mb-1.5">
+              <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.sunduchki.yourHand') %></p>
+              <div class="flex items-center gap-2">
+                <span id="skp-my-chests" class="flex items-center gap-1 text-xs font-medium text-amber-400 tabular-nums" hidden>
+                  <img src="/images/games/sunduchki/chest.png" alt="" class="w-3.5 h-3.5 object-contain">
+                  <%= t('games.sunduchki.chestsLabel') %>: <span id="skp-my-chests-count">0</span>
+                </span>
+                <span id="skp-my-clock" class="text-xs font-mono tabular-nums text-neutral-400"></span>
+              </div>
+            </div>
+            <div id="skp-hand" class="flex flex-wrap justify-center gap-2 min-h-[88px]"></div>
+          </div>
+        </div>
+
+        <div id="skp-result-overlay" hidden
+             class="absolute inset-3 sm:inset-4 rounded-lg bg-neutral-950/85 backdrop-blur-sm grid place-items-center text-center">
+          <div class="px-4">
+            <h2 id="skp-result-title" class="text-xl font-semibold text-neutral-100 mb-2"></h2>
+            <p id="skp-result-detail" class="text-sm text-neutral-400 mb-2"></p>
+            <ol id="skp-result-standings" class="text-sm text-neutral-400 mb-4 space-y-0.5"></ol>
+            <button type="button" id="skp-result-back-btn"
+                    class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.sunduchki.backToLobby') %></button>
+          </div>
+        </div>
+      </div>
+
+      <%# Host-editable game rules - only shown, and only editable, while the
+          room is still "lobby" (sunduchkiRoomManager.js's handleSetRules
+          enforces this server-side too). Once "playing" starts this full
+          form is replaced by #skp-rules-summary below - a one-line, read-only
+          recap instead of the same selects re-shown disabled, which used to
+          push the (now board-first) table further down than a settled
+          ruleset needs. %>
       <div id="skp-rules-panel" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 mb-4">
         <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.sunduchki.rulesPanelTitle') %></p>
         <div>
@@ -210,6 +282,17 @@
         <p id="skp-rules-host-hint" class="text-xs text-neutral-600 mt-2" hidden><%= t('games.sunduchki.rulesHostOnlyHint') %></p>
       </div>
 
+      <%# Compact read-only recap shown only while "playing" - see the
+          comment on #skp-rules-panel above. Built client-side from these
+          data-* fragments (sunduchki-multiplayer.js's renderRulesPanel) since
+          which combination applies depends on the room's live rules. %>
+      <p id="skp-rules-summary" hidden class="text-xs text-neutral-500 mt-3 mb-4"
+         data-label="<%= t('games.sunduchki.rulesSummaryLabel') %>"
+         data-deck-36="<%= t('games.sunduchki.ruleDeckSize36') %>"
+         data-deck-52="<%= t('games.sunduchki.ruleDeckSize52') %>"
+         data-target-next="<%= t('games.sunduchki.ruleQuestionTargetNext') %>"
+         data-target-any="<%= t('games.sunduchki.ruleQuestionTargetAny') %>"></p>
+
       <%# Ready check - shown only while room.status === "starting". %>
       <div id="skp-ready-check" hidden class="rounded-xl border border-purple-700/60 bg-neutral-900 p-6 mb-4 text-center">
         <p class="text-base font-semibold text-neutral-100 mb-1"><%= t('games.sunduchki.readyCheckTitle') %></p>
@@ -219,55 +302,6 @@
         <button type="button" id="skp-ready-accept-btn"
                 class="px-6 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.sunduchki.readyCheckAccept') %></button>
         <p id="skp-ready-waiting" hidden class="text-sm text-neutral-500 mt-3"><%= t('games.sunduchki.readyCheckWaiting') %></p>
-      </div>
-
-      <div id="skp-table-wrap" class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4" hidden>
-        <div id="skp-board" class="relative rounded-lg bg-neutral-950 border border-neutral-800 min-h-[420px] flex flex-col">
-          <div class="px-3 pt-3">
-            <div id="skp-opponents" class="flex flex-wrap justify-center gap-2"></div>
-          </div>
-
-          <div class="flex items-center justify-center gap-4 px-3 py-2 text-xs text-neutral-500">
-            <span><%= t('games.sunduchki.deckLabel') %>: <span id="skp-deck-count" class="text-neutral-200 tabular-nums">0</span></span>
-            <span id="skp-turn-timer" class="font-mono tabular-nums" hidden></span>
-          </div>
-
-          <p id="skp-status" class="text-center text-sm text-neutral-400 px-3 min-h-[1.5em]"></p>
-
-          <%# Public ask/answer log - the "logical" part of the game: every
-              question and answer is visible to the whole table, not just the
-              two players involved. %>
-          <div class="px-3">
-            <ul id="skp-log" class="max-h-28 overflow-y-auto text-xs text-neutral-400 space-y-0.5 rounded-lg bg-neutral-900/60 border border-neutral-800 p-2"></ul>
-          </div>
-
-          <%# Target picker - only shown once a rank has been picked from your
-              hand and questionTarget="any" leaves more than one legal
-              option (see sunduchki-multiplayer.js's renderAskControls). %>
-          <div id="skp-target-picker" class="px-3 pt-2" hidden>
-            <p class="text-xs text-neutral-500 mb-1.5" id="skp-target-picker-label"></p>
-            <div id="skp-target-buttons" class="flex flex-wrap justify-center gap-2"></div>
-          </div>
-
-          <div id="skp-hand-panel" class="px-3 pb-3 pt-2">
-            <div class="flex items-center justify-between mb-1.5">
-              <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.sunduchki.yourHand') %></p>
-              <span id="skp-my-chests" class="text-xs font-medium text-amber-400 tabular-nums" hidden><%= t('games.sunduchki.chestsLabel') %>: <span id="skp-my-chests-count">0</span></span>
-            </div>
-            <div id="skp-hand" class="flex flex-wrap justify-center gap-2 min-h-[88px]"></div>
-          </div>
-        </div>
-
-        <div id="skp-result-overlay" hidden
-             class="absolute inset-3 sm:inset-4 rounded-lg bg-neutral-950/85 backdrop-blur-sm grid place-items-center text-center">
-          <div class="px-4">
-            <h2 id="skp-result-title" class="text-xl font-semibold text-neutral-100 mb-2"></h2>
-            <p id="skp-result-detail" class="text-sm text-neutral-400 mb-2"></p>
-            <ol id="skp-result-standings" class="text-sm text-neutral-400 mb-4 space-y-0.5"></ol>
-            <button type="button" id="skp-result-back-btn"
-                    class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.sunduchki.backToLobby') %></button>
-          </div>
-        </div>
       </div>
     </section>
   </div>
