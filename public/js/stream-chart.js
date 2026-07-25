@@ -155,12 +155,17 @@
   }
 
   // ---------------------------------------------------------------------------------------
-  // Category strip - plain HTML segments (not SVG), widths proportional to real elapsed time.
-  // Each distinct category gets its own highlight colour (a soft tint + a solid accent bar) and,
-  // when Twitch has cover art for it, its box-art thumbnail. Colour is keyed to the category name
-  // so the same game reads identically wherever it recurs; identity still comes primarily from the
-  // label + art + tooltip (the palette repeats past 10 distinct games). A narrow segment simply
-  // clips its own thumbnail/label via overflow-hidden - no width threshold to tune.
+  // Category strip - plain HTML segments (not SVG), positioned by REAL elapsed time on the exact
+  // same [startMs, endMs] domain the lines and x-axis use (each segment gets an absolute left% +
+  // width%, not a flush-packed flex width). This is what keeps the strip aligned: a category sits
+  // directly under the stretch of chart it was live for, so the first segment starts at the first
+  // viewer sample - matching the first data point - instead of at the plot's left edge, and the
+  // last reaches the session end - matching the x-axis - instead of falling short. Each distinct
+  // category gets its own highlight colour (a soft tint + a solid accent bar) and, when Twitch has
+  // cover art for it, its box-art thumbnail. Colour is keyed to the category name so the same game
+  // reads identically wherever it recurs; identity still comes primarily from the label + art +
+  // tooltip (the palette repeats past 10 distinct games). A narrow segment simply clips its own
+  // thumbnail/label via overflow-hidden - no width threshold to tune.
   // ---------------------------------------------------------------------------------------
   const colorForCategory = (name, assigned) => {
     if (!assigned.has(name)) assigned.set(name, CATEGORY_PALETTE[assigned.size % CATEGORY_PALETTE.length]);
@@ -176,17 +181,24 @@
     segments.forEach((seg) => {
       const segStart = new Date(seg.startAt).getTime();
       const segEnd = new Date(seg.endAt).getTime();
-      const widthPct = ((segEnd - segStart) / totalMs) * 100;
+      // Clamp to the plot so a segment straddling either edge can never overflow the strip.
+      const leftPct = Math.max(0, ((segStart - startMs) / totalMs) * 100);
+      const widthPct = Math.min(100, ((segEnd - startMs) / totalMs) * 100) - leftPct;
       if (widthPct <= 0) return;
 
       const label = seg.category || "—";
       const color = seg.category ? colorForCategory(seg.category, assigned) : "#525252";
 
       const div = document.createElement("div");
+      // top/bottom set inline (not via an `inset-y-0` class) so the strip doesn't depend on a
+      // Tailwind rebuild to emit a class nothing else on the site uses.
+      div.style.left = `${leftPct}%`;
+      div.style.top = "0";
+      div.style.bottom = "0";
       div.style.width = `${widthPct}%`;
       div.style.background = `${color}26`; // ~15% tint over the dark surface
       div.style.borderBottom = `2px solid ${color}`;
-      div.className = "relative flex items-center gap-1 overflow-hidden min-w-0 text-neutral-200";
+      div.className = "absolute flex items-center gap-1 overflow-hidden text-neutral-200";
       div.title = `${label} — ${dateTimeFmt.format(segStart)} → ${
         seg.endAt ? dateTimeFmt.format(segEnd) : "…"
       }`;
