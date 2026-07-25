@@ -44,6 +44,43 @@
     }
   }
 
+  // Actually inside the hub's iframe (not just a `?watch=` link opened
+  // directly in a normal tab - embedWatchRoomId alone can't tell those apart).
+  // Only the hub case has no left margin of its own to float the spectator
+  // cluster/picker into (spectatorCluster.ejs's header comment) - the hub
+  // page shows its own instance instead, fed by the postMessage below, so
+  // this page's local instance must stay suppressed to avoid showing both.
+  const isHubEmbed = !!(embedWatchRoomId && window.parent && window.parent !== window);
+
+  function postSpectatorEmoteState(room, yourEmoteId, spectating) {
+    if (!isHubEmbed) return;
+    try {
+      window.parent.postMessage(
+        {
+          type: "spectatorEmoteState",
+          roomId: embedWatchRoomId,
+          spectatorEmotes: room.spectatorEmotes || [],
+          yourEmoteId: yourEmoteId || null,
+          isSpectating: !!spectating,
+        },
+        location.origin
+      );
+    } catch (_) {
+      /* same-origin iframe - shouldn't throw */
+    }
+  }
+
+  // The hub forwards a click on ITS OWN picker back down here as this message
+  // (watch-hub.js's onSelect) - this page still owns the only live websocket
+  // to the room, so it's the one that actually has to send the WS message.
+  window.addEventListener("message", (event) => {
+    if (event.origin !== location.origin) return;
+    const msg = event.data;
+    if (msg && msg.type === "setSpectatorEmote" && embedWatchRoomId) {
+      send({ type: "setSpectatorEmote", emoteId: msg.emoteId });
+    }
+  });
+
   const SUIT_SYMBOL = { S: "♠", H: "♥", D: "♦", C: "♣" };
   const RANK_LABEL = { 11: "J", 12: "Q", 13: "K", 14: "A" };
 
@@ -179,7 +216,7 @@
   // routed entirely outside the roomState/action message flow (see the
   // "sticker" branch in handleMessage()).
   const STICKER_BASE = "/images/games/durak/stickers/";
-  const STICKER_FILES = { subprise: "subprise.png", bloodtrail: "bloodtrail.png", jokerge: "jokerge.png" };
+  const STICKER_FILES = { subprise: "subprise.png", bloodtrail: "bloodtrail.png", jokerge: "jokerge.png", latege: "latege.webp" };
 
   // How long a popped sticker stays in the DOM - must be >= the
   // durak-sticker-pop CSS animation's own duration (public/css/input.css) so
@@ -282,6 +319,9 @@
   const copyLinkBtn = document.getElementById("dmp-copy-link-btn");
   const spectatorCountEl = document.getElementById("dmp-spectator-count");
   const spectatorCluster = window.initSpectatorCluster ? window.initSpectatorCluster() : { update: function () {} };
+  const spectatorEmotePicker = window.initSpectatorEmotePicker
+    ? window.initSpectatorEmotePicker({ onSelect: function (emoteId) { send({ type: "setSpectatorEmote", emoteId: emoteId }); } })
+    : { show: function () {}, hide: function () {}, setSelected: function () {} };
   const avgRatingEl = document.getElementById("dmp-avg-rating");
   const earlyFinishBannerEl = document.getElementById("dmp-early-finish-banner");
   const spectatingBadgeEl = document.getElementById("dmp-spectating-badge");
@@ -689,6 +729,7 @@
       "not-host": d.errNotHost,
       "room-not-watchable": d.errRoomNotWatchable,
       "sticker-rate-limited": d.errStickerRateLimited,
+      "spectator-emote-rate-limited": d.errSpectatorEmoteRateLimited,
       "not-in-lobby": d.errNotInLobby,
       "player-not-found": d.errPlayerNotFound,
     };
@@ -812,7 +853,10 @@
   function switchView(inRoom) {
     lobbyViewEl.hidden = inRoom;
     roomViewEl.hidden = !inRoom;
-    if (!inRoom) spectatorCluster.update(0); // back in the lobby - no active match to show spectators of
+    if (!inRoom) {
+      spectatorCluster.update(0); // back in the lobby - no active match to show spectators of
+      spectatorEmotePicker.hide();
+    }
   }
 
   function renderRoom(msg) {
@@ -826,7 +870,20 @@
     spectatingBadgeEl.hidden = !isSpectating;
     spectatorCountEl.hidden = !room.spectatorCount;
     if (room.spectatorCount) spectatorCountEl.textContent = fillTemplate(d.spectatorCountTpl, { COUNT: room.spectatorCount });
-    spectatorCluster.update(room.spectatorCount || 0);
+    // Inside the hub's iframe, relay up to the hub's own instance instead of
+    // rendering locally (see isHubEmbed's own comment) - otherwise (a normal
+    // player, or a `?watch=` link opened directly in a plain tab) render here
+    // same as always.
+    if (isHubEmbed) {
+      postSpectatorEmoteState(room, msg.yourEmoteId, isSpectating);
+    } else {
+      spectatorCluster.update(room.spectatorEmotes && room.spectatorEmotes.length ? room.spectatorEmotes : room.spectatorCount || 0);
+      // Only an actual spectator gets a picker - a migrated early finisher
+      // (isSpectating true, ownSeat set server-side) is still a spectators-map
+      // entry with its own emoteId, so this covers them too.
+      if (isSpectating) spectatorEmotePicker.show(msg.yourEmoteId);
+      else spectatorEmotePicker.hide();
+    }
     avgRatingEl.hidden = room.avgRating == null;
     if (room.avgRating != null) avgRatingEl.textContent = fillTemplate(d.avgRatingTpl, { RATING: room.avgRating });
 

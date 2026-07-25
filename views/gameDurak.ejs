@@ -199,6 +199,7 @@
          data-err-not-host="<%= t('games.durakMultiplayer.errorNotHost') %>"
          data-err-room-not-watchable="<%= t('games.durakMultiplayer.errorRoomNotWatchable') %>"
          data-err-sticker-rate-limited="<%= t('games.durakMultiplayer.errorStickerRateLimited') %>"
+         data-err-spectator-emote-rate-limited="<%= t('games.durakMultiplayer.errorSpectatorEmoteRateLimited') %>"
          data-err-not-in-lobby="<%= t('games.durakMultiplayer.errorNotInLobby') %>"
          data-err-player-not-found="<%= t('games.durakMultiplayer.errorPlayerNotFound') %>"
          data-err-generic="<%= t('games.durakMultiplayer.errorGeneric') %>"
@@ -302,6 +303,12 @@
                       class="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.durakMultiplayer.stopWatching') %></button>
             </div>
           </div>
+          <%# Renders both the fixed left-margin panel and its narrow-viewport
+              inline fallback (see views/partials/spectatorCluster.ejs for why
+              both exist) - only one include call per page (duplicate ids
+              otherwise), placed here near the top of the room view so the
+              inline variant never needs scrolling to reach. %>
+          <%- include('partials/spectatorCluster', { withEmotePicker: true }) %>
           <ul id="dmp-player-list" class="flex flex-wrap gap-2"></ul>
           <p id="dmp-waiting-hint" class="text-xs text-neutral-500 mt-2" hidden><%= t('games.durakMultiplayer.waitingForPlayers') %></p>
         </div>
@@ -344,6 +351,11 @@
                       class="w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 p-1 transition-colors"
                       title="<%= t('games.durakMultiplayer.stickerJokerge') %>">
                 <img src="/images/games/durak/stickers/jokerge.png" alt="<%= t('games.durakMultiplayer.stickerJokerge') %>" class="w-full h-full object-contain">
+              </button>
+              <button type="button" data-sticker-id="latege"
+                      class="w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 p-1 transition-colors"
+                      title="<%= t('games.durakMultiplayer.stickerLatege') %>">
+                <img src="/images/games/durak/stickers/latege.webp" alt="<%= t('games.durakMultiplayer.stickerLatege') %>" class="w-full h-full object-contain">
               </button>
             </div>
             <%# Shown from the moment MY OWN seat empties its hand with the
@@ -506,10 +518,10 @@
   </section>
 </main>
 
-<% if (!embedWatch) { %><%- include('partials/spectatorCluster') %><% } %>
 <%- include('partials/gameVolumeControl') %>
 <script src="/js/games/gameVolume.js" defer></script>
 <script src="/js/games/spectatorCluster.js" defer></script>
+<script src="/js/games/spectatorEmotePicker.js" defer></script>
 <script src="/js/games/durak.js" defer></script>
 <script src="/js/games/durak-multiplayer.js" defer></script>
 <script src="/js/games/durak-mode-select.js" defer></script>

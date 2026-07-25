@@ -14,6 +14,18 @@
     <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.watch.backToGames') %></a>
   </div>
 
+  <%# The embedded game page (Durak/Sunduchki) has its OWN spectator-cluster
+      instance too, but that one lives inside the iframe's own document, which
+      has no left margin to float into - only THIS outer hub page does. So the
+      panel actually shown to a hub visitor lives here, fed over postMessage
+      from whichever match is currently embedded (public/js/games/watch-hub.js's
+      "spectatorEmoteState" listener) rather than from a live websocket of its
+      own - the hub page has no direct room connection, only the iframe does.
+      The embedded page suppresses its own local instance while it detects
+      it's actually inside this hub's iframe (window.self !== window.top), so
+      the two are never both visible at once. %>
+  <%- include('partials/spectatorCluster', { withEmotePicker: true }) %>
+
   <div id="watch-root"
        data-name-durak-multiplayer="<%= t('games.durak.name') %>"
        data-name-battleship="<%= t('games.battleship.name') %>"
@@ -66,5 +78,7 @@
   </div>
 </main>
 
+<script src="/js/games/spectatorCluster.js" defer></script>
+<script src="/js/games/spectatorEmotePicker.js" defer></script>
 <script src="/js/games/watch-hub.js" defer></script>
 <%- include('partials/foot') %>

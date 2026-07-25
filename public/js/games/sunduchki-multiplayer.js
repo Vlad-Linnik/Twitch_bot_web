@@ -42,6 +42,38 @@
     }
   }
 
+  // See durak-multiplayer.js's identical block for the full rationale: only
+  // the hub's iframe (not a `?watch=` link opened directly in a normal tab)
+  // has no left margin of its own, so this page's local spectator cluster/
+  // picker must stay suppressed there in favor of the hub's own instance.
+  const isHubEmbed = !!(embedWatchRoomId && window.parent && window.parent !== window);
+
+  function postSpectatorEmoteState(room, yourEmoteId, spectating) {
+    if (!isHubEmbed) return;
+    try {
+      window.parent.postMessage(
+        {
+          type: "spectatorEmoteState",
+          roomId: embedWatchRoomId,
+          spectatorEmotes: room.spectatorEmotes || [],
+          yourEmoteId: yourEmoteId || null,
+          isSpectating: !!spectating,
+        },
+        location.origin
+      );
+    } catch (_) {
+      /* same-origin iframe - shouldn't throw */
+    }
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.origin !== location.origin) return;
+    const msg = event.data;
+    if (msg && msg.type === "setSpectatorEmote" && embedWatchRoomId) {
+      send({ type: "setSpectatorEmote", emoteId: msg.emoteId });
+    }
+  });
+
   // Same card-rendering convention as durak-multiplayer.js (no image
   // sprites - every card is a small styled div built from {suit, rank}).
   const SUIT_SYMBOL = { S: "♠", H: "♥", D: "♦", C: "♣" };
@@ -201,6 +233,9 @@
   const copyLinkBtn = document.getElementById("skp-copy-link-btn");
   const spectatorCountEl = document.getElementById("skp-spectator-count");
   const spectatorCluster = window.initSpectatorCluster ? window.initSpectatorCluster() : { update: function () {} };
+  const spectatorEmotePicker = window.initSpectatorEmotePicker
+    ? window.initSpectatorEmotePicker({ onSelect: function (emoteId) { send({ type: "setSpectatorEmote", emoteId: emoteId }); } })
+    : { show: function () {}, hide: function () {}, setSelected: function () {} };
   const avgRatingEl = document.getElementById("skp-avg-rating");
   const spectatingBadgeEl = document.getElementById("skp-spectating-badge");
   const startBtn = document.getElementById("skp-start-btn");
@@ -398,6 +433,7 @@
       "not-enough-players": d.errNotEnoughPlayers,
       "not-host": d.errNotHost,
       "room-not-watchable": d.errRoomNotWatchable,
+      "spectator-emote-rate-limited": d.errSpectatorEmoteRateLimited,
       "not-in-lobby": d.errNotInLobby,
       "player-not-found": d.errPlayerNotFound,
       "not-your-turn": d.errNotYourTurn,
@@ -685,7 +721,10 @@
   function switchView(inRoom) {
     lobbyViewEl.hidden = inRoom;
     roomViewEl.hidden = !inRoom;
-    if (!inRoom) spectatorCluster.update(0);
+    if (!inRoom) {
+      spectatorCluster.update(0);
+      spectatorEmotePicker.hide();
+    }
   }
 
   function renderRoom(msg) {
@@ -699,7 +738,13 @@
     spectatingBadgeEl.hidden = !isSpectating;
     spectatorCountEl.hidden = !room.spectatorCount;
     if (room.spectatorCount) spectatorCountEl.textContent = fillTemplate(d.spectatorCountTpl, { COUNT: room.spectatorCount });
-    spectatorCluster.update(room.spectatorCount || 0);
+    if (isHubEmbed) {
+      postSpectatorEmoteState(room, msg.yourEmoteId, isSpectating);
+    } else {
+      spectatorCluster.update(room.spectatorEmotes && room.spectatorEmotes.length ? room.spectatorEmotes : room.spectatorCount || 0);
+      if (isSpectating) spectatorEmotePicker.show(msg.yourEmoteId);
+      else spectatorEmotePicker.hide();
+    }
     avgRatingEl.hidden = room.avgRating == null;
     if (room.avgRating != null) avgRatingEl.textContent = fillTemplate(d.avgRatingTpl, { RATING: room.avgRating });
 

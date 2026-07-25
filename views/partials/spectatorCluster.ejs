@@ -1,15 +1,82 @@
 <%# Shared visual spectator cluster for multiplayer game rooms (Durak,
-    Battleship, Pong, Connect Four) - a pile of little "viewer" icons in the
-    page's unused left-hand margin on wide screens, standing in for the
-    numeric "N watching" text those pages already show elsewhere. Hidden below
-    xl (no room there) via the class below, and hidden entirely at 0 viewers
-    via inline style (see spectatorCluster.js) - inline style wins the
-    cascade either way, so JS can force it off even on a wide viewport.
-    Wired by public/js/games/spectatorCluster.js's window.initSpectatorCluster()
-    through these fixed ids - a game view just includes this partial and its
-    client calls that once, then feeds it a live spectator count. %>
+    Sunduchki, Battleship, Pong, Connect Four) - a pile of little "viewer"
+    icons standing in for the numeric "N watching" text those pages already
+    show elsewhere. Wired by public/js/games/spectatorCluster.js's
+    window.initSpectatorCluster() - a game view just includes this partial
+    and its client calls that once, then feeds it a live spectator count.
+
+    TWO markup variants, both rendered unconditionally and switched purely by
+    a CSS breakpoint (never by embedWatch or anything else server-side):
+      - #spectator-cluster: the original fixed panel in the page's unused
+        left-hand margin, shown only at the xl breakpoint (`hidden xl:flex`)
+        where that margin actually exists, hidden entirely at 0 viewers via
+        inline style (see spectatorCluster.js) which wins the cascade either
+        way, so JS can force it off even on a wide viewport.
+      - #spectator-cluster-inline: the opposite breakpoint (`flex xl:hidden`),
+        flowing in the normal page layout instead of floating - for whichever
+        context has no such margin. Watching a specific room now ONLY happens
+        through the cross-game spectator-hub embed (the per-room "Watch"
+        button was removed in its favor) - that embed iframe is capped well
+        under xl by the hub's own layout (views/gameWatch.ejs's 1fr/20rem
+        grid), so the fixed variant above would never be visible there. But a
+        spectator opening a `?watch=` link directly in a normal wide tab gets
+        the exact same margin a player does - embedWatch is true in BOTH
+        cases, so it can't tell them apart; only an actual CSS breakpoint can.
+        Both games that use this (Durak/Sunduchki) include this partial once,
+        right near their room header, so the inline variant sits near the top
+        with no scrolling needed - the fixed variant doesn't care where in
+        the DOM it lives, since it's viewport-positioned either way.
+
+    initSpectatorCluster()/initSpectatorEmotePicker() each build whichever of
+    the two variants exist on the page and update both from one call, so
+    nothing here needs to know which is actually visible.
+
+    The picker lets Durak/Sunduchki's own spectators change which pile icon
+    represents THEM (realtime/spectatorEmotes.js's closed id set) instead of
+    the plain default viewer image - wired by
+    public/js/games/spectatorEmotePicker.js's window.initSpectatorEmotePicker().
+    Opt-in via the `withEmotePicker: true` local (only those two games' own
+    includes pass it) rather than rendered unconditionally: an <img> loads its
+    src regardless of the "hidden" attribute on an ancestor, so leaving this
+    markup in for Battleship/Pong/Connect Four would make every one of their
+    pages eagerly fetch all 6 emote images (one of them ~650KB) for a picker
+    those games never show. %>
+<% const spectatorEmoteList = [
+  ['default', '/images/games/spectator-viewer.png', 'spectatorEmoteDefault'],
+  ['binoculous', '/images/games/spectator-emotes/binoculous.webp', 'spectatorEmoteBinoculous'],
+  ['hmm', '/images/games/spectator-emotes/hmm.webp', 'spectatorEmoteHmm'],
+  ['peepoblanket', '/images/games/spectator-emotes/peepoblanket.webp', 'spectatorEmotePeepoblanket'],
+  ['peepoclap', '/images/games/spectator-emotes/peepoclap.webp', 'spectatorEmotePeepoclap'],
+  ['peepocheer', '/images/games/spectator-emotes/peepocheer.webp', 'spectatorEmotePeepocheer'],
+]; %>
 <div id="spectator-cluster"
      class="hidden xl:flex fixed left-6 top-1/2 -translate-y-1/2 z-30 flex-col items-center gap-1.5 pointer-events-none">
   <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.spectatorsLabel') %></p>
   <div id="spectator-cluster-pile" class="relative w-40 h-40"></div>
+  <% if (locals.withEmotePicker) { %>
+  <div id="spectator-emote-picker" class="pointer-events-auto flex flex-wrap justify-center gap-1 w-32" hidden>
+    <% spectatorEmoteList.forEach(function (e) { %>
+      <button type="button" data-emote-id="<%= e[0] %>"
+              class="w-6 h-6 rounded bg-neutral-800/80 hover:bg-neutral-700 p-0.5 transition-colors"
+              title="<%= t('games.' + e[2]) %>">
+        <img src="<%= e[1] %>" alt="<%= t('games.' + e[2]) %>" class="w-full h-full object-contain">
+      </button>
+    <% }); %>
+  </div>
+  <% } %>
+</div>
+<div id="spectator-cluster-inline" class="flex xl:hidden flex-col items-center gap-1.5 my-3">
+  <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.spectatorsLabel') %></p>
+  <div id="spectator-cluster-inline-pile" class="relative w-40 h-40"></div>
+  <% if (locals.withEmotePicker) { %>
+  <div id="spectator-emote-picker-inline" class="flex flex-wrap justify-center gap-1 w-32" hidden>
+    <% spectatorEmoteList.forEach(function (e) { %>
+      <button type="button" data-emote-id="<%= e[0] %>"
+              class="w-6 h-6 rounded bg-neutral-800/80 hover:bg-neutral-700 p-0.5 transition-colors"
+              title="<%= t('games.' + e[2]) %>">
+        <img src="<%= e[1] %>" alt="<%= t('games.' + e[2]) %>" class="w-full h-full object-contain">
+      </button>
+    <% }); %>
+  </div>
+  <% } %>
 </div>

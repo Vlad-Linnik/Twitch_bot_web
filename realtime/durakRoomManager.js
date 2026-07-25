@@ -20,7 +20,8 @@ const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const userProfileService = require("../db/userProfileService");
 const liveMatchRegistry = require("./liveMatchRegistry");
-const { durakRoomCreateLimiter, durakStickerLimiter } = require("../middleware/rateLimiters");
+const { durakRoomCreateLimiter, durakStickerLimiter, createSimpleLimiter } = require("../middleware/rateLimiters");
+const { isValidSpectatorEmote } = require("./spectatorEmotes");
 
 const MAX_PLAYERS = 6;
 const DISCONNECT_GRACE_MS = 60 * 1000;
@@ -44,7 +45,11 @@ const DEFAULT_RULES = { allowThrowIns: true, allowTransfers: false, deckSize: "a
 // actual images live at public/images/games/durak/stickers/). A closed set
 // server-validates msg.stickerId against, same reasoning as isCardShape()
 // below - never trust a client-supplied id straight through to a broadcast.
-const STICKER_IDS = new Set(["subprise", "bloodtrail", "jokerge"]);
+const STICKER_IDS = new Set(["subprise", "bloodtrail", "jokerge", "latege"]);
+// Sticker reactions are per-action bursts (durakStickerLimiter, 4/8s); a
+// spectator's own skin is a standing choice they change rarely, but still
+// bounded so a client can't force a broadcastRoom() rebuild on every tick.
+const spectatorEmoteLimiter = createSimpleLimiter({ windowMs: 4000, max: 6 });
 
 const rooms = new Map(); // roomId -> Room
 const socketMeta = new Map(); // ws -> { userId, login, displayName, roomId, watchRoomId }
@@ -169,6 +174,12 @@ function serializeRoomMeta(room) {
     status: room.status,
     rules: room.rules,
     spectatorCount: room.spectators ? room.spectators.size : 0,
+    // One entry per current spectator, their own chosen skin (or "default") -
+    // the shared spectator cluster (spectatorCluster.js) renders one pile icon
+    // per entry using this id instead of the same static viewer icon for
+    // everyone. Order is just Map insertion order (join order); nothing reads
+    // it as a stable per-spectator slot.
+    spectatorEmotes: room.spectators ? [...room.spectators.values()].map((s) => s.emoteId || "default") : [],
     // Sent on every roomState push regardless of status, so it's visible
     // both in the pre-start lobby (right after creating/joining a room) and
     // throughout the game itself - the same field, never recomputed
@@ -249,10 +260,20 @@ function broadcastRoom(room) {
     // leaveWatch instead of leaveRoom.
     const spectatorPayload = { type: "roomState", room: meta, game: engine.serializeForSpectator(room.game), clocks, spectating: true };
     for (const [ws, info] of room.spectators) {
+      // yourEmoteId is per-spectator (which button their own picker highlights
+      // as selected), so it's spread on top of the otherwise-shared payload
+      // object rather than folded into it.
       if (info.ownSeat != null) {
-        safeSend(ws, { type: "roomState", room: meta, game: engine.serializeForSeat(room.game, info.ownSeat), clocks, spectating: true });
+        safeSend(ws, {
+          type: "roomState",
+          room: meta,
+          game: engine.serializeForSeat(room.game, info.ownSeat),
+          clocks,
+          spectating: true,
+          yourEmoteId: info.emoteId || "default",
+        });
       } else {
-        safeSend(ws, spectatorPayload);
+        safeSend(ws, { ...spectatorPayload, yourEmoteId: info.emoteId || "default" });
       }
     }
   }
@@ -345,7 +366,7 @@ function resumeIntoRoom(ws, meta, room) {
   if (entry.spectatingOwnSeat) {
     meta.roomId = null;
     meta.watchRoomId = room.id;
-    room.spectators.set(ws, { userId: entry.userId, displayName: entry.displayName, ownSeat: room.players.indexOf(entry) });
+    room.spectators.set(ws, { userId: entry.userId, displayName: entry.displayName, ownSeat: room.players.indexOf(entry), emoteId: "default" });
   } else {
     meta.roomId = room.id;
   }
@@ -568,7 +589,7 @@ function migrateFinishersToSpectating(room, before) {
     const entry = room.players[seat];
     if (!entry || entry.left || entry.spectatingOwnSeat || !entry.ws) return;
     entry.spectatingOwnSeat = true;
-    room.spectators.set(entry.ws, { userId: entry.userId, displayName: entry.displayName, ownSeat: seat });
+    room.spectators.set(entry.ws, { userId: entry.userId, displayName: entry.displayName, ownSeat: seat, emoteId: "default" });
     const meta = socketMeta.get(entry.ws);
     if (meta) {
       meta.roomId = null;
@@ -784,7 +805,7 @@ function handleWatchRoom(ws, meta, roomId) {
   // a Watch button for it anymore anyway).
   if (room.status !== "playing") return sendError(ws, "room-not-watchable");
   lobbySockets.delete(ws);
-  room.spectators.set(ws, { userId: meta.userId, displayName: meta.displayName });
+  room.spectators.set(ws, { userId: meta.userId, displayName: meta.displayName, emoteId: "default" });
   meta.watchRoomId = room.id;
   broadcastRoom(room); // pushes the initial state to this spectator and the updated spectatorCount to everyone else
   broadcastLobby();
@@ -968,6 +989,21 @@ function handleSticker(ws, meta, stickerId) {
   broadcastSticker(room, seat, stickerId);
 }
 
+// A spectator's own choice of skin in the shared spectator cluster - unlike a
+// sticker this never pops and fades, it's a standing property of that
+// spectator until they change it again, so the only broadcast needed is the
+// next full roomState (spectatorEmotes carries it to everyone, yourEmoteId
+// tells this spectator's own picker which button to highlight).
+function handleSetSpectatorEmote(ws, meta, emoteId) {
+  const room = rooms.get(meta.watchRoomId);
+  if (!room) return sendError(ws, "not-watching");
+  const info = room.spectators.get(ws);
+  if (!info) return sendError(ws, "not-watching");
+  if (!spectatorEmoteLimiter(meta.userId)) return sendError(ws, "spectator-emote-rate-limited");
+  info.emoteId = emoteId;
+  broadcastRoom(room);
+}
+
 function handleGameAction(ws, meta, applyFn, msgType) {
   const room = rooms.get(meta.roomId);
   if (!room || room.status !== "playing") return sendError(ws, "not-playing");
@@ -1075,6 +1111,9 @@ function onMessage(ws, meta, raw) {
     case "sticker":
       if (typeof msg.stickerId !== "string" || !STICKER_IDS.has(msg.stickerId)) return sendError(ws, "bad-request");
       return handleSticker(ws, meta, msg.stickerId);
+    case "setSpectatorEmote":
+      if (!isValidSpectatorEmote(msg.emoteId)) return sendError(ws, "bad-request");
+      return handleSetSpectatorEmote(ws, meta, msg.emoteId);
     default:
       return;
   }

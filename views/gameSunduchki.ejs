@@ -63,6 +63,7 @@
        data-err-not-enough-players="<%= t('games.sunduchki.errorNotEnoughPlayers') %>"
        data-err-not-host="<%= t('games.sunduchki.errorNotHost') %>"
        data-err-room-not-watchable="<%= t('games.sunduchki.errorRoomNotWatchable') %>"
+       data-err-spectator-emote-rate-limited="<%= t('games.sunduchki.errorSpectatorEmoteRateLimited') %>"
        data-err-not-in-lobby="<%= t('games.sunduchki.errorNotInLobby') %>"
        data-err-player-not-found="<%= t('games.sunduchki.errorPlayerNotFound') %>"
        data-err-not-your-turn="<%= t('games.sunduchki.errorNotYourTurn') %>"
@@ -181,6 +182,10 @@
                     class="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.sunduchki.stopWatching') %></button>
           </div>
         </div>
+        <%# See gameDurak.ejs's identical comment: renders both the fixed
+            panel and its narrow-viewport inline fallback from one include
+            call, placed here near the top of the room view. %>
+        <% if (user) { %><%- include('partials/spectatorCluster', { withEmotePicker: true }) %><% } %>
         <ul id="skp-player-list" class="flex flex-wrap gap-2"></ul>
         <p id="skp-waiting-hint" class="text-xs text-neutral-500 mt-2" hidden><%= t('games.sunduchki.waitingForPlayers') %></p>
       </div>
@@ -308,9 +313,9 @@
   <% } %>
 </main>
 
-<% if (!embedWatch && user) { %><%- include('partials/spectatorCluster') %><% } %>
 <% if (!embedWatch && user) { %><%- include('partials/gameVolumeControl') %><% } %>
 <script src="/js/games/gameVolume.js" defer></script>
 <script src="/js/games/spectatorCluster.js" defer></script>
+<script src="/js/games/spectatorEmotePicker.js" defer></script>
 <script src="/js/games/sunduchki-multiplayer.js" defer></script>
 <%- include('partials/foot') %>

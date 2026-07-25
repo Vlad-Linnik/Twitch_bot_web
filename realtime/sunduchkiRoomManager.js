@@ -22,6 +22,7 @@ const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const userProfileService = require("../db/userProfileService");
 const liveMatchRegistry = require("./liveMatchRegistry");
 const { createSimpleLimiter } = require("../middleware/rateLimiters");
+const { isValidSpectatorEmote } = require("./spectatorEmotes");
 
 const MAX_PLAYERS = 6;
 const DISCONNECT_GRACE_MS = 60 * 1000;
@@ -34,6 +35,10 @@ const DEFAULT_RULES = { deckSize: "36", questionTarget: "next" };
 // adding another named export there per game): room creation is an
 // occasional lobby action, not something a legitimate player repeats quickly.
 const roomCreateLimiter = createSimpleLimiter({ windowMs: 10 * 60 * 1000, max: 5 });
+// Same reasoning/value as durakRoomManager.js's spectatorEmoteLimiter - a
+// spectator's skin is a standing choice changed rarely, just bounded so a
+// client can't force a broadcastRoom() rebuild on every tick.
+const spectatorEmoteLimiter = createSimpleLimiter({ windowMs: 4000, max: 6 });
 
 const rooms = new Map(); // roomId -> Room
 const socketMeta = new Map(); // ws -> { userId, login, displayName, roomId, watchRoomId }
@@ -136,6 +141,10 @@ function serializeRoomMeta(room) {
     status: room.status,
     rules: room.rules,
     spectatorCount: room.spectators ? room.spectators.size : 0,
+    // See durakRoomManager.js's identical field for the full rationale - one
+    // entry per current spectator's chosen skin, rendered as that spectator's
+    // own pile icon in the shared spectator cluster.
+    spectatorEmotes: room.spectators ? [...room.spectators.values()].map((s) => s.emoteId || "default") : [],
     avgRating: averageRating(room.players),
     players: room.players.map((p) => ({
       userId: p.userId,
@@ -186,7 +195,9 @@ function broadcastRoom(room) {
       clocks,
       spectating: true,
     };
-    for (const ws of room.spectators.keys()) safeSend(ws, spectatorPayload);
+    // yourEmoteId is per-spectator (which button their own picker highlights),
+    // so it's spread on top of the otherwise-shared payload object.
+    for (const [ws, info] of room.spectators) safeSend(ws, { ...spectatorPayload, yourEmoteId: info.emoteId || "default" });
   }
 }
 
@@ -507,7 +518,7 @@ function handleWatchRoom(ws, meta, roomId) {
   if (!room) return sendError(ws, "room-not-found");
   if (room.status !== "playing") return sendError(ws, "room-not-watchable");
   lobbySockets.delete(ws);
-  room.spectators.set(ws, { userId: meta.userId, displayName: meta.displayName });
+  room.spectators.set(ws, { userId: meta.userId, displayName: meta.displayName, emoteId: "default" });
   meta.watchRoomId = room.id;
   broadcastRoom(room);
   broadcastLobby();
@@ -521,6 +532,19 @@ function handleLeaveWatch(ws, meta) {
     broadcastLobby();
   }
   enterLobby(ws, meta);
+}
+
+// Same reasoning as durakRoomManager.js's identical handler: a standing
+// per-spectator property, not a fleeting reaction, so the only broadcast
+// needed is the next full roomState.
+function handleSetSpectatorEmote(ws, meta, emoteId) {
+  const room = rooms.get(meta.watchRoomId);
+  if (!room) return sendError(ws, "not-watching");
+  const info = room.spectators.get(ws);
+  if (!info) return sendError(ws, "not-watching");
+  if (!spectatorEmoteLimiter(meta.userId)) return sendError(ws, "spectator-emote-rate-limited");
+  info.emoteId = emoteId;
+  broadcastRoom(room);
 }
 
 // --- Ready check --------------------------------------------------------
@@ -678,6 +702,9 @@ function onMessage(ws, meta, raw) {
       return handleAsk(ws, meta, msg.targetSeat, msg.rank, msg.suits);
     case "passEmpty":
       return handlePassEmpty(ws, meta);
+    case "setSpectatorEmote":
+      if (!isValidSpectatorEmote(msg.emoteId)) return sendError(ws, "bad-request");
+      return handleSetSpectatorEmote(ws, meta, msg.emoteId);
     default:
       return;
   }

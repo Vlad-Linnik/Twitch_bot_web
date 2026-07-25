@@ -29,6 +29,24 @@
   const listEmptyEl = document.getElementById("watch-list-empty");
   const autoSwitchEl = document.getElementById("watch-auto-switch");
 
+  // This hub page has the only genuine "unused left margin" a spectator ever
+  // sees (the embedded game page's own copy has none - see spectatorCluster.ejs's
+  // header comment) - fed entirely over postMessage from whichever match is
+  // currently embedded, since this page has no live room connection of its
+  // own. Only Durak/Sunduchki's embedded pages actually send "spectatorEmoteState"
+  // (see their own postMessage call) - Battleship/Pong/Connect Four don't have
+  // a per-spectator skin, so their spectator count there just never updates
+  // this cluster (a pre-existing, lower-stakes gap, not something this change
+  // fixes for those three).
+  const spectatorCluster = window.initSpectatorCluster ? window.initSpectatorCluster() : { update: function () {} };
+  const spectatorEmotePicker = window.initSpectatorEmotePicker
+    ? window.initSpectatorEmotePicker({
+        onSelect: function (emoteId) {
+          if (frame && frame.contentWindow) frame.contentWindow.postMessage({ type: "setSpectatorEmote", emoteId: emoteId }, location.origin);
+        },
+      })
+    : { show: function () {}, hide: function () {}, setSelected: function () {} };
+
   const gameName = (game) => root.dataset["name" + toCamel(game)] || game;
   const matchVsTpl = root.dataset.matchVsTpl || "{{p1}} vs {{p2}}";
   const spectatorCountTpl = root.dataset.spectatorCountTpl || "{{count}} watching";
@@ -90,6 +108,12 @@
     idleEl.hidden = true;
     frameWrap.hidden = false;
     frame.src = src;
+    // Clear the previous match's viewers/picker state immediately - the new
+    // iframe's first "spectatorEmoteState" postMessage will repopulate it
+    // (or never arrive at all for a non-Durak/Sunduchki game), so nothing
+    // should show a stale carry-over from whatever was watched before.
+    spectatorCluster.update(0);
+    spectatorEmotePicker.hide();
     renderList();
   }
 
@@ -100,6 +124,8 @@
     frameWrap.hidden = true;
     idleEl.hidden = false;
     if (frame.src && frame.src !== "about:blank") frame.src = "about:blank";
+    spectatorCluster.update(0);
+    spectatorEmotePicker.hide();
     renderList();
   }
 
@@ -191,13 +217,20 @@
     }
   }
 
-  // --- Embedded page -> hub ("this match ended") -----------------------------
+  // --- Embedded page -> hub ("this match ended" / spectator viewers+picker) --
   window.addEventListener("message", (event) => {
     if (event.origin !== location.origin) return;
     const msg = event.data;
-    if (!msg || msg.type !== "spectatorMatchEnded") return;
+    if (!msg || typeof msg.type !== "string") return;
     if (!current || msg.roomId !== current.roomId) return; // stale / not the one we're on
-    handleCurrentEnded();
+
+    if (msg.type === "spectatorMatchEnded") {
+      handleCurrentEnded();
+    } else if (msg.type === "spectatorEmoteState") {
+      spectatorCluster.update(msg.spectatorEmotes || []);
+      if (msg.isSpectating) spectatorEmotePicker.show(msg.yourEmoteId);
+      else spectatorEmotePicker.hide();
+    }
   });
 
   // --- Auto-switch toggle -----------------------------------------------------
