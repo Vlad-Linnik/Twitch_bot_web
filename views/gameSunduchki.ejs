@@ -238,6 +238,7 @@
                   <img src="/images/games/sunduchki/chest.png" alt="" class="w-3.5 h-3.5 object-contain">
                   <%= t('games.sunduchki.chestsLabel') %>: <span id="skp-my-chests-count">0</span>
                 </span>
+                <%- include('partials/handSortControl', { handSortKey: 'sunduchkiHandSortMode', handSortDefault: 'rank' }) %>
                 <span id="skp-my-clock" class="text-xs font-mono tabular-nums text-neutral-400"></span>
               </div>
             </div>
@@ -315,6 +316,7 @@
 
 <% if (!embedWatch && user) { %><%- include('partials/gameVolumeControl') %><% } %>
 <script src="/js/games/gameVolume.js" defer></script>
+<script src="/js/games/handSortMode.js" defer></script>
 <script src="/js/games/spectatorCluster.js" defer></script>
 <script src="/js/games/spectatorEmotePicker.js" defer></script>
 <script src="/js/games/sunduchki-multiplayer.js" defer></script>

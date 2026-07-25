@@ -1258,6 +1258,29 @@
     }
   }
 
+  // The server sends game.you.hand in dealt order (durakEngine.js never
+  // reorders it) - sorting is purely a display concern, so it's done here on
+  // a copy rather than mutated in place, same reasoning as sunduchki-
+  // multiplayer.js's own hand sort. Mirrors durak.js's single-player
+  // sortHand() so both modes look identical between the two Durak variants.
+  function sortedHand(game) {
+    const mode = window.handSortMode ? window.handSortMode.get() : "suit";
+    const hand = game.you.hand.slice();
+    if (mode === "rank") {
+      hand.sort((a, b) => a.rank - b.rank || a.suit.localeCompare(b.suit));
+      return hand;
+    }
+    const trump = game.trumpSuit;
+    hand.sort((a, b) => {
+      const at = a.suit === trump ? 1 : 0;
+      const bt = b.suit === trump ? 1 : 0;
+      if (at !== bt) return at - bt;
+      if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
+      return a.rank - b.rank;
+    });
+    return hand;
+  }
+
   function renderHand(game, justDealt) {
     handEl.textContent = "";
     const legal = game.legal;
@@ -1267,7 +1290,7 @@
     // which is also empty whenever the defender simply has no beatable card
     // for the current attack (still their turn to respond, just via Take).
     const isDefending = legal.canTake;
-    game.you.hand.forEach((card, index) => {
+    sortedHand(game).forEach((card, index) => {
       let isLegal = false;
       let onClick = null;
       if (legal.canOpen) {
@@ -1476,6 +1499,15 @@
       li.textContent = fillTemplate(d.finishRankTpl, { RANK: entry.finishRank }) + ": " + nameOf(entry.seat);
       resultStandingsEl.appendChild(li);
     }
+  }
+
+  // Re-render just the hand (not the whole table) whenever the player flips
+  // the shared sort-mode toggle mid-game - lastRenderedGame is set at the top
+  // of every renderTable() call, so it always reflects the latest state.
+  if (window.handSortMode) {
+    window.handSortMode.onChange(() => {
+      if (lastRenderedGame && lastRenderedGame.you) renderHand(lastRenderedGame, false);
+    });
   }
 
   // --- Boot --------------------------------------------------------------------

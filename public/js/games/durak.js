@@ -335,6 +335,11 @@
   let resolving = false;
 
   function sortHand(hand) {
+    const mode = window.handSortMode ? window.handSortMode.get() : "suit";
+    if (mode === "rank") {
+      hand.sort((a, b) => a.rank - b.rank || a.suit.localeCompare(b.suit));
+      return;
+    }
     hand.sort((a, b) => {
       const at = a.suit === trumpSuit ? 1 : 0;
       const bt = b.suit === trumpSuit ? 1 : 0;
@@ -900,4 +905,13 @@
   dealNewGame(true);
   renderAll();
   showStartOverlay();
+
+  // Re-sort and re-render (via the same FLIP machinery a normal turn uses)
+  // whenever the player flips the shared sort-mode toggle mid-game.
+  if (window.handSortMode) {
+    window.handSortMode.onChange(() => {
+      sortHand(playerHand);
+      renderAll();
+    });
+  }
 })();

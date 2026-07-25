@@ -1,0 +1,20 @@
+<%# Shared hand-sort toggle for card games (Durak, Sunduchki) - two buttons,
+    "by suit" / "by rank", backed by one persisted-per-game preference
+    (public/js/games/handSortMode.js reads the key/default off this wrapper's
+    data attributes). Include this partial + that script on any card-game
+    page; multiple instances sharing the same handSortKey (e.g. Durak's
+    vs-computer AND vs-people sections) stay in sync since they share the
+    same underlying preference.
+    Locals: handSortKey (default "durakHandSortMode"), handSortDefault
+    ("suit" or "rank", default "suit" - pass "rank" for a game whose
+    pre-existing hardcoded sort was rank-then-suit, e.g. Sunduchki, so a
+    first-time visitor's hand still looks exactly as it always has). %>
+<% const _hsKey = locals.handSortKey || 'durakHandSortMode'; %>
+<% const _hsDefault = locals.handSortDefault === 'rank' ? 'rank' : 'suit'; %>
+<div class="flex items-center gap-1 shrink-0" role="group" aria-label="<%= t('games.sortHandLabel') %>"
+     data-hand-sort-key="<%= _hsKey %>" data-hand-sort-default="<%= _hsDefault %>">
+  <button type="button" data-hand-sort-btn data-sort-value="suit"
+          class="px-2 py-0.5 rounded text-xs font-medium bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition-colors"><%= t('games.sortBySuit') %></button>
+  <button type="button" data-hand-sort-btn data-sort-value="rank"
+          class="px-2 py-0.5 rounded text-xs font-medium bg-neutral-800 text-neutral-400 hover:bg-neutral-700 transition-colors"><%= t('games.sortByRank') %></button>
+</div>

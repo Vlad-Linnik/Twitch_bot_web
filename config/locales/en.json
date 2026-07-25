@@ -165,6 +165,9 @@
   "games": {
     "title": "Mini-Games",
     "volume": "Sound volume",
+    "sortHandLabel": "Sort hand",
+    "sortBySuit": "By suit",
+    "sortByRank": "By rank",
     "spectatorsLabel": "Viewers",
     "spectatorEmoteDefault": "Default look",
     "spectatorEmoteBinoculous": "Binoculars",

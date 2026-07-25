@@ -969,7 +969,12 @@
       chestFlourishAnimate(myChestsEl);
     }
 
-    const hand = game.you.hand.slice().sort((a, b) => a.rank - b.rank || a.suit.localeCompare(b.suit));
+    const sortMode = window.handSortMode ? window.handSortMode.get() : "suit";
+    const hand = game.you.hand.slice().sort(
+      sortMode === "rank"
+        ? (a, b) => a.rank - b.rank || a.suit.localeCompare(b.suit)
+        : (a, b) => a.suit.localeCompare(b.suit) || a.rank - b.rank
+    );
     const legalRanks = new Set(game.legal ? game.legal.askRanks : []);
     const canPickThisTurn = mySeat === game.activeSeat && game.phase === "playing" && game.legal && game.legal.canAsk;
     const currentHandKeys = new Set();
@@ -1244,6 +1249,15 @@
       const deltaStr = delta != null ? " (" + (delta > 0 ? "+" : "") + delta + ")" : "";
       li.textContent = displayRank + ". " + nameOf(seat) + " — " + chests + deltaStr;
       resultStandingsEl.appendChild(li);
+    });
+  }
+
+  // Re-render just the hand (not the whole table) whenever the player flips
+  // the shared sort-mode toggle mid-game - lastGame is set at the top of
+  // every renderTable() call, so it always reflects the latest state.
+  if (window.handSortMode) {
+    window.handSortMode.onChange(() => {
+      if (lastGame && lastGame.you) renderHand(lastGame, false, null);
     });
   }
 

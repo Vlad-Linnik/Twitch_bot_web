@@ -114,7 +114,10 @@
               grow into and cover them. Keep this the final block in
               #durak-board if the layout above changes. %>
           <div class="px-3 pb-3">
-            <p class="text-xs uppercase tracking-wide text-neutral-500 mb-1.5"><%= t('games.durak.yourHand') %></p>
+            <div class="flex items-center justify-between mb-1.5">
+              <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.durak.yourHand') %></p>
+              <%- include('partials/handSortControl') %>
+            </div>
             <%# gap-2 (not gap-1) so the extra invisible hit-area each legal
                 card gets in durak.js's renderPlayerHand() (before:-top-2 etc.)
                 has room to sit in without overlapping its neighbor's card. %>
@@ -404,7 +407,10 @@
             <div id="dmp-hand-panel" class="px-3 pb-3">
               <div class="flex items-center justify-between mb-1.5">
                 <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.durakMultiplayer.yourHand') %></p>
-                <span id="dmp-my-clock" class="text-xs font-mono tabular-nums text-neutral-400"></span>
+                <div class="flex items-center gap-2">
+                  <%- include('partials/handSortControl') %>
+                  <span id="dmp-my-clock" class="text-xs font-mono tabular-nums text-neutral-400"></span>
+                </div>
               </div>
               <%# gap-2, same reasoning as durak-player-hand above - room for
                   the expanded hit-area durak-multiplayer.js's renderHand() adds. %>
@@ -520,6 +526,7 @@
 
 <%- include('partials/gameVolumeControl') %>
 <script src="/js/games/gameVolume.js" defer></script>
+<script src="/js/games/handSortMode.js" defer></script>
 <script src="/js/games/spectatorCluster.js" defer></script>
 <script src="/js/games/spectatorEmotePicker.js" defer></script>
 <script src="/js/games/durak.js" defer></script>

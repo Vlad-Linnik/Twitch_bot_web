@@ -165,6 +165,9 @@
   "games": {
     "title": "Мини-игры",
     "volume": "Громкость звука",
+    "sortHandLabel": "Сортировка руки",
+    "sortBySuit": "По мастям",
+    "sortByRank": "По достоинству",
     "spectatorsLabel": "Зрители",
     "spectatorEmoteDefault": "Обычный вид",
     "spectatorEmoteBinoculous": "Бинокль",
