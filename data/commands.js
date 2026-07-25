@@ -51,6 +51,7 @@ module.exports = [
       { signature: "!countunique [period]", accessKey: "commands.access.all", cooldown: "15s", descriptionKey: "commands.desc.countunique", useCaseKey: "commands.useCase.countunique", configKey: "countunique" },
       { signature: "!botinfo", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.botinfo", useCaseKey: "commands.useCase.botinfo", configKey: "botinfo" },
       { signature: "!randomclip", accessKey: "commands.access.all", cooldown: "30s", descriptionKey: "commands.desc.randomclip", useCaseKey: "commands.useCase.randomclip", configKey: "randomclip" },
+      { signature: "!weather [city]", accessKey: "commands.access.all", cooldown: "15s", descriptionKey: "commands.desc.weather", useCaseKey: "commands.useCase.weather", configKey: "weather" },
     ],
   },
   {
