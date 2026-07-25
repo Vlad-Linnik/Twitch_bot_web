@@ -18,6 +18,7 @@
     battleship: "/games/battleship",
     pong: "/games/pong",
     "connect-four": "/games/connect-four",
+    "sunduchki-multiplayer": "/games/sunduchki",
   };
 
   const frameWrap = document.getElementById("watch-frame-wrap");

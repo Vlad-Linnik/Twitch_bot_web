@@ -1,0 +1,282 @@
+<% const embedWatch = locals.embedWatch || null; %>
+<%- include('partials/head', { title: t('games.sunduchki.name') }) %>
+<% if (!embedWatch) { %><%- include('partials/nav') %><% } %>
+
+<main class="<%= embedWatch ? 'p-2' : 'pt-14' %> max-w-5xl mx-auto px-4 sm:px-6 py-6">
+  <% if (!embedWatch) { %>
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.sunduchki.name') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0"><%= t('games.sunduchki.backToGames') %></a>
+  </div>
+  <% } %>
+
+  <% if (!user) { %>
+    <div class="max-w-md mx-auto rounded-xl border border-neutral-800 bg-neutral-900 p-6 text-center">
+      <p class="text-neutral-300 mb-4"><%= t('games.sunduchki.loginRequired') %></p>
+      <a href="/auth/login" class="inline-block px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.sunduchki.name') %></a>
+    </div>
+
+    <aside class="max-w-sm mx-auto mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.sunduchki.leaderboardTitle') %></p>
+      <ol class="space-y-0.5">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="text-sm text-neutral-500 py-1"><%= t('games.sunduchki.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded">
+            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+            <span class="flex-1 truncate text-neutral-300"
+                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+          </li>
+        <% }) %>
+      </ol>
+    </aside>
+  <% } else { %>
+
+  <%# All game state (lobby list, room membership, table) is pushed over the
+      WebSocket connection (public/js/games/sunduchki-multiplayer.js) - this is
+      an empty shell, same "server renders the frame, client drives visibility"
+      pattern Durak's multiplayer section uses. %>
+  <div id="skp-root"
+       data-ws-path="/ws/sunduchki"
+       data-auto-join-room-id="<%= autoJoinRoomId || '' %>"
+       data-watch-room-id="<%= embedWatch || '' %>"
+       data-my-user-id="<%= user.userId %>"
+       data-join-label="<%= t('games.sunduchki.joinRoom') %>"
+       data-host-prefix="<%= t('games.sunduchki.hostPrefix') %>"
+       data-status-connecting="<%= t('games.sunduchki.connecting') %>"
+       data-status-reconnecting="<%= t('games.sunduchki.reconnecting') %>"
+       data-status-disconnected="<%= t('games.sunduchki.disconnectedFinal') %>"
+       data-status-your-turn-ask="<%= t('games.sunduchki.statusYourTurnAsk') %>"
+       data-status-your-turn-pass="<%= t('games.sunduchki.statusYourTurnPass') %>"
+       data-status-waiting="<%= t('games.sunduchki.statusWaiting') %>"
+       data-players-count-tpl="<%= t('games.sunduchki.playersCount', { count: '__COUNT__', max: '__MAX__' }) %>"
+       data-ready-accepted-tpl="<%= t('games.sunduchki.readyCheckAcceptedTpl', { accepted: '__ACCEPTED__', total: '__TOTAL__' }) %>"
+       data-ready-countdown-tpl="<%= t('games.sunduchki.readyCheckCountdownTpl', { seconds: '__SECONDS__' }) %>"
+       data-link-copied="<%= t('games.sunduchki.linkCopied') %>"
+       data-err-room-not-found="<%= t('games.sunduchki.errorRoomNotFound') %>"
+       data-err-room-full="<%= t('games.sunduchki.errorRoomFull') %>"
+       data-err-room-not-joinable="<%= t('games.sunduchki.errorRoomNotJoinable') %>"
+       data-err-rate-limited="<%= t('games.sunduchki.errorRateLimited') %>"
+       data-err-already-in-room="<%= t('games.sunduchki.errorAlreadyInRoom') %>"
+       data-err-not-enough-players="<%= t('games.sunduchki.errorNotEnoughPlayers') %>"
+       data-err-not-host="<%= t('games.sunduchki.errorNotHost') %>"
+       data-err-room-not-watchable="<%= t('games.sunduchki.errorRoomNotWatchable') %>"
+       data-err-not-in-lobby="<%= t('games.sunduchki.errorNotInLobby') %>"
+       data-err-player-not-found="<%= t('games.sunduchki.errorPlayerNotFound') %>"
+       data-err-not-your-turn="<%= t('games.sunduchki.errorNotYourTurn') %>"
+       data-err-rank-not-legal="<%= t('games.sunduchki.errorRankNotLegal') %>"
+       data-err-target-not-allowed="<%= t('games.sunduchki.errorTargetNotAllowed') %>"
+       data-err-generic="<%= t('games.sunduchki.errorGeneric') %>"
+       data-kick-button-title="<%= t('games.sunduchki.kickButtonTitle') %>"
+       data-kicked-toast="<%= t('games.sunduchki.kickedToast') %>"
+       data-watch-label="<%= t('games.sunduchki.watchLabel') %>"
+       data-match-player-count-tpl="<%= t('games.sunduchki.matchPlayerCountTpl', { count: '__COUNT__' }) %>"
+       data-spectator-count-tpl="<%= t('games.sunduchki.spectatorCountTpl', { count: '__COUNT__' }) %>"
+       data-avg-rating-tpl="<%= t('games.sunduchki.avgRatingTpl', { rating: '__RATING__' }) %>"
+       data-player-rating-tpl="<%= t('games.sunduchki.playerRatingTpl', { rating: '__RATING__' }) %>"
+       data-player-rating-unknown="<%= t('games.sunduchki.playerRatingUnknown') %>"
+       data-toast-rating-change-tpl="<%= t('games.sunduchki.toastRatingChangeTpl', { rank: '__RANK__', delta: '__DELTA__' }) %>"
+       data-leave-confirm="<%= t('games.sunduchki.leaveConfirm') %>"
+       data-stop-watching="<%= t('games.sunduchki.stopWatching') %>"
+       data-spectating-badge="<%= t('games.sunduchki.spectatingBadge') %>"
+       data-result-title="<%= t('games.sunduchki.resultTitle') %>"
+       data-left-result-title-tpl="<%= t('games.sunduchki.leftResultTitleTpl', { name: '__NAME__' }) %>"
+       data-winner-label="<%= t('games.sunduchki.winnerLabel') %>"
+       data-you-label="<%= t('games.sunduchki.youLabel') %>"
+       data-log-hit-tpl="<%= t('games.sunduchki.logHitTpl', { asker: '__ASKER__', target: '__TARGET__', rank: '__RANK__', count: '__COUNT__' }) %>"
+       data-log-miss-tpl="<%= t('games.sunduchki.logMissTpl', { asker: '__ASKER__', target: '__TARGET__', rank: '__RANK__' }) %>"
+       data-log-chest-tpl="<%= t('games.sunduchki.logChestTpl', { name: '__NAME__', rank: '__RANK__' }) %>"
+       data-log-pass-tpl="<%= t('games.sunduchki.logPassTpl', { name: '__NAME__' }) %>"
+       data-action-left-tpl="<%= t('games.sunduchki.actionLeftTpl', { name: '__NAME__' }) %>"
+       data-action-disconnect-tpl="<%= t('games.sunduchki.actionDisconnectTpl', { name: '__NAME__' }) %>"
+       data-action-timeout-tpl="<%= t('games.sunduchki.actionTimeoutTpl', { name: '__NAME__' }) %>"
+       data-action-clock-tpl="<%= t('games.sunduchki.actionClockTpl', { name: '__NAME__' }) %>"
+       data-action-kicked-tpl="<%= t('games.sunduchki.actionKickedTpl', { name: '__NAME__' }) %>"
+       data-time-remaining-tooltip="<%= t('games.sunduchki.timeRemainingTooltip') %>"
+       data-pick-target-prompt="<%= t('games.sunduchki.pickTargetPrompt') %>"
+       data-pick-rank-prompt="<%= t('games.sunduchki.pickRankPrompt') %>">
+
+    <p id="skp-connstatus" class="text-sm text-neutral-500 mb-3"></p>
+
+    <%# --- Lobby: list of open rooms --------------------------------------- %>
+    <section id="skp-lobby-view">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.sunduchki.lobbyTitle') %></p>
+        <button type="button" id="skp-create-room-btn"
+                class="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('games.sunduchki.createRoom') %></button>
+      </div>
+      <ul id="skp-room-list" class="space-y-2">
+        <li id="skp-room-list-empty" class="text-sm text-neutral-500 py-2"><%= t('games.sunduchki.lobbyEmpty') %></li>
+      </ul>
+
+      <div class="mt-6">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.sunduchki.ongoingMatchesTitle') %></p>
+        <ul id="skp-playing-list" class="space-y-2">
+          <li id="skp-playing-list-empty" class="text-sm text-neutral-500 py-2"><%= t('games.sunduchki.ongoingMatchesEmpty') %></li>
+        </ul>
+      </div>
+
+      <div class="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4 max-w-sm">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.sunduchki.leaderboardTitle') %></p>
+        <ol class="space-y-0.5">
+          <% if (leaderboard.rows.length === 0) { %>
+            <li class="text-sm text-neutral-500 py-1"><%= t('games.sunduchki.leaderboardEmpty') %></li>
+          <% } %>
+          <% leaderboard.rows.forEach(function(row) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+              <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                    <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+            </li>
+          <% }) %>
+          <% if (leaderboard.myRow) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10 mt-1 pt-1 border-t border-neutral-800">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+              <span class="flex-1 truncate text-purple-300"
+                    <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+            </li>
+          <% } %>
+        </ol>
+      </div>
+
+      <div class="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4 max-w-sm">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.sunduchki.rulesTitle') %></p>
+        <ul class="text-sm text-neutral-400 space-y-1.5 list-disc list-inside">
+          <li><%= t('games.sunduchki.mpRule1') %></li>
+          <li><%= t('games.sunduchki.mpRule2') %></li>
+          <li><%= t('games.sunduchki.mpRule3') %></li>
+          <li><%= t('games.sunduchki.mpRule4') %></li>
+          <li><%= t('games.sunduchki.mpRule5') %></li>
+          <li><%= t('games.sunduchki.mpRule6') %></li>
+          <li><%= t('games.sunduchki.mpRule7') %></li>
+          <li><%= t('games.sunduchki.mpRule8') %></li>
+          <li><%= t('games.sunduchki.mpRule9') %></li>
+        </ul>
+      </div>
+    </section>
+
+    <%# --- Room: header (code/players/start/leave) + table -------------------- %>
+    <section id="skp-room-view" hidden>
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div class="flex items-baseline gap-2">
+            <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.sunduchki.roomCodeLabel') %></span>
+            <span id="skp-room-code" class="text-sm font-mono text-neutral-200"></span>
+            <button type="button" id="skp-copy-link-btn" class="text-xs text-purple-400 hover:text-purple-300"><%= t('games.sunduchki.copyLink') %></button>
+            <span id="skp-spectator-count" class="text-xs font-medium text-cyan-400" hidden></span>
+            <span id="skp-avg-rating" class="text-xs font-medium text-amber-400" hidden></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="skp-spectating-badge" class="text-xs text-purple-400" hidden><%= t('games.sunduchki.spectatingBadge') %></span>
+            <button type="button" id="skp-start-btn" hidden
+                    class="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('games.sunduchki.startGame') %></button>
+            <button type="button" id="skp-leave-btn"
+                    class="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.sunduchki.leaveRoom') %></button>
+            <button type="button" id="skp-stop-watching-btn" hidden
+                    class="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.sunduchki.stopWatching') %></button>
+          </div>
+        </div>
+        <ul id="skp-player-list" class="flex flex-wrap gap-2"></ul>
+        <p id="skp-waiting-hint" class="text-xs text-neutral-500 mt-2" hidden><%= t('games.sunduchki.waitingForPlayers') %></p>
+      </div>
+
+      <%# Host-editable game rules - only editable while the room is still
+          "lobby" (sunduchkiRoomManager.js's handleSetRules enforces this
+          server-side too). %>
+      <div id="skp-rules-panel" hidden class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 mb-4">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.sunduchki.rulesPanelTitle') %></p>
+        <div>
+          <label for="skp-rule-deck-size" class="block text-sm text-neutral-200"><%= t('games.sunduchki.ruleDeckSize') %></label>
+          <p class="text-xs text-neutral-500"><%= t('games.sunduchki.ruleDeckSizeDesc') %></p>
+          <select id="skp-rule-deck-size"
+                  class="mt-1.5 rounded border-neutral-700 bg-neutral-800 text-sm text-neutral-200 focus:ring-purple-500 focus:ring-offset-neutral-900">
+            <option value="36"><%= t('games.sunduchki.ruleDeckSize36') %></option>
+            <option value="52"><%= t('games.sunduchki.ruleDeckSize52') %></option>
+          </select>
+        </div>
+        <div class="mt-3">
+          <label for="skp-rule-question-target" class="block text-sm text-neutral-200"><%= t('games.sunduchki.ruleQuestionTarget') %></label>
+          <p class="text-xs text-neutral-500"><%= t('games.sunduchki.ruleQuestionTargetDesc') %></p>
+          <select id="skp-rule-question-target"
+                  class="mt-1.5 rounded border-neutral-700 bg-neutral-800 text-sm text-neutral-200 focus:ring-purple-500 focus:ring-offset-neutral-900">
+            <option value="next"><%= t('games.sunduchki.ruleQuestionTargetNext') %></option>
+            <option value="any"><%= t('games.sunduchki.ruleQuestionTargetAny') %></option>
+          </select>
+        </div>
+        <p id="skp-rules-host-hint" class="text-xs text-neutral-600 mt-2" hidden><%= t('games.sunduchki.rulesHostOnlyHint') %></p>
+      </div>
+
+      <%# Ready check - shown only while room.status === "starting". %>
+      <div id="skp-ready-check" hidden class="rounded-xl border border-purple-700/60 bg-neutral-900 p-6 mb-4 text-center">
+        <p class="text-base font-semibold text-neutral-100 mb-1"><%= t('games.sunduchki.readyCheckTitle') %></p>
+        <p class="text-sm text-neutral-400 mb-4"><%= t('games.sunduchki.readyCheckSubtitle') %></p>
+        <p id="skp-ready-countdown" class="text-2xl font-bold text-purple-400 tabular-nums mb-4"></p>
+        <p id="skp-ready-count" class="text-sm text-neutral-400 mb-4"></p>
+        <button type="button" id="skp-ready-accept-btn"
+                class="px-6 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"><%= t('games.sunduchki.readyCheckAccept') %></button>
+        <p id="skp-ready-waiting" hidden class="text-sm text-neutral-500 mt-3"><%= t('games.sunduchki.readyCheckWaiting') %></p>
+      </div>
+
+      <div id="skp-table-wrap" class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4" hidden>
+        <div id="skp-board" class="relative rounded-lg bg-neutral-950 border border-neutral-800 min-h-[420px] flex flex-col">
+          <div class="px-3 pt-3">
+            <div id="skp-opponents" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <div class="flex items-center justify-center gap-4 px-3 py-2 text-xs text-neutral-500">
+            <span><%= t('games.sunduchki.deckLabel') %>: <span id="skp-deck-count" class="text-neutral-200 tabular-nums">0</span></span>
+            <span id="skp-turn-timer" class="font-mono tabular-nums" hidden></span>
+          </div>
+
+          <p id="skp-status" class="text-center text-sm text-neutral-400 px-3 min-h-[1.5em]"></p>
+
+          <%# Public ask/answer log - the "logical" part of the game: every
+              question and answer is visible to the whole table, not just the
+              two players involved. %>
+          <div class="px-3">
+            <ul id="skp-log" class="max-h-28 overflow-y-auto text-xs text-neutral-400 space-y-0.5 rounded-lg bg-neutral-900/60 border border-neutral-800 p-2"></ul>
+          </div>
+
+          <%# Target picker - only shown once a rank has been picked from your
+              hand and questionTarget="any" leaves more than one legal
+              option (see sunduchki-multiplayer.js's renderAskControls). %>
+          <div id="skp-target-picker" class="px-3 pt-2" hidden>
+            <p class="text-xs text-neutral-500 mb-1.5" id="skp-target-picker-label"></p>
+            <div id="skp-target-buttons" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <div id="skp-hand-panel" class="px-3 pb-3 pt-2">
+            <div class="flex items-center justify-between mb-1.5">
+              <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.sunduchki.yourHand') %></p>
+              <span id="skp-my-chests" class="text-xs font-medium text-amber-400 tabular-nums" hidden><%= t('games.sunduchki.chestsLabel') %>: <span id="skp-my-chests-count">0</span></span>
+            </div>
+            <div id="skp-hand" class="flex flex-wrap justify-center gap-2 min-h-[88px]"></div>
+          </div>
+        </div>
+
+        <div id="skp-result-overlay" hidden
+             class="absolute inset-3 sm:inset-4 rounded-lg bg-neutral-950/85 backdrop-blur-sm grid place-items-center text-center">
+          <div class="px-4">
+            <h2 id="skp-result-title" class="text-xl font-semibold text-neutral-100 mb-2"></h2>
+            <p id="skp-result-detail" class="text-sm text-neutral-400 mb-2"></p>
+            <ol id="skp-result-standings" class="text-sm text-neutral-400 mb-4 space-y-0.5"></ol>
+            <button type="button" id="skp-result-back-btn"
+                    class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"><%= t('games.sunduchki.backToLobby') %></button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <% } %>
+</main>
+
+<% if (!embedWatch && user) { %><%- include('partials/spectatorCluster') %><% } %>
+<% if (!embedWatch && user) { %><%- include('partials/gameVolumeControl') %><% } %>
+<script src="/js/games/gameVolume.js" defer></script>
+<script src="/js/games/spectatorCluster.js" defer></script>
+<script src="/js/games/sunduchki-multiplayer.js" defer></script>
+<%- include('partials/foot') %>

@@ -194,4 +194,24 @@ module.exports = [
         <circle cx="79" cy="38" r="10" fill="#171717"/>
       </svg>`,
   },
+  {
+    id: "sunduchki",
+    url: "/games/sunduchki",
+    nameKey: "games.sunduchki.name",
+    descKey: "games.sunduchki.cardDescription",
+    preview: `
+      <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+        <rect x="18" y="42" width="46" height="34" rx="3" fill="#a16207" stroke="#171717" stroke-width="1"/>
+        <rect x="18" y="42" width="46" height="12" fill="#ca8a04"/>
+        <circle cx="41" cy="48" r="2.4" fill="#fde68a"/>
+        <rect x="86" y="30" width="46" height="46" rx="3" fill="#b45309" stroke="#171717" stroke-width="1"/>
+        <rect x="86" y="30" width="46" height="14" fill="#d97706"/>
+        <circle cx="109" cy="37" r="2.6" fill="#fde68a"/>
+        <g transform="translate(75,20) rotate(-10)">
+          <rect x="-13" y="-18" width="26" height="36" rx="3" fill="#fafafa" stroke="#171717" stroke-width="1"/>
+          <text x="-8" y="-4" font-size="11" font-family="sans-serif" fill="#dc2626">6</text>
+          <text x="-8" y="8" font-size="11" font-family="sans-serif" fill="#dc2626">♦</text>
+        </g>
+      </svg>`,
+  },
 ];

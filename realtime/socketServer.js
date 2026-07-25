@@ -9,6 +9,7 @@
 
 const { WebSocketServer } = require("ws");
 const durakRoomManager = require("./durakRoomManager");
+const sunduchkiRoomManager = require("./sunduchkiRoomManager");
 const { createQuickMatchManager } = require("./quickMatchManager");
 const spectatorHubManager = require("./spectatorHubManager");
 const battleshipEngine = require("../lib/battleshipEngine");
@@ -23,6 +24,7 @@ const HEARTBEAT_MS = 30 * 1000;
 function buildHandlers() {
   const handlers = new Map();
   handlers.set("/ws/durak-multiplayer", durakRoomManager);
+  handlers.set("/ws/sunduchki", sunduchkiRoomManager);
   handlers.set(
     "/ws/battleship",
     createQuickMatchManager({ game: "battleship", rated: true, mode: "turn-based", engine: battleshipEngine })

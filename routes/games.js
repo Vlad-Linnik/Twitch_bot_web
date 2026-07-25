@@ -29,6 +29,10 @@ const GAME_CONNECT_FOUR = "connect-four";
 // multiplayer game. New players start at a hidden 300 rating and don't get a
 // GameScores doc - so don't appear here - until their first game finishes.
 const GAME_DURAK_ONLINE = "durak-multiplayer";
+// Same "bestScore holds a live Elo rating" convention as GAME_DURAK_ONLINE -
+// realtime/sunduchkiRoomManager.js's finalizeGame computes and persists it
+// after every multiplayer game (durakElo.js's rating math, reused verbatim).
+const GAME_SUNDUCHKI_ONLINE = "sunduchki-multiplayer";
 const TOP_LIMIT = 10;
 // Sanity cap on submitted scores. The game itself can't validate a client-run
 // score, but a legitimate marathon run stays far below this - anything above is
@@ -239,6 +243,24 @@ router.get("/games/durak", (req, res, next) => renderDurak(req, res, next, null,
 // already seated in).
 router.get("/games/durak/room/:roomId", requireLogin, (req, res, next) =>
   renderDurak(req, res, next, req.params.roomId)
+);
+
+// /games/sunduchki is multiplayer-only (no vs-computer mode, unlike Durak) -
+// still open to logged-out visitors, who just see a login prompt in place of
+// the create/join lobby (see views/gameSunduchki.ejs).
+async function renderSunduchki(req, res, next, autoJoinRoomId, embedWatch) {
+  try {
+    const leaderboard = await buildLeaderboard(GAME_SUNDUCHKI_ONLINE, req.user ? req.user.userId : null);
+    res.render("gameSunduchki", { leaderboard, autoJoinRoomId, embedWatch: embedWatch || null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+router.get("/games/sunduchki", (req, res, next) => renderSunduchki(req, res, next, null, watchRoomParam(req)));
+
+router.get("/games/sunduchki/room/:roomId", requireLogin, (req, res, next) =>
+  renderSunduchki(req, res, next, req.params.roomId)
 );
 
 function requireLoginJson(req, res, next) {
