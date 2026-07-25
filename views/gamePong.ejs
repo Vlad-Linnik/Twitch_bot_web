@@ -86,8 +86,10 @@
 </main>
 
 <% if (!embedWatch) { %><%- include('partials/quickMatchReadyCheck') %><% } %>
+<% if (!embedWatch) { %><%- include('partials/spectatorCluster') %><% } %>
 <%- include('partials/gameVolumeControl') %>
 <script src="/js/games/gameVolume.js" defer></script>
+<script src="/js/games/spectatorCluster.js" defer></script>
 <script src="/js/games/quickMatchClient.js" defer></script>
 <script src="/js/games/pong.js" defer></script>
 <%- include('partials/foot') %>

@@ -281,6 +281,7 @@
   const roomCodeEl = document.getElementById("dmp-room-code");
   const copyLinkBtn = document.getElementById("dmp-copy-link-btn");
   const spectatorCountEl = document.getElementById("dmp-spectator-count");
+  const spectatorCluster = window.initSpectatorCluster ? window.initSpectatorCluster() : { update: function () {} };
   const avgRatingEl = document.getElementById("dmp-avg-rating");
   const earlyFinishBannerEl = document.getElementById("dmp-early-finish-banner");
   const spectatingBadgeEl = document.getElementById("dmp-spectating-badge");
@@ -799,6 +800,7 @@
   function switchView(inRoom) {
     lobbyViewEl.hidden = inRoom;
     roomViewEl.hidden = !inRoom;
+    if (!inRoom) spectatorCluster.update(0); // back in the lobby - no active match to show spectators of
   }
 
   function renderRoom(msg) {
@@ -812,6 +814,7 @@
     spectatingBadgeEl.hidden = !isSpectating;
     spectatorCountEl.hidden = !room.spectatorCount;
     if (room.spectatorCount) spectatorCountEl.textContent = fillTemplate(d.spectatorCountTpl, { COUNT: room.spectatorCount });
+    spectatorCluster.update(room.spectatorCount || 0);
     avgRatingEl.hidden = room.avgRating == null;
     if (room.avgRating != null) avgRatingEl.textContent = fillTemplate(d.avgRatingTpl, { RATING: room.avgRating });
 

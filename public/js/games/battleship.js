@@ -69,6 +69,7 @@
     });
     window.wireQuickMatchLobby(client);
   }
+  window.wireQuickMatchSpectatorCluster(client);
 
   const screens = { idle: byId("bs-screen-idle"), queued: byId("bs-screen-queued"), game: byId("bs-screen-game") };
   const placementPanel = byId("bs-placement");

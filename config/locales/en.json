@@ -165,6 +165,7 @@
   "games": {
     "title": "Mini-Games",
     "volume": "Sound volume",
+    "spectatorsLabel": "Viewers",
     "fallingBlocks": {
       "name": "Falling Blocks",
       "cardDescription": "Stack the falling pieces, clear lines and chase your best score.",

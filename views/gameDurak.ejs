@@ -483,8 +483,10 @@
   </section>
 </main>
 
+<% if (!embedWatch) { %><%- include('partials/spectatorCluster') %><% } %>
 <%- include('partials/gameVolumeControl') %>
 <script src="/js/games/gameVolume.js" defer></script>
+<script src="/js/games/spectatorCluster.js" defer></script>
 <script src="/js/games/durak.js" defer></script>
 <script src="/js/games/durak-multiplayer.js" defer></script>
 <script src="/js/games/durak-mode-select.js" defer></script>

@@ -25,6 +25,7 @@
     });
     window.wireQuickMatchLobby(client);
   }
+  window.wireQuickMatchSpectatorCluster(client);
 
   const screens = {
     idle: document.getElementById("c4-screen-idle"),

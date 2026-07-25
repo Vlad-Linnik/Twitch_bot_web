@@ -314,6 +314,27 @@
     return { isSpectating: () => spectating };
   }
 
+  // Shared visual spectator cluster (views/partials/spectatorCluster.ejs +
+  // public/js/games/spectatorCluster.js), wired identically for all 4
+  // quick-match games. state/tick now carry spectatorCount (realtime/
+  // quickMatchManager.js's broadcastState/tick loop/reconnect send and
+  // spectatorPayloadFor - so this covers players and spectators alike) - no
+  // per-game rendering needed, just relay the number to the shared widget.
+  // Reset to 0 on lobbyState, same reasoning as wireQuickMatchSpectating's
+  // stop(): back in the lobby there's no active match's spectators to show.
+  function wireSpectatorCluster(client) {
+    if (!window.initSpectatorCluster) return;
+    const cluster = window.initSpectatorCluster();
+
+    function onStateLike(msg) {
+      if (msg && typeof msg.spectatorCount === "number") cluster.update(msg.spectatorCount);
+    }
+
+    client.on("state", onStateLike);
+    client.on("tick", onStateLike);
+    client.on("lobbyState", () => cluster.update(0));
+  }
+
   // Embedded-spectator wiring for the cross-game hub (public/js/games/watch-hub.js).
   // When a quick-match game page is loaded inside the hub's iframe with a target
   // room (root's data-watch-room), it auto-watches that room and reports back to
@@ -388,5 +409,6 @@
   window.wireQuickMatchReadyCheck = wireReadyCheck;
   window.wireQuickMatchLobby = wireQuickMatchLobby;
   window.wireQuickMatchSpectating = wireQuickMatchSpectating;
+  window.wireQuickMatchSpectatorCluster = wireSpectatorCluster;
   window.wireQuickMatchEmbeddedSpectator = wireEmbeddedSpectator;
 })();

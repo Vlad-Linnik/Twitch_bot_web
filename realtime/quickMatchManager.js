@@ -178,6 +178,7 @@ function createQuickMatchManager(config) {
       state: serialize(room.state),
       spectating: true,
       players: room.players.map((p) => ({ displayName: p.meta.displayName })),
+      spectatorCount: room.spectators.size,
     };
   }
 
@@ -218,7 +219,7 @@ function createQuickMatchManager(config) {
   function broadcastState(room) {
     const deadline = deadlinePayload(room);
     for (const p of room.players) {
-      safeSend(p.ws, { type: "state", state: engine.serializeForSeat(room.state, p.seat), deadline });
+      safeSend(p.ws, { type: "state", state: engine.serializeForSeat(room.state, p.seat), deadline, spectatorCount: room.spectators.size });
     }
     broadcastSpectatorState(room, "state", deadline);
   }
@@ -283,7 +284,7 @@ function createQuickMatchManager(config) {
       room.lastTick = now;
       engine.step(room.state, dt);
       for (const p of room.players) {
-        safeSend(p.ws, { type: "tick", state: engine.serializeForSeat(room.state, p.seat) });
+        safeSend(p.ws, { type: "tick", state: engine.serializeForSeat(room.state, p.seat), spectatorCount: room.spectators.size });
       }
       broadcastSpectatorState(room, "tick");
       const result = engine.checkGameOver(room.state);
@@ -650,7 +651,12 @@ function createQuickMatchManager(config) {
           opponent: opponentInfoFor(room, player.seat),
           deadline: deadlinePayload(room),
         });
-        safeSend(ws, { type: "state", state: engine.serializeForSeat(room.state, player.seat), deadline: deadlinePayload(room) });
+        safeSend(ws, {
+          type: "state",
+          state: engine.serializeForSeat(room.state, player.seat),
+          deadline: deadlinePayload(room),
+          spectatorCount: room.spectators.size,
+        });
         broadcastLobby();
         return;
       }

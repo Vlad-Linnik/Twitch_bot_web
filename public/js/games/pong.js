@@ -67,6 +67,7 @@
     });
     window.wireQuickMatchLobby(client);
   }
+  window.wireQuickMatchSpectatorCluster(client);
 
   const screens = {
     idle: document.getElementById("pong-screen-idle"),
