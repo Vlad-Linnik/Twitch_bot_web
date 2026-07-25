@@ -181,8 +181,52 @@ function isRunEndpoint(run, cell) {
   return (cell[0] === first[0] && cell[1] === first[1]) || (cell[0] === last[0] && cell[1] === last[1]);
 }
 
-// Classifies a matched group's shape to decide whether it triggers a bonus
-// blast alongside its normal clear:
+// Groups a matched group's runs into clusters that actually intersect
+// (share a cell) with each other, using union-find. Cell-level 4-adjacency
+// (how findMatchGroups built the group in the first place) is a coarser
+// relation than "these runs form one shape": a genuine 4-run or T/Г corner
+// can end up flood-filled into the same group as a completely unrelated
+// match just because their matched cells happen to touch during a cascade -
+// see classifyGroupShapes below for why that must NOT be judged as one
+// combined shape.
+function clusterIntersectingRuns(runs) {
+  const parent = runs.map((_, i) => i);
+  function find(x) {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  }
+  const cellSets = runs.map((run) => new Set(run.cells.map(([r, c]) => r + "," + c)));
+  for (let i = 0; i < runs.length; i++) {
+    for (let j = i + 1; j < runs.length; j++) {
+      let intersects = false;
+      for (const key of cellSets[j]) {
+        if (cellSets[i].has(key)) {
+          intersects = true;
+          break;
+        }
+      }
+      if (intersects) {
+        const ri = find(i);
+        const rj = find(j);
+        if (ri !== rj) parent[ri] = rj;
+      }
+    }
+  }
+  const clusters = new Map();
+  runs.forEach((run, i) => {
+    const root = find(i);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root).push(run);
+  });
+  return [...clusters.values()];
+}
+
+// Classifies each independent cluster of intersecting runs within a matched
+// group into a bonus shape, returning the list of shapes that fire (often
+// empty, sometimes more than one - see below):
 // - A single straight run of 4+ (no intersection) blasts the opposite line -
 //   a horizontal run clears its middle cell's column, a vertical run clears
 //   its middle cell's row (matches "4 в ряд -> взрыв столбика", "4 в
@@ -192,31 +236,56 @@ function isRunEndpoint(run, cell) {
 //   it blasts a 3x3 area around the corner; otherwise (the crossing sits in
 //   the middle of at least one run, like the letter "Т") it blasts every
 //   crystal of that type on the board.
-// - Anything else (3+ runs, or two same-orientation runs that only ended up
-//   in the same group via incidental cell-adjacency rather than a shared
-//   run cell) gets no bonus - just the plain match.
-function classifyGroupShape(group, grid) {
-  const runs = group.runs;
-  if (runs.length === 1) {
-    const run = runs[0];
-    if (run.cells.length < 4) return null;
-    const mid = run.cells[Math.floor(run.cells.length / 2)];
-    return run.orientation === "h"
-      ? { kind: "clearColumn", r: mid[0], c: mid[1] }
-      : { kind: "clearRow", r: mid[0], c: mid[1] };
-  }
-  if (runs.length === 2) {
-    const [a, b] = runs;
-    if (a.orientation === b.orientation) return null;
-    const aCells = new Set(a.cells.map(([r, c]) => r + "," + c));
-    const shared = b.cells.find(([r, c]) => aCells.has(r + "," + c));
-    if (!shared) return null;
-    if (isRunEndpoint(a, shared) && isRunEndpoint(b, shared)) {
-      return { kind: "clearArea", r: shared[0], c: shared[1] };
+// - Anything else (3+ mutually-intersecting runs, or two same-orientation
+//   runs that DO share a cell, which can't happen from a legal swap but is
+//   handled defensively) gets no bonus for that cluster - just its plain
+//   match.
+// Clustering by actual shared-cell intersection - rather than judging the
+// whole flood-filled group's run count at once - matters because a group can
+// contain runs that never intersect each other at all: a real 4-in-a-row (or
+// T/Г) landing directly next to an unrelated match in the same cascade step
+// flood-fills into one group via plain cell-adjacency, but the two shapes
+// are independent and should each get whatever bonus they individually earn
+// (or none), rather than one incidental neighbor silently cancelling the
+// other's bonus.
+function classifyGroupShapes(group, grid) {
+  const shapes = [];
+  for (const clusterRuns of clusterIntersectingRuns(group.runs)) {
+    if (clusterRuns.length === 1) {
+      const run = clusterRuns[0];
+      if (run.cells.length < 4) continue;
+      const mid = run.cells[Math.floor(run.cells.length / 2)];
+      shapes.push(
+        run.orientation === "h"
+          ? { kind: "clearColumn", r: mid[0], c: mid[1] }
+          : { kind: "clearRow", r: mid[0], c: mid[1] }
+      );
+      continue;
     }
-    return { kind: "clearType", type: grid[shared[0]][shared[1]] };
+    if (clusterRuns.length === 2) {
+      const [a, b] = clusterRuns;
+      if (a.orientation === b.orientation) continue;
+      const aCells = new Set(a.cells.map(([r, c]) => r + "," + c));
+      const shared = b.cells.find(([r, c]) => aCells.has(r + "," + c));
+      if (!shared) continue;
+      if (isRunEndpoint(a, shared) && isRunEndpoint(b, shared)) {
+        shapes.push({ kind: "clearArea", r: shared[0], c: shared[1] });
+      } else {
+        shapes.push({ kind: "clearType", type: grid[shared[0]][shared[1]] });
+      }
+      continue;
+    }
+    // 3+ mutually-intersecting runs (e.g. a plus/asterisk of crossing
+    // lines): too ambiguous to pick a single bonus shape for, so this
+    // cluster just clears as a plain match.
   }
-  return null;
+  return shapes;
+}
+
+// Back-compat single-shape view of classifyGroupShapes, for callers (and
+// tests) that only care about the first/only bonus a simple group produces.
+function classifyGroupShape(group, grid) {
+  return classifyGroupShapes(group, grid)[0] || null;
 }
 
 // Area blast radius: 2 -> a 5x5 square (radius = (side-1)/2) around the
@@ -310,11 +379,12 @@ const MAX_CASCADE_STEPS = 50;
 
 // Runs match -> clear -> gravity -> refill until the grid stabilizes, same
 // as before, except each step's groups are now run through
-// classifyGroupShape first: a group with a bonus shape has its clear set
-// widened to the whole column/row/area/type before the clear (see
-// cellsForShape) - so a shape bonus fires automatically, in the same visual
-// step, with no separate "cast an ability" step of its own. `specials`
-// records which shape(s) fired that step, for match3.js's combo callout.
+// classifyGroupShapes first: a group's clear set is widened by every bonus
+// shape found among its (possibly several, independently-clustered - see
+// classifyGroupShapes) shapes before the clear (see cellsForShape) - so a
+// shape bonus fires automatically, in the same visual step, with no
+// separate "cast an ability" step of its own. `specials` records which
+// shape(s) fired that step, for match3.js's combo callout.
 function resolveCascade(grid, typeCount, rng) {
   const random = rng || Math.random;
   const steps = [];
@@ -324,9 +394,12 @@ function resolveCascade(grid, typeCount, rng) {
     if (groups.length === 0) break;
 
     const expanded = groups.map((group) => {
-      const shape = classifyGroupShape(group, grid);
-      if (!shape) return { cells: group.cells, special: null };
-      return { cells: dedupeCellList([group.cells, cellsForShape(grid, shape)]), special: shape.kind };
+      const shapes = classifyGroupShapes(group, grid);
+      if (shapes.length === 0) return { cells: group.cells, specials: [] };
+      return {
+        cells: dedupeCellList([group.cells, ...shapes.map((shape) => cellsForShape(grid, shape))]),
+        specials: shapes.map((shape) => shape.kind),
+      };
     });
 
     const clearedCells = [];
@@ -343,7 +416,7 @@ function resolveCascade(grid, typeCount, rng) {
     steps.push({
       clearedCount: clearedCells.length,
       groupSizes: expanded.map((g) => g.cells.length),
-      specials: expanded.map((g) => g.special).filter(Boolean),
+      specials: expanded.flatMap((g) => g.specials),
       clearedCells,
       moves,
       newCells,
@@ -429,6 +502,7 @@ const api = {
   findMatches,
   findMatchGroups,
   classifyGroupShape,
+  classifyGroupShapes,
   applyGravity,
   refillGrid,
   resolveCascade,
