@@ -32,7 +32,13 @@ const READY_CHECK_MS = 45 * 1000;
 // never eats into either side's time budget.
 const BEATEN_PAUSE_MS = 2000;
 const GAME_KEY = "durak-multiplayer";
-const DEFAULT_RULES = { allowThrowIns: true, allowTransfers: false };
+// deckSize: "auto" (default, durakEngine.createDeck's existing 36-for-<6/
+// 52-at-6 behavior) | "36" | "52" - host-forced either way regardless of
+// player count. Stays "auto" (or whatever the host picked) while the room is
+// still "lobby"; beginGame() below freezes it to the concrete size the
+// engine actually dealt once play starts, so serializeRoomMeta's rules never
+// show "auto" for a game already in progress.
+const DEFAULT_RULES = { allowThrowIns: true, allowTransfers: false, deckSize: "auto" };
 // The fixed sticker set players can react with mid-game (public/js/games/
 // durak-multiplayer.js renders the buttons and the pop-in animation; the
 // actual images live at public/images/games/durak/stickers/). A closed set
@@ -709,6 +715,7 @@ function handleSetRules(ws, meta, rules) {
   if (!rules || typeof rules !== "object") return sendError(ws, "bad-request");
   if (typeof rules.allowThrowIns === "boolean") room.rules.allowThrowIns = rules.allowThrowIns;
   if (typeof rules.allowTransfers === "boolean") room.rules.allowTransfers = rules.allowTransfers;
+  if (rules.deckSize === "auto" || rules.deckSize === "36" || rules.deckSize === "52") room.rules.deckSize = rules.deckSize;
   broadcastRoom(room);
 }
 
@@ -847,6 +854,10 @@ function beginGame(room) {
   room.readyCheck = null;
   room.status = "playing";
   room.game = engine.createGame(room.players.map((p) => p.userId), room.rules);
+  // Freeze "auto" to the concrete size the engine just dealt (36 or 52) so
+  // serializeRoomMeta's rules - shown for "playing" rooms too - never display
+  // "auto" for a game whose deck size has already been decided.
+  room.rules.deckSize = room.game.rules.deckSize;
   room.clocks = durakClock.createClocks(room.players.length);
   // Frozen once, the moment the game starts - every Elo computation for this
   // game (an early payout the instant a seat goes out, and whoever's still

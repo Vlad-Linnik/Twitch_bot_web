@@ -293,6 +293,7 @@
   const rulesPanelEl = document.getElementById("dmp-rules-panel");
   const ruleThrowInsEl = document.getElementById("dmp-rule-throwins");
   const ruleTransfersEl = document.getElementById("dmp-rule-transfers");
+  const ruleDeckSizeEl = document.getElementById("dmp-rule-deck-size");
   const rulesHostHintEl = document.getElementById("dmp-rules-host-hint");
 
   const readyCheckEl = document.getElementById("dmp-ready-check");
@@ -486,10 +487,10 @@
   // enforced too (durakRoomManager.js's handleSetRules rejects non-host
   // senders and any status other than "lobby"), so the checkboxes are only
   // ever interactive there. The panel itself stays visible (but locked) once
-  // "playing" starts, purely so players can see which of the two house rules
-  // (throw-ins / perevod) this match is actually running with - hidden again
-  // only for "starting" (ready check, no rules to show settled yet) and
-  // "finished".
+  // "playing" starts, purely so players can see which house rules (throw-ins
+  // / perevod / deck size) this match is actually running with - hidden
+  // again only for "starting" (ready check, no rules to show settled yet)
+  // and "finished".
 
   function renderRulesPanel(rules, amHost, roomStatus) {
     rulesPanelEl.hidden = roomStatus !== "lobby" && roomStatus !== "playing";
@@ -499,6 +500,11 @@
     ruleThrowInsEl.disabled = !editable;
     ruleTransfersEl.checked = rules.allowTransfers === true;
     ruleTransfersEl.disabled = !editable;
+    // Once play starts durakRoomManager.js's beginGame() has already frozen
+    // this to the concrete size the engine dealt (36 or 52, never "auto"
+    // again), so the same <select> can show it as a plain, disabled fact.
+    ruleDeckSizeEl.value = String(rules.deckSize || "auto");
+    ruleDeckSizeEl.disabled = !editable;
     // The "only the host can change this" hint only makes sense in the
     // lobby - during play nobody can change it, host included, so showing
     // it there would misleadingly suggest someone else could.
@@ -510,6 +516,9 @@
   });
   ruleTransfersEl.addEventListener("change", () => {
     send({ type: "setRules", rules: { allowTransfers: ruleTransfersEl.checked } });
+  });
+  ruleDeckSizeEl.addEventListener("change", () => {
+    send({ type: "setRules", rules: { deckSize: ruleDeckSizeEl.value } });
   });
 
   function wsUrl() {

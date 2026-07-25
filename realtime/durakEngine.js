@@ -33,17 +33,36 @@
 const SUITS = ["S", "H", "D", "C"];
 
 // A 36-card deck (ranks 6-14) dealt 6-each to 6 players leaves ZERO reserve
-// cards (36 - 6*6 = 0) - no trump reveal, no redraws, structurally broken.
-// Extend to a 52-card deck (ranks 2-14) only at exactly 6 players (52-36=16
-// reserve) - a standard, common house-rule for large Durak tables. 2-5 player
-// rooms stay on the classic 36-card deck, unchanged from single-player.
-function createDeck(playerCount) {
-  const startRank = playerCount >= 6 ? 2 : 6;
+// cards (36 - 6*6 = 0) - no redraws, and (see deckStartedEmpty in createGame)
+// no face-up trump card sitting on the table either, since it's already been
+// dealt straight into a hand along with the rest of the deck. That's a
+// deliberate, host-chosen tradeoff now (see rules.deckSize below), not a bug -
+// by default rooms still auto-extend to a 52-card deck (ranks 2-14, no
+// jokers) at exactly 6 players (52-36=16 reserve), a standard, common
+// house-rule for large Durak tables, but the host can force either size for
+// any player count from the lobby.
+//
+// deckSizeOverride, when given, must already be normalize()d (36 or 52) -
+// createGame is the only caller that passes it; direct callers (tests) get
+// the auto-by-playerCount behavior with a single argument.
+function createDeck(playerCount, deckSizeOverride) {
+  const deckSize = deckSizeOverride || (playerCount >= 6 ? 52 : 36);
+  const startRank = deckSize === 52 ? 2 : 6;
   const cards = [];
   for (const suit of SUITS) {
     for (let rank = startRank; rank <= 14; rank++) cards.push({ suit, rank });
   }
   return cards;
+}
+
+// rules.deckSize travels over the network as "auto" | "36" | "52" (a <select>
+// element's value is always a string) - this is the one place that turns it
+// into the 36/52 number createDeck expects, or null for "let createDeck
+// auto-pick by player count".
+function normalizeDeckSize(value) {
+  if (value === 36 || value === "36") return 36;
+  if (value === 52 || value === "52") return 52;
+  return null;
 }
 
 function shuffle(cards) {
@@ -354,7 +373,9 @@ function finishBeatenPause(state) {
 // exists it's fixed for the rest of that game, same as trumpSuit.
 function createGame(playerIds, rules) {
   const n = playerIds.length;
-  const deck = createDeck(n);
+  const deckSizeOverride = normalizeDeckSize(rules && rules.deckSize);
+  const deck = createDeck(n, deckSizeOverride);
+  const deckSize = deck.length;
   shuffle(deck);
   const trumpCard = deck.pop();
   const trumpSuit = trumpCard.suit;
@@ -373,6 +394,14 @@ function createGame(playerIds, rules) {
     deck,
     trumpSuit,
     trumpCard,
+    // True only for the 36-card/6-player combo (36 - 6*6 = 0): the initial
+    // deal consumes the entire deck at once, so the trump card went straight
+    // into a hand instead of staying face-up on an actual reserve pile.
+    // serializePublicState below uses this to keep showing it for the whole
+    // game, rather than the usual "hide it once the reserve empties" rule,
+    // which would otherwise hide it for a game that never had a reserve to
+    // begin with.
+    deckStartedEmpty: deck.length === 0,
     table: [],
     attackerSeat: 0,
     defenderSeat: 1 % n,
@@ -384,6 +413,9 @@ function createGame(playerIds, rules) {
     rules: {
       allowThrowIns: !(rules && rules.allowThrowIns === false),
       allowTransfers: !!(rules && rules.allowTransfers === true),
+      // Resolved to the concrete size actually dealt (never "auto") so
+      // display code never has to re-derive it from player count.
+      deckSize,
     },
   };
 
@@ -579,7 +611,7 @@ function serializePublicState(state) {
     attackerSeat: state.attackerSeat,
     defenderSeat: state.defenderSeat,
     trumpSuit: state.trumpSuit,
-    trumpCard: state.deck.length > 0 ? state.trumpCard : null,
+    trumpCard: state.deck.length > 0 || state.deckStartedEmpty ? state.trumpCard : null,
     deckCount: state.deck.length,
     rules: state.rules,
     boutCap: state.boutCap,
@@ -629,6 +661,7 @@ function serializeForSeat(state, seat) {
 
 module.exports = {
   createDeck,
+  normalizeDeckSize,
   shuffle,
   beats,
   createGame,
