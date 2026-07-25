@@ -1,0 +1,69 @@
+<%- include('partials/head', { title: t('games.watch.title') }) %>
+<%- include('partials/nav') %>
+
+<%# The cross-game spectator hub. The left pane embeds a real game page in
+    spectator (?watch=) mode via an iframe; the right panel lists every live
+    match across all games and lets the viewer switch. Everything is driven by
+    public/js/games/watch-hub.js off the /ws/spectator-hub feed
+    (realtime/spectatorHubManager.js). Per-game display names + i18n templates
+    are passed through data-* attributes so the client stays locale-agnostic,
+    same technique as views/partials/quickMatchLobby.ejs. %>
+<main class="pt-14 max-w-6xl mx-auto px-4 sm:px-6 py-6">
+  <div class="mb-4 flex items-baseline justify-between gap-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.watch.heading') %></h1>
+    <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.watch.backToGames') %></a>
+  </div>
+
+  <div id="watch-root"
+       data-name-durak-multiplayer="<%= t('games.durak.name') %>"
+       data-name-battleship="<%= t('games.battleship.name') %>"
+       data-name-pong="<%= t('games.pong.name') %>"
+       data-name-connect-four="<%= t('games.connectFour.name') %>"
+       data-match-vs-tpl="<%= t('games.watch.matchVsTpl') %>"
+       data-spectator-count-tpl="<%= t('games.watch.spectatorCountTpl') %>"
+       class="grid gap-4 lg:grid-cols-[1fr_20rem]">
+
+    <%# Stage: the embedded game, an idle "wait for a match" panel, or a small
+        "this match ended" banner sitting above the frozen final board. %>
+    <div class="min-w-0">
+      <div id="watch-ended-notice" hidden
+           class="mb-3 px-4 py-2 rounded-lg bg-amber-500/15 text-amber-300 text-sm text-center">
+        <%= t('games.watch.matchEndedNotice') %>
+      </div>
+
+      <div id="watch-frame-wrap" hidden class="rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden">
+        <%# title is set for a11y; src is assigned by the client. A same-origin
+            frame (session cookie + postMessage both need it), so no sandbox. %>
+        <iframe id="watch-frame" title="<%= t('games.watch.heading') %>"
+                class="w-full block" style="height: 78vh; border: 0"></iframe>
+      </div>
+
+      <div id="watch-idle"
+           class="rounded-xl border border-neutral-800 bg-neutral-900 p-10 text-center grid place-items-center"
+           style="min-height: 60vh">
+        <div>
+          <p class="text-lg font-medium text-neutral-200 mb-2"><%= t('games.watch.idleTitle') %></p>
+          <p class="text-sm text-neutral-500 max-w-sm mx-auto"><%= t('games.watch.idleBody') %></p>
+        </div>
+      </div>
+    </div>
+
+    <%# Switch-rooms panel. %>
+    <aside class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 self-start">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-3"><%= t('games.watch.liveMatchesTitle') %></p>
+
+      <label class="flex items-start gap-2 cursor-pointer mb-4">
+        <input type="checkbox" id="watch-auto-switch" checked
+               class="mt-0.5 rounded border-neutral-700 bg-neutral-800 text-purple-600 focus:ring-purple-500 focus:ring-offset-neutral-900">
+        <span class="text-sm text-neutral-300"><%= t('games.watch.autoSwitchLabel') %></span>
+      </label>
+
+      <ul id="watch-list" class="space-y-2">
+        <li id="watch-list-empty" class="text-sm text-neutral-500 py-2"><%= t('games.watch.noMatches') %></li>
+      </ul>
+    </aside>
+  </div>
+</main>
+
+<script src="/js/games/watch-hub.js" defer></script>
+<%- include('partials/foot') %>

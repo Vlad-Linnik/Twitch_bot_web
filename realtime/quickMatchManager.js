@@ -28,6 +28,7 @@ const crypto = require("crypto");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const durakElo = require("./durakElo");
+const liveMatchRegistry = require("./liveMatchRegistry");
 const { createSimpleLimiter } = require("../middleware/rateLimiters");
 
 // Queueing is a low-frequency lobby action, same spirit as
@@ -112,7 +113,25 @@ function createQuickMatchManager(config) {
   function broadcastLobby() {
     const snapshot = buildLobbySnapshot();
     for (const ws of lobbySockets) safeSend(ws, snapshot);
+    // The cross-game spectator hub (/games/watch) is driven off the same set
+    // of transitions as the per-game lobby list, so notify it here rather than
+    // hunting down every lifecycle call site separately.
+    liveMatchRegistry.notifyChange();
   }
+
+  // The shape realtime/liveMatchRegistry.js aggregates for this one game - the
+  // same "playing rooms" set buildLobbySnapshot() advertises, keyed as the
+  // registry expects (roomId, players:[{displayName,connected}]).
+  function listLiveMatches() {
+    return [...rooms.values()]
+      .filter((r) => r.status === "playing")
+      .map((r) => ({
+        roomId: r.id,
+        players: r.players.map((p) => ({ displayName: p.meta.displayName, connected: p.connected })),
+        spectatorCount: r.spectators.size,
+      }));
+  }
+  liveMatchRegistry.registerSource(game, listLiveMatches);
 
   function enterLobby(ws, meta) {
     meta.roomId = null;

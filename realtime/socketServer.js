@@ -10,6 +10,7 @@
 const { WebSocketServer } = require("ws");
 const durakRoomManager = require("./durakRoomManager");
 const { createQuickMatchManager } = require("./quickMatchManager");
+const spectatorHubManager = require("./spectatorHubManager");
 const battleshipEngine = require("../lib/battleshipEngine");
 const pongEngine = require("../lib/pongEngine");
 const connectFourEngine = require("../lib/connectFourEngine");
@@ -34,6 +35,11 @@ function buildHandlers() {
     "/ws/connect-four",
     createQuickMatchManager({ game: "connect-four", rated: true, mode: "turn-based", engine: connectFourEngine })
   );
+  // The cross-game spectator hub feed (directory only, no game state) backing
+  // the /games/watch page - see realtime/spectatorHubManager.js. Every quick-
+  // match manager above, plus durakRoomManager, publishes its live matches to
+  // realtime/liveMatchRegistry.js, which this handler aggregates.
+  handlers.set("/ws/spectator-hub", spectatorHubManager);
   return handlers;
 }
 

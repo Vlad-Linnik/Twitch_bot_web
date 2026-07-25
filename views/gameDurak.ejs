@@ -1,7 +1,9 @@
+<% const embedWatch = locals.embedWatch || null; %>
 <%- include('partials/head', { title: t('games.durak.name') }) %>
-<%- include('partials/nav') %>
+<% if (!embedWatch) { %><%- include('partials/nav') %><% } %>
 
-<main class="pt-14 max-w-5xl mx-auto px-4 sm:px-6 py-6">
+<main class="<%= embedWatch ? 'p-2' : 'pt-14' %> max-w-5xl mx-auto px-4 sm:px-6 py-6">
+  <% if (!embedWatch) { %>
   <div class="mb-4 flex items-baseline justify-between gap-4">
     <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.durak.name') %></h1>
     <div class="flex items-baseline gap-4 shrink-0">
@@ -10,6 +12,7 @@
       <a href="/games" class="text-sm text-purple-400 hover:text-purple-300"><%= t('games.durak.backToGames') %></a>
     </div>
   </div>
+  <% } %>
 
   <%# --- Mode select: vs computer or with people, both on this one page ------ %>
   <section id="durak-mode-select">
@@ -169,6 +172,7 @@
     <div id="dmp-root"
          data-ws-path="/ws/durak-multiplayer"
          data-auto-join-room-id="<%= autoJoinRoomId || '' %>"
+         data-watch-room-id="<%= embedWatch || '' %>"
          data-my-user-id="<%= user ? user.userId : '' %>"
          data-join-label="<%= t('games.durakMultiplayer.joinRoom') %>"
          data-host-prefix="<%= t('games.durakMultiplayer.hostPrefix') %>"

@@ -11,12 +11,20 @@
   const ROWS = 6;
   const COLS = 7; // must match lib/connectFourEngine.js
 
+  // Set when this page is embedded in the cross-game spectator hub's iframe
+  // (public/js/games/watch-hub.js) to auto-watch one specific room. In that
+  // mode all the queue/lobby/ready-check/normal-spectator chrome is skipped -
+  // the page only ever renders the watched board.
+  const embedRoom = root.dataset.watchRoom || null;
+
   const client = window.createQuickMatchClient(root.dataset.wsPath);
-  window.wireQuickMatchQueueDisplay(client, {
-    countEl: document.getElementById("c4-queue-count"),
-    timeEl: document.getElementById("c4-queue-time"),
-  });
-  window.wireQuickMatchLobby(client);
+  if (!embedRoom) {
+    window.wireQuickMatchQueueDisplay(client, {
+      countEl: document.getElementById("c4-queue-count"),
+      timeEl: document.getElementById("c4-queue-time"),
+    });
+    window.wireQuickMatchLobby(client);
+  }
 
   const screens = {
     idle: document.getElementById("c4-screen-idle"),
@@ -33,14 +41,16 @@
   const colorBadge = document.getElementById("c4-color-badge");
   const resignBtn = document.getElementById("c4-resign");
 
-  window.wireQuickMatchSpectating(client, {
-    badgeEl: document.getElementById("c4-spectating-badge"),
-    stopBtn: document.getElementById("c4-stop-watching-btn"),
-    onExit: () => {
-      spectating = false;
-      showScreen("idle");
-    },
-  });
+  if (!embedRoom) {
+    window.wireQuickMatchSpectating(client, {
+      badgeEl: document.getElementById("c4-spectating-badge"),
+      stopBtn: document.getElementById("c4-stop-watching-btn"),
+      onExit: () => {
+        spectating = false;
+        showScreen("idle");
+      },
+    });
+  }
 
   // --- Sound (cloneNode()-per-play pattern shared with the other on-site
   // games, e.g. battleship.js, so it can't cut itself off on a fast rematch).
@@ -253,10 +263,18 @@
 
   // Ready-check popup (shared partial + shared wiring). matchCancelled drops to
   // idle; queued (a re-queue after a cancel) shows the searching screen again.
-  window.wireQuickMatchReadyCheck(client);
-  client.on("matchCancelled", () => showScreen("idle"));
-  client.on("queued", () => showScreen("queued"));
+  if (!embedRoom) {
+    window.wireQuickMatchReadyCheck(client);
+    client.on("matchCancelled", () => showScreen("idle"));
+    client.on("queued", () => showScreen("queued"));
+  }
 
-  showScreen("idle");
+  if (embedRoom) {
+    // Hub-embedded: jump straight to the board and auto-watch the target room.
+    showScreen("game");
+    window.wireQuickMatchEmbeddedSpectator(client, { roomId: embedRoom });
+  } else {
+    showScreen("idle");
+  }
   client.connect();
 })();

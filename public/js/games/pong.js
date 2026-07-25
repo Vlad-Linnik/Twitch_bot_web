@@ -54,12 +54,19 @@
   const RESYNC_DISTANCE = 90; // units - past this it's drift we can't ease away, adopt the server's value
   const MAX_FRAME_DT_MS = 100; // clamp a backgrounded-tab frame gap, same as the engine's step() does
 
+  // Set when embedded in the cross-game spectator hub's iframe
+  // (public/js/games/watch-hub.js) to auto-watch one room; skips the
+  // queue/lobby/ready-check/normal-spectator chrome (see connect-four.js).
+  const embedRoom = root.dataset.watchRoom || null;
+
   const client = window.createQuickMatchClient(root.dataset.wsPath);
-  window.wireQuickMatchQueueDisplay(client, {
-    countEl: document.getElementById("pong-queue-count"),
-    timeEl: document.getElementById("pong-queue-time"),
-  });
-  window.wireQuickMatchLobby(client);
+  if (!embedRoom) {
+    window.wireQuickMatchQueueDisplay(client, {
+      countEl: document.getElementById("pong-queue-count"),
+      timeEl: document.getElementById("pong-queue-time"),
+    });
+    window.wireQuickMatchLobby(client);
+  }
 
   const screens = {
     idle: document.getElementById("pong-screen-idle"),
@@ -80,15 +87,17 @@
   let currentDir = 0;
   let spectating = false; // local "have we already run spectate-entry setup" flag - see spectateCtl below for the shared badge/button state
 
-  window.wireQuickMatchSpectating(client, {
-    badgeEl: document.getElementById("pong-spectating-badge"),
-    stopBtn: document.getElementById("pong-stop-watching-btn"),
-    onExit: () => {
-      spectating = false;
-      stopLoop();
-      showScreen("idle");
-    },
-  });
+  if (!embedRoom) {
+    window.wireQuickMatchSpectating(client, {
+      badgeEl: document.getElementById("pong-spectating-badge"),
+      stopBtn: document.getElementById("pong-stop-watching-btn"),
+      onExit: () => {
+        spectating = false;
+        stopLoop();
+        showScreen("idle");
+      },
+    });
+  }
 
   let snapshot = null; // last authoritative state pushed by the server
   let snapshotAt = 0; // performance.now() when it arrived
@@ -414,10 +423,18 @@
 
   // Ready-check popup (shared partial + shared wiring). matchCancelled drops to
   // idle; queued (a re-queue after a cancel) shows the searching screen again.
-  window.wireQuickMatchReadyCheck(client);
-  client.on("matchCancelled", () => showScreen("idle"));
-  client.on("queued", () => showScreen("queued"));
+  if (!embedRoom) {
+    window.wireQuickMatchReadyCheck(client);
+    client.on("matchCancelled", () => showScreen("idle"));
+    client.on("queued", () => showScreen("queued"));
+  }
 
-  showScreen("idle");
+  if (embedRoom) {
+    // Hub-embedded: jump to the board and auto-watch the target room.
+    showScreen("game");
+    window.wireQuickMatchEmbeddedSpectator(client, { roomId: embedRoom });
+  } else {
+    showScreen("idle");
+  }
   client.connect();
 })();

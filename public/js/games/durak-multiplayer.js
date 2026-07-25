@@ -16,6 +16,34 @@
   const d = root.dataset;
   const myUserId = d.myUserId;
 
+  // Cross-game spectator hub embed (public/js/games/watch-hub.js): when set,
+  // this page is inside the hub's iframe to auto-watch one room and must report
+  // back when that game ends so the hub can auto-advance to another match.
+  const embedWatchRoomId = d.watchRoomId || null;
+  let embedEnded = false;
+  let embedStarted = false; // a spectator roomState has arrived - we're really watching
+  let embedWatchdog = null;
+
+  function embedClearWatchdog() {
+    if (embedWatchdog) {
+      clearTimeout(embedWatchdog);
+      embedWatchdog = null;
+    }
+  }
+
+  function embedPostEnded() {
+    if (!embedWatchRoomId || embedEnded) return;
+    embedEnded = true;
+    embedClearWatchdog();
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "spectatorMatchEnded", roomId: embedWatchRoomId }, location.origin);
+      }
+    } catch (_) {
+      /* same-origin iframe - shouldn't throw */
+    }
+  }
+
   const SUIT_SYMBOL = { S: "♠", H: "♥", D: "♦", C: "♣" };
   const RANK_LABEL = { 11: "J", 12: "Q", 13: "K", 14: "A" };
 
@@ -501,6 +529,7 @@
     ws.addEventListener("open", () => {
       reconnectAttempt = 0;
       setConnStatus("");
+      if (embedWatchRoomId) send({ type: "watchRoom", roomId: embedWatchRoomId });
       const autoJoin = d.autoJoinRoomId;
       if (autoJoin) send({ type: "joinRoom", roomId: autoJoin });
     });
@@ -538,10 +567,20 @@
     if (msg.type === "lobbyState") {
       renderLobbyList(msg.rooms);
       renderPlayingList(msg.playingRooms || []);
+      // Embedded in the hub and already watching, yet back in the lobby means
+      // the room was torn down (evicted) - end so the hub advances.
+      if (embedWatchRoomId && embedStarted) embedPostEnded();
     } else if (msg.type === "roomState") {
       currentRoomId = msg.room.id;
       isSpectating = !!msg.spectating;
       renderRoom(msg);
+      if (embedWatchRoomId) {
+        embedStarted = true;
+        embedClearWatchdog();
+        // Game over: let the result overlay linger a moment for the viewer,
+        // then hand off to the hub to load the next match.
+        if (msg.game && msg.game.result && !embedEnded) setTimeout(embedPostEnded, 4000);
+      }
     } else if (msg.type === "action") {
       narrateAction(msg.seat, msg.action);
       // Stashed for renderTable()'s exit animation: a "take" clear should
@@ -586,6 +625,12 @@
         if (lastRoom && lastGame && !resultOverlayEl.hidden) renderStandings(lastRoom, lastGame);
       }
     } else if (msg.type === "error") {
+      // In the hub embed, a watchRoom that raced a just-ended match ends us so
+      // the hub picks another rather than showing a stuck error toast.
+      if (embedWatchRoomId && (msg.code === "room-not-found" || msg.code === "room-not-watchable")) {
+        embedPostEnded();
+        return;
+      }
       showToast(errorText(msg.code));
     }
   }
@@ -687,9 +732,9 @@
   }
 
   // Rooms with a hand already in progress (server-filtered to status
-  // "playing" - see durakRoomManager.js's buildLobbySnapshot). A row here
-  // sends "watchRoom" instead of "joinRoom" - the visitor becomes a
-  // read-only spectator, never a seated player, of that room.
+  // "playing" - see durakRoomManager.js's buildLobbySnapshot), shown as a
+  // read-only "who's playing now" activity list. Watching moved to the unified
+  // cross-game hub (/games/watch), so these rows no longer carry a Watch button.
   function renderPlayingList(rooms) {
     if (currentRoomId) return; // already in a room (seated or spectating) - the lobby view isn't shown
     playingListEl.querySelectorAll("[data-playing-row]").forEach((el) => el.remove());
@@ -717,13 +762,10 @@
         (r.avgRating != null ? " · " + fillTemplate(d.avgRatingTpl, { RATING: r.avgRating }) : "");
       info.append(namesLine, countLine);
 
-      const watchBtn = document.createElement("button");
-      watchBtn.type = "button";
-      watchBtn.className = "px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors shrink-0";
-      watchBtn.textContent = d.watchLabel;
-      watchBtn.addEventListener("click", () => send({ type: "watchRoom", roomId: r.id }));
-
-      li.append(info, watchBtn);
+      // No per-row Watch button any more: spectating moved to the unified
+      // cross-game hub at /games/watch (public/js/games/watch-hub.js). This
+      // list stays as a read-only "who's playing now" activity panel.
+      li.append(info);
       playingListEl.appendChild(li);
     }
   }
@@ -1363,8 +1405,19 @@
   // room deep link (d.autoJoinRoomId set server-side), which should connect
   // immediately since the whole point of that URL is joining a room.
 
-  if (d.autoJoinRoomId) {
+  if (d.autoJoinRoomId || embedWatchRoomId) {
     connect();
+    if (embedWatchRoomId) {
+      // The hub owns navigation between matches, so the in-room Leave / Stop
+      // watching buttons are noise here - hide them and give up if nothing
+      // arrives (rejected upgrade, room already gone) so the hub can advance.
+      if (stopWatchingBtn) stopWatchingBtn.style.display = "none";
+      if (leaveBtn) leaveBtn.style.display = "none";
+      if (lobbyViewEl) lobbyViewEl.hidden = true; // no lobby flash before the watched roomState lands
+      embedWatchdog = setTimeout(() => {
+        if (!embedStarted) embedPostEnded();
+      }, 8000);
+    }
   } else {
     document.addEventListener("durak:play-people", connect, { once: true });
   }

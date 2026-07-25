@@ -1,13 +1,16 @@
+<% const embedWatch = locals.embedWatch || null; %>
 <%- include('partials/head', { title: t('games.battleship.name') }) %>
-<%- include('partials/nav') %>
+<% if (!embedWatch) { %><%- include('partials/nav') %><% } %>
 
-<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
+<main class="<%= embedWatch ? 'p-2' : 'pt-14' %> max-w-4xl mx-auto px-4 sm:px-6 py-6">
+  <% if (!embedWatch) { %>
   <div class="mb-4 flex items-baseline justify-between gap-4">
     <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.battleship.name') %></h1>
     <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.battleship.backToGames') %></a>
   </div>
+  <% } %>
 
-    <div id="bs-root" data-ws-path="/ws/battleship" class="max-w-2xl mx-auto">
+    <div id="bs-root" data-ws-path="/ws/battleship" data-watch-room="<%= embedWatch || '' %>" class="max-w-2xl mx-auto">
       <div id="bs-screen-idle" class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
         <p class="text-neutral-400 mb-4"><%= t('games.battleship.intro') %></p>
         <button type="button" id="bs-queue-button"
@@ -126,7 +129,9 @@
     <%# Rating leaderboard - same pattern as gameDurak.ejs's, since Battleship
         is rated (Elo) like the other 3 online games; this is server-rendered
         once and never updated client-side (ratings only change when someone
-        elsewhere finishes a rated game). %>
+        elsewhere finishes a rated game). Hidden when embedded in the spectator
+        hub (embedWatch). %>
+    <% if (!embedWatch) { %>
     <aside class="max-w-sm mx-auto mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
       <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.battleship.leaderboardTitle') %></p>
       <ol class="space-y-0.5">
@@ -151,9 +156,10 @@
         <% } %>
       </ol>
     </aside>
+    <% } %>
 </main>
 
-<%- include('partials/quickMatchReadyCheck') %>
+<% if (!embedWatch) { %><%- include('partials/quickMatchReadyCheck') %><% } %>
 <%- include('partials/gameVolumeControl') %>
 <script src="/js/games/gameVolume.js" defer></script>
 <script src="/js/games/quickMatchClient.js" defer></script>

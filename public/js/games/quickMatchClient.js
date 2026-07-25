@@ -228,7 +228,6 @@
     const queueCountEl = document.getElementById("qm-lobby-queue-count");
     const listEl = document.getElementById("qm-lobby-list");
     const listEmptyEl = document.getElementById("qm-lobby-list-empty");
-    const watchLabel = panel.dataset.watchLabel || "Watch";
     const matchVsTpl = panel.dataset.matchVsTpl || "{{p1}} vs {{p2}}";
     const spectatorCountTpl = panel.dataset.spectatorCountTpl || "{{count}} watching";
 
@@ -256,13 +255,10 @@
           info.appendChild(countLine);
         }
 
-        const watchBtn = document.createElement("button");
-        watchBtn.type = "button";
-        watchBtn.className = "px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors shrink-0";
-        watchBtn.textContent = watchLabel;
-        watchBtn.addEventListener("click", () => client.send("watchRoom", { roomId: r.id }));
-
-        li.append(info, watchBtn);
+        // No per-row Watch button any more: spectating moved to the unified
+        // cross-game hub at /games/watch (see public/js/games/watch-hub.js).
+        // This list stays as a read-only "who's playing now" activity panel.
+        li.append(info);
         listEl.appendChild(li);
       }
     }
@@ -318,9 +314,79 @@
     return { isSpectating: () => spectating };
   }
 
+  // Embedded-spectator wiring for the cross-game hub (public/js/games/watch-hub.js).
+  // When a quick-match game page is loaded inside the hub's iframe with a target
+  // room (root's data-watch-room), it auto-watches that room and reports back to
+  // the parent hub when the match ends so the hub can auto-advance. The game's
+  // OWN "state"/"tick" handler still does all the board rendering (msg.spectating
+  // path) - this only owns the watch/end lifecycle, not any drawing. Registers
+  // its listeners but does NOT call client.connect() - the game client does that
+  // itself after wiring, same as every other wire* helper here.
+  function wireEmbeddedSpectator(client, opts) {
+    const roomId = opts.roomId;
+    let ended = false;
+    let started = false; // a spectator "state"/"tick" has arrived - we're really watching
+    let watchdog = null;
+
+    function clearWatchdog() {
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+    }
+
+    function postEnded() {
+      if (ended) return;
+      ended = true;
+      clearWatchdog();
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: "spectatorMatchEnded", roomId }, location.origin);
+        }
+      } catch (_) {
+        /* cross-origin parent (shouldn't happen - same-origin iframe) */
+      }
+    }
+
+    client.on("_open", () => client.send("watchRoom", { roomId }));
+
+    function onStateLike(msg) {
+      if (msg && msg.spectating) {
+        started = true;
+        clearWatchdog();
+      }
+    }
+    client.on("state", onStateLike);
+    client.on("tick", onStateLike);
+
+    // The server evicts a spectator back to the lobby the instant the watched
+    // match ends (quickMatchManager.js's evictSpectators) - the reliable "match
+    // over" signal, since a spectator never receives "gameOver". Ignored until
+    // we've actually started watching, so the initial lobbyState the socket
+    // gets on connect (before watchRoom lands) doesn't end us instantly. A short
+    // delay lets the final board linger before the hub advances.
+    client.on("lobbyState", () => {
+      if (started && !ended) setTimeout(postEnded, 2500);
+    });
+
+    // watchRoom can race a match that ended between the hub's list and this
+    // click - end at once so the hub picks another.
+    client.on("error", (msg) => {
+      const e = msg && msg.error;
+      if (e === "room-not-found" || e === "room-not-watchable" || e === "already-in-room" || e === "bad-request") postEnded();
+    });
+
+    // Nothing ever arrived (rejected upgrade, room already gone) - don't leave
+    // the hub staring at a blank iframe forever.
+    watchdog = setTimeout(() => {
+      if (!started) postEnded();
+    }, 8000);
+  }
+
   window.createQuickMatchClient = createQuickMatchClient;
   window.wireQuickMatchQueueDisplay = wireQueueDisplay;
   window.wireQuickMatchReadyCheck = wireReadyCheck;
   window.wireQuickMatchLobby = wireQuickMatchLobby;
   window.wireQuickMatchSpectating = wireQuickMatchSpectating;
+  window.wireQuickMatchEmbeddedSpectator = wireEmbeddedSpectator;
 })();

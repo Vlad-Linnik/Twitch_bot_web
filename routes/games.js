@@ -112,6 +112,24 @@ router.get("/games", async (req, res, next) => {
   }
 });
 
+// The cross-game spectator hub - a single page that drops the viewer into a
+// random live match (across every multiplayer game), auto-advances when it
+// ends, and lists all live matches in a switch-rooms panel. It embeds the real
+// game pages in an iframe (each supports a ?watch=<roomId> spectator mode -
+// see the routes below), and its live-match feed is /ws/spectator-hub
+// (realtime/spectatorHubManager.js + realtime/liveMatchRegistry.js). Login-
+// gated since every spectator WebSocket needs a session anyway.
+router.get("/games/watch", requireLogin, (req, res) => {
+  res.render("gameWatch");
+});
+
+// Present on battleship/pong/connect-four/durak when the page is loaded inside
+// the hub's iframe to spectate one specific room. A non-empty ?watch renders
+// the page in embed mode (board only, auto-watch, reports match-end to the hub).
+function watchRoomParam(req) {
+  return typeof req.query.watch === "string" && req.query.watch ? req.query.watch : null;
+}
+
 router.get("/games/falling-blocks", async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_FALLING_BLOCKS, req.user ? req.user.userId : null);
@@ -173,7 +191,7 @@ router.get("/games/cloud-climber", async (req, res, next) => {
 router.get("/games/battleship", requireLogin, async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_BATTLESHIP, req.user.userId);
-    res.render("gameBattleship", { leaderboard });
+    res.render("gameBattleship", { leaderboard, embedWatch: watchRoomParam(req) });
   } catch (err) {
     next(err);
   }
@@ -182,7 +200,7 @@ router.get("/games/battleship", requireLogin, async (req, res, next) => {
 router.get("/games/pong", requireLogin, async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_PONG, req.user.userId);
-    res.render("gamePong", { leaderboard });
+    res.render("gamePong", { leaderboard, embedWatch: watchRoomParam(req) });
   } catch (err) {
     next(err);
   }
@@ -191,7 +209,7 @@ router.get("/games/pong", requireLogin, async (req, res, next) => {
 router.get("/games/connect-four", requireLogin, async (req, res, next) => {
   try {
     const leaderboard = await buildLeaderboard(GAME_CONNECT_FOUR, req.user.userId);
-    res.render("gameConnectFour", { leaderboard });
+    res.render("gameConnectFour", { leaderboard, embedWatch: watchRoomParam(req) });
   } catch (err) {
     next(err);
   }
@@ -203,16 +221,16 @@ router.get("/games/connect-four", requireLogin, async (req, res, next) => {
 // ones (the "play with people" option just renders as a login link for them,
 // see views/gameDurak.ejs). The leaderboard shown here is online-wins-only
 // (GAME_DURAK_ONLINE); the vs-computer side never submits a score.
-async function renderDurak(req, res, next, autoJoinRoomId) {
+async function renderDurak(req, res, next, autoJoinRoomId, embedWatch) {
   try {
     const leaderboard = await buildLeaderboard(GAME_DURAK_ONLINE, req.user ? req.user.userId : null);
-    res.render("gameDurak", { leaderboard, autoJoinRoomId });
+    res.render("gameDurak", { leaderboard, autoJoinRoomId, embedWatch: embedWatch || null });
   } catch (err) {
     next(err);
   }
 }
 
-router.get("/games/durak", (req, res, next) => renderDurak(req, res, next, null));
+router.get("/games/durak", (req, res, next) => renderDurak(req, res, next, null, watchRoomParam(req)));
 
 // A shareable deep link into a specific open multiplayer room - requires
 // login (same as joining any room) since there's no point rendering it for a

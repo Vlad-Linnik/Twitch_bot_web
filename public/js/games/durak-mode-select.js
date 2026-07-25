@@ -34,6 +34,10 @@
     showMode(null);
   });
 
+  // A room deep link (autoJoinRoomId) OR the spectator hub embed
+  // (watchRoomId, set by routes/games.js when /games/durak?watch=<id> is loaded
+  // inside the hub's iframe) both skip the picker and go straight to the
+  // "people" section - durak-multiplayer.js then joins/watches on connect.
   const dmpRoot = document.getElementById("dmp-root");
-  if (dmpRoot && dmpRoot.dataset.autoJoinRoomId) showMode("people");
+  if (dmpRoot && (dmpRoot.dataset.autoJoinRoomId || dmpRoot.dataset.watchRoomId)) showMode("people");
 })();

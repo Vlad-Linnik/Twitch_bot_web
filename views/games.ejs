@@ -2,7 +2,23 @@
 <%- include('partials/nav') %>
 
 <main class="pt-14 max-w-3xl mx-auto px-6 py-12">
-  <h1 class="text-3xl font-bold text-neutral-100 mb-8"><%= t('games.title') %></h1>
+  <div class="mb-8 flex items-center justify-between gap-4 flex-wrap">
+    <h1 class="text-3xl font-bold text-neutral-100"><%= t('games.title') %></h1>
+    <%# Entry point to the cross-game spectator hub - drops the viewer into a
+        random live match and auto-advances. Login-gated (spectating needs a
+        session), so it renders as a login link for logged-out visitors. %>
+    <% if (typeof user !== "undefined" && user) { %>
+      <a href="/games/watch"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors shrink-0">
+        <span aria-hidden="true">👁</span> <%= t('games.watch.watchButton') %>
+      </a>
+    <% } else { %>
+      <a href="/auth/login"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors shrink-0">
+        <span aria-hidden="true">👁</span> <%= t('games.watch.watchButton') %>
+      </a>
+    <% } %>
+  </div>
 
   <%
     // Category names are per-locale (db/gameCatalogRepo.js's `names` map) -

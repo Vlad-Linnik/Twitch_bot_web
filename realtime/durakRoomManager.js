@@ -19,6 +19,7 @@ const durakClock = require("./durakClock");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const userProfileService = require("../db/userProfileService");
+const liveMatchRegistry = require("./liveMatchRegistry");
 const { durakRoomCreateLimiter, durakStickerLimiter } = require("../middleware/rateLimiters");
 
 const MAX_PLAYERS = 6;
@@ -112,7 +113,25 @@ function sendLobbySnapshot(ws) {
 function broadcastLobby() {
   const snapshot = buildLobbySnapshot();
   for (const ws of lobbySockets) safeSend(ws, snapshot);
+  // Keep the cross-game spectator hub (/games/watch) in step - every lobby
+  // transition that changes what's playable is already funnelled through here.
+  liveMatchRegistry.notifyChange();
 }
+
+// The shape realtime/liveMatchRegistry.js aggregates for Durak - the same
+// "playing rooms" set buildLobbySnapshot() advertises, normalized to the
+// registry's {roomId, players:[{displayName,connected}], spectatorCount} shape
+// (a Durak player who left the table counts as disconnected for the hub row).
+function listLiveMatches() {
+  return [...rooms.values()]
+    .filter((r) => r.status === "playing")
+    .map((r) => ({
+      roomId: r.id,
+      players: r.players.map((p) => ({ displayName: p.displayName, connected: !p.left && p.connected })),
+      spectatorCount: r.spectators.size,
+    }));
+}
+liveMatchRegistry.registerSource(GAME_KEY, listLiveMatches);
 
 function enterLobby(ws, meta) {
   meta.roomId = null;

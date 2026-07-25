@@ -55,13 +55,20 @@
     }
   }
 
+  // Set when embedded in the cross-game spectator hub's iframe
+  // (public/js/games/watch-hub.js) to auto-watch one room; skips all the
+  // queue/lobby/ready-check/normal-spectator chrome (see connect-four.js).
+  const embedRoom = root.dataset.watchRoom || null;
+
   const client = window.createQuickMatchClient(root.dataset.wsPath);
-  window.wireQuickMatchReadyCheck(client);
-  window.wireQuickMatchQueueDisplay(client, {
-    countEl: byId("bs-queue-count"),
-    timeEl: byId("bs-queue-time"),
-  });
-  window.wireQuickMatchLobby(client);
+  if (!embedRoom) {
+    window.wireQuickMatchReadyCheck(client);
+    window.wireQuickMatchQueueDisplay(client, {
+      countEl: byId("bs-queue-count"),
+      timeEl: byId("bs-queue-time"),
+    });
+    window.wireQuickMatchLobby(client);
+  }
 
   const screens = { idle: byId("bs-screen-idle"), queued: byId("bs-screen-queued"), game: byId("bs-screen-game") };
   const placementPanel = byId("bs-placement");
@@ -89,17 +96,19 @@
   let spectating = false;
   let spectatePlayerNames = null;
 
-  window.wireQuickMatchSpectating(client, {
-    badgeEl: byId("bs-spectating-badge"),
-    stopBtn: byId("bs-stop-watching-btn"),
-    onExit: () => {
-      spectating = false;
-      placementPanel.hidden = true;
-      battlePanel.hidden = true;
-      spectatePanel.hidden = true;
-      showScreen("idle");
-    },
-  });
+  if (!embedRoom) {
+    window.wireQuickMatchSpectating(client, {
+      badgeEl: byId("bs-spectating-badge"),
+      stopBtn: byId("bs-stop-watching-btn"),
+      onExit: () => {
+        spectating = false;
+        placementPanel.hidden = true;
+        battlePanel.hidden = true;
+        spectatePanel.hidden = true;
+        showScreen("idle");
+      },
+    });
+  }
 
   let youAreSeat = null;
   let orientation = "horizontal"; // horizontal | vertical
@@ -608,8 +617,10 @@
   client.on("opponentReconnected", () => {
     opponentBanner.hidden = true;
   });
-  client.on("matchCancelled", () => showScreen("idle"));
-  client.on("queued", () => showScreen("queued"));
+  if (!embedRoom) {
+    client.on("matchCancelled", () => showScreen("idle"));
+    client.on("queued", () => showScreen("queued"));
+  }
   client.on("error", (msg) => console.error("[battleship] server error:", msg.error));
 
   byId("bs-queue-button")?.addEventListener("click", () => {
@@ -623,6 +634,19 @@
   byId("bs-resign")?.addEventListener("click", () => client.send("resign"));
   byId("bs-play-again")?.addEventListener("click", () => showScreen("idle"));
 
-  showScreen("idle");
+  if (embedRoom) {
+    // Hub-embedded: jump to the board and auto-watch the target room. Keep all
+    // three sub-panels hidden until the first spectator state arrives (the
+    // "state" handler unhides the spectate panel), so the placement UI never
+    // flashes on screen for a viewer who can't place anything.
+    showScreen("game");
+    placementPanel.hidden = true;
+    battlePanel.hidden = true;
+    spectatePanel.hidden = true;
+    resignBtn.hidden = true;
+    window.wireQuickMatchEmbeddedSpectator(client, { roomId: embedRoom });
+  } else {
+    showScreen("idle");
+  }
   client.connect();
 })();

@@ -1,13 +1,16 @@
+<% const embedWatch = locals.embedWatch || null; %>
 <%- include('partials/head', { title: t('games.connectFour.name') }) %>
-<%- include('partials/nav') %>
+<% if (!embedWatch) { %><%- include('partials/nav') %><% } %>
 
-<main class="pt-14 max-w-3xl mx-auto px-4 sm:px-6 py-6">
+<main class="<%= embedWatch ? 'p-2' : 'pt-14' %> max-w-3xl mx-auto px-4 sm:px-6 py-6">
+  <% if (!embedWatch) { %>
   <div class="mb-4 flex items-baseline justify-between gap-4">
     <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.connectFour.name') %></h1>
     <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.connectFour.backToGames') %></a>
   </div>
+  <% } %>
 
-  <div id="c4-root" data-ws-path="/ws/connect-four" class="max-w-xl mx-auto">
+  <div id="c4-root" data-ws-path="/ws/connect-four" data-watch-room="<%= embedWatch || '' %>" class="max-w-xl mx-auto">
     <div id="c4-screen-idle" class="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
       <p class="text-neutral-400 mb-4"><%= t('games.connectFour.intro') %></p>
       <button type="button" id="c4-queue-button"
@@ -67,7 +70,9 @@
     </div>
   </div>
 
-  <%# Rating leaderboard - same pattern as gameBattleship.ejs's/gamePong.ejs's. %>
+  <%# Rating leaderboard - same pattern as gameBattleship.ejs's/gamePong.ejs's.
+      Hidden entirely when embedded in the spectator hub (embedWatch). %>
+  <% if (!embedWatch) { %>
   <aside class="max-w-sm mx-auto mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
     <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.connectFour.leaderboardTitle') %></p>
     <ol class="space-y-0.5">
@@ -92,9 +97,10 @@
       <% } %>
     </ol>
   </aside>
+  <% } %>
 </main>
 
-<%- include('partials/quickMatchReadyCheck') %>
+<% if (!embedWatch) { %><%- include('partials/quickMatchReadyCheck') %><% } %>
 <%- include('partials/gameVolumeControl') %>
 <script src="/js/games/gameVolume.js" defer></script>
 <script src="/js/games/quickMatchClient.js" defer></script>

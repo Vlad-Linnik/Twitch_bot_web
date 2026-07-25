@@ -495,6 +495,20 @@
       "spectateTurnTpl": "{{name}}'s turn",
       "spectatePlacementWaiting": "Players are placing their fleets…"
     },
+    "watch": {
+      "title": "Watch matches",
+      "heading": "Watch live matches",
+      "backToGames": "All games",
+      "watchButton": "Watch matches",
+      "idleTitle": "No live matches right now",
+      "idleBody": "Wait until someone starts playing — you'll be dropped into a match automatically.",
+      "liveMatchesTitle": "Live matches",
+      "noMatches": "No matches in progress right now.",
+      "autoSwitchLabel": "Switch automatically when a game ends",
+      "matchEndedNotice": "This match ended. Pick another match from the list.",
+      "matchVsTpl": "{{p1}} vs {{p2}}",
+      "spectatorCountTpl": "{{count}} watching"
+    },
     "battleship": {
       "name": "Battleship",
       "cardDescription": "Classic 1v1 Battleship — online only, rated.",
