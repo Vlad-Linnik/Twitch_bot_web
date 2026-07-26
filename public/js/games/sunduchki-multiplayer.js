@@ -192,7 +192,12 @@
 
   // A single newly-arrived card (won via a hit, or drawn from the deck) -
   // shorter/snappier than the full deal, no stagger needed for one card.
-  function popInAnimate(el) {
+  // delayMs (see CARD_FLIGHT_MS below) lets a caller hold this pop until a
+  // concurrent flyCardAnimate() has actually "landed" instead of popping the
+  // instant the state update itself arrives - fill:"backwards" keeps the
+  // element at its first-keyframe (invisible) state for the duration of that
+  // delay rather than flashing full-size before the delay even starts.
+  function popInAnimate(el, delayMs) {
     if (!el.animate) return;
     el.animate(
       [
@@ -200,9 +205,14 @@
         { transform: "scale(1.08)", opacity: 1, offset: 0.7 },
         { transform: "scale(1)", opacity: 1 },
       ],
-      { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+      { duration: 320, delay: delayMs || 0, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "backwards" }
     );
   }
+
+  // The visible travel time of flyCardAnimate() below - popInAnimate()'s
+  // delay is derived from this so a card's arrival pop lines up with its
+  // flight actually landing rather than the two running independently.
+  const CARD_FLIGHT_MS = 480;
 
   // The payoff moment - a rank fully collected into a chest. A quick
   // amber flash + bounce on whichever badge just updated.
@@ -311,6 +321,7 @@
   // first render never treats its full starting hand as "newly arrived" cards.
   let previousHandKeys = null; // Set of "suit-rank" strings, my own hand only
   let previousChestCounts = null; // seat -> chest count, every seat
+  let previousHandCounts = null; // seat -> handCount, every seat (drives opponents' new-back pop-in)
   let previousLastLogKey = null; // JSON of the last-seen game.log entry - see renderTable's logEntryKey diffing
   let readyCheckSoundPlayedFor = null; // dedupes the notification sound against the ready check's deadline value
 
@@ -716,6 +727,79 @@
     setTimeout(() => wrap.remove(), ACTION_BADGE_MS);
   }
 
+  // --- Card flight (opponent hand / deck -> destination hand) ----------------
+  // A visible card physically travels from its source to its destination for
+  // EVERY viewer (players and spectators alike), not just whoever's turn it
+  // is - see spawnCardFlight's callers in renderTable, which runs this for
+  // every freshly-arrived public log entry. A hit is public knowledge (the
+  // server reveals the transferred cards to every viewer - see
+  // sunduchkiEngine.js's rule-design comment), so that flight shows the real
+  // face; a deck draw is private, so it always flies face-down, even to the
+  // player who ends up holding it (their own hand's popInAnimate reveals the
+  // real face once it "lands" - see the CARD_FLIGHT_MS-derived delay there).
+  function seatAnchorEl(seat) {
+    return seat === mySeat ? handPanelEl : opponentsEl.querySelector('[data-seat="' + seat + '"]');
+  }
+
+  function flyCardAnimate(fromEl, toEl, card, delayMs) {
+    if (!fromEl || !toEl || !boardEl || !boardEl.animate) return;
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+    const boardRect = boardEl.getBoundingClientRect();
+    const face = card ? buildCardEl(card.rank, card.suit) : buildCardBackEl("w-14 h-20");
+    // The positioned, animated element is a separate wrapper around the card
+    // face rather than the face element itself: buildCardEl's own base class
+    // bakes in "relative" (its rank/suit spans are positioned absolute
+    // against it), which would silently outrank an "absolute" utility added
+    // directly to that same element - same cascade gotcha buildCardBackEl's
+    // own comment documents, worked around the same way showActionBadge
+    // splits its badge/wrap.
+    const wrap = document.createElement("div");
+    wrap.className = "absolute pointer-events-none";
+    wrap.style.zIndex = "40";
+    wrap.appendChild(face);
+    // Centered on each anchor's own box (half of w-14 h-20 = 56x80px) so the
+    // ghost starts/ends in the middle of whichever element it's anchored to,
+    // regardless of that element's own size (a tiny opponent card-back stack
+    // vs. the full hand panel).
+    const fromLeft = fromRect.left - boardRect.left + fromRect.width / 2 - 28;
+    const fromTop = fromRect.top - boardRect.top + fromRect.height / 2 - 40;
+    const toLeft = toRect.left - boardRect.left + toRect.width / 2 - 28;
+    const toTop = toRect.top - boardRect.top + toRect.height / 2 - 40;
+    wrap.style.left = fromLeft + "px";
+    wrap.style.top = fromTop + "px";
+    boardEl.appendChild(wrap);
+    const dx = toLeft - fromLeft;
+    const dy = toTop - fromTop;
+    const anim = wrap.animate(
+      [
+        { transform: "translate(0px, 0px) scale(0.75) rotate(-8deg)", opacity: 0.95 },
+        { transform: "translate(" + dx * 0.5 + "px, " + (dy * 0.5 - 40) + "px) scale(0.9) rotate(4deg)", opacity: 1, offset: 0.55 },
+        { transform: "translate(" + dx + "px, " + dy + "px) scale(1) rotate(0deg)", opacity: 1 },
+      ],
+      { duration: CARD_FLIGHT_MS, delay: delayMs || 0, easing: "cubic-bezier(0.3, 0.55, 0.35, 1)", fill: "both" }
+    );
+    anim.addEventListener("finish", () => wrap.remove());
+    anim.addEventListener("cancel", () => wrap.remove());
+  }
+
+  // One freshly-arrived public log entry -> the flight(s) it implies. A hit
+  // flies every revealed card from the target's hand to the asker's (all at
+  // once, staggered); a miss/pass that drew a card flies one face-down card
+  // from the deck pile to the asker. A miss/pass where the deck was already
+  // empty has entry.drawn === null - nothing to fly.
+  function spawnCardFlight(entry) {
+    const askerAnchor = seatAnchorEl(entry.askerSeat);
+    if (!askerAnchor) return;
+    if (entry.hit) {
+      const targetAnchor = seatAnchorEl(entry.targetSeat);
+      if (!targetAnchor) return;
+      entry.revealed.forEach((card, i) => flyCardAnimate(targetAnchor, askerAnchor, card, i * 110));
+    } else if (entry.drawn) {
+      flyCardAnimate(deckEl, askerAnchor, null, 0);
+    }
+  }
+
   // --- Room rendering ------------------------------------------------------
 
   function switchView(inRoom) {
@@ -838,6 +922,7 @@
     previousLobbyPlayerRoomId = null;
     previousHandKeys = null;
     previousChestCounts = null;
+    previousHandCounts = null;
     previousLastLogKey = null;
     switchView(false);
   }
@@ -874,7 +959,7 @@
 
   // --- Table rendering -----------------------------------------------------
 
-  function renderOpponents(room, game, justDealt, chestCountsBefore) {
+  function renderOpponents(room, game, justDealt, chestCountsBefore, handCountsBefore) {
     opponentsEl.textContent = "";
     const n = room.players.length;
     const seatOrder = [];
@@ -909,9 +994,15 @@
       // hand rendering) instead of a bare "N 🂠" text count.
       const backs = document.createElement("div");
       backs.className = "flex";
+      const handCountBefore = handCountsBefore ? handCountsBefore.get(seat) || 0 : null;
       for (let c = 0; c < Math.min(meta.handCount, 6); c++) {
         const backEl = buildCardBackEl("w-4 h-6", c > 0 ? "-ml-2" : "");
         if (justDealt) dealInAnimate(backEl, c);
+        // A back this seat didn't have last render (a hit stolen from them
+        // dropping their count doesn't hit this branch since c only grows
+        // when handCount grows) - pop it in synced with flyCardAnimate's
+        // travel time, same technique as my own hand's popInAnimate below.
+        else if (handCountBefore != null && c >= handCountBefore) popInAnimate(backEl, CARD_FLIGHT_MS - 80);
         backs.appendChild(backEl);
       }
       const handCountSpan = document.createElement("span");
@@ -996,8 +1087,10 @@
         dealInAnimate(el, index);
       } else if (previousHandKeys && !previousHandKeys.has(key)) {
         // A card that wasn't in my hand last render: won via a hit, or drawn
-        // from the deck on a miss/pass - either way it just "arrived".
-        popInAnimate(el);
+        // from the deck on a miss/pass - either way it just "arrived". Delay
+        // synced with flyCardAnimate's travel time so the card visibly flies
+        // in from the target's hand/the deck before popping into place here.
+        popInAnimate(el, CARD_FLIGHT_MS - 80);
       }
     });
     previousHandKeys = currentHandKeys;
@@ -1166,23 +1259,32 @@
       // per-move "slide" cue.
       previousHandKeys = null;
       previousChestCounts = null;
+      previousHandCounts = null;
       playSound("shuffle");
     } else if (newEntries.length) {
       // This can also fire from a purely local re-render (e.g. selecting a
       // rank), which is why it's gated on actual new entries rather than
       // just "not justDealt".
       playSound("slide");
-      for (const entry of newEntries) spawnActionBadge(entry);
+      for (const entry of newEntries) {
+        spawnActionBadge(entry);
+        // Uses opponentsEl/handPanelEl as they still stand from the PREVIOUS
+        // render (renderOpponents/renderHand below haven't rebuilt them yet
+        // this pass) - same ordering showActionBadge above already relies on.
+        spawnCardFlight(entry);
+      }
     }
 
     const chestCountsBefore = previousChestCounts;
-    renderOpponents(room, game, justDealt, chestCountsBefore);
+    const handCountsBefore = previousHandCounts;
+    renderOpponents(room, game, justDealt, chestCountsBefore, handCountsBefore);
     renderHand(game, justDealt, chestCountsBefore);
     renderSuitPicker(game);
     renderTargetPicker(game);
     renderStatus(room, game);
     maybeAutoPass(game);
     previousChestCounts = new Map(game.players.map((p) => [p.seat, p.chests.length]));
+    previousHandCounts = new Map(game.players.map((p) => [p.seat, p.handCount]));
     myClockEl.title = d.timeRemainingTooltip;
     renderClockDisplays(); // paint immediately - the 250ms interval alone would leave a blank flash
     if (game.result) {
