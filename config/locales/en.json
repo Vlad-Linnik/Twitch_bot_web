@@ -98,7 +98,7 @@
     "access": {
       "mod": "mod",
       "all": "all",
-      "allPinExempt": "all (mod-only if \"only moderators\" is set for that command; pinning itself only happens when a mod triggers it)",
+      "allPinExempt": "all (mod-only if set; pinning needs a mod)",
       "allExceptionListed": "all (or mod/exception-listed)"
     },
     "category": {

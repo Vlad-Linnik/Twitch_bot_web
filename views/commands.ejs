@@ -120,7 +120,7 @@
                             <% }) %>
                           <% } %>
                         </td>
-                        <td class="px-4 py-2 text-neutral-400 whitespace-nowrap"><%= t(cmd.accessKey) %></td>
+                        <td class="px-4 py-2 text-neutral-400"><%= t(cmd.accessKey) %></td>
                         <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
                         <% if (cmd.isCustom) { %>
                           <td class="px-4 py-2 text-neutral-300"><%= cmd.resultPreview %></td>
