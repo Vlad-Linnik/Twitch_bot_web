@@ -64,6 +64,10 @@
   let tickHandle = null;
   let state = "idle"; // idle | running | over
   let cellEls = null;
+  // Bumped by startRun() - state alone can't tell a fresh run from an abandoned one (both are
+  // "running"), so a deferred setTimeout(nextBoard, ...) still pending from a board cleared/lost
+  // right before the restart button fired would otherwise swap out the just-started board too.
+  let runToken = 0;
 
   function fmtTime(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -205,7 +209,10 @@
       // deal a fresh board.
       playSound("explosion");
       revealAllMines();
-      setTimeout(nextBoard, 400);
+      const explodedToken = runToken;
+      setTimeout(() => {
+        if (explodedToken === runToken) nextBoard();
+      }, 400);
       return;
     }
     if (result.bonus && bonusProcs < BONUS_MAX_PROCS) {
@@ -217,7 +224,10 @@
     if (engine.checkWin(board)) {
       boardsCleared++;
       boardsEl.textContent = boardsCleared;
-      setTimeout(nextBoard, 250);
+      const clearedToken = runToken;
+      setTimeout(() => {
+        if (clearedToken === runToken) nextBoard();
+      }, 250);
     }
   }
 
@@ -262,6 +272,8 @@
   }
 
   function startRun() {
+    if (tickHandle) clearInterval(tickHandle); // safe to call while already running (the restart button)
+    runToken++; // invalidate any deferred nextBoard() still pending from the abandoned run
     boardsCleared = 0;
     bonusProcs = 0;
     boardsEl.textContent = "0";
@@ -421,6 +433,12 @@
   overlayButton.addEventListener("click", () => {
     startRun();
     overlayButton.blur();
+  });
+
+  const restartBtn = document.getElementById("ms-restart");
+  restartBtn?.addEventListener("click", () => {
+    startRun();
+    restartBtn.blur();
   });
 
   showOverlay("start");

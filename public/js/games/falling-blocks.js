@@ -609,6 +609,7 @@
   }
 
   function start() {
+    stopLoop(); // safe to call while already running (the restart button) - avoids a second rAF loop
     reset();
     state = "running";
     hideOverlay();
@@ -634,6 +635,12 @@
     if (state === "paused") resume();
     else start();
     overlayButton.blur();
+  });
+
+  const restartBtn = document.getElementById("fb-restart");
+  restartBtn?.addEventListener("click", () => {
+    start();
+    restartBtn.blur();
   });
 
   // Auto-pause when the tab loses focus - an unwatched game shouldn't end itself.

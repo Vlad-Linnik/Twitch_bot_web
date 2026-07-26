@@ -174,6 +174,11 @@
   let state = "idle"; // idle | running | over
   let busy = false;
   let selected = null; // {r,c} of the first tap in a two-tap swap
+  // Bumped by startRun() - lets a swap/cascade animation chain still in flight when the
+  // restart button fires (previously unreachable mid-animation: the overlay button that used
+  // to be the only way to call startRun() is hidden while state is "running") notice its run
+  // ended and abandon itself instead of painting stale cells onto the freshly rebuilt board.
+  let runToken = 0;
 
   function fmtTime(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -259,7 +264,8 @@
   // cells, then its survivors/new crystals dropping into place from
   // `step.gridAfter`) and recurses to the next step, so a multi-step cascade
   // plays as a real falling chain instead of jump-cutting to the final grid.
-  function animateCascadeSteps(steps, i, onAllDone) {
+  function animateCascadeSteps(steps, i, onAllDone, token) {
+    if (token !== runToken) return; // this run was abandoned by a restart - stop the chain
     if (i >= steps.length) {
       onAllDone();
       return;
@@ -286,6 +292,7 @@
     }
 
     setTimeout(() => {
+      if (token !== runToken) return; // this run was abandoned by a restart - stop the chain
       for (const mv of step.moves) {
         const el = cellEls[mv.toRow][mv.c];
         const type = step.gridAfter[mv.toRow][mv.c];
@@ -319,7 +326,7 @@
         });
       }
 
-      setTimeout(() => animateCascadeSteps(steps, i + 1, onAllDone), FALL_MS);
+      setTimeout(() => animateCascadeSteps(steps, i + 1, onAllDone, token), FALL_MS);
     }, SHATTER_MS);
   }
 
@@ -368,11 +375,13 @@
     }
 
     busy = true;
+    const token = runToken;
     animateSwap(a, b, () => {
+      if (token !== runToken) return; // this run was abandoned by a restart - stop the chain
       engine.swapCells(grid, a, b);
       renderCell(a.r, a.c);
       renderCell(b.r, b.c);
-      resolveAndScore();
+      resolveAndScore(token);
     });
   }
 
@@ -386,23 +395,29 @@
     }
   }
 
-  function resolveAndScore() {
+  function resolveAndScore(token) {
     const { steps } = engine.resolveCascade(grid, TYPE_COUNT, Math.random);
-    animateCascadeSteps(steps, 0, () => {
-      const gained = engine.computeCascadeScore(steps);
-      if (gained > 0) {
-        score += gained;
-        scoreEl.textContent = score;
-        const specials = [];
-        for (const step of steps) specials.push(...step.specials);
-        showCombo(steps.length, gained, specials);
-      }
-      if (!engine.hasAnyLegalMove(grid)) {
-        grid = freshGrid();
-        renderAll();
-      }
-      busy = false;
-    });
+    animateCascadeSteps(
+      steps,
+      0,
+      () => {
+        if (token !== runToken) return; // this run was abandoned by a restart - stop the chain
+        const gained = engine.computeCascadeScore(steps);
+        if (gained > 0) {
+          score += gained;
+          scoreEl.textContent = score;
+          const specials = [];
+          for (const step of steps) specials.push(...step.specials);
+          showCombo(steps.length, gained, specials);
+        }
+        if (!engine.hasAnyLegalMove(grid)) {
+          grid = freshGrid();
+          renderAll();
+        }
+        busy = false;
+      },
+      token
+    );
   }
 
   function tick() {
@@ -416,6 +431,8 @@
   }
 
   function startRun() {
+    if (tickHandle) clearInterval(tickHandle); // safe to call while already running (the restart button)
+    runToken++; // invalidate any swap/cascade animation still chaining from the abandoned run
     score = 0;
     scoreEl.textContent = "0";
     selected = null;
@@ -578,6 +595,12 @@
   overlayButton.addEventListener("click", () => {
     startRun();
     overlayButton.blur();
+  });
+
+  const restartBtn = document.getElementById("m3-restart");
+  restartBtn?.addEventListener("click", () => {
+    startRun();
+    restartBtn.blur();
   });
 
   showOverlay("start");

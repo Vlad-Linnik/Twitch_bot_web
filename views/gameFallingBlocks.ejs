@@ -117,10 +117,12 @@
           <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.lines') %></span>
           <span id="fb-lines" class="text-sm text-neutral-300 tabular-nums">0</span>
         </div>
-        <div class="flex justify-between items-baseline">
+        <div class="flex justify-between items-baseline mb-3">
           <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.level') %></span>
           <span id="fb-level" class="text-sm text-neutral-300 tabular-nums">1</span>
         </div>
+        <button type="button" id="fb-restart"
+                class="w-full px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.fallingBlocks.newGame') %></button>
       </div>
 
       <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
