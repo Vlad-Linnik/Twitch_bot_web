@@ -5,25 +5,39 @@
 // routing it through the validation here.
 //
 // Go-Fish family game: each of 2-6 players is dealt 4 cards, the rest form a
-// draw pile. On your turn you pick a target (constrained by rules.
-// questionTarget), ask for a RANK you already hold at least one card of (no
-// bluffing on the rank - enforced here, not just by the client), then name
-// one or more SUITS of that rank you're claiming the target holds - suit
-// count doubling as the claimed quantity. This is a genuine guess, not a
-// no-bluffing check: since only one card of each exact rank+suit exists in
-// the deck, a suit already in the asker's own hand can never be a hit
-// (nobody else can hold an identical card), so no suit-level legality check
-// is needed beyond "well-formed" - an own-held suit is just always a miss.
-// The ask is all-or-nothing: every requested rank+suit must be in the
-// target's hand, or nothing transfers at all (this, plus every ask/result
-// being broadcast to the whole table - realtime/sunduchkiRoomManager.js's
-// job, not this file's - is what makes the game "logical": everyone can
-// listen and deduce who holds what, the same as at a real table). A hit lets
-// you go again; a miss draws one card from the deck and passes the turn.
-// Collecting all 4 cards of a rank lays the "chest" down immediately (always
-// public, per the house rule this repo's game was built with) and removes
-// that rank from play for good. The game ends once every rank has been
-// chested by someone.
+// draw pile. Your turn is a 3-step ask, split across applyAskRank ->
+// applyAskQuantity -> applyAskSuits, tracked in state.pendingAsk between
+// steps:
+//   1. applyAskRank(seat, targetSeat, rank) - pick a target (constrained by
+//      rules.questionTarget) and a RANK you already hold at least one card
+//      of (no bluffing on the rank - enforced here, not just by the
+//      client). This alone reveals whether the target holds ANY card of
+//      that rank: if not, there is nothing left to guess and the turn
+//      resolves immediately as a miss (see below); only if they hold at
+//      least one does state.pendingAsk open, and the ask continues.
+//   2. applyAskQuantity(seat, count) - guess how many of that rank the
+//      target holds (bounded by how many of the 4 total the asker doesn't
+//      already have - see legalAskQuantities). Still a blind guess: not
+//      checked against the real count learned in step 1.
+//   3. applyAskSuits(seat, suits) - name exactly `count` SUITS of that rank
+//      you're claiming the target holds. A hit requires BOTH the quantity
+//      from step 2 AND every named suit to match the target's real hand -
+//      two cards of the same rank can never be split-captured, guessing
+//      only one of the two suits correctly is a total miss for the whole
+//      rank, not a partial win. Since only one card of each exact
+//      rank+suit exists in the deck, a suit already in the asker's own hand
+//      can never be a hit (nobody else can hold an identical card), so no
+//      suit-level legality check is needed beyond "well-formed" - an
+//      own-held suit is just always a miss.
+// Every step's result is broadcast to the whole table
+// (realtime/sunduchkiRoomManager.js's job, not this file's) - this is what
+// makes the game "logical": everyone can listen and deduce who holds what,
+// the same as at a real table. A hit lets you go again; a miss (at step 1
+// or step 3) draws one card from the deck and passes the turn. Collecting
+// all 4 cards of a rank lays the "chest" down immediately (always public,
+// per the house rule this repo's game was built with) and removes that
+// rank from play for good. The game ends once every rank has been chested
+// by someone.
 "use strict";
 
 const SUITS = ["S", "H", "D", "C"];
@@ -114,6 +128,21 @@ function legalTargets(state, seat) {
 
 function hasLegalAsk(state, seat) {
   return legalAskRanks(state, seat).length > 0 && legalTargets(state, seat).length > 0;
+}
+
+// Step 2's valid choices: 1..(4 - ownCount), where ownCount is how many
+// cards of state.pendingAsk.rank the asker's own hand holds. ownCount is
+// always >=1 (legalAskRanks required it back in step 1), so this is always
+// a subset of [1, 2, 3] - never empty, never including 4 (a seat holding
+// all 4 would already have chested the rank, removing it from play).
+function legalAskQuantities(state, seat) {
+  if (!state.pendingAsk || state.pendingAsk.count != null) return [];
+  const rank = state.pendingAsk.rank;
+  const ownCount = state.players[seat].hand.filter((c) => c.rank === rank).length;
+  const max = 4 - ownCount;
+  const out = [];
+  for (let i = 1; i <= max; i++) out.push(i);
+  return out;
 }
 
 // Sunduchki has exactly one active seat at a time (no simultaneous wave
@@ -239,35 +268,90 @@ function createGame(playerIds, rules) {
     },
     log: [],
     result: null,
+    // The in-progress ask, between applyAskRank and applyAskSuits - see file
+    // banner. null whenever no ask is mid-flight (including right after a
+    // step-1 instant miss, which never opens one at all).
+    pendingAsk: null,
   };
 }
 
-// The core turn action: seat asks targetSeat for rank + suits (one or more
-// suits of that rank, quantity implied by how many). Validates seat is the
-// active player, targetSeat is a legal target under rules.questionTarget,
-// seat actually holds >=1 card of rank (no-bluffing on the rank), and suits
-// is a well-formed, non-empty, duplicate-free subset of SUITS - see file
-// banner for why no suit-level legality check beyond that is needed. The ask
-// is all-or-nothing: a hit requires the target to hold EVERY requested
-// rank+suit combo; those exact cards transfer and any newly-completed chest
-// is laid down immediately, and the asker keeps the turn. Any missing
-// combo is a total miss - nothing transfers, the asker draws one card (if
-// the deck has any) and the turn passes to the next active seat clockwise.
-function applyAsk(state, seat, targetSeat, rank, suits) {
+// Step 1 of 3 (see file banner): seat asks targetSeat about rank. Validates
+// seat is the active player with no ask already mid-flight, targetSeat is a
+// legal target under rules.questionTarget, and seat actually holds >=1 card
+// of rank (no-bluffing on the rank). If the target holds NO card of that
+// rank, the turn resolves right here as an ordinary miss (draw one card if
+// the deck has any, pass to the next active seat) - there is nothing left
+// to guess. Otherwise opens state.pendingAsk and waits for
+// applyAskQuantity/applyAskSuits to actually resolve the ask.
+function applyAskRank(state, seat, targetSeat, rank) {
   if (state.phase !== "playing") return err("not-playing");
   if (seat !== state.activeSeat) return err("not-your-turn");
+  if (state.pendingAsk) return err("ask-in-progress");
   if (!Number.isInteger(targetSeat) || !isActive(state, targetSeat) || targetSeat === seat) return err("bad-target");
   if (!legalTargets(state, seat).includes(targetSeat)) return err("target-not-allowed");
   if (!Number.isInteger(rank)) return err("bad-request");
   if (!legalAskRanks(state, seat).includes(rank)) return err("rank-not-legal");
-  if (!Array.isArray(suits) || suits.length === 0) return err("bad-request");
+
+  const target = state.players[targetSeat];
+  const targetCount = target.hand.filter((c) => c.rank === rank).length;
+
+  if (targetCount === 0) {
+    const asker = state.players[seat];
+    let drawn = null;
+    let completedChests = [];
+    if (state.deck.length > 0) {
+      drawn = state.deck.shift();
+      asker.hand.push(drawn);
+      completedChests = layDownCompletedChests(state, seat);
+    }
+    pushLog(state, { askerSeat: seat, targetSeat, rank, suits: [], hit: false, drawn, completedChests, noneHeld: true });
+    state.activeSeat = nextActiveSeatAfter(state, seat);
+    checkGameEnd(state);
+    return ok(state);
+  }
+
+  state.pendingAsk = { targetSeat, rank, count: null };
+  return ok(state);
+}
+
+// Step 2 of 3: how many cards of pendingAsk.rank the asker claims the
+// target holds - see legalAskQuantities for the valid range. Still blind:
+// not checked here against the real count learned in applyAskRank.
+function applyAskQuantity(state, seat, count) {
+  if (state.phase !== "playing") return err("not-playing");
+  if (seat !== state.activeSeat) return err("not-your-turn");
+  if (!state.pendingAsk || state.pendingAsk.count != null) return err("no-pending-ask");
+  if (!Number.isInteger(count) || !legalAskQuantities(state, seat).includes(count)) return err("bad-request");
+
+  state.pendingAsk.count = count;
+  return ok(state);
+}
+
+// Step 3 of 3: name exactly pendingAsk.count suits of pendingAsk.rank - a
+// well-formed, duplicate-free subset of SUITS whose size matches the
+// quantity just guessed (see file banner for why no further suit-level
+// legality check is needed). A hit requires BOTH the guessed quantity AND
+// every named suit to match the target's real hand; those exact cards
+// transfer and any newly-completed chest is laid down immediately, and the
+// asker keeps the turn. Any mismatch on either axis is a total miss -
+// nothing transfers, the asker draws one card (if the deck has any) and the
+// turn passes to the next active seat clockwise.
+function applyAskSuits(state, seat, suits) {
+  if (state.phase !== "playing") return err("not-playing");
+  if (seat !== state.activeSeat) return err("not-your-turn");
+  if (!state.pendingAsk || state.pendingAsk.count == null) return err("no-pending-ask");
+  if (!Array.isArray(suits) || suits.length !== state.pendingAsk.count) return err("bad-request");
   const requested = new Set(suits);
   if (requested.size !== suits.length || [...requested].some((s) => !SUITS.includes(s))) return err("bad-request");
 
+  const { targetSeat, rank, count } = state.pendingAsk;
   const asker = state.players[seat];
   const target = state.players[targetSeat];
+  const actualCount = target.hand.filter((c) => c.rank === rank).length;
   const matches = target.hand.filter((c) => c.rank === rank && requested.has(c.suit));
-  const hit = matches.length === requested.size;
+  const hit = count === actualCount && matches.length === count;
+
+  state.pendingAsk = null;
 
   if (hit) {
     const matchedKeys = new Set(matches.map((c) => c.suit));
@@ -298,6 +382,7 @@ function applyAsk(state, seat, targetSeat, rank, suits) {
 function applyPassEmpty(state, seat) {
   if (state.phase !== "playing") return err("not-playing");
   if (seat !== state.activeSeat) return err("not-your-turn");
+  if (state.pendingAsk) return err("ask-in-progress");
   if (hasLegalAsk(state, seat)) return err("must-ask");
 
   const player = state.players[seat];
@@ -329,6 +414,14 @@ function removePlayer(state, seat, reason) {
   player.left = true;
   player.leftReason = reason;
   player.leaveRank = nextLeaveRank(state);
+
+  // An ask mid-flight involving the seat that just left (either side of it)
+  // can never be finished - abort it so nothing references a left seat's
+  // now-empty hand. If the active seat itself is the one who left, the
+  // rotation below picks the next active seat fresh, with no ask pending.
+  if (state.pendingAsk && (state.pendingAsk.targetSeat === seat || state.activeSeat === seat)) {
+    state.pendingAsk = null;
+  }
 
   if (state.phase === "finished") return state;
 
@@ -393,6 +486,12 @@ function serializePublicState(state) {
   return {
     phase: state.phase,
     activeSeat: state.activeSeat,
+    // The in-progress ask (see file banner), visible to every viewer exactly
+    // like the public log - a spectator/opponent watching a multi-step ask
+    // unfold sees the same target/rank/count-so-far the active seat does.
+    pendingAsk: state.pendingAsk
+      ? { targetSeat: state.pendingAsk.targetSeat, rank: state.pendingAsk.rank, count: state.pendingAsk.count }
+      : null,
     deckCount: state.deck.length,
     totalRanks: state.totalRanks,
     rules: state.rules,
@@ -418,10 +517,17 @@ function serializeForSeat(state, seat) {
     ...serializePublicState(state),
     you: { seat, hand: me ? me.hand.slice() : [] },
     legal: {
-      canAsk: state.phase === "playing" && seat === state.activeSeat && hasLegalAsk(state, seat),
-      canPass: state.phase === "playing" && seat === state.activeSeat && !hasLegalAsk(state, seat),
+      canAsk: state.phase === "playing" && seat === state.activeSeat && !state.pendingAsk && hasLegalAsk(state, seat),
+      canPass: state.phase === "playing" && seat === state.activeSeat && !state.pendingAsk && !hasLegalAsk(state, seat),
       askRanks: legalAskRanks(state, seat),
       targets: legalTargets(state, seat),
+      // Steps 2/3 (see file banner) - only meaningful for the active seat
+      // while its own ask is mid-flight; legalAskQuantities/pendingAsk.count
+      // are already false/empty for every non-active seat and every other
+      // phase, so these can't be misread as "your move" by anyone else.
+      canSubmitQuantity: state.phase === "playing" && seat === state.activeSeat && !!state.pendingAsk && state.pendingAsk.count == null,
+      askQuantities: legalAskQuantities(state, seat),
+      canSubmitSuits: state.phase === "playing" && seat === state.activeSeat && !!state.pendingAsk && state.pendingAsk.count != null,
     },
   };
 }
@@ -432,7 +538,9 @@ module.exports = {
   normalizeDeckSize,
   shuffle,
   createGame,
-  applyAsk,
+  applyAskRank,
+  applyAskQuantity,
+  applyAskSuits,
   applyPassEmpty,
   removePlayer,
   buildPlacements,
@@ -440,6 +548,7 @@ module.exports = {
   serializeForSpectator,
   legalAskRanks,
   legalTargets,
+  legalAskQuantities,
   hasLegalAsk,
   runningSeats,
   activeSeats,

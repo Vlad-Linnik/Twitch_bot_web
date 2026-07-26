@@ -50,6 +50,8 @@
        data-status-disconnected="<%= t('games.sunduchki.disconnectedFinal') %>"
        data-status-your-turn-ask="<%= t('games.sunduchki.statusYourTurnAsk') %>"
        data-status-your-turn-pass="<%= t('games.sunduchki.statusYourTurnPass') %>"
+       data-status-your-turn-quantity="<%= t('games.sunduchki.statusYourTurnQuantity') %>"
+       data-status-your-turn-suits="<%= t('games.sunduchki.statusYourTurnSuits') %>"
        data-status-waiting="<%= t('games.sunduchki.statusWaiting') %>"
        data-players-count-tpl="<%= t('games.sunduchki.playersCount', { count: '__COUNT__', max: '__MAX__' }) %>"
        data-ready-accepted-tpl="<%= t('games.sunduchki.readyCheckAcceptedTpl', { accepted: '__ACCEPTED__', total: '__TOTAL__' }) %>"
@@ -97,7 +99,8 @@
        data-time-remaining-tooltip="<%= t('games.sunduchki.timeRemainingTooltip') %>"
        data-pick-target-prompt="<%= t('games.sunduchki.pickTargetPrompt') %>"
        data-pick-rank-prompt="<%= t('games.sunduchki.pickRankPrompt') %>"
-       data-pick-suit-prompt="<%= t('games.sunduchki.pickSuitPrompt') %>"
+       data-pick-quantity-prompt="<%= t('games.sunduchki.pickQuantityPrompt') %>"
+       data-pick-suit-prompt-tpl="<%= t('games.sunduchki.pickSuitPromptTpl', { count: '__COUNT__' }) %>"
        data-suit-owned-hint="<%= t('games.sunduchki.suitOwnedHint') %>">
 
     <p id="skp-connstatus" class="text-sm text-neutral-500 mb-3"></p>
@@ -213,21 +216,31 @@
 
           <p id="skp-status" class="text-center text-sm text-neutral-400 px-3 min-h-[1.5em]"></p>
 
-          <%# Step 2 of the ask (after picking a rank from your hand below):
-              pick one or more suits of that rank - see
-              sunduchki-multiplayer.js's renderSuitPicker(). %>
-          <div id="skp-suit-picker" class="px-3 pt-2" hidden>
-            <p class="text-xs text-neutral-500 mb-1.5" id="skp-suit-picker-label"></p>
-            <div id="skp-suit-buttons" class="flex flex-wrap justify-center gap-2"></div>
-          </div>
-
-          <%# Step 3: target picker - only shown once a rank AND suit(s) have
-              been picked and questionTarget="any" leaves more than one legal
-              option (a single legal target, or questionTarget="next",
-              instead sends on clicking that opponent's block directly). %>
+          <%# Step 1's target picker (after picking a rank from your hand
+              below): only shown once a rank has been picked and
+              questionTarget="any" leaves more than one legal option (a
+              single legal target, or questionTarget="next", instead sends
+              on clicking that opponent's block directly). Sends the ask
+              right away - see sunduchki-multiplayer.js's
+              renderTargetPicker(). %>
           <div id="skp-target-picker" class="px-3 pt-2" hidden>
             <p class="text-xs text-neutral-500 mb-1.5" id="skp-target-picker-label"></p>
             <div id="skp-target-buttons" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <%# Step 2: once the target's confirmed to hold at least one card
+              of that rank (server-revealed - see sunduchkiEngine.js's
+              applyAskRank), guess how many - renderQuantityPicker(). %>
+          <div id="skp-quantity-picker" class="px-3 pt-2" hidden>
+            <p class="text-xs text-neutral-500 mb-1.5" id="skp-quantity-picker-label"></p>
+            <div id="skp-quantity-buttons" class="flex flex-wrap justify-center gap-2"></div>
+          </div>
+
+          <%# Step 3: name exactly that many suits of the rank -
+              renderSuitPicker(). %>
+          <div id="skp-suit-picker" class="px-3 pt-2" hidden>
+            <p class="text-xs text-neutral-500 mb-1.5" id="skp-suit-picker-label"></p>
+            <div id="skp-suit-buttons" class="flex flex-wrap justify-center gap-2"></div>
           </div>
 
           <div id="skp-hand-panel" class="px-3 pb-3 pt-2">

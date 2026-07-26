@@ -275,6 +275,9 @@
   const targetPickerEl = document.getElementById("skp-target-picker");
   const targetPickerLabelEl = document.getElementById("skp-target-picker-label");
   const targetButtonsEl = document.getElementById("skp-target-buttons");
+  const quantityPickerEl = document.getElementById("skp-quantity-picker");
+  const quantityPickerLabelEl = document.getElementById("skp-quantity-picker-label");
+  const quantityButtonsEl = document.getElementById("skp-quantity-buttons");
   const suitPickerEl = document.getElementById("skp-suit-picker");
   const suitPickerLabelEl = document.getElementById("skp-suit-picker-label");
   const suitButtonsEl = document.getElementById("skp-suit-buttons");
@@ -303,11 +306,14 @@
   let lastRatingChanges = null;
   let previousLobbyPlayerIds = null;
   let previousLobbyPlayerRoomId = null;
-  // The rank picked from my own hand this turn - cleared on every fresh
-  // roomState (a new turn/game) and once the ask is actually sent.
+  // The rank picked from my own hand this turn (step 1's local half, before
+  // a target is also chosen and askRank is actually sent) - cleared on
+  // every fresh roomState (a new turn/game) and once askRank is sent, since
+  // from that point on the ask's state of record is game.pendingAsk
+  // (server-authoritative), not this.
   let selectedRank = null;
-  // Suit(s) picked for that rank (step 2 of the ask) - a Set, cleared
-  // alongside selectedRank.
+  // Suit(s) picked for pendingAsk.rank (step 3 of the ask) - a Set, capped
+  // at pendingAsk.count entries and cleared alongside selectedRank.
   let selectedSuits = new Set();
   // Guards passEmpty from firing more than once for the same "nothing to ask
   // with" turn - reset whenever the active seat or my hand size changes.
@@ -1019,22 +1025,23 @@
       clockBadge.dataset.clockSeat = String(seat);
       clockBadge.title = d.timeRemainingTooltip;
       block.append(nameRow, backs, handCountSpan, chestsSpan, clockBadge);
-      // Clickable as a target once a rank AND at least one suit are picked
-      // and this seat is a legal target for my ask (server re-validates
-      // regardless).
+      // Clickable as a target once a rank is picked (step 1 of the ask) and
+      // this seat is a legal target - server re-validates regardless.
+      // Nothing to click once pendingAsk exists: the target's already fixed
+      // for the rest of this ask (steps 2/3 are quantity/suit pickers, not
+      // seat clicks).
       if (
         !isSpectating &&
         mySeat === game.activeSeat &&
+        !game.pendingAsk &&
         selectedRank != null &&
-        selectedSuits.size > 0 &&
         game.legal &&
         game.legal.targets.includes(seat)
       ) {
         block.classList.add("cursor-pointer", "ring-2", "ring-cyan-400", "hover:bg-cyan-500/10");
         block.addEventListener("click", () => {
-          send({ type: "ask", targetSeat: seat, rank: selectedRank, suits: [...selectedSuits] });
+          send({ type: "askRank", targetSeat: seat, rank: selectedRank });
           selectedRank = null;
-          selectedSuits = new Set();
         });
       }
       opponentsEl.appendChild(block);
@@ -1096,21 +1103,82 @@
     previousHandKeys = currentHandKeys;
   }
 
-  // Step 2 of the ask: once a rank is picked, offer all 4 suits of that rank.
-  // Suits already in my own hand are shown but disabled/greyed - a single
-  // standard deck means an identical card can never exist anywhere else, so
-  // picking one of those could never be a hit (see sunduchkiEngine.js's file
-  // banner) - this is purely a playability hint, not a server-enforced rule.
-  // Multi-select (toggling membership in selectedSuits); the target step
-  // below only lights up once at least one suit is chosen, which doubles as
-  // this step's "confirm".
+  // Step 1's target picker: once a rank is picked, offer whichever seats are
+  // legal targets - shown only when there's more than one option
+  // (questionTarget="any"); a single legal target ("next" mode) instead
+  // sends straight from clicking that opponent's block in renderOpponents.
+  // Sends askRank immediately - the target and rank travel together, and
+  // from here on the ask's state of record is game.pendingAsk, not these
+  // locals.
+  function renderTargetPicker(game) {
+    const showPicker =
+      !isSpectating && mySeat === game.activeSeat && !game.pendingAsk && selectedRank != null && game.legal && game.legal.targets.length > 1;
+    targetPickerEl.hidden = !showPicker;
+    targetButtonsEl.textContent = "";
+    if (!showPicker) return;
+    targetPickerLabelEl.textContent = d.pickTargetPrompt;
+    for (const seat of game.legal.targets) {
+      const p = lastRoom.players[seat];
+      if (!p) continue;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "px-3 py-1 rounded-lg bg-neutral-800 hover:bg-purple-600 text-neutral-200 hover:text-white text-xs font-medium transition-colors";
+      btn.textContent = p.displayName;
+      btn.addEventListener("click", () => {
+        send({ type: "askRank", targetSeat: seat, rank: selectedRank });
+        selectedRank = null;
+      });
+      targetButtonsEl.appendChild(btn);
+    }
+  }
+
+  // Step 2 of the ask: once applyAskRank has revealed the target holds at
+  // least one card of the rank (game.pendingAsk opens with count still
+  // null), guess how many - see sunduchkiEngine.js's legalAskQuantities for
+  // the valid range (1..(4 - how many of that rank I already hold)).
+  // Exactly one click, sent immediately - there's nothing to multi-select
+  // here, unlike the suit picker below.
+  function renderQuantityPicker(game) {
+    const showPicker = !isSpectating && mySeat === game.activeSeat && game.legal && game.legal.canSubmitQuantity;
+    quantityPickerEl.hidden = !showPicker;
+    quantityButtonsEl.textContent = "";
+    if (!showPicker) return;
+    quantityPickerLabelEl.textContent = d.pickQuantityPrompt;
+    for (const count of game.legal.askQuantities) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "w-10 h-10 rounded-lg text-lg font-bold border border-neutral-700 bg-neutral-800 hover:bg-purple-600 hover:text-white text-neutral-200 transition-colors";
+      btn.textContent = String(count);
+      btn.addEventListener("click", () => {
+        selectedSuits = new Set();
+        send({ type: "askQuantity", count });
+      });
+      quantityButtonsEl.appendChild(btn);
+    }
+  }
+
+  // Step 3 of the ask: name exactly game.pendingAsk.count suits of
+  // pendingAsk.rank - guessing fewer than the target actually holds of that
+  // rank is not a smaller/safer bet, it's always a total miss (see
+  // sunduchkiEngine.js's file banner: two cards of the same rank can never
+  // be split-captured), so the picker only ever accepts exactly `count`
+  // suits, never fewer or more. Suits already in my own hand are shown but
+  // disabled/greyed - a single standard deck means an identical card can
+  // never exist anywhere else, so picking one of those could never be a hit
+  // - this is purely a playability hint, not a server-enforced rule.
+  // Auto-submits the instant the count'th suit is picked (toggling a suit
+  // back off first un-submits nothing, since submission only fires on
+  // reaching the target count).
   function renderSuitPicker(game) {
-    const showPicker = !isSpectating && mySeat === game.activeSeat && selectedRank != null && game.legal && game.legal.canAsk;
+    const showPicker = !isSpectating && mySeat === game.activeSeat && game.legal && game.legal.canSubmitSuits;
     suitPickerEl.hidden = !showPicker;
     suitButtonsEl.textContent = "";
     if (!showPicker) return;
-    suitPickerLabelEl.textContent = d.pickSuitPrompt;
-    const ownedSuits = new Set(game.you.hand.filter((c) => c.rank === selectedRank).map((c) => c.suit));
+    const rank = game.pendingAsk.rank;
+    const needed = game.pendingAsk.count;
+    suitPickerLabelEl.textContent = fillTemplate(d.pickSuitPromptTpl, { COUNT: needed });
+    const ownedSuits = new Set(game.you.hand.filter((c) => c.rank === rank).map((c) => c.suit));
     for (const suit of SUIT_ORDER) {
       const owned = ownedSuits.has(suit);
       const isSelected = selectedSuits.has(suit);
@@ -1127,44 +1195,27 @@
       else colorClass = "border-neutral-700 bg-neutral-800 hover:bg-purple-600 hover:text-white " + (isRed(suit) ? "text-red-500" : "text-neutral-200");
       btn.className = "w-10 h-10 rounded-lg text-lg font-bold border transition-colors " + colorClass;
       btn.textContent = SUIT_SYMBOL[suit];
-      btn.disabled = owned;
+      btn.disabled = owned || (isSelected === false && selectedSuits.size >= needed);
       btn.title = owned ? d.suitOwnedHint : "";
       if (!owned) {
         btn.addEventListener("click", () => {
-          if (selectedSuits.has(suit)) selectedSuits.delete(suit);
-          else selectedSuits.add(suit);
-          renderTable(lastRoom, lastGame);
+          if (selectedSuits.has(suit)) {
+            selectedSuits.delete(suit);
+            renderTable(lastRoom, lastGame);
+            return;
+          }
+          if (selectedSuits.size >= needed) return;
+          selectedSuits.add(suit);
+          if (selectedSuits.size === needed) {
+            const suits = [...selectedSuits];
+            selectedSuits = new Set();
+            send({ type: "askSuits", suits });
+          } else {
+            renderTable(lastRoom, lastGame);
+          }
         });
       }
       suitButtonsEl.appendChild(btn);
-    }
-  }
-
-  function renderTargetPicker(game) {
-    const showPicker =
-      !isSpectating &&
-      mySeat === game.activeSeat &&
-      selectedRank != null &&
-      selectedSuits.size > 0 &&
-      game.legal &&
-      game.legal.targets.length > 1;
-    targetPickerEl.hidden = !showPicker;
-    targetButtonsEl.textContent = "";
-    if (!showPicker) return;
-    targetPickerLabelEl.textContent = d.pickTargetPrompt;
-    for (const seat of game.legal.targets) {
-      const p = lastRoom.players[seat];
-      if (!p) continue;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "px-3 py-1 rounded-lg bg-neutral-800 hover:bg-purple-600 text-neutral-200 hover:text-white text-xs font-medium transition-colors";
-      btn.textContent = p.displayName;
-      btn.addEventListener("click", () => {
-        send({ type: "ask", targetSeat: seat, rank: selectedRank, suits: [...selectedSuits] });
-        selectedRank = null;
-        selectedSuits = new Set();
-      });
-      targetButtonsEl.appendChild(btn);
     }
   }
 
@@ -1200,6 +1251,10 @@
     }
     if (mySeat !== game.activeSeat) {
       statusEl.textContent = d.statusWaiting;
+      return;
+    }
+    if (game.pendingAsk) {
+      statusEl.textContent = game.pendingAsk.count == null ? d.statusYourTurnQuantity : d.statusYourTurnSuits;
       return;
     }
     statusEl.textContent = game.legal && game.legal.canAsk ? d.statusYourTurnAsk : d.statusYourTurnPass;
@@ -1279,8 +1334,9 @@
     const handCountsBefore = previousHandCounts;
     renderOpponents(room, game, justDealt, chestCountsBefore, handCountsBefore);
     renderHand(game, justDealt, chestCountsBefore);
-    renderSuitPicker(game);
     renderTargetPicker(game);
+    renderQuantityPicker(game);
+    renderSuitPicker(game);
     renderStatus(room, game);
     maybeAutoPass(game);
     previousChestCounts = new Map(game.players.map((p) => [p.seat, p.chests.length]));

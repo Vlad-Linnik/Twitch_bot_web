@@ -649,13 +649,40 @@ function afterGameAction(room) {
   }
 }
 
-function handleAsk(ws, meta, targetSeat, rank, suits) {
+// The 3-step ask (see sunduchkiEngine.js's file banner): handleAskRank ->
+// handleAskQuantity -> handleAskSuits, each just validating shape and
+// forwarding to the matching engine step - engine.applyAsk* itself re-checks
+// seat/turn/pendingAsk state, so a client that gets out of order (e.g. sends
+// askSuits before askQuantity) is rejected there, not here.
+function handleAskRank(ws, meta, targetSeat, rank) {
   const room = rooms.get(meta.roomId);
   if (!room || room.status !== "playing") return sendError(ws, "not-playing");
   const seat = room.players.findIndex((p) => p.userId === meta.userId);
   if (seat < 0) return sendError(ws, "not-in-room");
-  if (!Number.isInteger(targetSeat) || !Number.isInteger(rank) || !Array.isArray(suits)) return sendError(ws, "bad-request");
-  const result = engine.applyAsk(room.game, seat, targetSeat, rank, suits);
+  if (!Number.isInteger(targetSeat) || !Number.isInteger(rank)) return sendError(ws, "bad-request");
+  const result = engine.applyAskRank(room.game, seat, targetSeat, rank);
+  if (!result.ok) return sendError(ws, result.error);
+  afterGameAction(room);
+}
+
+function handleAskQuantity(ws, meta, count) {
+  const room = rooms.get(meta.roomId);
+  if (!room || room.status !== "playing") return sendError(ws, "not-playing");
+  const seat = room.players.findIndex((p) => p.userId === meta.userId);
+  if (seat < 0) return sendError(ws, "not-in-room");
+  if (!Number.isInteger(count)) return sendError(ws, "bad-request");
+  const result = engine.applyAskQuantity(room.game, seat, count);
+  if (!result.ok) return sendError(ws, result.error);
+  afterGameAction(room);
+}
+
+function handleAskSuits(ws, meta, suits) {
+  const room = rooms.get(meta.roomId);
+  if (!room || room.status !== "playing") return sendError(ws, "not-playing");
+  const seat = room.players.findIndex((p) => p.userId === meta.userId);
+  if (seat < 0) return sendError(ws, "not-in-room");
+  if (!Array.isArray(suits)) return sendError(ws, "bad-request");
+  const result = engine.applyAskSuits(room.game, seat, suits);
   if (!result.ok) return sendError(ws, result.error);
   afterGameAction(room);
 }
@@ -698,8 +725,12 @@ function onMessage(ws, meta, raw) {
       return handleSetRules(ws, meta, msg.rules);
     case "kickPlayer":
       return handleKickPlayer(ws, meta, msg.userId);
-    case "ask":
-      return handleAsk(ws, meta, msg.targetSeat, msg.rank, msg.suits);
+    case "askRank":
+      return handleAskRank(ws, meta, msg.targetSeat, msg.rank);
+    case "askQuantity":
+      return handleAskQuantity(ws, meta, msg.count);
+    case "askSuits":
+      return handleAskSuits(ws, meta, msg.suits);
     case "passEmpty":
       return handlePassEmpty(ws, meta);
     case "setSpectatorEmote":
