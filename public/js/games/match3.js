@@ -93,6 +93,13 @@
   const shardsRoot = document.getElementById("m3-shards");
   const SHARD_COLORS = ["#fb7185", "#38bdf8", "#34d399", "#c084fc", "#fb923c", "#f5f5f5"];
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // A big-clear step (see BIG_CLEAR_THRESHOLD below) can fire a dozen+ flying
+  // sprites and shard bursts across the whole board plus a board-wide
+  // box-shadow animation, all in the same frame - fine on desktop but visibly
+  // janky on phones (reported directly by a user testing iOS Safari/Chrome).
+  // Coarse pointer is the standard touch-device signal, so those extras are
+  // downgraded to the same weight as a normal small clear on such devices.
+  const isCoarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
 
   function spawnShards(r, c, big) {
     if (!shardsRoot || reduceMotion) return;
@@ -273,10 +280,16 @@
     const step = steps[i];
     const stride = measureStride();
     const isBigBlast = step.clearedCells.length >= BIG_CLEAR_THRESHOLD;
+    // The board-wide shake/flash and per-cell flying-sprite extras are what
+    // lags on a phone (see isCoarsePointer above) - keep the deeper sound
+    // layer (cheap) but skip the heavy visuals there.
+    const bigBlastVisuals = isBigBlast && !isCoarsePointer;
 
     playSound("shatter");
     if (isBigBlast) {
       playSound("shatter", { rate: 0.6, volumeMult: 1.15 }); // layered deeper boom
+    }
+    if (bigBlastVisuals) {
       root.classList.remove("m3-board-blast");
       void root.offsetWidth;
       root.classList.add("m3-board-blast");
@@ -284,11 +297,11 @@
     }
     for (const [r, c] of step.clearedCells) {
       const el = cellEls[r][c];
-      if (isBigBlast) spawnFlyingCrystal(r, c);
+      if (bigBlastVisuals) spawnFlyingCrystal(r, c);
       el.classList.remove("m3-cell-shatter");
       void el.offsetWidth;
       el.classList.add("m3-cell-shatter");
-      spawnShards(r, c, isBigBlast);
+      spawnShards(r, c, bigBlastVisuals);
     }
 
     setTimeout(() => {
