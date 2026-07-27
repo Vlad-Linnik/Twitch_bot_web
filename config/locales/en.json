@@ -203,6 +203,7 @@
       "leaderboardEmpty": "No scores yet — be the first!",
       "loginToSave": "Log in to save your score to the leaderboard.",
       "combo": "Combo",
+      "touchHint": "Tap the piece to rotate · hold and drag to move · swipe down to drop · tap the bottom to nudge down",
       "leaveConfirmTitle": "Leave the game?",
       "leaveConfirmBody": "Your game is still in progress. Save your current score before you go, or leave without saving?",
       "leaveSave": "Save & leave",

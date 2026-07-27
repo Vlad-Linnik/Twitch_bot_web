@@ -1,72 +1,95 @@
 <%- include('partials/head', { title: t('games.fallingBlocks.name') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-6">
-  <div class="mb-4 flex items-baseline justify-between gap-4">
-    <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.fallingBlocks.name') %></h1>
+<%# Mobile layout goal: everything fits in one viewport (h-dvh, no scrolling) so the
+    top of the board never scrolls out from under the fixed nav bar while playing.
+    Score/next/restart share the same elements/ids at every breakpoint (just
+    reflowed via flex/order classes) rather than duplicating markup, since
+    falling-blocks.js updates them by id and duplicate ids would only ever
+    update the first copy in the DOM. %>
+<%# pb-14 on mobile reserves room for the fixed master-volume slider
+    (partials/gameVolumeControl, bottom-4 right-4) so it never overlaps the
+    leaderboard toggle once the game UI is packed to fill the viewport. %>
+<main class="pt-14 max-w-4xl mx-auto px-3 sm:px-6 pb-14 sm:pb-6 h-dvh sm:h-auto flex flex-col sm:block overflow-hidden sm:overflow-visible">
+  <div class="mb-2 sm:mb-4 flex items-baseline justify-between gap-4 shrink-0">
+    <h1 class="text-lg sm:text-3xl font-bold text-neutral-100"><%= t('games.fallingBlocks.name') %></h1>
     <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.fallingBlocks.backToGames') %></a>
   </div>
 
-  <div class="flex flex-col sm:flex-row gap-6 items-center sm:items-start justify-center">
-    <%# Leaderboard: top 10, plus the visitor's own row (with its real rank) as an
-        11th line when they're ranked below the top. Row markup here must stay in
-        sync with lbRow() in public/js/games/falling-blocks.js, which re-renders
-        these rows from the score.json response after a game over. data-csrf is
-        only present for logged-in visitors - its absence is how the client knows
-        not to attempt saving. Ordered last on mobile (below the board). %>
-    <aside id="fb-leaderboard"
-           class="w-full sm:w-56 order-last sm:order-none rounded-xl border border-neutral-800 bg-neutral-900 p-4"
-           <% if (user) { %>data-submit-url="/games/falling-blocks/score.json" data-csrf="<%= csrfToken %>"<% } %>
-           data-empty-label="<%= t('games.fallingBlocks.leaderboardEmpty') %>">
-      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.fallingBlocks.leaderboardTitle') %></p>
-      <ol id="fb-lb-list" class="space-y-0.5">
-        <% if (leaderboard.rows.length === 0) { %>
-          <li class="text-sm text-neutral-500 py-1"><%= t('games.fallingBlocks.leaderboardEmpty') %></li>
-        <% } %>
-        <% leaderboard.rows.forEach(function(row) { %>
-          <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
-            <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
-            <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
-                  <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
-            <span class="tabular-nums text-neutral-100"><%= row.score %></span>
-          </li>
-        <% }) %>
-      </ol>
-      <div id="fb-lb-me" class="mt-1 pt-1 border-t border-neutral-800" <% if (!leaderboard.myRow) { %>hidden<% } %>>
-        <ol id="fb-lb-me-row">
-          <% if (leaderboard.myRow) { %>
-            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10">
-              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
-              <span class="flex-1 truncate text-purple-300"
-                    <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
-              <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
-            </li>
-          <% } %>
-        </ol>
+  <div class="flex flex-col sm:flex-row gap-2 sm:gap-6 items-center sm:items-start justify-center flex-1 min-h-0 sm:flex-none">
+
+    <%# Score / next-piece / restart / keyboard-legend. A slim single row above
+        the board on mobile (order-first), the right-hand sidebar on desktop
+        (order-none puts it back in DOM order, i.e. last / rightmost). %>
+    <div class="w-full sm:w-56 order-first sm:order-none shrink-0 grid grid-cols-2 sm:grid-cols-1 gap-2 sm:gap-4">
+      <div class="col-span-2 sm:col-span-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 sm:p-4
+                  flex flex-row flex-wrap sm:flex-col items-center sm:items-stretch gap-x-4 gap-y-1 sm:gap-y-0">
+        <canvas id="fb-next" width="120" height="120" class="w-9 h-9 sm:w-24 sm:h-24 sm:mx-auto sm:mb-3 order-first sm:order-none"></canvas>
+        <div class="flex items-baseline gap-1.5 sm:justify-between sm:gap-2 sm:mb-2">
+          <span class="text-[10px] sm:text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.score') %></span>
+          <span id="fb-score" class="text-sm sm:text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+        </div>
+        <div class="hidden sm:flex justify-between items-baseline mb-2">
+          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.best') %></span>
+          <span id="fb-best" class="text-sm text-purple-400 tabular-nums">0</span>
+        </div>
+        <div class="flex items-baseline gap-1.5 sm:justify-between sm:gap-2 sm:mb-2">
+          <span class="text-[10px] sm:text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.lines') %></span>
+          <span id="fb-lines" class="text-sm text-neutral-300 tabular-nums">0</span>
+        </div>
+        <div class="flex items-baseline gap-1.5 sm:justify-between sm:gap-2 sm:mb-3">
+          <span class="text-[10px] sm:text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.level') %></span>
+          <span id="fb-level" class="text-sm text-neutral-300 tabular-nums">1</span>
+        </div>
+        <button type="button" id="fb-touch-pause"
+                class="sm:hidden ml-auto shrink-0 w-8 h-8 rounded-lg bg-neutral-800 text-neutral-200 text-sm active:bg-neutral-700"
+                aria-label="<%= t('games.fallingBlocks.controlsPause') %>">&#10074;&#10074;</button>
+        <button type="button" id="fb-restart"
+                class="shrink-0 sm:shrink sm:w-full sm:mt-1 px-3 py-1.5 sm:py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs sm:text-sm font-medium transition-colors"
+                aria-label="<%= t('games.fallingBlocks.newGame') %>">
+          <span class="hidden sm:inline"><%= t('games.fallingBlocks.newGame') %></span>
+          <span class="sm:hidden text-lg leading-none font-bold">+</span>
+        </button>
       </div>
-      <% if (!user) { %>
-        <p class="text-xs text-neutral-500 mt-3">
-          <%= t('games.fallingBlocks.loginToSave') %>
-          <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
-        </p>
-      <% } %>
-    </aside>
+
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 hidden sm:block">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.fallingBlocks.controlsTitle') %></p>
+        <ul class="text-sm text-neutral-400 space-y-1.5">
+          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsMove') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&larr; &rarr;</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsRotate') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&uarr; / R</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsSoftDrop') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&darr;</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsHardDrop') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">Space</kbd></li>
+          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsPause') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">P</kbd></li>
+        </ul>
+      </div>
+    </div>
 
     <%# The board. The overlay (start / pause / game over) sits on top of the canvas;
         all its text is server-rendered here - public/js/games/falling-blocks.js only
-        toggles which pieces are visible via the data-* labels below. %>
-    <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-3 shrink-0">
-      <%# Fixed internal resolution (360x600 + dpr scaling); the CSS size scales the
-          board down to fit the viewport height so no scrolling is needed to see the
-          whole field. w-auto keeps the 3:5 aspect from the canvas attributes. On
-          mobile the layout stacks vertically anyway, so a fixed size stays. %>
+        toggles which pieces are visible via the data-* labels below. The canvas
+        keeps its 360x600 internal resolution everywhere and is scaled purely via
+        CSS (max-h-full/max-w-full against its intrinsic 3:5 aspect ratio, same
+        technique as a responsive <img>) so it always fits whatever space its
+        flex parent has left - no fixed pixel breakpoints to fall out of sync
+        with real device sizes. %>
+    <div class="relative rounded-xl border border-neutral-800 bg-neutral-900 p-2 sm:p-3 shrink-0 sm:shrink
+                w-full sm:w-auto flex-1 min-h-0 sm:flex-none
+                flex items-center justify-center sm:block">
       <canvas id="fb-board" width="360" height="600"
-              class="block rounded-lg bg-neutral-950 w-[324px] h-[540px] sm:w-auto sm:h-[min(600px,calc(100dvh_-_11rem))]"></canvas>
+              class="block rounded-lg bg-neutral-950 max-h-full max-w-full h-auto w-auto touch-none sm:w-auto sm:h-[min(600px,calc(100dvh_-_11rem))]"></canvas>
 
       <%# Combo multiplier callout - toggled by showCombo() in falling-blocks.js
           whenever a lock clears a line on top of a previous one. %>
       <div id="fb-combo" data-label="<%= t('games.fallingBlocks.combo') %>"
            class="pointer-events-none absolute inset-x-0 top-6 text-center text-2xl font-extrabold tracking-wide text-amber-400 opacity-0 [text-shadow:0_2px_8px_rgba(0,0,0,0.6)]"></div>
+
+      <%# Optional rotate button - everything else is gesture-driven on mobile
+          (tap the falling piece / hold+drag / swipe down / tap the bottom of
+          the field), but a dedicated button stays for anyone who finds tapping
+          the piece itself fiddly. %>
+      <button type="button" id="fb-touch-rotate"
+              class="sm:hidden absolute bottom-4 right-4 w-14 h-14 rounded-full bg-neutral-800/70 backdrop-blur-sm text-neutral-100 text-2xl leading-none active:bg-neutral-700/80 shadow-lg"
+              aria-label="<%= t('games.fallingBlocks.controlsRotate') %>">&#8635;</button>
 
       <div id="fb-overlay"
            data-title-start="<%= t('games.fallingBlocks.name') %>"
@@ -76,12 +99,14 @@
            data-button-resume="<%= t('games.fallingBlocks.resume') %>"
            data-button-again="<%= t('games.fallingBlocks.playAgain') %>"
            data-final-score-label="<%= t('games.fallingBlocks.finalScore') %>"
+           data-touch-hint="<%= t('games.fallingBlocks.touchHint') %>"
            class="absolute inset-3 rounded-lg bg-neutral-950/80 backdrop-blur-sm grid place-items-center text-center">
         <div class="px-4">
           <h2 id="fb-overlay-title" class="text-xl font-semibold text-neutral-100 mb-1"></h2>
           <p id="fb-overlay-score" class="text-sm text-neutral-400 mb-4" hidden></p>
           <button type="button" id="fb-overlay-button"
                   class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"></button>
+          <p id="fb-overlay-hint" class="sm:hidden mt-4 text-xs text-neutral-500 max-w-[16rem] mx-auto" hidden></p>
         </div>
       </div>
     </div>
@@ -103,53 +128,61 @@
       </div>
     </dialog>
 
-    <div class="w-full sm:w-56 grid grid-cols-2 sm:grid-cols-1 gap-4">
-      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-        <div class="flex justify-between items-baseline mb-2">
-          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.score') %></span>
-          <span id="fb-score" class="text-lg font-semibold text-neutral-100 tabular-nums">0</span>
+    <%# Leaderboard: top 10, plus the visitor's own row (with its real rank) as an
+        11th line when they're ranked below the top. Row markup here must stay in
+        sync with lbRow() in public/js/games/falling-blocks.js, which re-renders
+        these rows from the score.json response after a game over. data-csrf is
+        only present for logged-in visitors - its absence is how the client knows
+        not to attempt saving. Ordered last on mobile (below the board) and
+        collapsed behind a toggle there - fb-lb-toggle/fb-lb-body only matter
+        below the sm breakpoint; "hidden sm:block" always wins at sm+ regardless
+        of the toggle's JS state (same pattern already used elsewhere on this
+        page for the desktop-only controls-legend card), so there's no separate
+        desktop code path to keep in sync. %>
+    <aside id="fb-leaderboard"
+           class="w-full sm:w-56 order-last sm:order-none shrink-0 rounded-xl border border-neutral-800 bg-neutral-900 sm:p-4"
+           <% if (user) { %>data-submit-url="/games/falling-blocks/score.json" data-csrf="<%= csrfToken %>"<% } %>
+           data-empty-label="<%= t('games.fallingBlocks.leaderboardEmpty') %>">
+      <button type="button" id="fb-lb-toggle" aria-expanded="false"
+              class="sm:hidden w-full flex items-center justify-between px-4 py-2 text-xs uppercase tracking-wide text-neutral-500">
+        <span><%= t('games.fallingBlocks.leaderboardTitle') %></span>
+        <span id="fb-lb-chevron" class="transition-transform">&#9662;</span>
+      </button>
+      <p class="hidden sm:block text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.fallingBlocks.leaderboardTitle') %></p>
+      <div id="fb-lb-body" class="hidden sm:block px-4 pb-3 sm:px-0 sm:pb-0">
+        <ol id="fb-lb-list" class="space-y-0.5">
+          <% if (leaderboard.rows.length === 0) { %>
+            <li class="text-sm text-neutral-500 py-1"><%= t('games.fallingBlocks.leaderboardEmpty') %></li>
+          <% } %>
+          <% leaderboard.rows.forEach(function(row) { %>
+            <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded<%= row.isMe ? ' bg-purple-500/10' : '' %>">
+              <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= row.rank %></span>
+              <span class="flex-1 truncate <%= row.isMe ? 'text-purple-300' : 'text-neutral-300' %>"
+                    <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+              <span class="tabular-nums text-neutral-100"><%= row.score %></span>
+            </li>
+          <% }) %>
+        </ol>
+        <div id="fb-lb-me" class="mt-1 pt-1 border-t border-neutral-800" <% if (!leaderboard.myRow) { %>hidden<% } %>>
+          <ol id="fb-lb-me-row">
+            <% if (leaderboard.myRow) { %>
+              <li class="flex items-baseline gap-2 text-sm py-1 px-1 rounded bg-purple-500/10">
+                <span class="w-5 text-right tabular-nums text-neutral-500 shrink-0"><%= leaderboard.myRow.rank %></span>
+                <span class="flex-1 truncate text-purple-300"
+                      <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+                <span class="tabular-nums text-neutral-100"><%= leaderboard.myRow.score %></span>
+              </li>
+            <% } %>
+          </ol>
         </div>
-        <div class="flex justify-between items-baseline mb-2">
-          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.best') %></span>
-          <span id="fb-best" class="text-sm text-purple-400 tabular-nums">0</span>
-        </div>
-        <div class="flex justify-between items-baseline mb-2">
-          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.lines') %></span>
-          <span id="fb-lines" class="text-sm text-neutral-300 tabular-nums">0</span>
-        </div>
-        <div class="flex justify-between items-baseline mb-3">
-          <span class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.fallingBlocks.level') %></span>
-          <span id="fb-level" class="text-sm text-neutral-300 tabular-nums">1</span>
-        </div>
-        <button type="button" id="fb-restart"
-                class="w-full px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors"><%= t('games.fallingBlocks.newGame') %></button>
+        <% if (!user) { %>
+          <p class="text-xs text-neutral-500 mt-3">
+            <%= t('games.fallingBlocks.loginToSave') %>
+            <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+          </p>
+        <% } %>
       </div>
-
-      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.fallingBlocks.next') %></p>
-        <canvas id="fb-next" width="120" height="120" class="block w-24 h-24 mx-auto"></canvas>
-      </div>
-
-      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 col-span-2 sm:col-span-1 hidden sm:block">
-        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.fallingBlocks.controlsTitle') %></p>
-        <ul class="text-sm text-neutral-400 space-y-1.5">
-          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsMove') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&larr; &rarr;</kbd></li>
-          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsRotate') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&uarr; / R</kbd></li>
-          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsSoftDrop') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">&darr;</kbd></li>
-          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsHardDrop') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">Space</kbd></li>
-          <li class="flex justify-between gap-2"><span><%= t('games.fallingBlocks.controlsPause') %></span><kbd class="text-xs text-neutral-300 bg-neutral-800 rounded px-1.5 py-0.5">P</kbd></li>
-        </ul>
-      </div>
-
-      <%# Touch controls - only shown on small screens, where there's no keyboard. %>
-      <div class="col-span-2 grid grid-cols-5 gap-2 sm:hidden">
-        <button type="button" id="fb-touch-left" class="py-3 rounded-lg bg-neutral-800 text-neutral-200 text-lg active:bg-neutral-700" aria-label="<%= t('games.fallingBlocks.controlsMove') %>">&larr;</button>
-        <button type="button" id="fb-touch-rotate" class="py-3 rounded-lg bg-neutral-800 text-neutral-200 text-lg active:bg-neutral-700" aria-label="<%= t('games.fallingBlocks.controlsRotate') %>">&#8635;</button>
-        <button type="button" id="fb-touch-down" class="py-3 rounded-lg bg-neutral-800 text-neutral-200 text-lg active:bg-neutral-700" aria-label="<%= t('games.fallingBlocks.controlsSoftDrop') %>">&darr;</button>
-        <button type="button" id="fb-touch-drop" class="py-3 rounded-lg bg-neutral-800 text-neutral-200 text-lg active:bg-neutral-700" aria-label="<%= t('games.fallingBlocks.controlsHardDrop') %>">&#10515;</button>
-        <button type="button" id="fb-touch-right" class="py-3 rounded-lg bg-neutral-800 text-neutral-200 text-lg active:bg-neutral-700" aria-label="<%= t('games.fallingBlocks.controlsMove') %>">&rarr;</button>
-      </div>
-    </div>
+    </aside>
   </div>
 </main>
 

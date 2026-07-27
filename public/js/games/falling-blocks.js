@@ -585,6 +585,8 @@
 
   // --- Overlay / state transitions ----------------------------------------
 
+  const overlayHint = document.getElementById("fb-overlay-hint");
+
   function showOverlay(kind) {
     const d = overlay.dataset;
     overlayScore.hidden = kind !== "over";
@@ -598,6 +600,14 @@
       overlayTitle.textContent = d.titleOver;
       overlayScore.textContent = d.finalScoreLabel + ": " + score;
       overlayButton.textContent = d.buttonAgain;
+    }
+    // Shown on every overlay screen (start/paused/over), not just the very
+    // first launch - a one-time hint is too easy to miss, and mobile players
+    // land back on this overlay constantly (every pause, every game over).
+    // The element is sm:hidden anyway, so desktop never sees it.
+    if (overlayHint) {
+      overlayHint.textContent = d.touchHint;
+      overlayHint.hidden = false;
     }
     // Inline style rather than the hidden attribute: the overlay carries
     // Tailwind's .grid utility, which would win over [hidden]'s display:none.
@@ -692,11 +702,109 @@
       draw();
     });
   }
-  bindTouch("fb-touch-left", () => move(-1));
-  bindTouch("fb-touch-right", () => move(1));
   bindTouch("fb-touch-rotate", tryRotate);
-  bindTouch("fb-touch-down", softDrop);
-  bindTouch("fb-touch-drop", hardDrop);
+
+  const touchPauseBtn = document.getElementById("fb-touch-pause");
+  touchPauseBtn?.addEventListener("click", () => {
+    if (state === "running") pause();
+    else if (state === "paused") resume();
+  });
+
+  // --- Leaderboard collapse (mobile only - "hidden sm:block" on fb-lb-body
+  // always wins at the sm breakpoint regardless of this toggle's state, same
+  // pattern the desktop-only controls-legend card already relies on). ------
+
+  const lbToggle = document.getElementById("fb-lb-toggle");
+  const lbBody = document.getElementById("fb-lb-body");
+  const lbChevron = document.getElementById("fb-lb-chevron");
+  lbToggle?.addEventListener("click", () => {
+    const collapsed = lbBody.classList.toggle("hidden");
+    lbToggle.setAttribute("aria-expanded", String(!collapsed));
+    if (lbChevron) lbChevron.style.transform = collapsed ? "" : "rotate(180deg)";
+  });
+
+  // --- Touch gestures on the board ------------------------------------------
+  // Mobile has no keyboard, so the whole control scheme lives here instead of
+  // the old button row: tap the falling piece to rotate, press-and-drag to
+  // slide it left/right under your finger, swipe down to hard-drop, and tap
+  // the bottom rows of the field for a single soft-drop step (mirrors the
+  // down arrow on desktop). A rotate button still exists for anyone who finds
+  // tapping the piece itself fiddly.
+
+  const TAP_MAX_MOVE = 12; // px of finger travel still counted as a tap, not a drag
+  const SWIPE_DOWN_MIN_DY = 40; // px of downward travel required to count as a swipe
+  const BOTTOM_ZONE_ROWS = 4; // tapping within the bottom N rows soft-drops instead of rotating
+
+  function boardPointFromEvent(event) {
+    const rect = board.getBoundingClientRect();
+    return {
+      col: ((event.clientX - rect.left) / rect.width) * COLS,
+      row: ((event.clientY - rect.top) / rect.height) * ROWS,
+    };
+  }
+
+  function pieceCellsAt(col, row) {
+    const cx = Math.floor(col);
+    const cy = Math.floor(row);
+    return current.cells.some(([px, py]) => current.x + px === cx && current.y + py === cy);
+  }
+
+  let touch = null;
+
+  board.addEventListener("pointerdown", (event) => {
+    if (state !== "running") return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const pt = boardPointFromEvent(event);
+    touch = {
+      id: event.pointerId,
+      startCol: pt.col,
+      startRow: pt.row,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      axis: null, // "x" once a horizontal drag is recognized, "y" once vertical
+      lastAppliedShift: 0,
+    };
+    board.setPointerCapture(event.pointerId);
+  });
+
+  board.addEventListener("pointermove", (event) => {
+    if (!touch || event.pointerId !== touch.id || state !== "running") return;
+    const dxPx = event.clientX - touch.startX;
+    const dyPx = event.clientY - touch.startY;
+    if (!touch.moved) {
+      if (Math.hypot(dxPx, dyPx) < TAP_MAX_MOVE) return;
+      touch.moved = true;
+      touch.axis = Math.abs(dxPx) >= Math.abs(dyPx) ? "x" : "y";
+    }
+    if (touch.axis !== "x") return; // vertical drags are resolved as a swipe on release
+    const pt = boardPointFromEvent(event);
+    const shift = Math.round(pt.col - touch.startCol);
+    const delta = shift - touch.lastAppliedShift;
+    if (delta === 0) return;
+    const dir = delta > 0 ? 1 : -1;
+    for (let i = 0; i < Math.abs(delta); i++) move(dir);
+    touch.lastAppliedShift = shift;
+    draw();
+  });
+
+  function endTouch(event) {
+    if (!touch || event.pointerId !== touch.id) return;
+    const dxPx = event.clientX - touch.startX;
+    const dyPx = event.clientY - touch.startY;
+    if (state === "running") {
+      if (!touch.moved) {
+        if (pieceCellsAt(touch.startCol, touch.startRow)) tryRotate();
+        else if (touch.startRow >= ROWS - BOTTOM_ZONE_ROWS) softDrop();
+      } else if (touch.axis === "y" && dyPx > SWIPE_DOWN_MIN_DY && dyPx > Math.abs(dxPx) * 1.5) {
+        hardDrop();
+      }
+      draw();
+    }
+    touch = null;
+  }
+  board.addEventListener("pointerup", endTouch);
+  board.addEventListener("pointercancel", endTouch);
 
   // --- Boot ----------------------------------------------------------------
 
