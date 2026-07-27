@@ -53,6 +53,7 @@
   const RECONCILE_TAU_MS = 250; // gentle pull toward the server, only when both agree we're stopped
   const RESYNC_DISTANCE = 90; // units - past this it's drift we can't ease away, adopt the server's value
   const MAX_FRAME_DT_MS = 100; // clamp a backgrounded-tab frame gap, same as the engine's step() does
+  const TOUCH_DEADZONE = 6; // court units - how close touch-drag chase gets before it stops nudging dir
 
   // Set when embedded in the cross-game spectator hub's iframe
   // (public/js/games/watch-hub.js) to auto-watch one room; skips the
@@ -195,6 +196,13 @@
     }
     const frameDt = Math.min(Math.max(now - lastFrameAt, 0), MAX_FRAME_DT_MS) / 1000;
     lastFrameAt = now;
+    if (touchTargetY != null && !spectating) {
+      const referenceY = localOwnY != null ? localOwnY : snapshot.paddles[youAreSeat].y;
+      const diff = touchTargetY - referenceY;
+      // Deadzone stops the dir from flickering -1/1 once the paddle is
+      // already close enough to the finger that either would overshoot.
+      setDir(Math.abs(diff) <= TOUCH_DEADZONE ? 0 : diff > 0 ? 1 : -1);
+    }
     const target = extrapolate(now - snapshotAt);
     const decay = decayedError(now - snapshotAt);
     const paddleY = target.paddleY.map((y, seat) => y + error.paddleY[seat] * decay);
@@ -329,16 +337,59 @@
   // and never reaches us - the paddle would keep travelling into the wall and
   // stay stuck there until the key was pressed and released again.
   window.addEventListener("blur", () => {
+    touchTargetY = null;
+    touchPointerId = null;
     if (heldKeys.size === 0) return;
     heldKeys.clear();
     recomputeDir();
   });
+
+  // Touch/mouse control: drag anywhere on the court and the paddle chases the
+  // finger's Y position. There's no continuous "set position" message in the
+  // wire protocol (server only takes dir -1|0|1 - see lib/pongEngine.js's
+  // applyInput), so this recomputes dir every frame (in frame() below) by
+  // comparing the held touch's target Y against the paddle's own last drawn
+  // position - the same chase-with-deadzone a human thumb does naturally,
+  // just decided in JS instead of by a real fingertip's fine motor control.
+  let touchTargetY = null; // court-space Y the pointer is currently over; null = not touching
+  let touchPointerId = null;
+
+  function courtYFromEvent(event) {
+    const rect = canvas.getBoundingClientRect();
+    const frac = (event.clientY - rect.top) / rect.height;
+    return clamp(frac, 0, 1) * COURT_HEIGHT;
+  }
+
+  function touchStart(event) {
+    if (spectating || screens.game.hidden) return;
+    event.preventDefault();
+    touchPointerId = event.pointerId;
+    canvas.setPointerCapture(event.pointerId);
+    touchTargetY = courtYFromEvent(event);
+  }
+  function touchMove(event) {
+    if (touchPointerId !== event.pointerId) return;
+    event.preventDefault();
+    touchTargetY = courtYFromEvent(event);
+  }
+  function touchEnd(event) {
+    if (touchPointerId !== event.pointerId) return;
+    touchPointerId = null;
+    touchTargetY = null;
+    setDir(0);
+  }
+  canvas.addEventListener("pointerdown", touchStart);
+  canvas.addEventListener("pointermove", touchMove);
+  canvas.addEventListener("pointerup", touchEnd);
+  canvas.addEventListener("pointercancel", touchEnd);
 
   client.on("matched", (msg) => {
     youAreSeat = msg.youAreSeat;
     mirror = youAreSeat === 1;
     currentDir = 0;
     heldKeys.clear();
+    touchTargetY = null;
+    touchPointerId = null;
     snapshot = null;
     view = null;
     localOwnY = null;
@@ -361,6 +412,8 @@
     mirror = false;
     currentDir = 0;
     heldKeys.clear();
+    touchTargetY = null;
+    touchPointerId = null;
     snapshot = null;
     view = null;
     localOwnY = null;
@@ -390,6 +443,8 @@
         : "";
     resultOverlay.hidden = false;
     heldKeys.clear();
+    touchTargetY = null;
+    touchPointerId = null;
     currentDir = 0;
     // Nothing moves after the final point - freeze on the last snapshot
     // rather than burning a rAF loop behind the result overlay. Freeze on the

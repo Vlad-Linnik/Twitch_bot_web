@@ -677,7 +677,7 @@
       "name": "Pong",
       "cardDescription": "1v1 air hockey-style Pong — online only, rated, ball speeds up as the match goes on.",
       "intro": "Find an opponent and be the first to 7 points.",
-      "controlsHint": "Arrow keys or W/S to move your paddle.",
+      "controlsHint": "Arrow keys or W/S to move your paddle. On touch devices, drag up/down on the court.",
       "youWin": "You win!",
       "youLose": "You lose",
       "playAgain": "Play again",
