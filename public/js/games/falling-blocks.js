@@ -693,10 +693,32 @@
     draw();
   });
 
-  function bindTouch(id, action) {
-    const el = document.getElementById(id);
+  // Fires on pointerdown rather than click: a tap that drifts even a couple
+  // of px - completely normal when mashing the rotate button mid-game - can
+  // make the browser read it as a scroll attempt and silently drop the
+  // synthesized click, which is exactly the "doesn't work on the first tap"
+  // symptom. pointerdown fires the instant contact happens, before any drift
+  // is possible. The click listener stays as a fallback for keyboard/
+  // assistive-tech activation (which never fires a pointerdown first); the
+  // lastPointerFire guard stops a browser that still synthesizes a click
+  // after a touch pointerdown from applying the action twice.
+  function bindTap(el, handler) {
     if (!el) return;
+    let lastPointerFire = 0;
+    el.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      event.preventDefault();
+      lastPointerFire = performance.now();
+      handler();
+    });
     el.addEventListener("click", () => {
+      if (performance.now() - lastPointerFire < 500) return;
+      handler();
+    });
+  }
+
+  function bindTouch(id, action) {
+    bindTap(document.getElementById(id), () => {
       if (state !== "running") return;
       action();
       draw();
@@ -704,8 +726,7 @@
   }
   bindTouch("fb-touch-rotate", tryRotate);
 
-  const touchPauseBtn = document.getElementById("fb-touch-pause");
-  touchPauseBtn?.addEventListener("click", () => {
+  bindTap(document.getElementById("fb-touch-pause"), () => {
     if (state === "running") pause();
     else if (state === "paused") resume();
   });
