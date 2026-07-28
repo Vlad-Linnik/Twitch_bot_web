@@ -22,6 +22,10 @@ async function ensureInitialized() {
   if (collection) return collection;
   const db = await connect();
   collection = db.collection("LongBans");
+  // Backs listHistoryForChannel's per-channel audit view, sorted newest-first - not covered by
+  // any index the bot side already maintains (those are all keyed off status/mode for the
+  // poller, see TwitchBot/db/longBansRepo.js).
+  await collection.createIndex({ channelId: 1, createdAt: -1 });
   return collection;
 }
 
@@ -31,6 +35,27 @@ async function listActiveForChannel(channelId) {
     .find({ channelId: String(channelId), status: { $in: OCCUPYING_STATUSES } })
     .sort({ unbanAt: 1 })
     .toArray();
+}
+
+const DEFAULT_HISTORY_LIMIT = 25;
+
+// Every long-ban ever requested for this channel, regardless of status - unlike
+// listActiveForChannel (which drops a row the moment it's completed/cancelled/failed), this is
+// the audit trail for "who used !longban/the long-bans page and when", including chat-issued
+// entries the site has no other record of (SettingsChangeLog only gets web-originated writes -
+// see ../CLAUDE.md's "Long-bans: written by both repos, executed only by the bot").
+async function listHistoryForChannel(channelId, { page = 1, limit = DEFAULT_HISTORY_LIMIT } = {}) {
+  const col = await ensureInitialized();
+  const filter = { channelId: String(channelId) };
+  const safePage = Math.max(1, page);
+  const skip = (safePage - 1) * limit;
+
+  const [entries, total] = await Promise.all([
+    col.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+    col.countDocuments(filter),
+  ]);
+
+  return { entries, total, totalPages: Math.max(1, Math.ceil(total / limit)), page: safePage };
 }
 
 async function findOccupyingByLogin(channelId, userLogin) {
@@ -67,4 +92,11 @@ async function requestCancel(id) {
   return { ...doc, status: nextStatus };
 }
 
-module.exports = { listActiveForChannel, findOccupyingByLogin, findById, create, requestCancel };
+module.exports = {
+  listActiveForChannel,
+  listHistoryForChannel,
+  findOccupyingByLogin,
+  findById,
+  create,
+  requestCancel,
+};

@@ -18,6 +18,7 @@ const { parseLongBanRequest, MAX_UNBAN_YEAR, MAX_REASON_LENGTH } = require("../l
 const { getUsersByLogin } = require("../twitch/helixUsers");
 
 const router = express.Router();
+const HISTORY_PER_PAGE = 25;
 
 async function loadChannel(req, res) {
   const channel = await channelsRepo.findByLogin(req.params.channel);
@@ -33,10 +34,20 @@ router.get("/:channel/settings/long-bans", requireLevel(2), async (req, res, nex
     const channel = await loadChannel(req, res);
     if (!channel) return;
 
-    const longBans = await longBansRepo.listActiveForChannel(channel.channelId);
+    const historyPage = Math.max(1, parseInt(req.query.historyPage, 10) || 1);
+    const [longBans, history] = await Promise.all([
+      longBansRepo.listActiveForChannel(channel.channelId),
+      longBansRepo.listHistoryForChannel(channel.channelId, {
+        page: historyPage,
+        limit: HISTORY_PER_PAGE,
+      }),
+    ]);
     res.render("longBans", {
       channel,
       longBans,
+      history: history.entries,
+      historyPage: history.page,
+      historyTotalPages: history.totalPages,
       maxUnbanYear: MAX_UNBAN_YEAR,
       maxReasonLength: MAX_REASON_LENGTH,
       error: req.query.error || null,

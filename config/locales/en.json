@@ -1154,6 +1154,19 @@
     "cancelConfirm": "Cancel this long-ban and immediately restore the user's chat access?",
     "saved": "Long-ban created — the bot will apply it within ~30 seconds.",
     "cancelled": "Long-ban being cancelled — chat access will be restored within ~30 seconds (instantly if it hadn't been applied yet).",
+    "history": "Long-ban history",
+    "historyNone": "No history yet",
+    "colCreated": "Created",
+    "colStatus": "Status",
+    "colOrigin": "Source / moderator",
+    "status": {
+      "active": "active",
+      "pending": "applying",
+      "cancelRequested": "cancelling",
+      "completed": "completed",
+      "cancelled": "cancelled",
+      "failed": "failed"
+    },
     "errors": {
       "user_required": "A user is required",
       "mode_invalid": "Pick a mode: timeout or ban",

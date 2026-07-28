@@ -104,6 +104,64 @@
     <% } %>
   </section>
 
+  <!-- History: every long-ban ever requested for this channel, including ones issued via
+       !longban in chat - the only place that usage is visible on the site, since
+       SettingsChangeLog only records web-originated actions. -->
+  <section class="mt-10">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('longBans.history') %></h2>
+
+    <% if (history.length === 0) { %>
+      <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-6 text-center text-neutral-600 text-sm"><%= t('longBans.historyNone') %></p>
+    <% } else { %>
+      <div class="rounded-lg border border-neutral-800 overflow-hidden">
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('longBans.colCreated') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('longBans.user') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('longBans.mode') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('longBans.colStatus') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('longBans.colOrigin') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('longBans.until') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('longBans.reason') %></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% history.forEach(function(b) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+                <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(b.createdAt).toLocaleString(locale) %></td>
+                <td class="px-4 py-2 text-neutral-200">@<%= b.userLogin %></td>
+                <td class="px-4 py-2 text-neutral-400"><%= b.mode === 'ban' ? t('longBans.modeBan') : t('longBans.modeTimeout') %></td>
+                <td class="px-4 py-2 text-neutral-400"><%= t('longBans.status.' + b.status) %></td>
+                <td class="px-4 py-2 text-neutral-400"><%= b.createdBySource === 'web' ? t('longBans.originWeb') : t('longBans.originChat') %>: <%= b.createdByDisplayName || b.createdByLogin %></td>
+                <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(b.unbanAt).toLocaleString(locale) %></td>
+                <td class="px-4 py-2 text-neutral-500 max-w-xs break-words"><%= b.reason || '—' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <% if (historyTotalPages > 1) { %>
+        <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+          <% if (historyPage > 1) { %>
+            <a href="?historyPage=<%= historyPage - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+          <% } else { %>
+            <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+          <% } %>
+          <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= historyPage %> / <%= historyTotalPages %></span>
+          <% if (historyPage < historyTotalPages) { %>
+            <a href="?historyPage=<%= historyPage + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+          <% } else { %>
+            <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+          <% } %>
+        </nav>
+      <% } %>
+    <% } %>
+  </section>
+
 </main>
 
 <script src="/js/confirm-delete.js" defer></script>
