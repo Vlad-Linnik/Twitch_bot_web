@@ -134,7 +134,10 @@
       "update7tv": "Re-sync the channel's 7TV emote set into the tracked-word whitelist.",
       "muteduel": "Challenge chat or a user to a dice-roll duel; loser gets timed out.",
       "muteaccept": "Accept a pending mute duel.",
-      "sovet": "Get a random Dota 2 item suggestion. Only responds while the stream's category is Dota 2."
+      "sovet": "Get a random Dota 2 item suggestion. Only responds while the stream's category is Dota 2.",
+      "longban": "Block a user longer than Twitch's native timeout cap (2 weeks) — via a renewing timeout or a ban with an automatic unban on a set date/duration.",
+      "cancellongban": "End an active long-ban early and immediately restore the user's chat access.",
+      "longbans": "List the channel's currently active long-bans."
     },
     "useCase": {
       "addcommand": "Set up a !discord or !socials command once and let chat trigger it any time.",
@@ -161,7 +164,10 @@
       "update7tv": "Pick up newly added 7TV emotes without waiting for the next auto-sync.",
       "muteduel": "A fun PvP wager between two chatters, loser gets timed out.",
       "muteaccept": "Accepting a challenge someone sent you.",
-      "sovet": "A lighthearted random Dota 2 item suggestion for chat."
+      "sovet": "A lighthearted random Dota 2 item suggestion for chat.",
+      "longban": "Long-term removal of a problem user without manually re-timing them out every 2 weeks.",
+      "cancellongban": "Undo a long-ban if the call changes or it was issued by mistake.",
+      "longbans": "Check who's currently under a long-ban and when each one ends."
     }
   },
   "games": {
@@ -814,6 +820,7 @@
       "chatStats": "Chat statistics commands",
       "customCommands": "Custom commands",
       "counters": "Counters",
+      "longBans": "Long bans",
       "miniGames": "Mini-games",
       "other": "Other commands"
     },
@@ -876,6 +883,7 @@
     "moderatorsIntro": "Choose who can edit settings",
     "commandCountSuffix": "custom commands",
     "counterCountSuffix": "counters",
+    "longBanCountSuffix": "active long-bans",
     "remSignatureLabel": "Removal signature",
     "acceptSignatureLabel": "Accept signature",
     "defaultCityLabel": "Default city",
@@ -906,12 +914,15 @@
     "category": {
       "settings": "Settings",
       "custom_command": "Custom command",
-      "counter": "Counter"
+      "counter": "Counter",
+      "long_ban": "Long ban"
     },
     "action": {
       "add": "Added",
       "update": "Updated",
-      "delete": "Deleted"
+      "delete": "Deleted",
+      "create": "Created",
+      "cancel": "Cancelled"
     },
     "colChanges": "What changed",
     "rawDetails": "Raw data",
@@ -1117,6 +1128,42 @@
       "alias_matches_name": "An alias can't be the same as the command's own name",
       "alias_conflict": "That alias is already taken by !%s on this channel",
       "name_conflict": "That name is already taken as an alias of !%s on this channel"
+    }
+  },
+  "longBans": {
+    "title": "Long bans",
+    "subtitle": "Block users longer than Twitch's native timeout cap (2 weeks)",
+    "create": "New long-ban",
+    "existing": "Active long-bans",
+    "none": "No active long-bans yet",
+    "user": "User",
+    "mode": "Mode",
+    "modeTimeout": "Timeout (chat visible)",
+    "modeBan": "Ban (chat hidden)",
+    "duration": "Duration or date",
+    "durationHint": "A number of seconds, 30d/6w/2m/1y, or a date DD.MM.YYYY.",
+    "maxYear": "Maximum allowed year:",
+    "reason": "Reason",
+    "save": "Create long-ban",
+    "until": "until",
+    "originWeb": "from the web",
+    "originChat": "from chat",
+    "statusPending": "applying",
+    "statusCancelling": "cancelling",
+    "cancelButton": "Cancel",
+    "cancelConfirm": "Cancel this long-ban and immediately restore the user's chat access?",
+    "saved": "Long-ban created — the bot will apply it within ~30 seconds.",
+    "cancelled": "Long-ban being cancelled — chat access will be restored within ~30 seconds (instantly if it hadn't been applied yet).",
+    "errors": {
+      "user_required": "A user is required",
+      "mode_invalid": "Pick a mode: timeout or ban",
+      "duration_format": "Invalid duration/date format. Expected a number of seconds, 30d/6w/2m/1y, or a date DD.MM.YYYY",
+      "duration_overflow": "Duration/date too large — maximum allowed year",
+      "duration_past": "That date is already in the past",
+      "reason_too_long": "Reason is too long",
+      "already_active": "That user already has an active long-ban",
+      "user_not_found": "User not found on Twitch",
+      "not_found": "Long-ban not found"
     }
   },
   "counters": {

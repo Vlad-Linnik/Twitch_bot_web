@@ -25,6 +25,7 @@ router.use("/", require("./admin"));
 // mount.
 router.use("/", require("./customCommands"));
 router.use("/", require("./counters"));
+router.use("/", require("./longBans"));
 router.use("/", require("./userDashboard"));
 router.use("/", require("./channelRedirect"));
 

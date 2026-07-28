@@ -33,6 +33,7 @@
       'question', 'directmsg', 'insult', 'customCommandTimer', 'counterUpdate',
       'addcommand', 'settimer', 'setpin', 'setannounce', 'delcommand',
       'addcounter', 'delcounter', 'exception',
+      'longban', 'cancellongban', 'longbans',
     ]);
     const claimed = new Set(placedElsewhere);
     groups.forEach(g => g.names.forEach(n => claimed.add(n)));
@@ -51,6 +52,16 @@
         <span>
           <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.customCommands') %></span>
           <span class="block text-neutral-400 text-sm mt-0.5"><%= customCommandCount %> <%= t('channelSettings.commandCountSuffix') %></span>
+        </span>
+      </a>
+    </section>
+
+    <section class="mb-4">
+      <a href="/<%= channel.channelLogin %>/settings/long-bans" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
+        <span class="text-2xl leading-none">🔨</span>
+        <span>
+          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.longBans') %></span>
+          <span class="block text-neutral-400 text-sm mt-0.5"><%= longBanCount %> <%= t('channelSettings.longBanCountSuffix') %></span>
         </span>
       </a>
     </section>

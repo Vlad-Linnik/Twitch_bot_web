@@ -3,6 +3,7 @@ const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
 const countersRepo = require("../db/countersRepo");
+const longBansRepo = require("../db/longBansRepo");
 const modsRepo = require("../db/modsRepo");
 const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -56,10 +57,11 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
-    const [config, customCommands, counters, sevenTvStatus] = await Promise.all([
+    const [config, customCommands, counters, longBans, sevenTvStatus] = await Promise.all([
       channelConfigRepo.getConfig(req.params.channel),
       customCommandsRepo.list(req.params.channel),
       countersRepo.list(req.params.channel),
+      longBansRepo.listActiveForChannel(channel.channelId),
       // emoteImages.js's getSevenTvLinkStatus is already fail-soft (a 7TV outage resolves to
       // "not linked" rather than rejecting), so no extra catch needed here.
       getSevenTvLinkStatus(channel.channelId),
@@ -69,6 +71,7 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
       config,
       customCommandCount: customCommands.length,
       counterCount: counters.length,
+      longBanCount: longBans.length,
       sevenTvStatus,
       saved: req.query.saved === "1",
       canManageModerators: req.permissionLevel <= 1,
