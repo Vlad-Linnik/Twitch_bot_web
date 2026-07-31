@@ -5,6 +5,7 @@ const channelsRepo = require("../db/channelsRepo");
 const modsRepo = require("../db/modsRepo");
 const ownerTokensRepo = require("../db/ownerTokensRepo");
 const { verifyToken } = require("../middleware/csrf");
+const { sanitizeReturnTo } = require("../lib/returnTo");
 
 const router = express.Router();
 
@@ -29,11 +30,20 @@ async function syncChannelModerators(accessToken, refreshToken, user) {
 router.get("/login", (req, res) => {
   const state = oauthClient.generateState();
   req.session.oauthState = state;
+  // Carried through the Twitch round-trip in the session (query params don't survive it) -
+  // every "Login with Twitch" link sends its own page as ?returnTo=, so /callback below can
+  // land the visitor back where they started instead of always going to "/".
+  req.session.returnTo = sanitizeReturnTo(req.query.returnTo);
   res.redirect(oauthClient.buildAuthorizeUrl(state));
 });
 
 router.get("/callback", async (req, res) => {
   const { code, state, error } = req.query;
+  // Captured before any redirect/regenerate touches the session - req.session.regenerate()
+  // below throws away the pre-login session (and everything on it, including this) to prevent
+  // session fixation, so this has to be read into a local first.
+  const returnTo = sanitizeReturnTo(req.session.returnTo) || "/";
+  delete req.session.returnTo;
 
   if (error) {
     return res.redirect("/?login_error=1");
@@ -61,7 +71,7 @@ router.get("/callback", async (req, res) => {
         return res.redirect("/?login_error=1");
       }
       req.session.user = user;
-      res.redirect("/");
+      res.redirect(returnTo);
     });
   } catch (err) {
     console.error("[auth] OAuth callback failed:", err.response?.data || err.message);

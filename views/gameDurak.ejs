@@ -30,7 +30,7 @@
           <p class="text-sm text-neutral-500 mt-1"><%= t('games.durak.modeSelectPeopleDesc') %></p>
         </button>
       <% } else { %>
-        <a href="/auth/login"
+        <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>"
            class="block rounded-xl border border-neutral-800 bg-neutral-900 p-5 opacity-70 hover:opacity-100 transition-opacity">
           <h2 class="text-lg font-semibold text-neutral-100"><span aria-hidden="true">👥</span> <%= t('games.durak.modeSelectPeople') %></h2>
           <p class="text-sm text-neutral-500 mt-1"><%= t('games.durak.modeSelectPeopleDesc') %></p>

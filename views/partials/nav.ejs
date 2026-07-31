@@ -126,7 +126,7 @@
       </dialog>
       <script src="/js/logout-confirm.js" defer></script>
     <% } else { %>
-      <a href="/auth/login" class="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors shrink-0 whitespace-nowrap"><%= t('nav.login') %></a>
+      <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors shrink-0 whitespace-nowrap"><%= t('nav.login') %></a>
     <% } %>
   </div>
 </nav>

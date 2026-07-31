@@ -13,7 +13,7 @@
         <span aria-hidden="true">👁</span> <%= t('games.watch.watchButton') %>
       </a>
     <% } else { %>
-      <a href="/auth/login"
+      <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>"
          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-medium transition-colors shrink-0">
         <span aria-hidden="true">👁</span> <%= t('games.watch.watchButton') %>
       </a>

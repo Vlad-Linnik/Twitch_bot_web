@@ -7,7 +7,7 @@
     <% if (typeof user !== "undefined" && user) { %>
       <%= t('errors.accessDeniedMessage') %>
     <% } else { %>
-      <%= t('errors.loginRequiredMessage') %> <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('errors.loginRequiredLink') %></a><%= t('errors.loginRequiredSuffix') %>
+      <%= t('errors.loginRequiredMessage') %> <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-purple-400 hover:text-purple-300"><%= t('errors.loginRequiredLink') %></a><%= t('errors.loginRequiredSuffix') %>
     <% } %>
   </p>
   <% if (typeof message !== "undefined" && message) { %>

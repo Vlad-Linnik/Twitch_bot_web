@@ -64,6 +64,10 @@ function createApp(sessionMiddleware) {
   app.use(csrf.ensureToken);
   app.use((req, res, next) => {
     res.locals.currentPath = req.path;
+    // Includes the query string (unlike currentPath) - every "Login with Twitch" link uses this
+    // as its ?returnTo= so routes/authRoutes.js's /callback can land the visitor back on the
+    // exact page (filters, pagination, etc. included) that sent them to log in.
+    res.locals.currentUrl = req.originalUrl;
     // Views inline server-fetched data into <script> tags; that data contains chat-derived
     // strings, so it must never go through a bare JSON.stringify(). See lib/safeJson.js.
     res.locals.safeJson = safeJson;

@@ -47,7 +47,7 @@
       <% if (!user) { %>
         <p class="text-xs text-neutral-500 mt-3">
           <%= t('games.2048.loginToSave') %>
-          <a href="/auth/login" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+          <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
         </p>
       <% } %>
     </aside>
