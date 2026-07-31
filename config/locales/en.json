@@ -712,6 +712,7 @@
     "titleSuffix": "statistics",
     "tabChat": "Chat",
     "tabMod": "Moderators",
+    "newsLink": "News",
     "uniqueChatters": "Unique chatters",
     "totalMessages": "Total messages",
     "topChatters": "Top chatters",
@@ -760,6 +761,15 @@
       "selectStream": "Select stream",
       "loading": "Loading…",
       "noSessions": "No stream data collected yet — check back after the channel's next stream."
+    }
+  },
+  "news": {
+    "titleSuffix": "news",
+    "previewNotice": "This feed is off for everyone else - you're seeing it because you're an admin.",
+    "empty": "No news posts yet.",
+    "react": {
+      "like": "Like",
+      "superlike": "Love it"
     }
   },
   "channelSettings": {
@@ -1234,6 +1244,7 @@
     "tabOverview": "Overview",
     "tabStatistics": "Statistics",
     "tabGames": "Games",
+    "tabNews": "News",
     "tabSettingsLog": "Settings log",
     "tabActions": "Admin actions",
     "visitsToday": "Visits today",
@@ -1284,6 +1295,8 @@
       "disabled": "Channel disabled. The bot leaves it at its next restart.",
       "homepageShown": "Channel is now shown on the home page.",
       "homepageHidden": "Channel hidden from the home page.",
+      "newsEnabled": "News feed enabled for the channel.",
+      "newsDisabled": "News feed disabled for the channel.",
       "deleted": "The entire settings change log has been deleted."
     },
     "healthHeading": "Service health",
@@ -1333,6 +1346,11 @@
     "homepageNo": "Hidden",
     "showOnHomepage": "Show",
     "hideFromHomepage": "Hide",
+    "colNews": "News feed",
+    "newsYes": "On",
+    "newsNo": "Off",
+    "newsEnable": "Enable news",
+    "newsDisable": "Disable news",
     "channelsEmpty": "No channels registered.",
     "settingsLogIntro": "Settings changes across all channels.",
     "actionsIntro": "Audit log of admin actions.",
@@ -1350,7 +1368,9 @@
         "enable": "Channel enabled",
         "disable": "Channel disabled",
         "homepageShow": "Channel shown on home page",
-        "homepageHide": "Channel hidden from home page"
+        "homepageHide": "Channel hidden from home page",
+        "newsEnable": "News feed enabled",
+        "newsDisable": "News feed disabled"
       },
       "game": {
         "hide": "Game hidden",
@@ -1361,7 +1381,50 @@
         "create": "Game category created",
         "rename": "Game category renamed",
         "delete": "Game category deleted"
+      },
+      "news": {
+        "create": "News post created",
+        "update": "News post updated",
+        "delete": "News post deleted"
       }
+    },
+    "news": {
+      "formError": "Please fill in every field - a title, body text, and (for a new post) a hero image.",
+      "allChannels": "All channels",
+      "newPost": "+ New post",
+      "colChannel": "Channel",
+      "colTitle": "Title",
+      "colCreated": "Created",
+      "colReactions": "Reactions",
+      "edit": "Edit",
+      "delete": "Delete",
+      "empty": "No news posts yet.",
+      "flash": {
+        "created": "News post created.",
+        "updated": "News post updated.",
+        "deleted": "News post deleted."
+      },
+      "editPost": "Edit post",
+      "formHint": "Posts are published immediately and appear at the top of the channel's news feed.",
+      "fieldChannel": "Channel",
+      "selectChannel": "Select a channel…",
+      "noEnabledChannels": "No channel has the news feed enabled yet - turn it on from the Overview tab first.",
+      "fieldTitle": "Title",
+      "fieldImage": "Hero image",
+      "currentImageHint": "Current image - upload a new one to replace it.",
+      "fieldFormat": "Body format",
+      "formatMarkdown": "Markdown",
+      "formatHtml": "HTML",
+      "fieldBody": "Body",
+      "toolbarBold": "Bold",
+      "toolbarItalic": "Italic",
+      "toolbarHeading": "Heading",
+      "toolbarLink": "Link",
+      "toolbarList": "List",
+      "bodyPlaceholder": "Write the post... **bold**, *italic*, ## heading, [link](https://example.com)",
+      "formatHint": "Markdown is rendered to HTML; HTML is used as-is. Both are sanitized before publishing.",
+      "save": "Publish",
+      "cancel": "Cancel"
     }
   }
 }

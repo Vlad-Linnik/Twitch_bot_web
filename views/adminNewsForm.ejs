@@ -1,0 +1,94 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t(isEdit ? 'admin.news.editPost' : 'admin.news.newPost') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t(isEdit ? 'admin.news.editPost' : 'admin.news.newPost') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.news.formHint') %></p>
+
+  <% if (error) { %>
+    <div class="mb-6 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3"><%= error %></div>
+  <% } %>
+
+  <form method="post" action="<%= isEdit ? `/admin/news/${postId}` : '/admin/news' %>" enctype="multipart/form-data" class="space-y-6">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <div>
+      <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.news.fieldChannel') %></label>
+      <% if (isEdit) { %>
+        <p class="text-sm text-neutral-300 px-3 py-1.5 rounded-md bg-neutral-900 border border-neutral-800"><%= post.channelLogin %></p>
+      <% } else { %>
+        <select name="channelLogin" required
+                class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600">
+          <option value="" disabled<%= post && post.channelLogin ? '' : ' selected' %>><%= t('admin.news.selectChannel') %></option>
+          <% channels.forEach(function(c) { %>
+            <option value="<%= c.channelLogin %>"<%= post && post.channelLogin === c.channelLogin ? ' selected' : '' %>><%= c.channelLogin %></option>
+          <% }) %>
+        </select>
+        <% if (channels.length === 0) { %>
+          <p class="text-xs text-amber-400 mt-1"><%= t('admin.news.noEnabledChannels') %></p>
+        <% } %>
+      <% } %>
+    </div>
+
+    <div>
+      <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.news.fieldTitle') %></label>
+      <input type="text" name="title" required maxlength="200" value="<%= (post && post.title) || '' %>"
+             class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+    </div>
+
+    <div>
+      <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.news.fieldImage') %></label>
+      <% if (isEdit && post.imageUrl) { %>
+        <img src="<%= post.imageUrl %>" alt="" class="mb-2 max-h-40 rounded-md border border-neutral-800" />
+        <p class="text-xs text-neutral-600 mb-2"><%= t('admin.news.currentImageHint') %></p>
+      <% } %>
+      <input type="file" name="image" accept="image/*" <%= isEdit ? '' : 'required' %>
+             class="w-full text-sm text-neutral-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:text-neutral-300 file:text-xs" />
+    </div>
+
+    <div>
+      <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.news.fieldFormat') %></label>
+      <div class="flex items-center gap-4">
+        <label class="flex items-center gap-1.5 text-sm text-neutral-300 cursor-pointer">
+          <input type="radio" name="bodyFormat" value="markdown" class="accent-purple-600"
+                 <%= !post || !post.bodyFormat || post.bodyFormat === 'markdown' ? 'checked' : '' %> />
+          <%= t('admin.news.formatMarkdown') %>
+        </label>
+        <label class="flex items-center gap-1.5 text-sm text-neutral-300 cursor-pointer">
+          <input type="radio" name="bodyFormat" value="html" class="accent-purple-600"
+                 <%= post && post.bodyFormat === 'html' ? 'checked' : '' %> />
+          <%= t('admin.news.formatHtml') %>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.news.fieldBody') %></label>
+      <div id="news-editor-toolbar" class="flex items-center gap-1 mb-1.5" data-target="news-body-textarea">
+        <button type="button" data-md="bold" title="<%= t('admin.news.toolbarBold') %>"
+                class="px-2.5 py-1 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs font-bold">B</button>
+        <button type="button" data-md="italic" title="<%= t('admin.news.toolbarItalic') %>"
+                class="px-2.5 py-1 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs italic">I</button>
+        <button type="button" data-md="heading" title="<%= t('admin.news.toolbarHeading') %>"
+                class="px-2.5 py-1 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs font-semibold">H2</button>
+        <button type="button" data-md="link" title="<%= t('admin.news.toolbarLink') %>"
+                class="px-2.5 py-1 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs">🔗</button>
+        <button type="button" data-md="list" title="<%= t('admin.news.toolbarList') %>"
+                class="px-2.5 py-1 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs">•</button>
+      </div>
+      <textarea id="news-body-textarea" name="bodyRaw" rows="14" required maxlength="20000"
+                class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-2 font-mono focus:outline-none focus:border-purple-600"
+                placeholder="<%= t('admin.news.bodyPlaceholder') %>"><%= (post && post.bodyRaw) || '' %></textarea>
+      <p class="text-xs text-neutral-600 mt-1"><%= t('admin.news.formatHint') %></p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button type="submit" class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"><%= t('admin.news.save') %></button>
+      <a href="/admin/news" class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= t('admin.news.cancel') %></a>
+    </div>
+  </form>
+</main>
+
+<script src="/js/news-editor.js" defer></script>
+
+<%- include('partials/foot') %>

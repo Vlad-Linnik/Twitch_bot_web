@@ -1,0 +1,87 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabNews') }) %>
+<%- include('partials/nav') %>
+
+<% const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US'; %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <% if (flash) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('admin.news.flash.' + flash) %>
+    </div>
+  <% } %>
+
+  <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
+    <form method="get" action="/admin/news" class="flex items-center gap-2">
+      <select name="channel" onchange="this.form.submit()"
+              class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-2 py-1.5 focus:outline-none focus:border-purple-600">
+        <option value=""<%= channelFilter ? '' : ' selected' %>><%= t('admin.news.allChannels') %></option>
+        <% channels.forEach(function(c) { %>
+          <option value="<%= c.channelLogin %>"<%= channelFilter === c.channelLogin ? ' selected' : '' %>><%= c.channelLogin %></option>
+        <% }) %>
+      </select>
+    </form>
+    <a href="/admin/news/new" data-transition="instant"
+       class="px-3 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium transition-colors"><%= t('admin.news.newPost') %></a>
+  </div>
+
+  <div class="rounded-lg border border-neutral-800 overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-neutral-900 text-neutral-400">
+        <tr>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.news.colChannel') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.news.colTitle') %></th>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.news.colCreated') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.news.colReactions') %></th>
+          <th class="px-4 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-neutral-800">
+        <% posts.forEach(function(p) { %>
+          <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+            <td class="px-4 py-2 text-neutral-300"><%= p.channelLogin %></td>
+            <td class="px-4 py-2 text-neutral-200 max-w-[20rem] truncate"><%= p.title %></td>
+            <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(p.createdAt).toLocaleString(dateLocale) %></td>
+            <td class="px-4 py-2 text-neutral-500 tabular-nums">♥ <%= p.likeCount %> · ♥♥ <%= p.superlikeCount %></td>
+            <td class="px-4 py-2 text-right whitespace-nowrap">
+              <a href="/admin/news/<%= p._id %>/edit" data-transition="instant"
+                 class="px-2 py-1 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.news.edit') %></a>
+              <form method="post" action="/admin/news/<%= p._id %>/delete" data-transition="instant" class="inline-block">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="px-2 py-1 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors"><%= t('admin.news.delete') %></button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (posts.length === 0) { %>
+          <tr><td colspan="5" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.news.empty') %></td></tr>
+        <% } %>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <% if (totalPages > 1) { %>
+    <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+      <% const qs = channelFilter ? `&channel=${encodeURIComponent(channelFilter)}` : ''; %>
+      <% if (page > 1) { %>
+        <a href="?page=<%= page - 1 %><%= qs %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+      <% } %>
+      <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %>
+        <a href="?page=<%= page + 1 %><%= qs %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+      <% } %>
+    </nav>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

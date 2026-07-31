@@ -3,6 +3,7 @@
 // admin action audit log. requireLevel(0) works unchanged on these non-channel routes:
 // computePermission checks the ADMIN_USER_IDS allowlist before it ever looks at a channel.
 const express = require("express");
+const multer = require("multer");
 const { requireLevel } = require("../middleware/permissions");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
@@ -21,6 +22,10 @@ const gamesCatalog = require("../data/gamesCatalog");
 const { SUPPORTED_LOCALES } = require("../config/i18n");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const { describeChange } = require("../lib/settingsChangeDescribe");
+const newsRepo = require("../db/newsRepo");
+const newsReactionsRepo = require("../db/newsReactionsRepo");
+const { saveNewsImage, deleteNewsImage } = require("../lib/newsImage");
+const newsValidation = require("../lib/newsValidation");
 
 const REJECT_REASON_MAX_LENGTH = 300;
 // The bot writes a fresh heartbeat doc every 30s (TwitchBot's index.js) - anything older than a
@@ -156,6 +161,23 @@ router.post("/admin/channels/:login/toggle-homepage", settingsWriteLimiter, requ
       });
     }
     res.redirect(`/admin?flash=${show ? "homepageShown" : "homepageHidden"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/channels/:login/toggle-news", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const enable = req.body.newsEnabled === "1";
+    const changed = await channelsRepo.setNewsEnabled(req.params.login, enable);
+    if (changed) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: enable ? "channel.newsEnable" : "channel.newsDisable",
+        target: req.params.login.toLowerCase(),
+      });
+    }
+    res.redirect(`/admin?flash=${enable ? "newsEnabled" : "newsDisabled"}`);
   } catch (err) {
     next(err);
   }
@@ -406,6 +428,208 @@ router.post("/admin/games/categories/:id/delete", settingsWriteLimiter, requireA
     await gameCatalogRepo.deleteCategory(req.params.id);
     await adminActionLogsRepo.logAction({ admin: req.user, action: "gameCategory.delete", target: req.params.id });
     res.redirect("/admin/games?flash=categoryDeleted");
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- News (site-admin-authored, per-channel feed at /:channel/news) -----------------------
+// Tier-0 only, same as the rest of /admin - the site admin is the sole author (see plan doc:
+// this mirrors /admin/games rather than settings.js's per-channel-owner pattern, since news
+// authorship was deliberately kept out of channel owners' hands).
+const NEWS_POSTS_PER_PAGE = 20;
+const NEWS_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+const newsImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: NEWS_IMAGE_MAX_BYTES },
+  fileFilter: (req, file, cb) => cb(null, file.mimetype.startsWith("image/")),
+});
+
+// Wraps multer so a bad upload (oversized file, wrong field) becomes a form re-render with a
+// friendly error instead of falling through to the generic 500 page - matches how every other
+// mutation on this page reports failure via a rendered flash/error, never a raw error page.
+function uploadNewsImage(req, res, next) {
+  newsImageUpload.single("image")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      req.newsImageUploadError = true;
+      return next();
+    }
+    if (err) return next(err);
+    next();
+  });
+}
+
+router.get("/admin/news", requireAdmin, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const channelFilter = typeof req.query.channel === "string" ? req.query.channel.trim().toLowerCase() : "";
+    const [log, channels] = await Promise.all([
+      newsRepo.listAll({ page, limit: NEWS_POSTS_PER_PAGE, channelLogin: channelFilter || null }),
+      channelsRepo.listAll(),
+    ]);
+    res.render("adminNews", {
+      tab: "news",
+      posts: log.posts,
+      totalPages: log.totalPages,
+      page: log.page,
+      channels,
+      channelFilter,
+      flash: req.query.flash || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/admin/news/new", requireAdmin, async (req, res, next) => {
+  try {
+    const channels = (await channelsRepo.listAll()).filter((c) => c.newsEnabled);
+    res.render("adminNewsForm", { tab: "news", post: null, channels, error: null, isEdit: false, postId: null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post(
+  "/admin/news",
+  settingsWriteLimiter,
+  requireAdmin,
+  uploadNewsImage,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channels = (await channelsRepo.listAll()).filter((c) => c.newsEnabled);
+      const channel = channels.find((c) => c.channelLogin === (req.body.channelLogin || "").toLowerCase());
+      const title = newsValidation.sanitizeTitle(req.body.title);
+      const bodyFormat = req.body.bodyFormat;
+      const bodyRaw = newsValidation.sanitizeBodyRaw(req.body.bodyRaw);
+
+      if (!channel || !title || !newsValidation.isValidBodyFormat(bodyFormat) || !bodyRaw || !req.file || req.newsImageUploadError) {
+        return res.status(400).render("adminNewsForm", {
+          tab: "news",
+          post: { channelLogin: req.body.channelLogin, title, bodyFormat, bodyRaw },
+          channels,
+          error: res.locals.t("admin.news.formError"),
+          isEdit: false,
+          postId: null,
+        });
+      }
+
+      const imageResult = await saveNewsImage(req.file.buffer);
+      const bodyHtml = newsValidation.renderBody(bodyFormat, bodyRaw);
+
+      const post = await newsRepo.create({
+        channelLogin: channel.channelLogin,
+        title,
+        bodyFormat,
+        bodyRaw,
+        bodyHtml,
+        imageUrl: imageResult.url,
+        imageWidth: imageResult.width,
+        imageHeight: imageResult.height,
+        authorUserId: req.user.userId,
+        authorDisplayName: req.user.displayName || req.user.login,
+      });
+
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "news.create",
+        target: `${channel.channelLogin}:${post._id}`,
+        details: title,
+      });
+
+      res.redirect("/admin/news?flash=created");
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get("/admin/news/:id/edit", requireAdmin, async (req, res, next) => {
+  try {
+    const post = await newsRepo.getById(req.params.id);
+    if (!post) return res.redirect("/admin/news");
+    res.render("adminNewsForm", {
+      tab: "news",
+      post,
+      channels: [{ channelLogin: post.channelLogin }],
+      error: null,
+      isEdit: true,
+      postId: String(post._id),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post(
+  "/admin/news/:id",
+  settingsWriteLimiter,
+  requireAdmin,
+  uploadNewsImage,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const existing = await newsRepo.getById(req.params.id);
+      if (!existing) return res.redirect("/admin/news");
+
+      const title = newsValidation.sanitizeTitle(req.body.title);
+      const bodyFormat = req.body.bodyFormat;
+      const bodyRaw = newsValidation.sanitizeBodyRaw(req.body.bodyRaw);
+
+      if (!title || !newsValidation.isValidBodyFormat(bodyFormat) || !bodyRaw || req.newsImageUploadError) {
+        return res.status(400).render("adminNewsForm", {
+          tab: "news",
+          post: { ...existing, title, bodyFormat, bodyRaw },
+          channels: [{ channelLogin: existing.channelLogin }],
+          error: res.locals.t("admin.news.formError"),
+          isEdit: true,
+          postId: String(existing._id),
+        });
+      }
+
+      const bodyHtml = newsValidation.renderBody(bodyFormat, bodyRaw);
+      let imagePatch = {};
+      if (req.file) {
+        const imageResult = await saveNewsImage(req.file.buffer);
+        imagePatch = { imageUrl: imageResult.url, imageWidth: imageResult.width, imageHeight: imageResult.height };
+      }
+
+      await newsRepo.update(req.params.id, { title, bodyFormat, bodyRaw, bodyHtml, ...imagePatch });
+      // Only unlink the OLD file after the new doc write succeeds - if the write had failed,
+      // the stale file staying on disk is harmless; deleting it first and then failing the
+      // write would leave the still-published post pointing at a missing image.
+      if (imagePatch.imageUrl) await deleteNewsImage(existing.imageUrl);
+
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "news.update",
+        target: `${existing.channelLogin}:${existing._id}`,
+        details: title,
+      });
+
+      res.redirect("/admin/news?flash=updated");
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post("/admin/news/:id/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const deleted = await newsRepo.deletePost(req.params.id);
+    if (deleted) {
+      await newsReactionsRepo.deleteAllForPost(String(deleted._id));
+      await deleteNewsImage(deleted.imageUrl);
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "news.delete",
+        target: `${deleted.channelLogin}:${deleted._id}`,
+        details: deleted.title,
+      });
+    }
+    res.redirect("/admin/news?flash=deleted");
   } catch (err) {
     next(err);
   }

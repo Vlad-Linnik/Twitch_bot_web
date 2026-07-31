@@ -1,0 +1,54 @@
+<%#
+  One feed card: hero image (letterboxed with a blurred fill for non-wide images), title, body,
+  two heart reaction buttons. Expects: post ({id, title, bodyHtml, imageUrl, imageWidth,
+  imageHeight, likeCount, superlikeCount, likedByViewer, superlikedByViewer, createdAt}),
+  channel, user (res.locals.user - null when logged out).
+
+  Letterbox technique: a fixed aspect-ratio box holds two copies of the same image - a blurred
+  object-cover layer filling the box completely, and an object-contain layer on top showing the
+  real image uncropped. A wide (matching-ratio) source image fills the contain layer edge to
+  edge and the blur layer never shows; a portrait/square source leaves the blur visible on the
+  sides instead of plain empty bars. No per-image branching needed either way.
+
+  The two heart buttons are byte-identical except for data-type/aria-label, per the "look
+  completely identical" requirement - see public/js/news-reactions.js for the click handler,
+  which only ever flips data-liked and the count text (no class/markup swapping).
+%>
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  // Ternary short-circuits, so csrfToken (unset for logged-out visitors - see middleware/csrf.js)
+  // is never dereferenced when there's no user to have one.
+  const csrf = user ? csrfToken : '';
+%>
+<article class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden mb-8">
+  <% if (post.imageUrl) { %>
+    <div class="relative aspect-[21/9] bg-neutral-950 overflow-hidden">
+      <img src="<%= post.imageUrl %>" alt="" aria-hidden="true"
+           class="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" />
+      <img src="<%= post.imageUrl %>" alt="" width="<%= post.imageWidth %>" height="<%= post.imageHeight %>"
+           class="relative w-full h-full object-contain" />
+    </div>
+  <% } %>
+  <div class="p-5">
+    <h2 class="text-xl font-bold text-neutral-100 mb-1"><%= post.title %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= new Date(post.createdAt).toLocaleString(dateLocale) %></p>
+    <div class="prose-news text-neutral-300 text-sm leading-relaxed"><%- post.bodyHtml %></div>
+
+    <div class="mt-5 flex items-center gap-5">
+      <% ["like", "superlike"].forEach(function(type) { %>
+        <% const liked = type === "like" ? post.likedByViewer : post.superlikedByViewer; %>
+        <% const count = type === "like" ? post.likeCount : post.superlikeCount; %>
+        <button type="button"
+                class="group news-heart-btn flex items-center gap-1.5 text-sm text-neutral-400 data-[liked=1]:text-red-400 hover:text-red-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                data-news-react data-post-id="<%= post.id %>" data-channel="<%= channel.channelLogin %>" data-type="<%= type %>"
+                data-liked="<%= liked ? '1' : '0' %>" data-csrf="<%= csrf %>" aria-pressed="<%= liked ? 'true' : 'false' %>"
+                aria-label="<%= t('news.react.' + type) %>" title="<%= t('news.react.' + type) %>" <%= user ? '' : 'disabled' %>>
+          <svg class="w-5 h-5 fill-none group-data-[liked=1]:fill-current" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+          </svg>
+          <span class="news-heart-count tabular-nums"><%= count %></span>
+        </button>
+      <% }) %>
+    </div>
+  </div>
+</article>

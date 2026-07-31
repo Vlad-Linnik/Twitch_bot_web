@@ -20,4 +20,16 @@
     <h1 class="text-3xl font-bold truncate group-hover:underline decoration-2 underline-offset-4 <%= broadcaster && broadcaster.chatColor ? '' : 'text-neutral-100' %>"
         <% if (broadcaster && broadcaster.chatColor) { %>style="color: <%= broadcaster.chatColor %>"<% } %>><%= channel.channelLogin %></h1>
   </a>
+  <%# Public, no permission gate - matches this page's own visibility. Off by default per
+      channel; only rendered once an admin has turned the feature on. hideNewsLink is only ever
+      passed by news.ejs itself (to avoid a self-referential link) - every other caller
+      (statisticsChat.ejs, statisticsMod.ejs) omits it entirely, so it must be read via typeof,
+      not referenced directly (EJS throws ReferenceError on an unpassed local, unlike a plain
+      property lookup). %>
+  <% if (channel.newsEnabled && typeof hideNewsLink === 'undefined') { %>
+    <a href="/<%= channel.channelLogin %>/news"
+       class="ml-auto shrink-0 px-3 py-1.5 rounded-md border border-neutral-800 text-sm text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors">
+      <%= t('statistics.newsLink') %>
+    </a>
+  <% } %>
 </header>

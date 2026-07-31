@@ -94,6 +94,18 @@ async function setShowOnHomepage(channelLogin, show) {
   return result.matchedCount > 0;
 }
 
+// Admin-panel toggle (/admin) for the per-channel news feed (/<channel>/news). Unlike
+// showOnHomepage, this defaults OFF for every channel (absent/false = disabled) - the news
+// feature must ship invisible everywhere until an admin turns it on for a given channel.
+async function setNewsEnabled(channelLogin, enabled) {
+  const col = await ensureInitialized();
+  const result = await col.updateOne(
+    { channelLogin: channelLogin.toLowerCase() },
+    { $set: { newsEnabled: !!enabled, updatedAt: new Date() } }
+  );
+  return result.matchedCount > 0;
+}
+
 module.exports = {
   findByLogin,
   listEnabled,
@@ -104,4 +116,5 @@ module.exports = {
   findManyByIds,
   setEnabled,
   setShowOnHomepage,
+  setNewsEnabled,
 };

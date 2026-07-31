@@ -207,6 +207,7 @@
             <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.colConsented') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colEnabled') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colHomepage') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.colNews') %></th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
@@ -232,6 +233,13 @@
                   <span class="text-green-400"><%= t('admin.homepageYes') %></span>
                 <% } %>
               </td>
+              <td class="px-4 py-2">
+                <% if (ch.newsEnabled) { %>
+                  <span class="text-green-400"><%= t('admin.newsYes') %></span>
+                <% } else { %>
+                  <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
+                <% } %>
+              </td>
               <td class="px-4 py-2 text-right whitespace-nowrap">
                 <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-homepage" data-transition="instant" class="inline-block">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -240,6 +248,15 @@
                     <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.showOnHomepage') %></button>
                   <% } else { %>
                     <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.hideFromHomepage') %></button>
+                  <% } %>
+                </form>
+                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-news" data-transition="instant" class="inline-block">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <input type="hidden" name="newsEnabled" value="<%= ch.newsEnabled ? '0' : '1' %>" />
+                  <% if (ch.newsEnabled) { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.newsDisable') %></button>
+                  <% } else { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.newsEnable') %></button>
                   <% } %>
                 </form>
                 <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle" data-transition="instant" class="inline-block">
@@ -255,7 +272,7 @@
             </tr>
           <% }) %>
           <% if (channels.length === 0) { %>
-            <tr><td colspan="6" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.channelsEmpty') %></td></tr>
+            <tr><td colspan="7" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.channelsEmpty') %></td></tr>
           <% } %>
         </tbody>
       </table>

@@ -1,0 +1,41 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('news.titleSuffix') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-12">
+
+  <%- include('partials/statsHeader', { channel, broadcaster, hideNewsLink: true }) %>
+
+  <% if (newsDisabledPreview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+      <%= t('news.previewNotice') %>
+    </div>
+  <% } %>
+
+  <% if (posts.length === 0) { %>
+    <p class="text-center text-neutral-500 text-sm py-16"><%= t('news.empty') %></p>
+  <% } else { %>
+    <% posts.forEach(function(post) { %>
+      <%- include('partials/newsCard', { post, channel, user, locale, t }) %>
+    <% }) %>
+  <% } %>
+
+  <% if (totalPages > 1) { %>
+    <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+      <% if (page > 1) { %>
+        <a href="?page=<%= page - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+      <% } %>
+      <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %>
+        <a href="?page=<%= page + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+      <% } %>
+    </nav>
+  <% } %>
+</main>
+
+<script src="/js/news-reactions.js" defer></script>
+
+<%- include('partials/foot') %>
