@@ -51,33 +51,56 @@ async function loadChannel(req, res) {
 // than leaking the unit mismatch into the view.
 const toSeconds = (timerMs) => (timerMs ? Math.round(timerMs / 1000) : null);
 
+// Shared by the GET page render and the POST create/edit handler's JSON success response (see
+// wireCommandsList below) - both need the exact same {commands, groupNames, sections} shape, and
+// the POST path re-derives it fresh after a save rather than patching the pre-save snapshot, so a
+// brand-new command or a group change lands in the right section without duplicating the grouping
+// logic client-side.
+async function buildCommandsView(channelLogin) {
+  const commands = (await customCommandsRepo.list(channelLogin)).map((c) => ({
+    command: c.command,
+    result: c.result,
+    timerSeconds: toSeconds(c.timer),
+    pin: !!c.pin,
+    announce: !!c.announce,
+    announceColor: c.announceColor || "primary",
+    enabled: c.enabled !== false,
+    categoryTexts: c.categoryTexts || [],
+    modOnly: !!c.modOnly,
+    aliases: c.aliases || [],
+    group: c.group || "",
+  }));
+
+  // Named groups first (alphabetical), then every ungrouped command as one final, header-less
+  // section - so a channel that's never used groups renders exactly as before (a single flat
+  // list). groupNames also feeds the create/edit form's <datalist> for autocomplete.
+  const groupNames = [...new Set(commands.map((c) => c.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const sections = [
+    ...groupNames.map((name) => ({ name, commands: commands.filter((c) => c.group === name) })),
+    { name: null, commands: commands.filter((c) => !c.group) },
+  ].filter((section) => section.commands.length > 0);
+
+  return { commands, groupNames, sections };
+}
+
+// res.render(view, locals, callback) - unlike res.app.render - automatically merges res.locals
+// (t, csrfToken, ...), same as every other view in this app; wrapped in a Promise purely to
+// await it inline. Mirrors routes/news.js's comment-thread partial re-render for the same reason:
+// a fetch-based save patches one piece of the DOM instead of reloading the page, and the server
+// stays the single source of truth for how that HTML is built instead of duplicating the
+// sections/grouping markup in client-side JS.
+function renderPartial(res, view, locals) {
+  return new Promise((resolve, reject) => {
+    res.render(view, locals, (err, html) => (err ? reject(err) : resolve(html)));
+  });
+}
+
 router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
     if (!channel) return;
 
-    const commands = (await customCommandsRepo.list(channel.channelLogin)).map((c) => ({
-      command: c.command,
-      result: c.result,
-      timerSeconds: toSeconds(c.timer),
-      pin: !!c.pin,
-      announce: !!c.announce,
-      announceColor: c.announceColor || "primary",
-      enabled: c.enabled !== false,
-      categoryTexts: c.categoryTexts || [],
-      modOnly: !!c.modOnly,
-      aliases: c.aliases || [],
-      group: c.group || "",
-    }));
-
-    // Named groups first (alphabetical), then every ungrouped command as one final, header-less
-    // section - so a channel that's never used groups renders exactly as before (a single flat
-    // list). groupNames also feeds the create/edit form's <datalist> for autocomplete.
-    const groupNames = [...new Set(commands.map((c) => c.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    const sections = [
-      ...groupNames.map((name) => ({ name, commands: commands.filter((c) => c.group === name) })),
-      { name: null, commands: commands.filter((c) => !c.group) },
-    ].filter((section) => section.commands.length > 0);
+    const { commands, sections, groupNames } = await buildCommandsView(channel.channelLogin);
 
     res.render("customCommands", {
       channel,
@@ -211,7 +234,10 @@ router.post(
         aliases: req.body.aliases,
         group: req.body.group,
       });
-      if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
+      if (!parsed.ok) {
+        if (wantsJson(req)) return res.status(400).json({ ok: false, error: parsed.error });
+        return res.redirect(`${back}?error=${parsed.error}`);
+      }
 
       // A name/alias can't collide with another command's name or alias in this channel - the
       // bot's trigger lookup can't tell two commands apart if they both claim the same trigger.
@@ -220,6 +246,7 @@ router.post(
       const others = (await customCommandsRepo.list(channel.channelLogin)).filter((c) => c.command !== parsed.command.command);
       const conflict = checkAliasConflicts(parsed.command.command, parsed.command.aliases, others);
       if (!conflict.ok) {
+        if (wantsJson(req)) return res.status(409).json({ ok: false, error: conflict.error, conflictsWith: conflict.conflictsWith });
         return res.redirect(`${back}?error=${conflict.error}&conflictsWith=${encodeURIComponent(conflict.conflictsWith)}`);
       }
 
@@ -230,6 +257,18 @@ router.post(
       });
       // The running bot re-reads custom_commands every 10s (CustomCommands.REFRESH_INTERVAL_MS),
       // so this is live in chat within seconds - no restart, no extra signal to send.
+      if (wantsJson(req)) {
+        // Re-derive the whole list rather than patching the pre-save snapshot - a brand-new
+        // command, or one that just moved group, needs to land in the right section, and the
+        // server is the only place that logic already lives (buildCommandsView above).
+        const view = await buildCommandsView(channel.channelLogin);
+        const html = await renderPartial(res, "partials/customCommandsList", { ...view, channel });
+        return res.json({
+          ok: true,
+          html,
+          commandsData: view.commands.map((c) => ({ command: c.command, aliases: c.aliases })),
+        });
+      }
       res.redirect(`${back}?saved=1`);
     } catch (err) {
       next(err);

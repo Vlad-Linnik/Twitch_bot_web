@@ -242,50 +242,15 @@
     addCategoryRow();
   }
 
-  // --- Edit: copy an existing command back into the form. The form POSTs an upsert, so editing
-  // and creating are literally the same request - there is no separate edit endpoint to keep in
-  // sync.
-  document.querySelectorAll(".js-edit").forEach((button) => {
-    button.addEventListener("click", () => {
-      name.value = button.dataset.name;
-      editingCommand = button.dataset.name;
-      aliasList = (button.dataset.aliases || "").split(",").map((a) => a.trim()).filter(Boolean);
-      aliasInput.value = "";
-      hideAliasError();
-      nameError.hidden = true;
-      renderAliasChips();
-      result.value = button.dataset.result;
-      timer.value = button.dataset.timer;
-      pin.checked = button.dataset.pin === "1";
-      announce.checked = button.dataset.announce === "1";
-      if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
-      modOnly.checked = button.dataset.modOnly === "1";
-      group.value = button.dataset.group || "";
-
-      let overrides = [];
-      try {
-        overrides = JSON.parse(button.dataset.categoryTexts || "[]");
-      } catch {
-        overrides = [];
-      }
-      fillCategoryRows(overrides);
-
-      heading.textContent = `${originalHeading} — !${button.dataset.name}`;
-      cancel.hidden = false;
-      updateConflict();
-
-      form.scrollIntoView({ behavior: "smooth", block: "start" });
-      result.focus();
-    });
-  });
-
-  cancel.addEventListener("click", () => {
+  // Shared by the cancel button and a successful save (submitCommandForm below) - both need the
+  // form back in "create a new command" state. form.reset() is called explicitly rather than
+  // relying on the button's native type="reset" behaviour, since a successful fetch-based save
+  // never gets that native reset for free (submit was preventDefault()'d) - driving it from here
+  // for both callers means there's exactly one reset path instead of two slightly different ones.
+  function resetFormToCreateMode() {
+    form.reset();
     heading.textContent = originalHeading;
     cancel.hidden = true;
-    // group is a plain form control with no default value attribute, so the native
-    // type="reset" behaviour (which fires right after this handler) already clears it -
-    // unlike aliasList/categoryContainer below, which are JS-managed state/DOM the browser
-    // doesn't know to restore.
     clearCategoryRows();
     categoryToggle.checked = false;
     categoryContainer.hidden = true;
@@ -295,8 +260,12 @@
     hideAliasError();
     renderAliasChips();
     nameError.hidden = true;
-    // The reset happens natively (type="reset"); clear the warning after it lands.
-    setTimeout(updateConflict, 0);
+    updateConflict();
+  }
+
+  cancel.addEventListener("click", (event) => {
+    event.preventDefault(); // resetFormToCreateMode() already calls form.reset() itself
+    resetFormToCreateMode();
   });
 
   // --- timer + pin, and announce + pin, cannot coexist. The bot refuses both combinations and
@@ -314,40 +283,82 @@
   pin.addEventListener("change", updateConflict);
   announce.addEventListener("change", updateConflict);
 
-  form.addEventListener("submit", (event) => {
-    if (!validateName()) {
-      event.preventDefault();
-      nameError.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
+  // --- Save toast: a small fade-in/fade-out notification (views/customCommands.ejs's #save-toast)
+  // instead of the old always-visible top banner. Fires from two places: a landing page load after
+  // a classic redirect (saved=1/deleted - the no-JS fallback, or a toggle's fail-soft fallback)
+  // and, with JS, directly from a successful fetch-based save/delete with no reload at all.
+  const toastEl = document.getElementById("save-toast");
+  const toastBody = document.getElementById("save-toast-body");
+  let toastTimer = null;
 
-    // Commit whatever's still sitting in the alias text box - a mod who typed a synonym and hit
-    // submit without clicking "+" shouldn't silently lose it.
-    if (aliasInput.value.trim()) {
-      const before = aliasList.length;
-      tryAddAliases();
-      // tryAddAliases only leaves text behind on a validation error (a successful add, including
-      // an all-duplicates no-op, always clears the box) - that's the signal to block submission.
-      if (aliasInput.value.trim() && aliasList.length === before) {
-        event.preventDefault();
-        aliasError.scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
-      }
-    }
+  function showToast(text) {
+    if (!toastEl || !text) return;
+    toastBody.textContent = text;
+    toastEl.classList.remove("opacity-0", "translate-y-2", "pointer-events-none");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastEl.classList.add("opacity-0", "translate-y-2", "pointer-events-none");
+    }, 2500);
+  }
 
-    if (updateConflict()) {
-      event.preventDefault();
-      (conflict.hidden ? announceConflict : conflict).scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  });
+  if (toastEl && toastEl.dataset.initialSaved) {
+    showToast(toastEl.dataset.initialSaved === "deleted" ? toastEl.dataset.deletedText : toastEl.dataset.savedText);
+    // Drop ?saved=... from the URL so refreshing the page doesn't replay the toast.
+    const url = new URL(location.href);
+    url.searchParams.delete("saved");
+    history.replaceState(null, "", url);
+  }
+
+  // --- Existing-commands list: re-wired after every fetch-based swap (submitCommandForm,
+  // wireToggleForm below), since replacing #commands-list's innerHTML drops whatever listeners
+  // were attached to the elements it just threw away.
+  const commandsList = document.getElementById("commands-list");
+
+  function wireEditButtons() {
+    commandsList.querySelectorAll(".js-edit").forEach((button) => {
+      button.addEventListener("click", () => {
+        name.value = button.dataset.name;
+        editingCommand = button.dataset.name;
+        aliasList = (button.dataset.aliases || "").split(",").map((a) => a.trim()).filter(Boolean);
+        aliasInput.value = "";
+        hideAliasError();
+        nameError.hidden = true;
+        renderAliasChips();
+        result.value = button.dataset.result;
+        timer.value = button.dataset.timer;
+        pin.checked = button.dataset.pin === "1";
+        announce.checked = button.dataset.announce === "1";
+        if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
+        modOnly.checked = button.dataset.modOnly === "1";
+        group.value = button.dataset.group || "";
+
+        let overrides = [];
+        try {
+          overrides = JSON.parse(button.dataset.categoryTexts || "[]");
+        } catch {
+          overrides = [];
+        }
+        fillCategoryRows(overrides);
+
+        heading.textContent = `${originalHeading} — !${button.dataset.name}`;
+        cancel.hidden = false;
+        updateConflict();
+
+        form.scrollIntoView({ behavior: "smooth", block: "start" });
+        result.focus();
+      });
+    });
+  }
 
   // --- Deleting a command is destructive and not undoable - confirm it.
-  document.querySelectorAll(".js-delete-form").forEach((deleteForm) => {
-    deleteForm.addEventListener("submit", (event) => {
-      const cmd = deleteForm.querySelector('input[name="name"]').value;
-      if (!window.confirm(`!${cmd}`)) event.preventDefault();
+  function wireDeleteForms() {
+    commandsList.querySelectorAll(".js-delete-form").forEach((deleteForm) => {
+      deleteForm.addEventListener("submit", (event) => {
+        const cmd = deleteForm.querySelector('input[name="name"]').value;
+        if (!window.confirm(`!${cmd}`)) event.preventDefault();
+      });
     });
-  });
+  }
 
   // --- Enable/disable toggle(s): fetch instead of a full page POST-redirect-GET, so flipping a
   // switch doesn't reload the whole (possibly long) command list, reset scroll position, AND hide
@@ -399,20 +410,97 @@
     });
   }
 
-  document.querySelectorAll("form[data-command-toggle]").forEach((toggleForm) => {
-    wireToggleForm(toggleForm, (button, data) => paintToggle(button, data.enabled));
-  });
+  function wireCommandToggles() {
+    commandsList.querySelectorAll("form[data-command-toggle]").forEach((toggleForm) => {
+      wireToggleForm(toggleForm, (button, data) => paintToggle(button, data.enabled));
+    });
+  }
 
   // The group header's master switch: one response flips every command in that group, so repaint
   // the master switch itself plus every individual command switch tagged with the same group
   // (data-command-toggle's own data-group, set in partials/customCommandRow.ejs) - otherwise each
   // row's own switch would sit stale until the next full page load.
-  document.querySelectorAll("form[data-group-toggle]").forEach((toggleForm) => {
-    wireToggleForm(toggleForm, (button, data) => {
-      paintToggle(button, data.enabled);
-      const group = toggleForm.dataset.group;
-      document.querySelectorAll(`form[data-command-toggle][data-group="${CSS.escape(group)}"] button[type="submit"]`)
-        .forEach((memberButton) => paintToggle(memberButton, data.enabled));
+  function wireGroupToggles() {
+    commandsList.querySelectorAll("form[data-group-toggle]").forEach((toggleForm) => {
+      wireToggleForm(toggleForm, (button, data) => {
+        paintToggle(button, data.enabled);
+        const memberGroup = toggleForm.dataset.group;
+        commandsList.querySelectorAll(`form[data-command-toggle][data-group="${CSS.escape(memberGroup)}"] button[type="submit"]`)
+          .forEach((memberButton) => paintToggle(memberButton, data.enabled));
+      });
     });
+  }
+
+  function wireCommandsList() {
+    wireEditButtons();
+    wireDeleteForms();
+    wireCommandToggles();
+    wireGroupToggles();
+  }
+
+  // --- Save: fetch instead of a full page POST-redirect-GET, same rationale and fallback shape as
+  // the toggles above - a create/edit shouldn't reload the whole page just to add one row. Unlike
+  // the toggles, a successful save also needs to: refresh the alias-conflict snapshot (the new/
+  // edited command wasn't in it), swap in the freshly server-rendered list (a new command, or one
+  // that changed group, needs to land in the right section - see routes/customCommands.js's
+  // buildCommandsView), and put the form back in "create" mode.
+  async function submitCommandForm() {
+    const submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      const response = await fetch(form.getAttribute("action"), {
+        method: "POST",
+        body: new URLSearchParams(new FormData(form)),
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || "save_failed");
+
+      commandsList.innerHTML = data.html;
+      wireCommandsList();
+      allCommands = data.commandsData || allCommands;
+      resetFormToCreateMode();
+      showToast(toastEl?.dataset.savedText);
+    } catch {
+      // Fail-soft: same reasoning as the toggle handlers - fall back to the plain submit the
+      // button would have done anyway with JS disabled, landing on the classic redirect + the
+      // server-rendered error banner (views/customCommands.ejs's #error block).
+      form.submit();
+      return;
+    } finally {
+      submitButton.disabled = false;
+    }
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    if (!validateName()) {
+      nameError.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // Commit whatever's still sitting in the alias text box - a mod who typed a synonym and hit
+    // submit without clicking "+" shouldn't silently lose it.
+    if (aliasInput.value.trim()) {
+      const before = aliasList.length;
+      tryAddAliases();
+      // tryAddAliases only leaves text behind on a validation error (a successful add, including
+      // an all-duplicates no-op, always clears the box) - that's the signal to block submission.
+      if (aliasInput.value.trim() && aliasList.length === before) {
+        aliasError.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
+
+    if (updateConflict()) {
+      (conflict.hidden ? announceConflict : conflict).scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    submitCommandForm();
   });
+
+  wireCommandsList();
 })();
