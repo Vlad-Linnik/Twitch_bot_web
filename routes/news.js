@@ -37,6 +37,12 @@ const POSTS_PER_PAGE = 10;
 const COMMENTS_PAGE_SIZE = 20;
 const REACTION_TYPES = ["like", "superlike"];
 
+// Same two-shapes-one-handler convention as routes/settings.js's autosave forms: a fetch with
+// Accept: application/json gets JSON back (public/js/news-comments.js's comment-post handler,
+// which splices the reply straight into the thread with no reload), the plain no-JS form submit
+// gets the classic redirect.
+const wantsJson = (req) => (req.get("accept") || "").includes("application/json");
+
 // `?sort=`/a posted `sort` field is user-controlled input - never trust it past
 // isValidCommentSort(), which is also what buildCommentTree() itself falls back on internally,
 // so an invalid/missing value converges to the same DEFAULT_COMMENT_SORT either way. Takes the
@@ -299,18 +305,23 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
     if (!post || post.channelLogin !== channel.channelLogin) return res.status(404).render("errors/404");
 
     // Carries the visitor's active sort (views/newsPost.ejs/partials/commentThread.ejs's hidden
-    // `sort` field) through the redirect, so posting a comment while sorted "Newest"/"Oldest"
-    // doesn't silently snap back to the default. `&error=`/`#comment-<id>` both append cleanly
-    // onto this since it's always `?sort=` first.
-    const backUrl = `/${channel.channelLogin}/news/${post._id}?sort=${resolveCommentSort(req.body.sort)}`;
+    // `sort` field) through the no-JS redirect fallback, so posting a comment while sorted
+    // "Newest"/"Oldest" doesn't silently snap back to the default.
+    const commentSort = resolveCommentSort(req.body.sort);
+    const backUrl = `/${channel.channelLogin}/news/${post._id}?sort=${commentSort}`;
+
+    const fail = (status, code) => {
+      if (wantsJson(req)) return res.status(status).json({ ok: false, error: code });
+      return res.redirect(`${backUrl}&error=${code}`);
+    };
 
     const banned = await newsCommentBansRepo.isBanned(channel.channelLogin, req.user.userId);
-    if (banned) return res.redirect(`${backUrl}&error=restricted`);
+    if (banned) return fail(403, "restricted");
 
-    if (!commentPostLimiterAllow(req.user.userId)) return res.redirect(`${backUrl}&error=rate_limited`);
+    if (!commentPostLimiterAllow(req.user.userId)) return fail(429, "rate_limited");
 
     const body = sanitizeCommentBody(req.body.body);
-    if (!isCommentBodyValid(body)) return res.redirect(`${backUrl}&error=invalid_body`);
+    if (!isCommentBodyValid(body)) return fail(400, "invalid_body");
 
     let parentId = null;
     let depth = 0;
@@ -319,9 +330,9 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
       // Guards against a tampered parentId pointing at a comment on a DIFFERENT post - a reply
       // must nest under a comment that actually belongs to this thread.
       if (!parent || String(parent.postId) !== String(post._id)) {
-        return res.redirect(`${backUrl}&error=invalid_parent`);
+        return fail(400, "invalid_parent");
       }
-      if (parent.depth + 1 > MAX_DEPTH) return res.redirect(`${backUrl}&error=too_deep`);
+      if (parent.depth + 1 > MAX_DEPTH) return fail(400, "too_deep");
       parentId = parent._id;
       depth = parent.depth + 1;
     }
@@ -337,13 +348,55 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
       body,
     });
 
-    // Anchored at the new comment (views/partials/commentThread.ejs gives every <li> a matching
-    // id="comment-<id>") so the reload lands the visitor back where they were instead of at the
-    // top of the page - reliable for a reply (its parent, and therefore its position, didn't
-    // move) and for "Newest" sort (a brand-new comment is always first); best-effort for "Top"/
-    // "Oldest" root comments, which can legitimately land past the first loaded page - the
-    // browser just doesn't scroll in that case, no worse than before this existed.
-    res.redirect(`${backUrl}#comment-${created._id}`);
+    if (!wantsJson(req)) {
+      // No-JS fallback: anchored at the new comment (views/partials/commentThread.ejs gives
+      // every <li> a matching id="comment-<id>") so the reload lands the visitor back where they
+      // were instead of at the top of the page - reliable for a reply (its parent, and therefore
+      // its position, didn't move) and for "Newest" sort (a brand-new comment is always first);
+      // best-effort for "Top"/"Oldest" root comments, which can legitimately land past the first
+      // loaded page - the browser just doesn't scroll in that case.
+      return res.redirect(`${backUrl}#comment-${created._id}`);
+    }
+
+    // JS path: render the ONE new comment through the exact same partial the rest of the thread
+    // uses (see loadCommentTree() above for the batched equivalent), so
+    // public/js/news-comments.js can splice it straight into the live DOM with no reload at all -
+    // avatar/color/emote-rendering shaped the same way, just for a single comment instead of the
+    // whole flat list.
+    const [permission, authorProfile, emoteMap] = await Promise.all([
+      computePermission(req.user.userId, channel.channelLogin),
+      profileCacheRepo.getOrFetchProfile(req.user.userId).catch(() => null),
+      emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map()),
+    ]);
+    const node = {
+      ...created,
+      id: String(created._id),
+      parentId: parentId ? String(parentId) : null,
+      myVote: 0,
+      authorAvatarUrl: authorProfile?.avatarUrl || null,
+      authorChatColor: authorProfile?.chatColor || null,
+      renderedBody: renderCommentBody(created.body, buildEmoteLookup(emoteMap)),
+      children: [],
+    };
+
+    res.render(
+      "partials/commentThread",
+      {
+        nodes: [node],
+        channel,
+        post: { id: String(post._id) },
+        user: req.user,
+        isAdmin: permission === 0,
+        maxCommentDepth: MAX_DEPTH,
+        maxCommentBodyLength: MAX_BODY_LENGTH,
+        commentSort,
+        csrf: res.locals.csrfToken || "",
+      },
+      (err, html) => {
+        if (err) return next(err);
+        res.json({ ok: true, html, commentId: node.id, parentId: node.parentId });
+      }
+    );
   } catch (err) {
     next(err);
   }

@@ -1,13 +1,14 @@
 // Comment thread interactivity (views/partials/commentThread.ejs): reply-form toggling,
 // up/down vote buttons, collapsing long comment bodies behind a "read more" toggle,
-// incrementally loading more root-level comment threads, and an emote-aware comment editor.
-// Posting a comment/reply itself is a plain form submit (full page reload, no JS needed) - only
-// these interactions get client-side enhancement.
+// incrementally loading more root-level comment threads, an emote-aware comment editor, and
+// (further below) fetch-based posting + sort-switching, so none of the common actions on this
+// page ever reload it or move the visitor's scroll position. Every one of these still has a
+// real, working no-JS fallback (a plain form submit / a real <a href>) - this file only
+// intercepts and short-circuits them when it can, never removes the underlying capability.
 //
-// Vote buttons and read-more are both re-run against freshly loaded content (see
-// initLoadMore's insertedLis below), so both are written as functions taking a root element to
-// scan within, rather than the one-shot querySelectorAll-at-load-time style this file used
-// before "load more comments" existed - a static loop would never see comments fetched later.
+// Content inserted after page load (via "load more", a sort switch, or posting a comment/reply)
+// needs the exact same follow-up wiring a freshly-loaded page gets - see bindCommentSubtree()
+// below, which every insertion point funnels through instead of re-deriving it three times.
 
 // Long-comment collapse: a pure display enhancement, not a data guarantee - lib/commentEmotes.js
 // already rendered the full body into the DOM (data-comment-text), so with JS disabled every
@@ -429,17 +430,40 @@ let commentEmoteIndex = new Map();
 }
 initEmoteAutocomplete(document, commentEmoteList, commentEmoteIndex);
 
-// Load more comments: fetches the next page of ROOT threads (routes/news.js's comments.json,
-// COMMENTS_PAGE_SIZE per page) and moves the returned <li>s into the existing #comment-thread-root
-// <ul> - not a second <ul>, so the space-y-4 gap between threads stays consistent across pages.
-// The endpoint renders through the exact same commentThread.ejs partial the first page used, so
-// a loaded-in-later thread is indistinguishable from one rendered on first paint.
-(() => {
-  const LOAD_MORE_PAGE_SIZE = 20; // routes/news.js's COMMENTS_PAGE_SIZE
+const LOAD_MORE_PAGE_SIZE = 20; // routes/news.js's COMMENTS_PAGE_SIZE
 
-  const button = document.querySelector("[data-comment-loadmore]");
+// Both "load more" and "change sort" fetch routes/news.js's comments.json, which renders through
+// the exact same commentThread.ejs partial the first page used - this pulls the <li>s back out of
+// the wrapper <ul> the partial always emits, so a loaded-in-later/re-sorted thread is
+// indistinguishable from one rendered on first paint either way.
+function extractCommentLis(html) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  return [...wrapper.querySelectorAll(":scope > ul > li")];
+}
+
+// Every place that splices a freshly-fetched/rendered <li> into the live thread (load more,
+// change sort, post a comment/reply) needs the exact same follow-up wiring: the read-more
+// collapse, the emote-aware editor on any reply form it contains, AND (unlike those two, which
+// were already delegated) bindCommentPostForm() on that reply form itself - a bare
+// document-level click/submit delegation wouldn't have covered "submit", so newly-inserted reply
+// forms need it bound explicitly, same as the other two.
+function bindCommentSubtree(li) {
+  initReadMore(li);
+  initEmoteAutocomplete(li, commentEmoteList, commentEmoteIndex);
+  for (const form of li.querySelectorAll("[data-comment-post-form]")) {
+    bindCommentPostForm(form);
+  }
+}
+
+// Load more comments: fetches the next page of ROOT threads and appends them to the existing
+// #comment-thread-root <ul> - not a second <ul>, so the space-y-4 gap between threads stays
+// consistent across pages. Extracted into its own bindable function (rather than a one-shot IIFE)
+// because swapCommentSort() below needs to attach this same behavior to a freshly cloned button
+// too, whenever switching sort reveals more pages than the button that was on-screen before.
+function bindLoadMoreButton(button) {
   const list = document.getElementById("comment-thread-root");
-  if (!button || !list) return;
+  if (!list) return;
 
   const defaultText = button.textContent.trim();
   const loadingText = button.dataset.loadingText || defaultText;
@@ -458,14 +482,9 @@ initEmoteAutocomplete(document, commentEmoteList, commentEmoteIndex);
       if (!response.ok) throw new Error(`status ${response.status}`);
       const data = await response.json();
 
-      const wrapper = document.createElement("div");
-      wrapper.innerHTML = data.html;
-      const insertedLis = [...wrapper.querySelectorAll(":scope > ul > li")];
+      const insertedLis = extractCommentLis(data.html);
       for (const li of insertedLis) list.appendChild(li);
-      for (const li of insertedLis) {
-        initReadMore(li);
-        initEmoteAutocomplete(li, commentEmoteList, commentEmoteIndex);
-      }
+      for (const li of insertedLis) bindCommentSubtree(li);
 
       if (data.hasMore) {
         // Must match routes/news.js's COMMENTS_PAGE_SIZE - the server always returns up to that
@@ -484,4 +503,195 @@ initEmoteAutocomplete(document, commentEmoteList, commentEmoteIndex);
       button.textContent = defaultText;
     }
   });
+}
+
+{
+  const initialLoadMoreButton = document.querySelector("[data-comment-loadmore]");
+  if (initialLoadMoreButton) bindLoadMoreButton(initialLoadMoreButton);
+}
+
+// Change comment sort ("Top"/"Newest"/"Oldest") in place: fetches the first page under the new
+// sort (same comments.json endpoint "load more" uses, skip=0) and replaces #comment-thread-root's
+// entire contents - no navigation, so scroll position never moves, unlike the plain
+// <a href="?sort="> links this progressively enhances (those still work with JS disabled, just
+// with the "lands you back at the top of the page" tradeoff that motivated this in the first
+// place - see the memory note on avoiding scroll-jumping reloads where a JS alternative exists).
+(() => {
+  const group = document.querySelector("[data-comment-sort-group]");
+  const list = document.getElementById("comment-thread-root");
+  const loadMoreSlot = document.querySelector("[data-comment-loadmore-slot]");
+  const loadMoreTemplate = document.getElementById("load-more-template");
+  if (!group || !list) return;
+
+  const { channel, post } = group.dataset;
+
+  function setActiveSortStyles(sort) {
+    group.dataset.activeSort = sort;
+    for (const link of group.querySelectorAll("a[data-sort]")) {
+      const active = link.dataset.sort === sort;
+      link.classList.toggle("bg-neutral-800", active);
+      link.classList.toggle("text-neutral-100", active);
+      link.classList.toggle("text-neutral-500", !active);
+      link.classList.toggle("hover:text-neutral-300", !active);
+    }
+  }
+
+  group.addEventListener("click", async (event) => {
+    const link = event.target.closest("a[data-sort]");
+    if (!link || link.dataset.sort === group.dataset.activeSort) return;
+    event.preventDefault();
+    const sort = link.dataset.sort;
+
+    try {
+      const response = await fetch(`/${channel}/news/${post}/comments.json?skip=0&sort=${encodeURIComponent(sort)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+
+      list.textContent = "";
+      const insertedLis = extractCommentLis(data.html);
+      for (const li of insertedLis) list.appendChild(li);
+      for (const li of insertedLis) bindCommentSubtree(li);
+
+      setActiveSortStyles(sort);
+      // Keeps a refresh/shared link on the new sort without a real navigation.
+      const url = new URL(window.location.href);
+      url.searchParams.set("sort", sort);
+      history.replaceState(null, "", url);
+
+      // Rebuild the load-more slot for the new sort: the old button (if any) belonged to the
+      // previous sort's pagination and must not keep working against it.
+      if (loadMoreSlot) {
+        loadMoreSlot.textContent = "";
+        if (data.hasMore && loadMoreTemplate) {
+          const clone = loadMoreTemplate.content.firstElementChild.cloneNode(true);
+          clone.dataset.sort = sort;
+          clone.dataset.offset = String(LOAD_MORE_PAGE_SIZE);
+          loadMoreSlot.appendChild(clone);
+          bindLoadMoreButton(clone);
+        }
+      }
+    } catch {
+      // Fail-soft: fall back to the real navigation the link already points to.
+      window.location.href = link.href;
+    }
+  });
 })();
+
+// Posting a comment or reply: fetches instead of a full page POST-redirect-GET, splicing the
+// newly rendered comment straight into the live thread - see routes/news.js's JSON branch, which
+// renders the ONE new comment through the exact same commentThread.ejs partial the rest of the
+// page uses, so the inserted <li> is indistinguishable from one present on first paint. Falls
+// back to a real submit (routes/news.js's classic redirect branch) if the fetch itself fails.
+let commentErrorMessages = {};
+{
+  const errorDataEl = document.getElementById("comment-error-messages");
+  if (errorDataEl) {
+    try {
+      commentErrorMessages = JSON.parse(errorDataEl.textContent);
+    } catch {
+      commentErrorMessages = {};
+    }
+  }
+}
+
+function clearCommentForm(form) {
+  const textarea = form.querySelector("[data-comment-input]");
+  const editor = form.querySelector("[data-comment-editor]");
+  if (textarea) textarea.value = "";
+  if (editor) rebuildEditorFromText(editor, "", commentEmoteIndex);
+}
+
+function showCommentFormError(form, code) {
+  const errorEl = form.querySelector("[data-comment-form-error]");
+  if (!errorEl) return;
+  errorEl.textContent = commentErrorMessages[code] || commentErrorMessages.invalid_body || "";
+  errorEl.hidden = false;
+}
+
+function hideCommentFormError(form) {
+  const errorEl = form.querySelector("[data-comment-form-error]");
+  if (errorEl) errorEl.hidden = true;
+}
+
+function bindCommentPostForm(form) {
+  form.addEventListener("submit", async (event) => {
+    const list = document.getElementById("comment-thread-root");
+    // No AJAX path without a root list to insert into - a post's very first-ever comment (see
+    // views/newsPost.ejs, which only renders #comment-thread-root once at least one comment
+    // already exists). A real submit is simplest and correct there; synthesizing the sort
+    // control + list structure in JS just for this one rare case isn't worth the duplication.
+    if (!list) return;
+
+    event.preventDefault();
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton.disabled) return;
+
+    hideCommentFormError(form);
+    submitButton.disabled = true;
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        body: new URLSearchParams(new FormData(form)),
+        headers: { Accept: "application/json" },
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        showCommentFormError(form, data.error || "invalid_body");
+        return;
+      }
+
+      const [li] = extractCommentLis(data.html);
+      if (!li) return;
+
+      if (data.parentId) {
+        const parentBody = document
+          .getElementById(`comment-${data.parentId}`)
+          ?.querySelector(":scope > div > [data-comment-body]");
+        if (parentBody) {
+          let childrenWrap = parentBody.querySelector(":scope > [data-comment-children]");
+          let childrenUl;
+          if (childrenWrap) {
+            childrenUl = childrenWrap.querySelector(":scope > ul");
+          } else {
+            childrenWrap = document.createElement("div");
+            childrenWrap.className = "mt-4 pl-4 border-l border-neutral-800";
+            childrenWrap.setAttribute("data-comment-children", "");
+            childrenUl = document.createElement("ul");
+            childrenUl.className = "space-y-4";
+            childrenWrap.appendChild(childrenUl);
+            parentBody.appendChild(childrenWrap);
+          }
+          childrenUl.appendChild(li);
+        }
+        // The reply form collapses again, same as after any successful reply - the new comment
+        // is now visible in the thread in its place.
+        form.hidden = true;
+      } else {
+        // A brand-new top-level comment always surfaces at the top of the visible list for
+        // immediate feedback, regardless of the active sort's exact tie-break rules - it settles
+        // into its precise sorted position on the next full load/re-sort. Simpler, and in
+        // practice exactly where a mod expects to see the thing they just posted.
+        list.prepend(li);
+      }
+
+      bindCommentSubtree(li);
+      clearCommentForm(form);
+
+      for (const countEl of document.querySelectorAll("[data-comment-count]")) {
+        countEl.textContent = String((parseInt(countEl.textContent, 10) || 0) + 1);
+      }
+    } catch {
+      // Fail-soft: fall back to the plain submit the form would have done with JS disabled.
+      form.submit();
+      return;
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+}
+
+for (const form of document.querySelectorAll("[data-comment-post-form]")) {
+  bindCommentPostForm(form);
+}

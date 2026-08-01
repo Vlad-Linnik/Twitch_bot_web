@@ -32,6 +32,11 @@ const {
 
 const router = express.Router();
 
+// Same two-shapes-one-handler convention as routes/settings.js's autosave forms: a fetch with
+// Accept: application/json gets JSON back (public/js/custom-commands.js's toggle handler), the
+// plain no-JS form submit gets the classic redirect.
+const wantsJson = (req) => (req.get("accept") || "").includes("application/json");
+
 async function loadChannel(req, res) {
   const channel = await channelsRepo.findByLogin(req.params.channel);
   if (!channel) {
@@ -112,17 +117,28 @@ router.post(
 
       // The list's per-row toggle (there is no "enabled" checkbox on the create/edit form
       // anymore - see views/customCommands.ejs) flips enabled on an already-saved command
-      // without touching any of its other fields.
+      // without touching any of its other fields. JSON-aware (see wantsJson above) so
+      // public/js/custom-commands.js can flip it without a full page reload - the classic
+      // redirect used to send every visitor back to the top of a possibly long command list just
+      // to see one switch move, with the CSS transition invisible because the page never
+      // actually animated it, it just reappeared already in its new state after reloading.
       if (req.body.action === "toggle") {
         const name = normalizeName(req.body.name);
-        if (!name) return res.redirect(`${back}?error=name_required`);
+        if (!name) {
+          if (wantsJson(req)) return res.status(400).json({ ok: false, error: "name_required" });
+          return res.redirect(`${back}?error=name_required`);
+        }
         const before = await customCommandsRepo.findOne(channel.channelLogin, name);
-        if (!before) return res.redirect(`${back}?error=name_required`);
+        if (!before) {
+          if (wantsJson(req)) return res.status(404).json({ ok: false, error: "name_required" });
+          return res.redirect(`${back}?error=name_required`);
+        }
         const after = await customCommandsRepo.save(channel.channelLogin, { ...before, enabled: before.enabled === false });
         await settingsChangeLogRepo.logChange({
           channelLogin: channel.channelLogin, user: req.user, category: "custom_command",
           action: "update", target: name, before, after,
         });
+        if (wantsJson(req)) return res.json({ ok: true, enabled: after.enabled !== false });
         return res.redirect(`${back}?saved=1`);
       }
 

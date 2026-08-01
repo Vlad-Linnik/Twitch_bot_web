@@ -342,4 +342,42 @@
       if (!window.confirm(`!${cmd}`)) event.preventDefault();
     });
   });
+
+  // --- Enable/disable toggle: fetch instead of a full page POST-redirect-GET, so flipping one
+  // switch doesn't reload the whole (possibly long) command list, reset scroll position, AND hide
+  // the very slide animation the switch is supposed to show (the reload replaces the button with
+  // one already in its new state, mid-transition or not). Falls back to the plain form submit
+  // (routes/customCommands.js's classic redirect branch) if fetch fails for any reason.
+  document.querySelectorAll("form[data-command-toggle]").forEach((toggleForm) => {
+    toggleForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = toggleForm.querySelector('button[type="submit"]');
+      const thumb = button.querySelector("span");
+      if (button.disabled) return;
+
+      button.disabled = true;
+      try {
+        const response = await fetch(toggleForm.action, {
+          method: "POST",
+          body: new URLSearchParams(new FormData(toggleForm)),
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(`status ${response.status}`);
+        const data = await response.json();
+
+        button.setAttribute("aria-pressed", String(data.enabled));
+        button.classList.toggle("bg-purple-600", data.enabled);
+        button.classList.toggle("bg-neutral-700", !data.enabled);
+        thumb.classList.toggle("translate-x-4", data.enabled);
+        thumb.classList.toggle("translate-x-1", !data.enabled);
+      } catch {
+        // Fail-soft: nothing changed visually, so just fall back to the plain submit the button
+        // would have done anyway with JS disabled - the mod's click isn't silently swallowed.
+        toggleForm.submit();
+        return;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
 })();

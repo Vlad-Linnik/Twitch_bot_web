@@ -126,7 +126,7 @@
           </div>
 
           <% if (!node.removed && user && node.depth < maxCommentDepth) { %>
-            <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" data-reply-form hidden class="mt-2 flex flex-col gap-2">
+            <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" data-reply-form data-comment-post-form hidden class="mt-2 flex flex-col gap-2">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
               <input type="hidden" name="parentId" value="<%= node.id %>" />
               <input type="hidden" name="sort" value="<%= commentSort %>" />
@@ -137,12 +137,13 @@
                 <div data-emote-suggestions hidden
                      class="absolute left-0 right-0 z-10 mt-1 rounded-md border border-neutral-700 bg-neutral-900 shadow-lg overflow-hidden"></div>
               </div>
+              <div data-comment-form-error hidden class="rounded-md border border-red-800 bg-red-950/50 text-red-300 text-xs px-3 py-2"></div>
               <button type="submit" class="self-start px-3 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium transition-colors"><%= t('comments.submit') %></button>
             </form>
           <% } %>
 
           <% if (node.children.length > 0) { %>
-            <div class="mt-4 pl-4 border-l border-neutral-800">
+            <div class="mt-4 pl-4 border-l border-neutral-800" data-comment-children>
               <%- include('commentThread', { nodes: node.children, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
             </div>
           <% } %>

@@ -218,9 +218,11 @@
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
-              <%# Enable/disable toggle: a plain form submit (action=toggle), so it works without
-                  JS too - no separate "enabled" checkbox on the create/edit form anymore. %>
-              <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands">
+              <%# Enable/disable toggle: submits via fetch when JS is available
+                  (public/js/custom-commands.js's data-command-toggle handler - flips the switch
+                  in place, no reload, so the CSS transition actually plays) and falls back to a
+                  plain form submit (classic redirect) otherwise. %>
+              <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" data-command-toggle>
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                 <input type="hidden" name="action" value="toggle" />
                 <input type="hidden" name="name" value="<%= c.command %>" />

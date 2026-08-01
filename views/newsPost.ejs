@@ -18,7 +18,7 @@
   <% const csrf = user ? csrfToken : ''; %>
 
   <section class="mt-8" id="comments">
-    <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('comments.heading') %> (<%= post.commentCount %>)</h2>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('comments.heading') %> (<span data-comment-count><%= post.commentCount %></span>)</h2>
 
     <% if (commentError) { %>
       <div class="mb-4 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3">
@@ -50,7 +50,10 @@
     <% } else if (isRestricted) { %>
       <p class="mb-6 text-sm text-amber-400"><%= t('comments.restrictedNotice') %></p>
     <% } else { %>
-      <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" class="mb-8 flex flex-col gap-2">
+      <%# data-comment-post-form: public/js/news-comments.js posts this via fetch and splices the
+          rendered reply into #comment-thread-root itself - no reload, no scroll jump. Falls back
+          to this plain POST (routes/news.js's classic redirect branch) with no JS. %>
+      <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" class="mb-8 flex flex-col gap-2" data-comment-post-form>
         <input type="hidden" name="_csrf" value="<%= csrf %>" />
         <input type="hidden" name="sort" value="<%= commentSort %>" />
         <div class="relative">
@@ -60,6 +63,7 @@
           <div data-emote-suggestions hidden
                class="absolute left-0 right-0 z-10 mt-1 rounded-md border border-neutral-700 bg-neutral-900 shadow-lg overflow-hidden"></div>
         </div>
+        <div data-comment-form-error hidden class="rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-3 py-2"></div>
         <button type="submit" class="self-start px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"><%= t('comments.submit') %></button>
       </form>
     <% } %>
@@ -67,12 +71,15 @@
     <% if (commentTree.length === 0) { %>
       <p class="text-sm text-neutral-600 py-6 text-center"><%= t('comments.empty') %></p>
     <% } else { %>
-      <%# Full-reload links (?sort=), not an AJAX toggle - same call as statisticsMod.ejs's period
-          control: the thread's markup (avatars, colors, nested replies, admin controls, reply
-          forms) is too rich to duplicate client-side just to re-sort it. %>
-      <div class="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-900 p-0.5 w-fit mb-4" role="group">
+      <%# Real <a href="?sort=..."> links - work with no JS. public/js/news-comments.js
+          progressively enhances the group: a click fetches the same GET .../comments.json
+          "load more" already uses (skip=0, the new sort) and swaps #comment-thread-root's
+          contents in place, so re-sorting never reloads the page or moves the scroll position -
+          only falls back to the real navigation if the fetch itself fails. %>
+      <div class="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-900 p-0.5 w-fit mb-4"
+           role="group" data-comment-sort-group data-channel="<%= channel.channelLogin %>" data-post="<%= post.id %>" data-active-sort="<%= commentSort %>">
         <% commentSortModes.forEach(function(mode) { %>
-          <a href="?sort=<%= mode %>#comments" data-transition="instant"
+          <a href="?sort=<%= mode %>#comments" data-transition="instant" data-sort="<%= mode %>"
              class="px-2 py-1 text-xs rounded transition-colors <%= mode === commentSort ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-500 hover:text-neutral-300' %>">
             <%= t('comments.sort.' + mode) %>
           </a>
@@ -80,13 +87,25 @@
       </div>
 
       <%- include('partials/commentThread', { nodes: commentTree, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl, isRoot: true }) %>
-      <% if (hasMoreComments) { %>
+      <div data-comment-loadmore-slot>
+        <% if (hasMoreComments) { %>
+          <button type="button" data-comment-loadmore data-channel="<%= channel.channelLogin %>" data-post="<%= post.id %>"
+                  data-sort="<%= commentSort %>" data-offset="<%= nextCommentOffset %>" data-loading-text="<%= t('comments.loadingMore') %>"
+                  class="mt-4 w-full text-sm text-neutral-400 hover:text-neutral-200 border border-neutral-800 hover:border-neutral-700 rounded-md py-2 transition-colors">
+            <%= t('comments.loadMore') %>
+          </button>
+        <% } %>
+      </div>
+      <%# Always rendered (even when nothing needs loading right now) so a sort switch that
+          reveals more pages under the new order has a template to clone from - see
+          public/js/news-comments.js's swapCommentSort(). %>
+      <template id="load-more-template">
         <button type="button" data-comment-loadmore data-channel="<%= channel.channelLogin %>" data-post="<%= post.id %>"
-                data-sort="<%= commentSort %>" data-offset="<%= nextCommentOffset %>" data-loading-text="<%= t('comments.loadingMore') %>"
+                data-loading-text="<%= t('comments.loadingMore') %>"
                 class="mt-4 w-full text-sm text-neutral-400 hover:text-neutral-200 border border-neutral-800 hover:border-neutral-700 rounded-md py-2 transition-colors">
           <%= t('comments.loadMore') %>
         </button>
-      <% } %>
+      </template>
     <% } %>
   </section>
 </main>
@@ -96,6 +115,18 @@
     data, not something a visitor typed), but inlined via safeJson anyway for the same reason
     every other inlined payload on this site is - see lib/safeJson.js. %>
 <script id="comment-emote-data" type="application/json"><%- safeJson(emoteList) %></script>
+
+<%# Translated comment-post error strings, keyed the same as routes/news.js's JSON error codes -
+    public/js/news-comments.js reads this to show an inline message on a failed AJAX post instead
+    of the old redirect-with-?error= banner. Fixed UI copy, not visitor-derived, but inlined via
+    safeJson anyway for the same reason every other inlined payload on this site is. %>
+<script id="comment-error-messages" type="application/json"><%- safeJson({
+  restricted: t('comments.error.restricted'),
+  rate_limited: t('comments.error.rate_limited'),
+  invalid_body: t('comments.error.invalid_body'),
+  invalid_parent: t('comments.error.invalid_parent'),
+  too_deep: t('comments.error.too_deep'),
+}) %></script>
 
 <script src="/js/news-reactions.js" defer></script>
 <script src="/js/emoteMatch.js" defer></script>
