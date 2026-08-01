@@ -177,7 +177,10 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
           action: "add", target: targetLabel, before, after: [...words],
         });
       }
-      res.redirect(`/${req.params.channel}${basePath}`);
+      // Anchored at the list container (partials/wordListEditor.ejs's id="word-list") rather
+      // than reloading to the top of the settings page - the editor can render well below other
+      // per-channel settings sections above it.
+      res.redirect(`/${req.params.channel}${basePath}#word-list`);
     } catch (err) {
       next(err);
     }
@@ -201,7 +204,10 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
           action: "update", target: targetLabel, before, after: [...words],
         });
       }
-      res.redirect(`/${req.params.channel}${basePath}`);
+      // Anchored at the list container (partials/wordListEditor.ejs's id="word-list") rather
+      // than reloading to the top of the settings page - the editor can render well below other
+      // per-channel settings sections above it.
+      res.redirect(`/${req.params.channel}${basePath}#word-list`);
     } catch (err) {
       next(err);
     }
@@ -224,7 +230,10 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
           action: "delete", target: targetLabel, before, after: [...words],
         });
       }
-      res.redirect(`/${req.params.channel}${basePath}`);
+      // Anchored at the list container (partials/wordListEditor.ejs's id="word-list") rather
+      // than reloading to the top of the settings page - the editor can render well below other
+      // per-channel settings sections above it.
+      res.redirect(`/${req.params.channel}${basePath}#word-list`);
     } catch (err) {
       next(err);
     }
@@ -277,7 +286,9 @@ router.post("/:channel/settings/spam-signatures/add", settingsWriteLimiter, requ
         action: "add", target: "spamSignatures", before, after: [...signatures],
       });
     }
-    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+    // Anchored at the list container (views/channelSpamSignatures.ejs's id="word-list", same
+    // convention as the banned-words editor) rather than the top of the settings page.
+    res.redirect(`/${req.params.channel}/settings/spam-signatures#word-list`);
   } catch (err) {
     next(err);
   }
@@ -293,12 +304,12 @@ router.post("/:channel/settings/spam-signatures/edit", settingsWriteLimiter, req
     const before = [...signatures];
     const index = parseInt(req.body.index, 10);
     if (!Number.isInteger(index) || index < 0 || index >= signatures.length) {
-      return res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+      return res.redirect(`/${req.params.channel}/settings/spam-signatures#word-list`);
     }
 
     const parsed = parseSignatureEntry(req.body);
     if (!parsed.ok) {
-      return res.redirect(`/${req.params.channel}/settings/spam-signatures?edit=${index}&error=${parsed.error}`);
+      return res.redirect(`/${req.params.channel}/settings/spam-signatures?edit=${index}&error=${parsed.error}#word-list`);
     }
 
     signatures[index] = parsed.entry;
@@ -308,7 +319,8 @@ router.post("/:channel/settings/spam-signatures/edit", settingsWriteLimiter, req
       channelLogin: req.params.channel, user: req.user, category: "settings",
       action: "update", target: "spamSignatures", before, after: [...signatures],
     });
-    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+    // Anchored at the list container - same reasoning as the /add route above.
+    res.redirect(`/${req.params.channel}/settings/spam-signatures#word-list`);
   } catch (err) {
     next(err);
   }
@@ -332,7 +344,8 @@ router.post("/:channel/settings/spam-signatures/delete", settingsWriteLimiter, r
         action: "delete", target: "spamSignatures", before, after: [...signatures],
       });
     }
-    res.redirect(`/${req.params.channel}/settings/spam-signatures`);
+    // Anchored at the list container - same reasoning as the /add route above.
+    res.redirect(`/${req.params.channel}/settings/spam-signatures#word-list`);
   } catch (err) {
     next(err);
   }
@@ -511,7 +524,10 @@ router.post("/:channel/settings/moderators", settingsWriteLimiter, requireLevel(
       });
     }
 
-    res.redirect(`/${req.params.channel}/settings/moderators?saved=1`);
+    // Anchored at the table (views/channelModeratorPermissions.ejs's id="moderator-list") rather
+    // than the very top of the page - a long moderator roster means the submit button (and the
+    // rows the visitor just toggled) can be well below the page heading.
+    res.redirect(`/${req.params.channel}/settings/moderators?saved=1#moderator-list`);
   } catch (err) {
     next(err);
   }

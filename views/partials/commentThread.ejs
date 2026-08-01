@@ -1,0 +1,154 @@
+<%#
+  Recursive comment tree renderer (Reddit-style nested replies + up/down voting). Expects: nodes
+  (array of {id, authorDisplayName, authorAvatarUrl, authorChatColor, body, renderedBody, removed,
+  score, myVote, depth, children, createdAt}), channel, post ({id}), user (res.locals.user - null
+  when logged out), isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf
+  (real csrfToken when logged in, '' otherwise - see newsPost.ejs), currentUrl.
+
+  Every <li> carries id="comment-<id>" and the reply form carries a hidden `sort` field so
+  routes/news.js's comment-post handler can redirect back to `#comment-<newId>&sort=<active>`
+  instead of reloading to the top of the page / silently resetting the sort - see that route's
+  own comment for the reliability caveat (works for a reply and for "Newest" sort always; is
+  best-effort for a brand-new "Top"/"Oldest" root comment, which can legitimately land past the
+  first loaded page).
+
+  renderedBody is pre-escaped HTML built by lib/commentEmotes.js (routes/news.js) - every
+  character of the original comment is HTML-escaped there, with only trusted <img> tags spliced
+  in for recognized emote names, so it's rendered here UNESCAPED, on purpose (the "dash" EJS
+  output tag, not the "equals" one). Never swap that for the raw `body` field without re-escaping
+  - `body` is untrusted user text.
+
+  Deliberately uses `csrf`, never the raw `csrfToken` local, anywhere in this file (including the
+  recursive include below): `res.locals.csrfToken` is only ever SET for a logged-in session
+  (middleware/csrf.js's ensureToken) - for an anonymous visitor the property doesn't exist at all.
+  Referencing it inside a guarded "if user is logged in" block is safe (never reached when
+  absent), but passing it into an include()'s data object as shorthand (`{ ..., csrfToken, ... }`) evaluates
+  that bare identifier UNCONDITIONALLY to build the object - with no guard around it, that alone
+  threw "csrfToken is not defined" for every anonymous visitor the moment a thread had any
+  comments to recurse into. `csrf` has no such problem since it's set in newsPost.ejs, in the
+  same scope, via a real short-circuited ternary rather than object-shorthand construction.
+
+  Each recursive call renders ONE level and wraps ITS children in one more indent unit
+  (border-l + pl) - the accumulation across recursive calls IS the visual nesting, no per-depth
+  class computed from `node.depth` needed. `node.depth` is only used to decide whether a Reply
+  affordance renders at all (see lib/commentValidation.js's MAX_DEPTH).
+
+  An admin-removed comment (node.removed) is fully invisible to a non-admin viewer - not even a
+  "[removed]" placeholder, vote score, or Reply affordance - per explicit product decision (a
+  regular user should have no way to tell a removed comment ever existed there). Only an admin
+  still sees the placeholder + score/restrict controls, so moderation stays reviewable. Either
+  way, REPLIES underneath it stay visible: hiddenFromViewer only skips this one node's own row,
+  the recursive include for node.children always runs (guarded by a plain <li> + matching
+  indent so the nesting depth doesn't visually collapse when the hidden parent's row disappears).
+
+  isRoot (optional, defaults falsy - same typeof-guard convention as partials/statsHeader.ejs's
+  hideNewsLink): only the OUTERMOST call for a page's top-level thread list passes isRoot: true,
+  so the <ul> gets a stable id for public/js/news-comments.js's "load more comments" handler to
+  append newly-fetched root <li>s into. Every recursive call (children, and the JSON fragment
+  routes/news.js's comments.json endpoint renders for a load-more page) omits it - a per-reply
+  <ul> must never carry that id too, or the page would have duplicate ids.
+%>
+<% const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US'; %>
+<ul class="space-y-4"<% if (typeof isRoot !== 'undefined' && isRoot) { %> id="comment-thread-root"<% } %>>
+  <% nodes.forEach(function(node) { %>
+    <% const hiddenFromViewer = node.removed && !isAdmin; %>
+    <li id="comment-<%= node.id %>">
+      <% if (hiddenFromViewer) { %>
+        <% if (node.children.length > 0) { %>
+          <div class="pl-9">
+            <%- include('commentThread', { nodes: node.children, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
+          </div>
+        <% } %>
+      <% } else { %>
+      <div class="flex gap-3">
+        <div class="flex flex-col items-center gap-0.5 pt-0.5 shrink-0 w-6">
+          <button type="button"
+                  class="group news-vote-btn text-neutral-600 hover:text-orange-400 data-[voted=1]:text-orange-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                  data-comment-vote data-comment-id="<%= node.id %>" data-channel="<%= channel.channelLogin %>"
+                  data-direction="1" data-voted="<%= node.myVote === 1 ? '1' : '0' %>" data-csrf="<%= csrf %>"
+                  aria-label="<%= t('comments.upvote') %>" title="<%= t('comments.upvote') %>" <%= node.removed ? 'disabled' : '' %>>
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 4l6 7H4l6-7z" /></svg>
+          </button>
+          <span class="news-comment-score text-xs font-semibold tabular-nums text-neutral-300"><%= node.score %></span>
+          <button type="button"
+                  class="group news-vote-btn text-neutral-600 hover:text-sky-400 data-[voted=1]:text-sky-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                  data-comment-vote data-comment-id="<%= node.id %>" data-channel="<%= channel.channelLogin %>"
+                  data-direction="-1" data-voted="<%= node.myVote === -1 ? '1' : '0' %>" data-csrf="<%= csrf %>"
+                  aria-label="<%= t('comments.downvote') %>" title="<%= t('comments.downvote') %>" <%= node.removed ? 'disabled' : '' %>>
+            <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 16l-6-7h12l-6 7z" /></svg>
+          </button>
+        </div>
+
+        <div class="flex-1 min-w-0" data-comment-body>
+          <% if (node.removed) { %>
+            <p class="text-sm text-neutral-600 italic"><%= t('comments.removed') %></p>
+          <% } else { %>
+            <div class="flex items-center gap-2">
+              <% if (node.authorAvatarUrl) { %>
+                <img src="<%= node.authorAvatarUrl %>" alt="" width="24" height="24"
+                     class="w-6 h-6 rounded-full ring-1 ring-neutral-700 shrink-0" />
+              <% } else { %>
+                <span class="w-6 h-6 rounded-full grid place-items-center bg-neutral-800 text-neutral-400 text-[10px] font-semibold ring-1 ring-neutral-700 shrink-0">
+                  <%= node.authorDisplayName.charAt(0).toUpperCase() %>
+                </span>
+              <% } %>
+              <p class="text-sm min-w-0">
+                <span class="font-medium <%= node.authorChatColor ? '' : 'text-neutral-200' %>" <% if (node.authorChatColor) { %>style="color: <%= node.authorChatColor %>"<% } %>><%= node.authorDisplayName %></span>
+                <span class="text-xs text-neutral-600 ml-2"><%= new Date(node.createdAt).toLocaleString(dateLocale) %></span>
+              </p>
+            </div>
+            <div class="news-comment-text text-sm text-neutral-300 whitespace-pre-wrap break-words mt-0.5"
+                 data-comment-text data-readmore-text="<%= t('comments.readMore') %>" data-readless-text="<%= t('comments.readLess') %>"><%- node.renderedBody %></div>
+          <% } %>
+
+          <div class="flex items-center gap-3 mt-1.5 text-xs">
+            <% if (!node.removed && node.depth < maxCommentDepth) { %>
+              <% if (user) { %>
+                <button type="button" data-reply-toggle class="text-neutral-500 hover:text-neutral-300"><%= t('comments.reply') %></button>
+              <% } else { %>
+                <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-neutral-500 hover:text-neutral-300"><%= t('comments.reply') %></a>
+              <% } %>
+            <% } %>
+            <% if (isAdmin) { %>
+              <% if (!node.removed) { %>
+                <form method="post" action="/<%= channel.channelLogin %>/news/comments/<%= node.id %>/delete" data-transition="instant" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>" />
+                  <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
+                  <button type="submit" class="text-red-500 hover:text-red-400"><%= t('comments.adminDelete') %></button>
+                </form>
+              <% } %>
+              <form method="post" action="/<%= channel.channelLogin %>/news/comments/<%= node.id %>/restrict" data-transition="instant" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrf %>" />
+                <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
+                <button type="submit" class="text-amber-500 hover:text-amber-400"><%= t('comments.adminRestrict') %></button>
+              </form>
+            <% } %>
+          </div>
+
+          <% if (!node.removed && user && node.depth < maxCommentDepth) { %>
+            <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" data-reply-form hidden class="mt-2 flex flex-col gap-2">
+              <input type="hidden" name="_csrf" value="<%= csrf %>" />
+              <input type="hidden" name="parentId" value="<%= node.id %>" />
+              <input type="hidden" name="sort" value="<%= commentSort %>" />
+              <div class="relative">
+                <textarea name="body" rows="2" maxlength="<%= maxCommentBodyLength %>" required data-comment-input
+                          class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-2 focus:outline-none focus:border-purple-600"
+                          placeholder="<%= t('comments.placeholder') %>"></textarea>
+                <div data-emote-suggestions hidden
+                     class="absolute left-0 right-0 z-10 mt-1 rounded-md border border-neutral-700 bg-neutral-900 shadow-lg overflow-hidden"></div>
+              </div>
+              <button type="submit" class="self-start px-3 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium transition-colors"><%= t('comments.submit') %></button>
+            </form>
+          <% } %>
+
+          <% if (node.children.length > 0) { %>
+            <div class="mt-4 pl-4 border-l border-neutral-800">
+              <%- include('commentThread', { nodes: node.children, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+    </li>
+  <% }) %>
+</ul>

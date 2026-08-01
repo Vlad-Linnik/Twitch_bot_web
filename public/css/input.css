@@ -71,6 +71,28 @@ nav.stats-tabs {
 .prose-news pre code { background: none; border: none; padding: 0; }
 .prose-news hr { border-color: var(--color-neutral-800, #262626); margin: 1em 0; }
 
+/* Collapsed state for a long news comment body (views/partials/commentThread.ejs,
+   public/js/news-comments.js) - clipped to a fixed height with a fade into the "read more"
+   button below it, so the cut-off reads as intentional rather than as truncated/broken text. */
+.news-comment-collapsed {
+  max-height: 168px;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+}
+
+/* Placeholder text for the emote-aware comment editor (public/js/news-comments.js's
+   contenteditable replacement for a plain <textarea>) - contenteditable has no native
+   `placeholder` attribute, so this stands in for one. :empty only matches when the element has
+   truly zero child nodes (not even an empty text node), which is exactly the state
+   rebuildEditorFromText() leaves an empty editor in. */
+[data-comment-editor]:empty:before {
+  content: attr(data-placeholder);
+  color: var(--color-neutral-600, #525252);
+  pointer-events: none;
+}
+
 /* Directional slide instead of the default cross-fade: the outgoing page
    slides left off-screen while the incoming page slides in from the right.
    This is the fallback for any navigation public/js/page-transitions.js

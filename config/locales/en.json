@@ -772,6 +772,39 @@
       "superlike": "Super Like"
     }
   },
+  "comments": {
+    "backToFeed": "Back to news",
+    "heading": "Comments",
+    "empty": "No comments yet - be the first to say something.",
+    "placeholder": "Add a comment…",
+    "submit": "Comment",
+    "reply": "Reply",
+    "removed": "[removed by a moderator]",
+    "upvote": "Upvote",
+    "downvote": "Downvote",
+    "loginToComment": "Log in with Twitch to comment",
+    "restrictedNotice": "You've been restricted from commenting on this channel's news.",
+    "restrictedHeading": "Restricted commenters on this channel",
+    "unrestrict": "Unrestrict",
+    "adminDelete": "Delete",
+    "adminRestrict": "Restrict user",
+    "readMore": "Read more",
+    "readLess": "Show less",
+    "loadMore": "Load more comments",
+    "loadingMore": "Loading…",
+    "sort": {
+      "score": "Top",
+      "new": "Newest",
+      "old": "Oldest"
+    },
+    "error": {
+      "restricted": "You've been restricted from commenting on this channel's news.",
+      "rate_limited": "You're commenting too quickly - please wait a bit and try again.",
+      "invalid_body": "Comment can't be empty.",
+      "invalid_parent": "That comment no longer exists.",
+      "too_deep": "This thread is too deeply nested to reply to."
+    }
+  },
   "channelSettings": {
     "titleSuffix": "settings",
     "subtitle": "Changes take effect within a few seconds.",
@@ -1386,6 +1419,11 @@
         "create": "News post created",
         "update": "News post updated",
         "delete": "News post deleted"
+      },
+      "newsComment": {
+        "delete": "News comment removed",
+        "restrictUser": "Commenter restricted",
+        "unrestrictUser": "Commenter unrestricted"
       }
     },
     "news": {

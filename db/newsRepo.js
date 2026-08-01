@@ -45,6 +45,7 @@ async function create({
     imageHeight,
     likeCount: 0,
     superlikeCount: 0,
+    commentCount: 0,
     authorUserId: String(authorUserId),
     authorDisplayName,
     createdAt: now,
@@ -71,10 +72,22 @@ async function deletePost(id) {
   return col.findOneAndDelete({ _id: new ObjectId(id) });
 }
 
+// create() has always defaulted commentCount to 0, but a post written before that default
+// existed (or before the comments feature shipped at all) has no field there whatsoever -
+// db/newsCommentsRepo.js's create()/removeByAdmin() $inc it from that missing state just fine
+// (Mongo treats a missing numeric field as 0 for $inc), so the FIRST comment/removal silently
+// heals it, but a post that has never had one still reads back as `undefined`, which
+// `<%= post.commentCount %>` in views/newsPost.ejs/partials/newsCard.ejs renders as "" instead
+// of "0". Normalized here, once, rather than a `|| 0` at every call site.
+function withCommentCountDefault(doc) {
+  if (doc && doc.commentCount === undefined) doc.commentCount = 0;
+  return doc;
+}
+
 async function getById(id) {
   if (!ObjectId.isValid(id)) return null;
   const col = await ensureInitialized();
-  return col.findOne({ _id: new ObjectId(id) });
+  return withCommentCountDefault(await col.findOne({ _id: new ObjectId(id) }));
 }
 
 // Public feed read path. Same count-then-find, clamp-page-to-totalPages pagination as
@@ -93,7 +106,7 @@ async function listByChannel(channelLogin, { page = 1, limit = 10 } = {}) {
     .limit(limit)
     .toArray();
 
-  return { posts, total, totalPages, page: clampedPage };
+  return { posts: posts.map(withCommentCountDefault), total, totalPages, page: clampedPage };
 }
 
 // Admin list (/admin/news) - every channel by default, or narrowed to one via channelLogin.

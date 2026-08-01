@@ -70,10 +70,13 @@ router.post(
 
       const back = `/${channel.channelLogin}/settings/long-bans`;
 
+      // Anchored at the existing-bans list (views/longBans.ejs's id="existing-bans") rather than
+      // the top of the page - the cancel button lives below the entire Create section, so an
+      // un-anchored reload would jump the mod away from the entry they were just looking at.
       if (req.body.action === "cancel") {
         const doc = await longBansRepo.findById(req.body.id);
         if (!doc || String(doc.channelId) !== String(channel.channelId)) {
-          return res.redirect(`${back}?error=not_found`);
+          return res.redirect(`${back}?error=not_found#existing-bans`);
         }
         const updated = await longBansRepo.requestCancel(doc._id);
         await settingsChangeLogRepo.logChange({
@@ -82,7 +85,7 @@ router.post(
         });
         // 'pending' -> 'cancelled' is immediate; 'active' -> 'cancelRequested' is finished by
         // TwitchBot/twitch/longBanScheduler.js's next ~30s poll.
-        return res.redirect(`${back}?saved=cancelled`);
+        return res.redirect(`${back}?saved=cancelled#existing-bans`);
       }
 
       // Same rules the chat command enforces - see lib/longBanValidation.js for why that matters.

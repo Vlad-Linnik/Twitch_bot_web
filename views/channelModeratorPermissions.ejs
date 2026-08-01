@@ -15,7 +15,7 @@
   <form method="post" action="/<%= channel.channelLogin %>/settings/moderators" data-transition="instant">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
-    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+    <div class="rounded-lg border border-neutral-800 overflow-hidden" id="moderator-list">
       <table class="w-full text-sm">
         <thead class="bg-neutral-900 text-neutral-400">
           <tr>

@@ -73,7 +73,7 @@
 
             <div class="flex gap-2">
               <button type="submit" class="px-3 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.wordSave') %></button>
-              <a href="/<%= channel.channelLogin %>/settings/spam-signatures" class="px-3 py-1 rounded-md text-neutral-400 hover:text-neutral-100 text-xs transition-colors"><%= t('channelSettings.wordCancel') %></a>
+              <a href="/<%= channel.channelLogin %>/settings/spam-signatures#word-list" class="px-3 py-1 rounded-md text-neutral-400 hover:text-neutral-100 text-xs transition-colors"><%= t('channelSettings.wordCancel') %></a>
             </div>
           </form>
         <% } else { %>
@@ -92,7 +92,7 @@
               </div>
             </div>
             <span class="flex items-center gap-1 shrink-0">
-              <a href="/<%= channel.channelLogin %>/settings/spam-signatures?edit=<%= index %>" class="p-1.5 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordEdit') %>">
+              <a href="/<%= channel.channelLogin %>/settings/spam-signatures?edit=<%= index %>#word-list" class="p-1.5 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordEdit') %>">
                 <%- include('partials/iconPencil') %>
               </a>
               <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/delete" data-transition="instant" data-confirm-delete="<%= t('channelSettings.wordDeleteConfirm') %>">
