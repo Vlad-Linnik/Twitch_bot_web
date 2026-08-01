@@ -357,7 +357,12 @@
 
       button.disabled = true;
       try {
-        const response = await fetch(toggleForm.action, {
+        // toggleForm.action, not getAttribute("action"), would resolve to the hidden
+        // <input name="action"> instead of the URL string - a named form control shadows
+        // HTMLFormElement's own "action" IDL property. That silently 404'd on
+        // "[object HTMLInputElement]" and fell through to the plain-submit fallback below
+        // on every click, defeating the whole point of this handler.
+        const response = await fetch(toggleForm.getAttribute("action"), {
           method: "POST",
           body: new URLSearchParams(new FormData(toggleForm)),
           headers: { Accept: "application/json" },
