@@ -12,7 +12,10 @@
 //      `categoryTexts` (per-stream-category text overrides), `modOnly` (restrict manual `!name`
 //      triggers to mods) and `aliases` (alternate trigger words, matched the same way as the
 //      command's own name - see lib/commandValidation.js) are web-panel-only fields - there is no
-//      chat command that sets any of them, same as announceColor.
+//      chat command that sets any of them, same as announceColor. `group` is one more: a free-text
+//      label a mod assigns purely to sort this page's command list and bulk enable/disable a
+//      cluster of commands at once (routes/customCommands.js's "toggleGroup" action) - the bot
+//      never reads it and has no chat command for it either.
 //   2. The bot caches these in memory. It re-reads them every
 //      CustomCommands.REFRESH_INTERVAL_MS (10s) precisely so edits made here reach a running bot
 //      without a restart - that refresh was added for this feature. Before it existed, a write
@@ -50,11 +53,11 @@ async function findOne(channelLogin, command) {
 
 // Upsert rather than insert: matches !addcommand's behaviour, which updates a command's text if it
 // already exists instead of erroring.
-async function save(channelLogin, { command, result, timer, pin, announce, announceColor, enabled, categoryTexts, modOnly, aliases }) {
+async function save(channelLogin, { command, result, timer, pin, announce, announceColor, enabled, categoryTexts, modOnly, aliases, group }) {
   const col = await ensureInitialized();
   await col.updateOne(
     { channel: withHash(channelLogin), command },
-    { $set: { channel: withHash(channelLogin), command, result, timer, pin, announce, announceColor, enabled, categoryTexts, modOnly, aliases: aliases || [] } },
+    { $set: { channel: withHash(channelLogin), command, result, timer, pin, announce, announceColor, enabled, categoryTexts, modOnly, aliases: aliases || [], group: group || "" } },
     { upsert: true }
   );
   return findOne(channelLogin, command);

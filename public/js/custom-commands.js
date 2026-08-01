@@ -20,6 +20,7 @@
   const announce = document.getElementById("announce");
   const announceColor = document.getElementById("announceColor");
   const modOnly = document.getElementById("modOnly");
+  const group = document.getElementById("group");
   const heading = document.getElementById("form-heading");
   const cancel = document.getElementById("cancel-edit");
   const conflict = document.getElementById("pin-conflict");
@@ -259,6 +260,7 @@
       announce.checked = button.dataset.announce === "1";
       if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
       modOnly.checked = button.dataset.modOnly === "1";
+      group.value = button.dataset.group || "";
 
       let overrides = [];
       try {
@@ -280,6 +282,10 @@
   cancel.addEventListener("click", () => {
     heading.textContent = originalHeading;
     cancel.hidden = true;
+    // group is a plain form control with no default value attribute, so the native
+    // type="reset" behaviour (which fires right after this handler) already clears it -
+    // unlike aliasList/categoryContainer below, which are JS-managed state/DOM the browser
+    // doesn't know to restore.
     clearCategoryRows();
     categoryToggle.checked = false;
     categoryContainer.hidden = true;
@@ -343,16 +349,28 @@
     });
   });
 
-  // --- Enable/disable toggle: fetch instead of a full page POST-redirect-GET, so flipping one
+  // --- Enable/disable toggle(s): fetch instead of a full page POST-redirect-GET, so flipping a
   // switch doesn't reload the whole (possibly long) command list, reset scroll position, AND hide
   // the very slide animation the switch is supposed to show (the reload replaces the button with
-  // one already in its new state, mid-transition or not). Falls back to the plain form submit
-  // (routes/customCommands.js's classic redirect branch) if fetch fails for any reason.
-  document.querySelectorAll("form[data-command-toggle]").forEach((toggleForm) => {
+  // one already in its new state, mid-transition or not). Both the per-command toggle
+  // (data-command-toggle) and the per-group master switch (data-group-toggle) share this - shared
+  // repaint helper so a group flip visually updates its own switch AND every member command's own
+  // switch in one pass.
+  function paintToggle(button, enabled) {
+    const thumb = button.querySelector("span");
+    button.setAttribute("aria-pressed", String(enabled));
+    button.classList.toggle("bg-purple-600", enabled);
+    button.classList.toggle("bg-neutral-700", !enabled);
+    thumb.classList.toggle("translate-x-4", enabled);
+    thumb.classList.toggle("translate-x-1", !enabled);
+  }
+
+  // Shared submit handler for both toggle flavors: same fetch-with-fallback shape, only what
+  // happens with a successful response differs (onSuccess).
+  function wireToggleForm(toggleForm, onSuccess) {
     toggleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const button = toggleForm.querySelector('button[type="submit"]');
-      const thumb = button.querySelector("span");
       if (button.disabled) return;
 
       button.disabled = true;
@@ -369,12 +387,7 @@
         });
         if (!response.ok) throw new Error(`status ${response.status}`);
         const data = await response.json();
-
-        button.setAttribute("aria-pressed", String(data.enabled));
-        button.classList.toggle("bg-purple-600", data.enabled);
-        button.classList.toggle("bg-neutral-700", !data.enabled);
-        thumb.classList.toggle("translate-x-4", data.enabled);
-        thumb.classList.toggle("translate-x-1", !data.enabled);
+        onSuccess(button, data);
       } catch {
         // Fail-soft: nothing changed visually, so just fall back to the plain submit the button
         // would have done anyway with JS disabled - the mod's click isn't silently swallowed.
@@ -383,6 +396,23 @@
       } finally {
         button.disabled = false;
       }
+    });
+  }
+
+  document.querySelectorAll("form[data-command-toggle]").forEach((toggleForm) => {
+    wireToggleForm(toggleForm, (button, data) => paintToggle(button, data.enabled));
+  });
+
+  // The group header's master switch: one response flips every command in that group, so repaint
+  // the master switch itself plus every individual command switch tagged with the same group
+  // (data-command-toggle's own data-group, set in partials/customCommandRow.ejs) - otherwise each
+  // row's own switch would sit stale until the next full page load.
+  document.querySelectorAll("form[data-group-toggle]").forEach((toggleForm) => {
+    wireToggleForm(toggleForm, (button, data) => {
+      paintToggle(button, data.enabled);
+      const group = toggleForm.dataset.group;
+      document.querySelectorAll(`form[data-command-toggle][data-group="${CSS.escape(group)}"] button[type="submit"]`)
+        .forEach((memberButton) => paintToggle(memberButton, data.enabled));
     });
   });
 })();

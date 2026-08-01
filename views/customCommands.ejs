@@ -60,6 +60,17 @@
       </div>
 
       <div>
+        <label for="group" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('customCommands.group') %></label>
+        <input type="text" id="group" name="group" maxlength="<%= maxGroupLength %>" list="group-list" autocomplete="off"
+               placeholder="<%= t('customCommands.groupPlaceholder') %>"
+               class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+        <datalist id="group-list">
+          <% groupNames.forEach(function(g) { %><option value="<%= g %>"></option><% }) %>
+        </datalist>
+        <p class="text-xs text-neutral-600 mt-1"><%= t('customCommands.groupHint') %></p>
+      </div>
+
+      <div>
         <label for="alias-input" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('customCommands.aliases') %></label>
         <div class="flex gap-2">
           <div class="flex items-center flex-1">
@@ -179,88 +190,34 @@
     <% if (commands.length === 0) { %>
       <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-6 text-center text-neutral-600 text-sm"><%= t('customCommands.none') %></p>
     <% } else { %>
-      <ul class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
-        <% commands.forEach(function(c) { %>
-          <li class="px-4 py-3 flex items-start gap-3">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <code class="text-purple-400 font-medium">!<%= c.command %></code>
-                <% if (c.enabled === false) { %>
-                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-500 border border-neutral-700"><%= t('customCommands.disabledBadge') %></span>
-                <% } %>
-                <% if (c.timerSeconds) { %>
-                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400"><%= t('customCommands.every') %> <%= c.timerSeconds %>s</span>
-                <% } %>
-                <% if (c.pin) { %>
-                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-600/20 text-amber-500 border border-amber-600/30"><%= t('customCommands.pinned') %></span>
-                <% } %>
-                <% if (c.announce) { %>
-                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('customCommands.announced') %> · <%= t('customCommands.color.' + c.announceColor) %></span>
-                <% } %>
-                <% if (c.modOnly) { %>
-                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-600/20 text-red-400 border border-red-600/30"><%= t('customCommands.modOnlyBadge') %></span>
-                <% } %>
-                <% if (c.categoryTexts.length) { %>
-                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400 border border-blue-600/30"><%= t('customCommands.categoryOverridesBadge') %> · <%= c.categoryTexts.length %></span>
-                <% } %>
-                <% c.aliases.forEach(function(alias) { %>
-                  <code class="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">!<%= alias %></code>
-                <% }) %>
-              </div>
-              <p class="text-sm text-neutral-400 mt-1 break-words"><%= c.result %></p>
-              <% if (c.categoryTexts.length) { %>
-                <ul class="mt-1 space-y-0.5">
-                  <% c.categoryTexts.forEach(function(ov) { %>
-                    <li class="text-xs text-neutral-500 break-words"><span class="text-neutral-400 font-medium"><%= ov.category %>:</span> <%= ov.result %></li>
-                  <% }) %>
-                </ul>
-              <% } %>
-            </div>
-
-            <div class="flex items-center gap-1 shrink-0">
-              <%# Enable/disable toggle: submits via fetch when JS is available
-                  (public/js/custom-commands.js's data-command-toggle handler - flips the switch
-                  in place, no reload, so the CSS transition actually plays) and falls back to a
-                  plain form submit (classic redirect) otherwise. %>
-              <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" data-command-toggle>
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                <input type="hidden" name="action" value="toggle" />
-                <input type="hidden" name="name" value="<%= c.command %>" />
-                <button type="submit"
-                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors <%= c.enabled ? 'bg-purple-600' : 'bg-neutral-700' %>"
-                        aria-pressed="<%= c.enabled ? 'true' : 'false' %>"
-                        aria-label="<%= t('customCommands.toggleEnabled') %>">
-                  <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform <%= c.enabled ? 'translate-x-4' : 'translate-x-1' %>"></span>
-                </button>
-              </form>
-
-              <%# Edit is client-side only: it copies the row back into the form above. The form
-                  posts an upsert, so "edit" and "create" are the same request. %>
-              <button type="button"
-                      class="p-1.5 rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors js-edit"
-                      data-name="<%= c.command %>"
-                      data-result="<%= c.result %>"
-                      data-timer="<%= c.timerSeconds || '' %>"
-                      data-pin="<%= c.pin ? '1' : '' %>"
-                      data-announce="<%= c.announce ? '1' : '' %>"
-                      data-announce-color="<%= c.announceColor %>"
-                      data-mod-only="<%= c.modOnly ? '1' : '' %>"
-                      data-category-texts="<%= JSON.stringify(c.categoryTexts) %>"
-                      data-aliases="<%= c.aliases.join(', ') %>"
-                      aria-label="<%= t('customCommands.edit') %>"><%- include('partials/iconPencil') %></button>
-
-              <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" class="js-delete-form">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                <input type="hidden" name="action" value="delete" />
-                <input type="hidden" name="name" value="<%= c.command %>" />
-                <button type="submit"
-                        class="p-1.5 rounded text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        aria-label="<%= t('customCommands.delete') %>"><%- include('partials/iconTrash') %></button>
-              </form>
-            </div>
-          </li>
-        <% }) %>
-      </ul>
+      <% sections.forEach(function(section) { %>
+        <% if (section.name) { %>
+          <% const allOn = section.commands.every(function(c) { return c.enabled; }); %>
+          <div class="flex items-center justify-between mb-2 mt-6 first:mt-0">
+            <h3 class="text-sm font-semibold text-neutral-300"><%= section.name %> <span class="text-neutral-600 font-normal">(<%= section.commands.length %>)</span></h3>
+            <%# Group master switch: one request flips every command in this group to the same
+                enabled state (routes/customCommands.js's "toggleGroup" action) - reads "on" as
+                long as anything in the group still runs, "off" only once the whole group is off,
+                same semantics as the fetch handler that repaints it (public/js/custom-commands.js). %>
+            <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" data-group-toggle data-group="<%= section.name %>">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <input type="hidden" name="action" value="toggleGroup" />
+              <input type="hidden" name="group" value="<%= section.name %>" />
+              <button type="submit"
+                      class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors <%= allOn ? 'bg-purple-600' : 'bg-neutral-700' %>"
+                      aria-pressed="<%= allOn ? 'true' : 'false' %>"
+                      aria-label="<%= t('customCommands.toggleGroupEnabled', { group: section.name }) %>">
+                <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform <%= allOn ? 'translate-x-4' : 'translate-x-1' %>"></span>
+              </button>
+            </form>
+          </div>
+        <% } %>
+        <ul class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70 mb-2">
+          <% section.commands.forEach(function(c) { %>
+            <%- include('partials/customCommandRow', { c, channel, csrfToken, t }) %>
+          <% }) %>
+        </ul>
+      <% }) %>
     <% } %>
   </section>
 

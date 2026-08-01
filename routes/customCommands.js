@@ -27,6 +27,7 @@ const {
   MAX_CATEGORY_LENGTH,
   MAX_CATEGORY_OVERRIDES,
   MAX_ALIASES,
+  MAX_GROUP_LENGTH,
   ANNOUNCEMENT_COLORS,
 } = require("../lib/commandValidation");
 
@@ -66,16 +67,29 @@ router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async
       categoryTexts: c.categoryTexts || [],
       modOnly: !!c.modOnly,
       aliases: c.aliases || [],
+      group: c.group || "",
     }));
+
+    // Named groups first (alphabetical), then every ungrouped command as one final, header-less
+    // section - so a channel that's never used groups renders exactly as before (a single flat
+    // list). groupNames also feeds the create/edit form's <datalist> for autocomplete.
+    const groupNames = [...new Set(commands.map((c) => c.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const sections = [
+      ...groupNames.map((name) => ({ name, commands: commands.filter((c) => c.group === name) })),
+      { name: null, commands: commands.filter((c) => !c.group) },
+    ].filter((section) => section.commands.length > 0);
 
     res.render("customCommands", {
       channel,
       commands,
+      sections,
+      groupNames,
       minTimerSeconds: MIN_TIMER_SECONDS,
       maxResultLength: MAX_RESULT_LENGTH,
       maxCategoryLength: MAX_CATEGORY_LENGTH,
       maxCategoryOverrides: MAX_CATEGORY_OVERRIDES,
       maxAliases: MAX_ALIASES,
+      maxGroupLength: MAX_GROUP_LENGTH,
       announcementColors: ANNOUNCEMENT_COLORS,
       error: req.query.error || null,
       // Only meaningful alongside error === "alias_conflict"/"name_conflict" - which existing
@@ -142,6 +156,32 @@ router.post(
         return res.redirect(`${back}?saved=1`);
       }
 
+      // The group header's master switch (views/customCommands.ejs) - flips EVERY command in one
+      // named group to the same enabled state in one request. Mirrors the single toggle above
+      // (JSON-aware, same fallback), but the target state is derived rather than just inverted:
+      // if any member is currently enabled, the click means "turn the group off"; only when every
+      // member is already off does it mean "turn the group on". That matches a master-switch
+      // showing "on" for a fully-or-partly-enabled group and "off" only once nothing in it runs.
+      if (req.body.action === "toggleGroup") {
+        const group = String(req.body.group || "").trim();
+        const members = group ? (await customCommandsRepo.list(channel.channelLogin)).filter((c) => (c.group || "") === group) : [];
+        if (!members.length) {
+          if (wantsJson(req)) return res.status(404).json({ ok: false, error: "group_required" });
+          return res.redirect(`${back}?error=group_required`);
+        }
+        const newEnabled = !members.some((c) => c.enabled !== false);
+        const toFlip = members.filter((c) => (c.enabled !== false) !== newEnabled);
+        for (const before of toFlip) {
+          const after = await customCommandsRepo.save(channel.channelLogin, { ...before, enabled: newEnabled });
+          await settingsChangeLogRepo.logChange({
+            channelLogin: channel.channelLogin, user: req.user, category: "custom_command",
+            action: "update", target: before.command, before, after,
+          });
+        }
+        if (wantsJson(req)) return res.json({ ok: true, enabled: newEnabled, commands: members.map((c) => c.command) });
+        return res.redirect(`${back}?saved=1`);
+      }
+
       // A variable number of category-override rows (see views/customCommands.ejs, rendered
       // progressively client-side) - urlencoded bodies collapse a single repeated field name to
       // a bare string instead of a one-element array, so normalize both categoryName/
@@ -169,6 +209,7 @@ router.post(
         categoryTexts,
         modOnly: req.body.modOnly,
         aliases: req.body.aliases,
+        group: req.body.group,
       });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
 
