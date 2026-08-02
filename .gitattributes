@@ -1,0 +1,4 @@
+# deploy/deploy.sh runs on the Linux host but is edited on Windows, where core.autocrlf
+# is on. A CRLF shebang line fails as `bad interpreter: /usr/bin/env bash^M`, so pin shell
+# scripts to LF in the working tree regardless of platform.
+*.sh text eol=lf
