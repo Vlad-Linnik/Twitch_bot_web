@@ -9,11 +9,16 @@
 // entirely (a Twitch display name isn't guaranteed to match the login), so the two must not be
 // conflated.
 //
-// Soft-delete only: a removed comment's doc stays in place (body/author blanked, `removed: true`)
-// so replies underneath it keep a valid parent to attach to - a hard delete would either orphan
-// an entire subtree or force a destructive cascade that also wipes other people's unrelated
-// replies. lib/commentValidation.js's buildCommentTree() is what actually nests the flat list
-// this repo returns into a tree, and treats "removed" as a display flag, not a structural one.
+// Soft-delete only: a removed comment's doc stays in place (`removed: true`, body/author left
+// intact) so replies underneath it keep a valid parent to attach to - a hard delete would either
+// orphan an entire subtree or force a destructive cascade that also wipes other people's
+// unrelated replies. body/author are deliberately NOT blanked: a site admin (tier 0) still needs
+// to see what was actually posted and by whom to review the removal, so hiding a removed
+// comment's content is done at display time only (views/partials/commentThread.ejs shows it to
+// admins with a "deleted" badge, and hides it entirely from everyone else) rather than by
+// destroying the data. lib/commentValidation.js's buildCommentTree() is what actually nests the
+// flat list this repo returns into a tree, and treats "removed" as a display flag, not a
+// structural one.
 const { ObjectId } = require("mongodb");
 const { connectWeb } = require("./connection");
 

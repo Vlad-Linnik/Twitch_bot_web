@@ -66,16 +66,10 @@
         </div>
       </div>
 
-      <div>
-        <label for="group" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('customCommands.group') %></label>
-        <input type="text" id="group" name="group" maxlength="<%= maxGroupLength %>" list="group-list" autocomplete="off"
-               placeholder="<%= t('customCommands.groupPlaceholder') %>"
-               class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
-        <datalist id="group-list">
-          <% groupNames.forEach(function(g) { %><option value="<%= g %>"></option><% }) %>
-        </datalist>
-        <p class="text-xs text-neutral-600 mt-1"><%= t('customCommands.groupHint') %></p>
-      </div>
+      <%# No group field here on purpose: a command's group is assigned from the list below
+          instead - the row's "..." menu, or by dragging the row onto another group (see
+          routes/customCommands.js's "setGroup" action). Editing a command therefore never touches
+          its group, which is why that route carries the stored value over. %>
 
       <div>
         <label for="alias-input" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('customCommands.aliases') %></label>
@@ -191,8 +185,10 @@
   </section>
 
   <!-- Existing commands -->
-  <section id="commands-list">
-    <%- include('partials/customCommandsList', { commands, sections, channel }) %>
+  <%# data-channel keys the per-group collapsed-state memory in localStorage
+      (public/js/custom-commands.js) so two channels' command lists don't share it. %>
+  <section id="commands-list" data-channel="<%= channel.channelLogin %>">
+    <%- include('partials/customCommandsList', { commands, sections, groupNames, maxGroupLength, channel }) %>
   </section>
 
 </main>

@@ -22,6 +22,7 @@ const {
   parseCommand,
   checkAliasConflicts,
   normalizeName,
+  parseGroupName,
   MIN_TIMER_SECONDS,
   MAX_RESULT_LENGTH,
   MAX_CATEGORY_LENGTH,
@@ -95,6 +96,21 @@ function renderPartial(res, view, locals) {
   });
 }
 
+// The JSON success payload every mutation that changes the LIST's shape shares (create/edit,
+// delete, setGroup): the freshly server-rendered list plus the alias-conflict snapshot the form's
+// client-side checker keeps. Re-deriving the whole list rather than patching the pre-save snapshot
+// is deliberate - a new command, a deleted one, or one that just moved group all have to land in
+// the right section, and buildCommandsView above is the only place that grouping logic lives.
+async function listResponse(res, channel) {
+  const view = await buildCommandsView(channel.channelLogin);
+  const html = await renderPartial(res, "partials/customCommandsList", { ...view, channel, maxGroupLength: MAX_GROUP_LENGTH });
+  return {
+    ok: true,
+    html,
+    commandsData: view.commands.map((c) => ({ command: c.command, aliases: c.aliases })),
+  };
+}
+
 router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
@@ -138,9 +154,16 @@ router.post(
 
       const back = `/${channel.channelLogin}/settings/custom-commands/commands`;
 
+      // Delete lives in the row's "..." menu now (partials/customCommandRow.ejs). JSON-aware for
+      // the same reason the toggles are: removing one row shouldn't reload a possibly long list
+      // and throw away the visitor's scroll position - the list partial is re-rendered and swapped
+      // in instead.
       if (req.body.action === "delete") {
         const name = normalizeName(req.body.name);
-        if (!name) return res.redirect(`${back}?error=name_required`);
+        if (!name) {
+          if (wantsJson(req)) return res.status(400).json({ ok: false, error: "name_required" });
+          return res.redirect(`${back}?error=name_required`);
+        }
         const before = await customCommandsRepo.findOne(channel.channelLogin, name);
         await customCommandsRepo.remove(channel.channelLogin, name);
         if (before) {
@@ -149,7 +172,38 @@ router.post(
             action: "delete", target: name, before, after: null,
           });
         }
+        if (wantsJson(req)) return res.json(await listResponse(res, channel));
         return res.redirect(`${back}?saved=deleted`);
+      }
+
+      // Moving a command into another group (or into a brand-new one, or out of every group when
+      // the field is left blank). Its own action rather than a field on the create/edit form: the
+      // group is now assigned from the list itself - the row's "..." menu and drag-and-drop
+      // (public/js/custom-commands.js) - so a mod can reorganize a channel's commands without
+      // loading each one back into the form. Every other field is carried over untouched.
+      if (req.body.action === "setGroup") {
+        const name = normalizeName(req.body.name);
+        const parsedGroup = parseGroupName(req.body.group);
+        if (!parsedGroup.ok) {
+          if (wantsJson(req)) return res.status(400).json({ ok: false, error: parsedGroup.error });
+          return res.redirect(`${back}?error=${parsedGroup.error}`);
+        }
+        const before = name ? await customCommandsRepo.findOne(channel.channelLogin, name) : null;
+        if (!before) {
+          if (wantsJson(req)) return res.status(404).json({ ok: false, error: "name_required" });
+          return res.redirect(`${back}?error=name_required`);
+        }
+        // A no-op move (dropping a command back into the group it already sits in) still repaints
+        // the list, but must not write a settings-log entry for a change that didn't happen.
+        if ((before.group || "") !== parsedGroup.group) {
+          const after = await customCommandsRepo.save(channel.channelLogin, { ...before, group: parsedGroup.group });
+          await settingsChangeLogRepo.logChange({
+            channelLogin: channel.channelLogin, user: req.user, category: "custom_command",
+            action: "update", target: name, before, after,
+          });
+        }
+        if (wantsJson(req)) return res.json({ ...(await listResponse(res, channel)), moved: name });
+        return res.redirect(`${back}?saved=1`);
       }
 
       // The list's per-row toggle (there is no "enabled" checkbox on the create/edit form
@@ -232,7 +286,11 @@ router.post(
         categoryTexts,
         modOnly: req.body.modOnly,
         aliases: req.body.aliases,
-        group: req.body.group,
+        // The create/edit form has no group field anymore (that's the list's "..." menu and
+        // drag-and-drop now, via the setGroup action above), so - exactly like `enabled` - saving
+        // a command's text/timer/pin must not silently drop it out of its group. Carry it over
+        // from the existing row; a brand-new command starts ungrouped and gets moved afterwards.
+        group: before ? before.group || "" : "",
       });
       if (!parsed.ok) {
         if (wantsJson(req)) return res.status(400).json({ ok: false, error: parsed.error });
@@ -257,18 +315,7 @@ router.post(
       });
       // The running bot re-reads custom_commands every 10s (CustomCommands.REFRESH_INTERVAL_MS),
       // so this is live in chat within seconds - no restart, no extra signal to send.
-      if (wantsJson(req)) {
-        // Re-derive the whole list rather than patching the pre-save snapshot - a brand-new
-        // command, or one that just moved group, needs to land in the right section, and the
-        // server is the only place that logic already lives (buildCommandsView above).
-        const view = await buildCommandsView(channel.channelLogin);
-        const html = await renderPartial(res, "partials/customCommandsList", { ...view, channel });
-        return res.json({
-          ok: true,
-          html,
-          commandsData: view.commands.map((c) => ({ command: c.command, aliases: c.aliases })),
-        });
-      }
+      if (wantsJson(req)) return res.json(await listResponse(res, channel));
       res.redirect(`${back}?saved=1`);
     } catch (err) {
       next(err);

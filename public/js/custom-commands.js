@@ -1,11 +1,16 @@
 // /<channel>/settings/custom-commands/commands - progressive enhancement only.
 //
-// Everything on this page works with JavaScript disabled: the form is a plain POST, delete and
-// the enable/disable toggle are plain POSTs, and the category-override rows fall back to a fixed
-// <noscript> set (views/customCommands.ejs). This file adds on top - loading a row back into the
-// form to edit it, warning about the timer+pin conflict before the server has to reject it, a
-// delete confirmation, rendering the category-override rows one at a time instead of a fixed
-// block of five, and the alias chip-list below.
+// Everything on this page works with JavaScript disabled: the form is a plain POST, the row menu
+// and the group sections are <details> (so they open and collapse natively), delete / move-to-
+// group / the enable-disable toggle are plain POSTs inside that menu, and the category-override
+// rows fall back to a fixed <noscript> set (views/customCommands.ejs). This file adds on top -
+// loading a row back into the form to edit it, warning about the timer+pin conflict before the
+// server has to reject it, a delete confirmation, rendering the category-override rows one at a
+// time instead of a fixed block of five, the alias chip-list, remembering which groups were
+// collapsed, and dragging a command from one group into another.
+//
+// The one thing that is genuinely JS-only is drag-and-drop, and deliberately so: it's a shortcut
+// for the move form in each row's "..." menu, never the only way to reach it.
 (function () {
   "use strict";
 
@@ -20,7 +25,6 @@
   const announce = document.getElementById("announce");
   const announceColor = document.getElementById("announceColor");
   const modOnly = document.getElementById("modOnly");
-  const group = document.getElementById("group");
   const heading = document.getElementById("form-heading");
   const cancel = document.getElementById("cancel-edit");
   const conflict = document.getElementById("pin-conflict");
@@ -311,8 +315,98 @@
 
   // --- Existing-commands list: re-wired after every fetch-based swap (submitCommandForm,
   // wireToggleForm below), since replacing #commands-list's innerHTML drops whatever listeners
-  // were attached to the elements it just threw away.
+  // were attached to the elements it just threw away. The container element itself is never
+  // replaced (only its innerHTML), so listeners delegated onto IT - the drag-and-drop handlers
+  // and the menu bookkeeping below - survive a swap and are attached exactly once.
   const commandsList = document.getElementById("commands-list");
+
+  // --- Collapsed groups. The open/closed state is the <details> element's own, so all this does
+  // is remember which groups were collapsed across a list re-render (and across visits): the
+  // server always renders every section open, and applyCollapsedState() closes the remembered
+  // ones again immediately after each swap. Keyed per channel so two channels' lists don't share
+  // it. A browser with storage disabled just loses the memory, never the collapsing itself.
+  const collapsedKey = `cc-collapsed:${commandsList.dataset.channel || ""}`;
+
+  function readCollapsed() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(collapsedKey) || "[]");
+      return new Set(Array.isArray(stored) ? stored : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function writeCollapsed(set) {
+    try {
+      localStorage.setItem(collapsedKey, JSON.stringify([...set]));
+    } catch {
+      /* storage unavailable (private mode, quota) - collapsing still works, it just won't stick */
+    }
+  }
+
+  function applyCollapsedState() {
+    const collapsed = readCollapsed();
+    commandsList.querySelectorAll("details.cc-group").forEach((section) => {
+      section.open = !collapsed.has(section.dataset.group);
+      // `toggle` doesn't bubble, so this can't be delegated onto the container like the drag
+      // handlers - it has to be re-attached to each freshly rendered section.
+      section.addEventListener("toggle", () => {
+        const set = readCollapsed();
+        if (section.open) set.delete(section.dataset.group);
+        else set.add(section.dataset.group);
+        writeCollapsed(set);
+      });
+    });
+  }
+
+  // Expanding a group programmatically (used after a command is moved into a collapsed one -
+  // landing a row somewhere invisible would make the move look like it did nothing).
+  function rememberExpanded(groupName) {
+    const set = readCollapsed();
+    if (!set.delete(groupName)) return;
+    writeCollapsed(set);
+  }
+
+  // --- Row "..." menus. They're <details>, so opening/closing is native; this only enforces
+  // one-open-at-a-time and closes them on an outside click or Escape, the way a menu is expected
+  // to behave. Delegated onto the container/document, so no re-wiring after a list swap.
+  function closeAllMenus(except) {
+    commandsList.querySelectorAll("details.cc-menu[open]").forEach((menu) => {
+      if (menu !== except) menu.open = false;
+    });
+  }
+
+  commandsList.addEventListener("click", (event) => {
+    const groupToggleForm = event.target.closest("form[data-group-toggle]");
+    if (groupToggleForm) {
+      // The group master switch sits inside the group's <summary>, so clicking it would collapse
+      // the group as well. Toggling the <details> and submitting the form are both default
+      // actions of this one click, and there's no way to cancel only the first - so cancel both
+      // and re-issue the submit ourselves. requestSubmit() fires the very submit event
+      // wireToggleForm() listens for, and never re-fires a click, so this can't loop.
+      const submitter = event.target.closest("button[type='submit']");
+      if (submitter) {
+        event.preventDefault();
+        groupToggleForm.requestSubmit(submitter);
+      }
+      return;
+    }
+    const summary = event.target.closest("summary.cc-menu-summary");
+    if (summary) {
+      // The click hasn't toggled this <details> yet, so "currently closed" means "about to open"
+      // - close every other menu now rather than after it has opened.
+      const menu = summary.parentElement;
+      if (!menu.open) closeAllMenus(menu);
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("details.cc-menu")) closeAllMenus();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllMenus();
+  });
 
   function wireEditButtons() {
     commandsList.querySelectorAll(".js-edit").forEach((button) => {
@@ -330,7 +424,10 @@
         announce.checked = button.dataset.announce === "1";
         if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
         modOnly.checked = button.dataset.modOnly === "1";
-        group.value = button.dataset.group || "";
+        // No group field to fill: a command's group is changed from the row's "..." menu or by
+        // dragging it, never by loading it into this form (routes/customCommands.js carries the
+        // stored value over on save for exactly that reason).
+        closeAllMenus();
 
         let overrides = [];
         try {
@@ -350,15 +447,175 @@
     });
   }
 
-  // --- Deleting a command is destructive and not undoable - confirm it.
-  function wireDeleteForms() {
-    commandsList.querySelectorAll(".js-delete-form").forEach((deleteForm) => {
-      deleteForm.addEventListener("submit", (event) => {
-        const cmd = deleteForm.querySelector('input[name="name"]').value;
-        if (!window.confirm(`!${cmd}`)) event.preventDefault();
+  // --- Swapping in a freshly server-rendered list. Shared by every mutation that changes the
+  // list's shape (create/edit, delete, move) - the server re-derives the whole grouped list
+  // (routes/customCommands.js's listResponse) rather than the client patching rows around,
+  // because which section a command belongs in is server-side logic.
+  // `moved` names the command to land a jelly bounce on, so a drag or a menu-move visibly ends
+  // somewhere instead of the list silently rearranging itself.
+  function applyListHtml(data, moved) {
+    commandsList.innerHTML = data.html;
+    allCommands = data.commandsData || allCommands;
+    applyCollapsedState();
+    wireCommandsList();
+    if (moved) bounceRow(moved);
+  }
+
+  function bounceRow(command) {
+    const row = commandsList.querySelector(`.cc-row[data-command="${CSS.escape(command)}"]`);
+    if (!row) return; // its group is collapsed, or it was deleted - nothing to point at
+    row.classList.add("cc-jelly-drop");
+    row.addEventListener("animationend", () => row.classList.remove("cc-jelly-drop"), { once: true });
+    const box = row.getBoundingClientRect();
+    if (box.top < 64 || box.bottom > window.innerHeight) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  // --- Row menu actions that hit the server (move to group, delete): same fetch-with-fallback
+  // shape as the toggles and the save, differing only in that a successful response replaces the
+  // whole list. Delete is destructive and not undoable, so it confirms first.
+  function wireRowActionForms() {
+    commandsList.querySelectorAll("form.js-row-action").forEach((actionForm) => {
+      actionForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const commandName = actionForm.querySelector('input[name="name"]').value;
+        const isDelete = actionForm.classList.contains("js-delete-form");
+        if (isDelete && !window.confirm(`!${commandName}`)) return;
+
+        const submitButton = actionForm.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        try {
+          const response = await fetch(actionForm.getAttribute("action"), {
+            method: "POST",
+            body: new URLSearchParams(new FormData(actionForm)),
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) throw new Error(`status ${response.status}`);
+          const data = await response.json();
+          if (!data.ok) throw new Error(data.error || "action_failed");
+
+          // A command moved into a collapsed group has to make that group open again, or the
+          // move looks like it did nothing at all.
+          if (!isDelete) rememberExpanded(actionForm.querySelector('input[name="group"]').value.trim());
+          applyListHtml(data, isDelete ? null : commandName);
+          showToast(isDelete ? toastEl?.dataset.deletedText : toastEl?.dataset.savedText);
+        } catch {
+          // Fail-soft, same as every other handler here: fall back to the plain submit the button
+          // would have done with JS disabled rather than swallowing the click.
+          actionForm.submit();
+        } finally {
+          submitButton.disabled = false;
+        }
       });
     });
   }
+
+  // --- Drag and drop: pick a command row up and drop it on any group section to move it there
+  // (the same "setGroup" request the menu's move form sends). Delegated onto #commands-list,
+  // which survives every list swap, so these are attached exactly once.
+  //
+  // The <details> section as a whole is the drop target rather than its <ul>, so a COLLAPSED
+  // group accepts drops too - its list isn't rendered at all in that state.
+  let draggedCommand = null;
+  let draggedFromGroup = null;
+  // Whether the gesture started on a control inside the row (the enable switch, the "..." menu)
+  // rather than on the row body. dragstart fires on the draggable <li> itself, so its target
+  // can't tell us where the pointer actually went down - this has to be recorded beforehand.
+  let dragBlocked = false;
+
+  commandsList.addEventListener("pointerdown", (event) => {
+    dragBlocked = !!event.target.closest("form, summary, .cc-menu-panel");
+  });
+
+  function clearDropTargets() {
+    commandsList.querySelectorAll(".cc-group-dropzone").forEach((el) => el.classList.remove("cc-group-dropzone"));
+  }
+
+  commandsList.addEventListener("dragstart", (event) => {
+    const row = event.target.closest(".cc-row");
+    if (!row || dragBlocked) {
+      event.preventDefault();
+      return;
+    }
+    draggedCommand = row.dataset.command;
+    draggedFromGroup = row.dataset.group || "";
+    event.dataTransfer.effectAllowed = "move";
+    // Firefox refuses to start a drag at all unless some data is set.
+    event.dataTransfer.setData("text/plain", draggedCommand);
+    closeAllMenus();
+    row.classList.add("cc-row-dragging");
+  });
+
+  commandsList.addEventListener("dragend", () => {
+    commandsList.querySelectorAll(".cc-row-dragging").forEach((el) => el.classList.remove("cc-row-dragging"));
+    clearDropTargets();
+    draggedCommand = null;
+    draggedFromGroup = null;
+  });
+
+  // The group currently under the pointer, or null if it isn't a legal target. Dropping a command
+  // back into the group it already sits in is a no-op, so that section never lights up.
+  function dropTargetFor(event) {
+    if (!draggedCommand) return null;
+    const section = event.target.closest("details.cc-group");
+    if (!section || (section.dataset.group || "") === draggedFromGroup) return null;
+    return section;
+  }
+
+  // Recomputing the highlight on every dragover (instead of pairing dragenter with dragleave)
+  // sidesteps the classic dragleave-fires-for-every-child-element problem entirely.
+  commandsList.addEventListener("dragover", (event) => {
+    const section = dropTargetFor(event);
+    if (!section) return; // no preventDefault -> the browser shows "can't drop here"
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (!section.classList.contains("cc-group-dropzone")) {
+      clearDropTargets();
+      section.classList.add("cc-group-dropzone");
+    }
+  });
+
+  // Dragging out of the list entirely (relatedTarget outside it) is the one case dragover can't
+  // clean up after, since it simply stops firing.
+  commandsList.addEventListener("dragleave", (event) => {
+    if (!commandsList.contains(event.relatedTarget)) clearDropTargets();
+  });
+
+  commandsList.addEventListener("drop", async (event) => {
+    const section = dropTargetFor(event);
+    if (!section) return;
+    event.preventDefault();
+    const command = draggedCommand;
+    const targetGroup = section.dataset.group || "";
+    clearDropTargets();
+
+    // Reuse the dropped row's own move form: it already carries the CSRF token and the action,
+    // and it's the same request the menu sends - only the group value differs.
+    const moveForm = commandsList.querySelector(`.cc-row[data-command="${CSS.escape(command)}"] form.js-row-action:not(.js-delete-form)`);
+    if (!moveForm) return;
+
+    const body = new URLSearchParams(new FormData(moveForm));
+    body.set("group", targetGroup);
+    try {
+      const response = await fetch(moveForm.getAttribute("action"), {
+        method: "POST",
+        body,
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || "move_failed");
+      rememberExpanded(targetGroup);
+      applyListHtml(data, command);
+      showToast(toastEl?.dataset.savedText);
+    } catch {
+      // Nothing was moved and nothing was repainted, so unlike the form handlers there's no
+      // half-applied state to escape from - a full reload puts the list back in sync with the
+      // server, whichever side actually failed.
+      location.reload();
+    }
+  });
 
   // --- Enable/disable toggle(s): fetch instead of a full page POST-redirect-GET, so flipping a
   // switch doesn't reload the whole (possibly long) command list, reset scroll position, AND hide
@@ -433,7 +690,7 @@
 
   function wireCommandsList() {
     wireEditButtons();
-    wireDeleteForms();
+    wireRowActionForms();
     wireCommandToggles();
     wireGroupToggles();
   }
@@ -457,9 +714,7 @@
       const data = await response.json();
       if (!data.ok) throw new Error(data.error || "save_failed");
 
-      commandsList.innerHTML = data.html;
-      wireCommandsList();
-      allCommands = data.commandsData || allCommands;
+      applyListHtml(data, null);
       resetFormToCreateMode();
       showToast(toastEl?.dataset.savedText);
     } catch {
@@ -502,5 +757,6 @@
     submitCommandForm();
   });
 
+  applyCollapsedState();
   wireCommandsList();
 })();

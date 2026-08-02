@@ -35,11 +35,14 @@
 
   An admin-removed comment (node.removed) is fully invisible to a non-admin viewer - not even a
   "[removed]" placeholder, vote score, or Reply affordance - per explicit product decision (a
-  regular user should have no way to tell a removed comment ever existed there). Only an admin
-  still sees the placeholder + score/restrict controls, so moderation stays reviewable. Either
-  way, REPLIES underneath it stay visible: hiddenFromViewer only skips this one node's own row,
-  the recursive include for node.children always runs (guarded by a plain <li> + matching
-  indent so the nesting depth doesn't visually collapse when the hidden parent's row disappears).
+  regular user should have no way to tell a removed comment ever existed there). An admin instead
+  sees the real author + content (db/newsCommentsRepo.js's removeByAdmin never blanks either
+  field, only flips `removed`/`removedBy`/`removedAt`), rendered with a "deleted" badge and muted/
+  strikethrough styling instead of a placeholder, so moderation stays reviewable without having to
+  guess what was actually said. Either way, REPLIES underneath it stay visible: hiddenFromViewer
+  only skips this one node's own row, the recursive include for node.children always runs
+  (guarded by a plain <li> + matching indent so the nesting depth doesn't visually collapse when
+  the hidden parent's row disappears).
 
   isRoot (optional, defaults falsy - same typeof-guard convention as partials/statsHeader.ejs's
   hideNewsLink): only the OUTERMOST call for a page's top-level thread list passes isRoot: true,
@@ -80,26 +83,29 @@
         </div>
 
         <div class="flex-1 min-w-0" data-comment-body>
-          <% if (node.removed) { %>
-            <p class="text-sm text-neutral-600 italic"><%= t('comments.removed') %></p>
-          <% } else { %>
-            <div class="flex items-center gap-2">
-              <% if (node.authorAvatarUrl) { %>
-                <img src="<%= node.authorAvatarUrl %>" alt="" width="24" height="24"
-                     class="w-6 h-6 rounded-full ring-1 ring-neutral-700 shrink-0" />
-              <% } else { %>
-                <span class="w-6 h-6 rounded-full grid place-items-center bg-neutral-800 text-neutral-400 text-[10px] font-semibold ring-1 ring-neutral-700 shrink-0">
-                  <%= node.authorDisplayName.charAt(0).toUpperCase() %>
-                </span>
+          <% /* node.removed only reaches this branch for an admin viewer - hiddenFromViewer
+               above fully hides a removed comment from anyone else. Admins see the real author
+               + content, same as a normal comment, just visibly badged as deleted so moderation
+               stays reviewable without guessing what was actually said. */ %>
+          <div class="flex items-center gap-2 <%= node.removed ? 'opacity-60' : '' %>">
+            <% if (node.authorAvatarUrl) { %>
+              <img src="<%= node.authorAvatarUrl %>" alt="" width="24" height="24"
+                   class="w-6 h-6 rounded-full ring-1 ring-neutral-700 shrink-0" />
+            <% } else { %>
+              <span class="w-6 h-6 rounded-full grid place-items-center bg-neutral-800 text-neutral-400 text-[10px] font-semibold ring-1 ring-neutral-700 shrink-0">
+                <%= node.authorDisplayName.charAt(0).toUpperCase() %>
+              </span>
+            <% } %>
+            <p class="text-sm min-w-0">
+              <span class="font-medium <%= node.authorChatColor ? '' : 'text-neutral-200' %>" <% if (node.authorChatColor) { %>style="color: <%= node.authorChatColor %>"<% } %>><%= node.authorDisplayName %></span>
+              <span class="text-xs text-neutral-600 ml-2"><%= new Date(node.createdAt).toLocaleString(dateLocale) %></span>
+              <% if (node.removed) { %>
+                <span class="text-xs text-red-500 font-semibold uppercase ml-2"><%= t('comments.removedAdminBadge') %></span>
               <% } %>
-              <p class="text-sm min-w-0">
-                <span class="font-medium <%= node.authorChatColor ? '' : 'text-neutral-200' %>" <% if (node.authorChatColor) { %>style="color: <%= node.authorChatColor %>"<% } %>><%= node.authorDisplayName %></span>
-                <span class="text-xs text-neutral-600 ml-2"><%= new Date(node.createdAt).toLocaleString(dateLocale) %></span>
-              </p>
-            </div>
-            <div class="news-comment-text text-sm text-neutral-300 whitespace-pre-wrap break-words mt-0.5"
-                 data-comment-text data-readmore-text="<%= t('comments.readMore') %>" data-readless-text="<%= t('comments.readLess') %>"><%- node.renderedBody %></div>
-          <% } %>
+            </p>
+          </div>
+          <div class="news-comment-text text-sm whitespace-pre-wrap break-words mt-0.5 <%= node.removed ? 'text-neutral-500 line-through decoration-red-800' : 'text-neutral-300' %>"
+               data-comment-text data-readmore-text="<%= t('comments.readMore') %>" data-readless-text="<%= t('comments.readLess') %>"><%- node.renderedBody %></div>
 
           <div class="flex items-center gap-3 mt-1.5 text-xs">
             <% if (!node.removed && node.depth < maxCommentDepth) { %>

@@ -170,6 +170,118 @@ html:active-view-transition-type(instant) {
   }
 }
 
+/* Custom commands list (views/partials/customCommandsList.ejs + customCommandRow.ejs,
+   public/js/custom-commands.js): collapsible <details> groups, a "..." row menu, and
+   drag-and-drop of a command from one group into another.
+
+   Both the group sections and the row menus are <details>/<summary> so they work with JS
+   disabled; everything here just replaces the native disclosure triangle with our own chevron
+   and supplies the drag affordances. */
+.cc-group > summary,
+.cc-menu > summary {
+  list-style: none;
+}
+.cc-group > summary::-webkit-details-marker,
+.cc-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.cc-group > summary:hover {
+  background-color: rgb(38 38 38 / 0.5); /* neutral-800/50 */
+}
+.cc-group > summary:focus-visible,
+.cc-menu > summary:focus-visible {
+  outline: 2px solid var(--color-purple-500, #a855f7);
+  outline-offset: 2px;
+}
+/* Chevron points right when collapsed, down when open. */
+.cc-chevron {
+  transition: rotate 160ms ease;
+}
+.cc-group[open] > summary .cc-chevron {
+  rotate: 90deg;
+}
+
+/* The grab hand the row shows on hover, and the "picked up" state while it's being dragged.
+   Only the row body is grabbable - the toggle switch and the "..." menu inside it keep the
+   normal pointer, since dragging from there is suppressed in JS anyway. */
+.cc-row {
+  cursor: grab;
+}
+.cc-row:active {
+  cursor: grabbing;
+}
+.cc-row form,
+.cc-row summary,
+.cc-row button,
+.cc-row input,
+.cc-row label {
+  cursor: pointer;
+}
+.cc-row input[type="text"] {
+  cursor: text;
+}
+.cc-row-dragging {
+  opacity: 0.4;
+}
+
+/* Drop target: the whole group section lights up green while a dragged command hovers it, so
+   a collapsed group is just as valid (and as obvious) a target as an expanded one. The class
+   is toggled by JS on the <details>, and the ::after overlay is what draws the outline without
+   disturbing the section's own layout. */
+.cc-group {
+  position: relative;
+  border-radius: 0.5rem;
+}
+.cc-group-dropzone::after {
+  content: "";
+  position: absolute;
+  inset: -0.25rem;
+  border-radius: 0.625rem;
+  border: 2px dashed rgb(34 197 94 / 0.9); /* green-500 */
+  background-color: rgb(34 197 94 / 0.08);
+  pointer-events: none;
+  z-index: 10;
+}
+.cc-group-dropzone > summary .cc-group-name {
+  color: rgb(74 222 128 / 1); /* green-400 */
+}
+
+/* Jelly landing: the moved row squashes and rebounds once, so after the list re-renders the eye
+   is drawn to where the command actually ended up (which may be a section that scrolled). */
+/* The horizontal component is deliberately tiny (never past 1.015) while the vertical one does
+   the real squash-and-stretch: the row is as wide as the list card it sits in, so scaling X the
+   same amount as Y makes it visibly spill out past the card's rounded edge on the overshoot. */
+@keyframes cc-jelly-drop {
+  0% {
+    transform: scale(0.985, 0.78);
+  }
+  35% {
+    transform: scale(1.015, 1.1);
+  }
+  55% {
+    transform: scale(0.995, 0.96);
+  }
+  75% {
+    transform: scale(1.005, 1.02);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+.cc-jelly-drop {
+  animation: cc-jelly-drop 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center center;
+  background-color: rgb(34 197 94 / 0.08);
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-jelly-drop,
+  .cc-chevron {
+    animation: none;
+    transition: none;
+  }
+}
+
 /* Custom radio buttons: a plain circle instead of the native OS control,
    filled with a smaller dot when checked. */
 input[type="radio"].radio-custom {

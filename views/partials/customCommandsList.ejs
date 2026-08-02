@@ -1,42 +1,74 @@
 <%#
   The existing-commands list on views/customCommands.ejs - a separate partial so it can be
-  re-rendered server-side and swapped in wholesale after a fetch-based create/edit save
-  (routes/customCommands.js's POST handler, public/js/custom-commands.js's submitCommandForm),
-  the same way partials/commentThread.ejs backs the news comments page's AJAX posting. Expects:
-  commands (flat, for the count), sections (grouped, see routes/customCommands.js), channel;
-  t/csrfToken come through res.locals automatically, same as every other view in this app.
+  re-rendered server-side and swapped in wholesale after a fetch-based create/edit/delete/move
+  (routes/customCommands.js's POST handler + listResponse, public/js/custom-commands.js's
+  submitCommandForm/wireRowActionForms), the same way partials/commentThread.ejs backs the news
+  comments page's AJAX posting. Expects: commands (flat, for the count), sections (grouped, see
+  routes/customCommands.js), groupNames, maxGroupLength, channel; t/csrfToken come through
+  res.locals automatically, same as every other view in this app.
 %>
 <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('customCommands.existing') %> <span class="text-neutral-600 text-sm">(<%= commands.length %>)</span></h2>
+
+<%# One shared <datalist> for every row's "move to group" input (partials/customCommandRow.ejs):
+    it lives here rather than in the create/edit form because it has to be re-rendered together
+    with the list - a command moved into a brand-new group must show up as an autocomplete option
+    for the next move without a page reload. %>
+<datalist id="group-list">
+  <% groupNames.forEach(function(g) { %><option value="<%= g %>"></option><% }) %>
+</datalist>
 
 <% if (commands.length === 0) { %>
   <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-6 text-center text-neutral-600 text-sm"><%= t('customCommands.none') %></p>
 <% } else { %>
   <% sections.forEach(function(section) { %>
-    <% if (section.name) { %>
-      <% const allOn = section.commands.every(function(c) { return c.enabled; }); %>
-      <div class="flex items-center justify-between mb-2 mt-6 first:mt-0">
-        <h3 class="text-sm font-semibold text-neutral-300"><%= section.name %> <span class="text-neutral-600 font-normal">(<%= section.commands.length %>)</span></h3>
-        <%# Group master switch: one request flips every command in this group to the same
-            enabled state (routes/customCommands.js's "toggleGroup" action) - reads "on" as
-            long as anything in the group still runs, "off" only once the whole group is off,
-            same semantics as the fetch handler that repaints it (public/js/custom-commands.js). %>
-        <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" data-group-toggle data-group="<%= section.name %>">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-          <input type="hidden" name="action" value="toggleGroup" />
-          <input type="hidden" name="group" value="<%= section.name %>" />
-          <button type="submit"
-                  class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors <%= allOn ? 'bg-purple-600' : 'bg-neutral-700' %>"
-                  aria-pressed="<%= allOn ? 'true' : 'false' %>"
-                  aria-label="<%= t('customCommands.toggleGroupEnabled', { group: section.name }) %>">
-            <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform <%= allOn ? 'translate-x-4' : 'translate-x-1' %>"></span>
-          </button>
-        </form>
-      </div>
-    <% } %>
-    <ul class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70 mb-2">
-      <% section.commands.forEach(function(c) { %>
-        <%- include('customCommandRow', { c, channel, csrfToken, t }) %>
-      <% }) %>
-    </ul>
+    <%# <details> rather than a JS-driven show/hide: collapsing works with JS disabled too, and the
+        open/closed state is the element's own, so public/js/custom-commands.js only has to
+        remember it across list re-renders instead of implementing the toggle itself.
+        The <details> as a whole (not the <ul>) is the drag-and-drop target, so a command can be
+        dropped onto a COLLAPSED group - its <ul> isn't rendered at all in that state. The
+        header-less ungrouped section is rendered with a header now too, precisely because it has
+        to be a visible, droppable target: without one there'd be no way to drag a command back
+        OUT of a group. %>
+    <details class="cc-group mt-6 first:mt-0 mb-2" data-group="<%= section.name || '' %>" open>
+      <summary class="cc-group-summary flex items-center justify-between gap-2 py-1 px-2 -mx-2 rounded-md cursor-pointer select-none">
+        <span class="flex items-center gap-1.5 min-w-0">
+          <svg class="cc-chevron w-3.5 h-3.5 shrink-0 text-neutral-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
+          <%# A <span>, not the <h3> this used to be: the label now lives inside a <summary>, whose
+              whole content is the disclosure control's accessible name - a heading nested in it
+              reads as a heading you can click rather than as a group toggle. %>
+          <span class="cc-group-name text-sm font-semibold truncate <%= section.name ? 'text-neutral-300' : 'text-neutral-500 italic' %>">
+            <%= section.name || t('customCommands.ungrouped') %>
+          </span>
+          <span class="text-neutral-600 text-sm font-normal shrink-0">(<%= section.commands.length %>)</span>
+        </span>
+        <% if (section.name) { %>
+          <%# Group master switch: one request flips every command in this group to the same
+              enabled state (routes/customCommands.js's "toggleGroup" action) - reads "on" as long
+              as anything in the group still runs, "off" only once the whole group is off, same
+              semantics as the fetch handler that repaints it (public/js/custom-commands.js). It
+              sits INSIDE the <summary>, so its click has to be kept from bubbling up and toggling
+              the collapse as well - see that file's stopPropagation. %>
+          <% const allOn = section.commands.every(function(c) { return c.enabled; }); %>
+          <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" data-group-toggle data-group="<%= section.name %>" class="shrink-0">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="action" value="toggleGroup" />
+            <input type="hidden" name="group" value="<%= section.name %>" />
+            <button type="submit"
+                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors <%= allOn ? 'bg-purple-600' : 'bg-neutral-700' %>"
+                    aria-pressed="<%= allOn ? 'true' : 'false' %>"
+                    aria-label="<%= t('customCommands.toggleGroupEnabled', { group: section.name }) %>">
+              <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform <%= allOn ? 'translate-x-4' : 'translate-x-1' %>"></span>
+            </button>
+          </form>
+        <% } %>
+      </summary>
+      <ul class="mt-2 rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+        <% section.commands.forEach(function(c) { %>
+          <%- include('customCommandRow', { c, channel, csrfToken, maxGroupLength, t }) %>
+        <% }) %>
+      </ul>
+    </details>
   <% }) %>
 <% } %>
