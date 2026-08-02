@@ -1,5 +1,5 @@
 <%# Shared master-volume slider for every on-site game that has sound.
-    Include this partial + <script src="/js/games/gameVolume.js"> (non-deferred,
+    Include this partial + <script src="<%= asset('/js/games/gameVolume.js') %>"> (non-deferred,
     before the game's own script) on any such game page. One persisted value
     (localStorage, public/js/games/gameVolume.js) drives every game - changing
     it on one game page carries over to the rest. %>

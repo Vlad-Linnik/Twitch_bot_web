@@ -122,7 +122,7 @@
 </main>
 
 <%- include('partials/gameVolumeControl') %>
-<script src="/js/games/gameVolume.js" defer></script>
-<script src="/js/games/engines/minesweeperEngine.js"></script>
-<script src="/js/games/minesweeper.js" defer></script>
+<script src="<%= asset('/js/games/gameVolume.js') %>" defer></script>
+<script src="<%= asset('/js/games/engines/minesweeperEngine.js') %>"></script>
+<script src="<%= asset('/js/games/minesweeper.js') %>" defer></script>
 <%- include('partials/foot') %>

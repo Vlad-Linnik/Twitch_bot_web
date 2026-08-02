@@ -203,8 +203,8 @@
 
 <%# Chat-derived strings - must not go through a bare JSON.stringify(). See lib/safeJson.js. %>
 <script id="stats-chat-data" type="application/json"><%- safeJson(bootstrap) %></script>
-<script src="/js/cloud-layout.js" defer></script>
-<script src="/js/statistics-chat.js" defer></script>
-<script src="/js/stream-chart.js" defer></script>
+<script src="<%= asset('/js/cloud-layout.js') %>" defer></script>
+<script src="<%= asset('/js/statistics-chat.js') %>" defer></script>
+<script src="<%= asset('/js/stream-chart.js') %>" defer></script>
 
 <%- include('partials/foot') %>

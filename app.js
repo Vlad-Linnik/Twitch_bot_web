@@ -1,8 +1,10 @@
 const crypto = require("crypto");
+const compression = require("compression");
 const express = require("express");
 const helmet = require("helmet");
 const path = require("path");
 const env = require("./config/env");
+const { asset } = require("./lib/assetVersion");
 const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
@@ -54,7 +56,32 @@ function createApp(sessionMiddleware) {
       referrerPolicy: { policy: "same-origin" },
     })
   );
-  app.use(express.static(path.join(__dirname, "public")));
+  // Nothing was compressed before this: neither here nor in deploy/Caddyfile.example (a bare
+  // `reverse_proxy` does not encode). Measured on the real pages - output.css 84KB -> 15KB,
+  // /commands 48KB -> 5.9KB, a channel's /statistics/chat 20KB -> 4.6KB. That HTML sits in the
+  // critical path of every navigation, and the cross-document view transition waits on the new
+  // document's first paint, so this is the single largest lever on how often the slide plays
+  // at all. Done in Node rather than at Caddy on purpose - it ships with the app and holds
+  // regardless of what's proxying in front of it (see deploy/Caddyfile.example).
+  app.use(compression());
+
+  // maxAge/immutable only bind when the request carries the ?v= fingerprint that
+  // lib/assetVersion.js's res.locals.asset() stamps onto the URL. Views go through that helper
+  // for css/js; the games' sprites and sounds are built as URL strings inside client JS and
+  // arrive unversioned, so those fall to a plain one-hour max-age - still an enormous
+  // improvement on the previous max-age=0 (public/sounds alone is 7.2MB, re-validated on every
+  // single game load), while staying short enough that an unversioned asset self-heals.
+  app.use(
+    express.static(path.join(__dirname, "public"), {
+      setHeaders(res) {
+        const versioned = res.req.query && res.req.query.v;
+        res.setHeader(
+          "Cache-Control",
+          versioned ? "public, max-age=31536000, immutable" : "public, max-age=3600"
+        );
+      },
+    })
+  );
   app.use(siteVisits);
   app.use(express.urlencoded({ extended: false }));
   app.use(sessionMiddleware);
@@ -64,6 +91,9 @@ function createApp(sessionMiddleware) {
   app.use(csrf.ensureToken);
   app.use((req, res, next) => {
     res.locals.currentPath = req.path;
+    // Stamps ?v=<fingerprint> onto a public/ URL so express.static above can answer it with a
+    // one-year immutable Cache-Control. Every <link>/<script> in views/ goes through this.
+    res.locals.asset = asset;
     // Includes the query string (unlike currentPath) - every "Login with Twitch" link uses this
     // as its ?returnTo= so routes/authRoutes.js's /callback can land the visitor back on the
     // exact page (filters, pagination, etc. included) that sent them to log in.

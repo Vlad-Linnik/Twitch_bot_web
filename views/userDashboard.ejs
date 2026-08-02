@@ -220,8 +220,8 @@
       history, raw message bodies), so it must be escaped against a "</script>" breakout.
       See lib/safeJson.js. The hidden stub inlines no data and loads no dashboard scripts. %>
   <script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
-  <script src="/js/cloud-layout.js" defer></script>
-  <script src="/js/user-dashboard.js" defer></script>
+  <script src="<%= asset('/js/cloud-layout.js') %>" defer></script>
+  <script src="<%= asset('/js/user-dashboard.js') %>" defer></script>
 <% } %>
 
 <%- include('partials/foot') %>

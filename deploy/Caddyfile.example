@@ -6,6 +6,11 @@
 # Copy to /etc/caddy/Caddyfile on the host, replace the domain, then:
 #   sudo systemctl reload caddy
 
+# Note there is deliberately no `encode` directive here: app.js compresses responses
+# itself (the `compression` middleware), so they reach Caddy already gzipped and an
+# `encode` line would be a no-op for them. Keeping it in Node means the compression
+# holds no matter what is proxying in front of the app.
+
 panel.example.com {
 	reverse_proxy localhost:3000
 }

@@ -74,6 +74,10 @@
       });
     })();
   </script>
-  <link rel="stylesheet" href="/css/output.css" />
+  <%# Fingerprinted via res.locals.asset (lib/assetVersion.js) so it can be served immutable
+      for a year. This is the one render-blocking request on every page, and the cross-document
+      view transition above cannot start until it resolves - re-validating it per navigation
+      was costing a round-trip in front of every single slide. %>
+  <link rel="stylesheet" href="<%= asset('/css/output.css') %>" />
 </head>
 <body class="bg-neutral-950 text-neutral-200 min-h-screen">

@@ -128,8 +128,8 @@
   too_deep: t('comments.error.too_deep'),
 }) %></script>
 
-<script src="/js/news-reactions.js" defer></script>
-<script src="/js/emoteMatch.js" defer></script>
-<script src="/js/news-comments.js" defer></script>
+<script src="<%= asset('/js/news-reactions.js') %>" defer></script>
+<script src="<%= asset('/js/emoteMatch.js') %>" defer></script>
+<script src="<%= asset('/js/news-comments.js') %>" defer></script>
 
 <%- include('partials/foot') %>

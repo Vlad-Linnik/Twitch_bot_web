@@ -162,8 +162,8 @@
 <% if (!embedWatch) { %><%- include('partials/quickMatchReadyCheck') %><% } %>
 <%- include('partials/spectatorCluster') %>
 <%- include('partials/gameVolumeControl') %>
-<script src="/js/games/gameVolume.js" defer></script>
-<script src="/js/games/spectatorCluster.js" defer></script>
-<script src="/js/games/quickMatchClient.js" defer></script>
-<script src="/js/games/battleship.js" defer></script>
+<script src="<%= asset('/js/games/gameVolume.js') %>" defer></script>
+<script src="<%= asset('/js/games/spectatorCluster.js') %>" defer></script>
+<script src="<%= asset('/js/games/quickMatchClient.js') %>" defer></script>
+<script src="<%= asset('/js/games/battleship.js') %>" defer></script>
 <%- include('partials/foot') %>
