@@ -7,8 +7,13 @@
   <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.groupIntro.customCommands') %></p>
 
   <a href="/<%= channel.channelLogin %>/settings/custom-commands/commands"
-     class="inline-flex items-center gap-2 mb-8 px-4 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
-    🛠️ <%= t('channelSettings.manageCustomCommands') %> →
+     class="flex items-center gap-3 mb-8 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
+    <span class="text-2xl leading-none">🛠️</span>
+    <span class="flex-1">
+      <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.manageCustomCommands') %></span>
+      <span class="block text-neutral-400 text-sm mt-0.5"><%= customCommandCount %> <%= t('channelSettings.commandCountSuffix') %></span>
+    </span>
+    <span class="text-purple-400 text-lg">→</span>
   </a>
 
   <% if (saved) { %>

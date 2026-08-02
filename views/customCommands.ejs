@@ -3,9 +3,17 @@
 
 <main class="pt-14 max-w-4xl mx-auto px-6 py-12">
 
-  <header class="mb-8">
-    <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('customCommands.title') %></h1>
-    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('customCommands.subtitle') %></p>
+  <a href="/<%= channel.channelLogin %>/settings/custom-commands" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('customCommands.backToSettings') %></a>
+
+  <header class="mt-2 mb-8 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('customCommands.title') %></h1>
+      <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('customCommands.subtitle') %></p>
+    </div>
+    <button type="button" id="open-create-modal"
+            class="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+      <span class="text-base leading-none">+</span> <%= t('customCommands.newCommand') %>
+    </button>
   </header>
 
   <%# Small fade-in/fade-out toast instead of a persistent top banner - shown on page load when
@@ -28,9 +36,18 @@
     </p>
   <% } %>
 
-  <!-- Create / edit -->
-  <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-    <h2 class="text-lg font-semibold text-neutral-100 mb-4" id="form-heading"><%= t('customCommands.create') %></h2>
+  <!-- Create / edit modal - a native <dialog> (same convention as views/partials/nav.ejs's
+       logout-confirm dialog and the games' leave-confirm dialogs) instead of a permanently-inline
+       form section, so the commands list is the main thing on the page and creating/editing a
+       command is an explicit, focused action instead of a wall of fields above every list. -->
+  <dialog id="command-modal"
+          data-open-on-error="<%= error ? '1' : '' %>"
+          class="w-[min(42rem,calc(100vw-2rem))] max-h-[85vh] overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-200 p-6 sm:p-8 m-auto backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+    <div class="flex items-center justify-between gap-4 mb-4">
+      <h2 class="text-lg font-semibold text-neutral-100" id="form-heading"><%= t('customCommands.create') %></h2>
+      <button type="button" id="modal-close" aria-label="<%= t('customCommands.cancel') %>"
+              class="text-neutral-500 hover:text-neutral-200 text-2xl leading-none transition-colors">&times;</button>
+    </div>
 
     <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" class="space-y-4" id="command-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -178,11 +195,11 @@
       <div class="flex gap-3 pt-1">
         <button type="submit"
                 class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('customCommands.save') %></button>
-        <button type="reset" id="cancel-edit" hidden
+        <button type="button" id="cancel-edit"
                 class="px-4 py-2 rounded-md text-neutral-400 hover:text-neutral-100 text-sm transition-colors"><%= t('customCommands.cancel') %></button>
       </div>
     </form>
-  </section>
+  </dialog>
 
   <!-- Existing commands -->
   <%# data-channel keys the per-group collapsed-state memory in localStorage

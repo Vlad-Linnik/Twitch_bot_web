@@ -133,7 +133,9 @@ function registerConfigSubPage(basePath, viewName, getExtras = null) {
   });
 }
 
-registerConfigSubPage("/settings/custom-commands", "channelCustomCommandsSettings");
+registerConfigSubPage("/settings/custom-commands", "channelCustomCommandsSettings", async (channelLogin) => ({
+  customCommandCount: (await customCommandsRepo.list(channelLogin)).length,
+}));
 registerConfigSubPage("/settings/counters", "channelCountersSettings");
 
 // Banned Words and Spam Signatures moved off the main settings page onto

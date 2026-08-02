@@ -29,6 +29,9 @@
   const cancel = document.getElementById("cancel-edit");
   const conflict = document.getElementById("pin-conflict");
   const announceConflict = document.getElementById("announce-conflict");
+  const modal = document.getElementById("command-modal");
+  const openCreateBtn = document.getElementById("open-create-modal");
+  const modalClose = document.getElementById("modal-close");
 
   const originalHeading = heading.textContent;
 
@@ -246,15 +249,16 @@
     addCategoryRow();
   }
 
-  // Shared by the cancel button and a successful save (submitCommandForm below) - both need the
-  // form back in "create a new command" state. form.reset() is called explicitly rather than
+  // Shared by the modal's "close" event (Cancel, the × button, Escape, a backdrop click, or a
+  // successful save all end up closing the dialog - see the modal wiring below) and reused
+  // directly rather than duplicated per-caller. form.reset() is called explicitly rather than
   // relying on the button's native type="reset" behaviour, since a successful fetch-based save
   // never gets that native reset for free (submit was preventDefault()'d) - driving it from here
-  // for both callers means there's exactly one reset path instead of two slightly different ones.
+  // for every caller means there's exactly one reset path instead of several slightly different
+  // ones.
   function resetFormToCreateMode() {
     form.reset();
     heading.textContent = originalHeading;
-    cancel.hidden = true;
     clearCategoryRows();
     categoryToggle.checked = false;
     categoryContainer.hidden = true;
@@ -267,10 +271,33 @@
     updateConflict();
   }
 
-  cancel.addEventListener("click", (event) => {
-    event.preventDefault(); // resetFormToCreateMode() already calls form.reset() itself
+  // --- Create/edit modal: a native <dialog> (same convention as views/partials/nav.ejs's
+  // logout-confirm dialog and the games' leave-confirm dialogs) instead of a permanently-inline
+  // form section. showModal()/close() drive visibility; CSS's shared dialog-pop rule
+  // (public/css/input.css) plays the jelly-ish pop-in on open. The "close" event is the single
+  // place the form resets back to "create" state, so every way of dismissing the dialog behaves
+  // the same regardless of which control (or key) triggered it.
+  openCreateBtn.addEventListener("click", () => {
     resetFormToCreateMode();
+    modal.showModal();
+    name.focus();
   });
+
+  cancel.addEventListener("click", () => modal.close());
+  modalClose.addEventListener("click", () => modal.close());
+
+  // A click landing on the <dialog> element itself (never a descendant) is a click on its
+  // backdrop/edge - dialog has no way to distinguish that from a normal click otherwise.
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) modal.close();
+  });
+
+  modal.addEventListener("close", resetFormToCreateMode);
+
+  // The classic no-JS-fallback redirect (?error=...) lands on a fresh render with the dialog
+  // closed and the error banner above it floating with no visible form to explain - reopen the
+  // dialog automatically so the two are seen together.
+  if (modal.dataset.openOnError) modal.showModal();
 
   // --- timer + pin, and announce + pin, cannot coexist. The bot refuses both combinations and
   // so does the server; this just says so before the round-trip, and stops the submit so the
@@ -438,10 +465,9 @@
         fillCategoryRows(overrides);
 
         heading.textContent = `${originalHeading} — !${button.dataset.name}`;
-        cancel.hidden = false;
         updateConflict();
 
-        form.scrollIntoView({ behavior: "smooth", block: "start" });
+        modal.showModal();
         result.focus();
       });
     });
@@ -715,7 +741,7 @@
       if (!data.ok) throw new Error(data.error || "save_failed");
 
       applyListHtml(data, null);
-      resetFormToCreateMode();
+      modal.close();
       showToast(toastEl?.dataset.savedText);
     } catch {
       // Fail-soft: same reasoning as the toggle handlers - fall back to the plain submit the

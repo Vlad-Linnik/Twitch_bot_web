@@ -1110,6 +1110,8 @@
   "customCommands": {
     "title": "Custom commands",
     "subtitle": "Created here or with !addcommand in chat — same commands, same bot",
+    "backToSettings": "← Back to custom commands settings",
+    "newCommand": "New command",
     "create": "Create or edit",
     "existing": "Commands",
     "none": "No custom commands yet",

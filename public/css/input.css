@@ -406,7 +406,8 @@ html.js .save-fab.save-visible {
    showModal(), so this keyframe runs immediately). */
 #logout-confirm-dialog[open],
 #fb-leave-confirm-dialog[open],
-#pd-leave-confirm-dialog[open] {
+#pd-leave-confirm-dialog[open],
+#command-modal[open] {
   animation: dialog-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 @keyframes dialog-pop {
