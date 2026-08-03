@@ -64,15 +64,23 @@ main() {
   # npm ci, never npm install: it installs strictly from the lockfile and never writes to
   # it, which is what keeps the drift above from returning. The cost is that it deletes
   # node_modules wholesale, so a failed install leaves the app unable to start - hence
-  # running it only when the dependency files actually changed, rather than every deploy.
+  # skipping it when the installed tree is already correct.
+  #
+  # "Already correct" is decided by INSPECTING node_modules, never by whether the pull
+  # above moved HEAD. That distinction took prod down: someone had already pulled the new
+  # code by hand, so `git pull` here reported "Already up to date", the HEAD-delta test saw
+  # no dependency change, the install was skipped - and the app crash-looped on a `require`
+  # of a package that had never been installed. `npm ls` compares what is on disk against
+  # package.json/package-lock.json, so it catches a missing dependency no matter how the
+  # working tree got into that state.
   if [ ! -d node_modules ]; then
     echo "==> npm ci (no node_modules)"
-    npm ci
-  elif [ "$before" != "$after" ] && ! git diff --quiet "$before" "$after" -- package.json package-lock.json; then
-    echo "==> npm ci (dependencies changed)"
-    npm ci
+    npm ci --include=dev
+  elif ! npm ls --depth=0 >/dev/null 2>&1; then
+    echo "==> npm ci (installed packages do not match package.json)"
+    npm ci --include=dev
   else
-    echo "==> npm ci skipped (dependencies unchanged)"
+    echo "==> npm ci skipped (installed packages already match)"
   fi
 
   # public/css/output.css is gitignored, so it is never delivered by the pull and has to be
