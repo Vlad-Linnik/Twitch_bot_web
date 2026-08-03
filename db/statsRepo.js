@@ -149,6 +149,45 @@ async function getTopChatters(channelLogin, period, limit = 10) {
   });
 }
 
+// A logged-in visitor's own standing, for the "not in the top 10" row on Top Chatters - same
+// idea as db/gameScoresRepo.js's getUserBestAndRank behind the on-site games' leaderboards.
+// Not cache-wrapped (like that function): it's a per-visitor read, so there's no cross-request
+// reuse to buy back.
+async function getUserRank(channelLogin, userId, period) {
+  const channel = withHash(channelLogin);
+  const id = String(userId);
+
+  if (period === "all") {
+    const { userLifetimeStats, userIdentities } = await ensureInitialized();
+    // {channel, messageCount} is the same index getLeaderboard sorts with, so both the lookup
+    // and the $gt count below are index-only.
+    const doc = await userLifetimeStats.findOne({ channel, userId: id });
+    if (!doc) return null;
+    const higher = await userLifetimeStats.countDocuments({ channel, messageCount: { $gt: doc.messageCount } });
+    const identity = await userIdentities.findOne({ userId: id });
+    return { userId: id, messageCount: doc.messageCount, rank: higher + 1, userName: identity?.currentUserName || id };
+  }
+
+  // Ranged periods have no precomputed per-user rank, so it's derived from the same $group
+  // getTopChatters runs for that period (covered by UserDailyMessageStats' {channel, date,
+  // count, userId} index) - no new query shape, just read without the $limit that discards
+  // everyone outside the top N.
+  const { userDailyMessageStats, userIdentities } = await ensureInitialized();
+  const start = limits.periodStart(period);
+  const rows = await userDailyMessageStats
+    .aggregate([
+      { $match: { channel, date: { $gte: start } } },
+      { $group: { _id: "$userId", messageCount: { $sum: "$count" } } },
+    ])
+    .toArray();
+
+  const mine = rows.find((row) => row._id === id);
+  if (!mine) return null;
+  const higher = rows.filter((row) => row.messageCount > mine.messageCount).length;
+  const identity = await userIdentities.findOne({ userId: id });
+  return { userId: id, messageCount: mine.messageCount, rank: higher + 1, userName: identity?.currentUserName || id };
+}
+
 async function getChannelTotals(channelLogin) {
   const channel = withHash(channelLogin);
   const key = `totals:${channel}`;
@@ -346,6 +385,7 @@ async function getUserNames(userIds) {
 module.exports = {
   getLeaderboard,
   getTopChatters,
+  getUserRank,
   getChannelTotals,
   getRecentModActions,
   getModActionModIds,

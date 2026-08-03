@@ -23,8 +23,11 @@
 
 <main class="pt-14 max-w-5xl mx-auto px-6 py-12">
 
-  <!-- Header: avatar, name, nickname-history dropdown -->
-  <header class="flex items-start gap-4 mb-10">
+  <!-- Header: avatar, name, nickname-history dropdown. user-header pinned via
+       view-transition-name (public/css/input.css) so a Top Chatters row or search hit
+       (data-vt-name="user-header", public/js/page-transitions.js) morphs into it on arrival -
+       same technique as stats-header (see that partial). -->
+  <header class="user-header flex items-start gap-4 mb-10">
     <% if (profile && profile.avatarUrl) { %>
       <img src="<%= profile.avatarUrl %>" alt="" width="72" height="72"
            class="w-18 h-18 rounded-full border border-neutral-800 shrink-0" style="width:72px;height:72px" />

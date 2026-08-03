@@ -18,13 +18,49 @@ nav.site-nav {
 /* Same pinning for the streamer header (avatar + nick) and the Chat/Moderators tab bar on the
    /:channel/statistics pages (views/partials/statsHeader.ejs / statsTabs.ejs): when navigating
    between the two statistics sub-pages they stay put instead of sliding with the page. On a
-   navigation where only one side has them (e.g. home -> statistics) they fade, like the nav. */
+   navigation where only one side has them they fade, like the nav - except home -> statistics
+   via a channel card, where public/js/page-transitions.js tags the clicked card itself with
+   view-transition-name: stats-header (views/home.ejs's data-vt-name), so the card morphs into
+   this header instead of fading. */
 header.stats-header {
   view-transition-name: stats-header;
   contain: layout;
 }
 nav.stats-tabs {
   view-transition-name: stats-tabs;
+  contain: layout;
+}
+
+/* Same shared-element morph as stats-header/home's channel cards, for the /:channel/user/:username
+   profile page (views/userDashboard.ejs): a Top Chatters row or a "find a user" hit
+   (data-vt-name="user-header" - views/statisticsChat.ejs, public/js/statistics-chat.js) morphs
+   into this header when clicked. Only ever paired with whichever single row was actually
+   clicked (see public/js/page-transitions.js), so no duplicate-name collision even though many
+   rows on the source page carry the same data-vt-name. */
+header.user-header {
+  view-transition-name: user-header;
+  contain: layout;
+}
+
+/* Same shared-element morph, for the news feed (views/news.ejs) -> single-post permalink
+   (views/newsPost.ejs) navigation: clicking a post's comments link (views/partials/newsCard.ejs's
+   data-vt-name="post-card", applied to the whole <article> - see public/js/page-transitions.js)
+   morphs that card into the permalink page's own copy of it instead of fading. Only the
+   permalink page's <article> carries this class (newsCard.ejs's isPermalink) - the feed's many
+   cards get the name dynamically, one at a time, on click. */
+article.post-card {
+  view-transition-name: post-card;
+  contain: layout;
+}
+
+/* Same shared-element morph, for /<channel>/settings's quick-link cards (views/settings.ejs,
+   data-vt-name="settings-heading" - public/js/page-transitions.js) into whichever sub-page's own
+   heading (channelCustomCommandsSettings.ejs, channelCountersSettings.ejs, channelSpamSignatures.ejs,
+   channelModeratorPermissions.ejs, channelSettingsChangeLog.ejs, longBans.ejs, channelBannedWords.ejs -
+   all share this one class/name, same as user-header: only ever one such page loaded at a time, so
+   there's no simultaneous-duplicate-name risk despite 7 pages reusing it). */
+h1.settings-heading {
+  view-transition-name: settings-heading;
   contain: layout;
 }
 

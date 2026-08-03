@@ -121,16 +121,29 @@
           class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
         <% topChatters.forEach(function(u) { %>
           <% const medal = u.rank === 1 ? '👑' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : null; %>
-          <li class="flex items-center gap-3 px-4 py-2.5">
+          <li class="flex items-center gap-3 px-4 py-2.5<%= u.isMe ? ' bg-purple-500/10' : '' %>">
             <span class="w-6 shrink-0 text-center <%= medal ? 'text-base' : 'text-xs text-neutral-600 tabular-nums' %>"><%= medal || u.rank %></span>
-            <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(u.userName) %>"
-               class="hover:underline truncate flex-1 min-w-0 <%= u.rank <= 3 ? 'font-medium' : '' %> <%= u.color ? '' : 'text-neutral-200' %>"
+            <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(u.userName) %>" data-vt-name="user-header"
+               class="hover:underline truncate flex-1 min-w-0 <%= u.rank <= 3 ? 'font-medium' : '' %> <%= u.color ? '' : (u.isMe ? 'text-purple-300' : 'text-neutral-200') %>"
                <% if (u.color) { %>style="color: <%= u.color %>"<% } %>><%= u.userName %></a>
             <span class="text-neutral-500 text-sm tabular-nums shrink-0"><%= u.messageCount.toLocaleString() %></span>
           </li>
         <% }) %>
         <% if (topChatters.length === 0) { %>
           <li class="px-4 py-6 text-center text-neutral-600 text-sm"><%= t('channelDashboard.noChatters') %></li>
+        <% } %>
+        <%# The visitor's own standing, appended below the top 10 with their REAL rank/message
+            count when they're logged in and not already in the list above (db/statsRepo.js's
+            getUserRank) - same "top N + your own row" shape as the on-site games' leaderboards
+            (routes/games.js's buildLeaderboard). %>
+        <% if (topChattersMyRow) { %>
+          <li id="top-chatters-me-row" class="flex items-center gap-3 px-4 py-2.5 bg-purple-500/10">
+            <span class="w-6 shrink-0 text-center text-xs text-neutral-600 tabular-nums"><%= topChattersMyRow.rank %></span>
+            <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(topChattersMyRow.userName) %>" data-vt-name="user-header"
+               class="hover:underline truncate flex-1 min-w-0 <%= topChattersMyRow.color ? '' : 'text-purple-300' %>"
+               <% if (topChattersMyRow.color) { %>style="color: <%= topChattersMyRow.color %>"<% } %>><%= topChattersMyRow.userName %></a>
+            <span class="text-neutral-500 text-sm tabular-nums shrink-0"><%= topChattersMyRow.messageCount.toLocaleString() %></span>
+          </li>
         <% } %>
       </ol>
     </section>

@@ -19,8 +19,18 @@
   // Ternary short-circuits, so csrfToken (unset for logged-out visitors - see middleware/csrf.js)
   // is never dereferenced when there's no user to have one.
   const csrf = user ? csrfToken : '';
+  // hideCommentsLink is only true on the post's own permalink page (newsPost.ejs) - see the
+  // typeof check further down for why. That's also this article's shared-element-morph role:
+  // on the feed (news.ejs) it's a candidate SOURCE, tagged on click via data-vt-name="post-card"
+  // (public/js/page-transitions.js finds it as the clicked comments-link's ancestor); on the
+  // permalink page it's the single, always-present DESTINATION, pinned statically via the
+  // post-card class (public/css/input.css) - same forward-only pairing as home's channel cards
+  // into stats-header. Never both on the same render: a static pin AND a dynamic per-click name
+  // could collide if this ever rendered twice on one page.
+  const isPermalink = typeof hideCommentsLink !== 'undefined';
 %>
-<article class="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden mb-8">
+<article class="<%= isPermalink ? 'post-card ' : '' %>rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden mb-8"
+         <% if (!isPermalink) { %>data-vt-name="post-card"<% } %>>
   <% if (post.imageUrl) { %>
     <div class="relative aspect-[21/9] bg-neutral-950 overflow-hidden">
       <img src="<%= post.imageUrl %>" alt="" aria-hidden="true"
@@ -60,7 +70,10 @@
           this way: EJS throws ReferenceError on a local that was never passed, unlike a plain
           property lookup that would just be undefined). %>
       <% if (typeof hideCommentsLink === 'undefined') { %>
-        <a href="/<%= channel.channelLogin %>/news/<%= post.id %>"
+        <%# #comments lands the permalink page scrolled straight to the thread (views/newsPost.ejs's
+            <section id="comments">) instead of its top - clicking "comments" from the feed means
+            the thread is what the visitor is after, not the post body they can already see here. %>
+        <a href="/<%= channel.channelLogin %>/news/<%= post.id %>#comments"
            class="flex items-center gap-1.5 text-sm text-neutral-400 hover:text-neutral-200 transition-colors">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />

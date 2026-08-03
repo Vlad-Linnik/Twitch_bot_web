@@ -10,6 +10,19 @@
 
 const STORAGE_KEY = "pageTransitionType";
 
+// Shared-element morph for list -> detail navigations: home's channel cards
+// (data-vt-name="stats-header"), the statistics page's Top Chatters/search rows
+// (data-vt-name="user-header"), and the news feed's post cards (data-vt-name="post-card",
+// on the <article> - an ancestor of the actual "comments" link that gets clicked, hence
+// closest() rather than reading the clicked link's own dataset). Each name matches a static
+// view-transition-name on the destination page (public/css/input.css). Only the ACTUAL
+// clicked element may carry the name - giving every list row the same name at once is a
+// duplicate the browser can't resolve and silently falls back to a plain fade - so it's
+// applied here, on click, to that one element only. lastVtElement remembers it so a
+// cancelled navigation (back button, etc.) followed by a click on a DIFFERENT row doesn't
+// leave two elements sharing the name.
+let lastVtElement = null;
+
 document.addEventListener("click", (event) => {
   if (event.defaultPrevented || event.button !== 0) return;
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -38,6 +51,15 @@ document.addEventListener("click", (event) => {
   // never reach the landed page for the fade case.
   const transition = link.dataset.transition;
   if (transition) sessionStorage.setItem(STORAGE_KEY, transition);
+
+  if (lastVtElement) lastVtElement.style.viewTransitionName = "";
+  const vtTarget = link.closest("[data-vt-name]");
+  if (vtTarget) {
+    vtTarget.style.viewTransitionName = vtTarget.dataset.vtName;
+    lastVtElement = vtTarget;
+  } else {
+    lastVtElement = null;
+  }
 });
 
 // Same opt-in for <form> submits (a plain click listener never sees these -

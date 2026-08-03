@@ -125,7 +125,7 @@
       const medal = u.rank === 1 ? "👑" : u.rank === 2 ? "🥈" : u.rank === 3 ? "🥉" : null;
 
       const li = document.createElement("li");
-      li.className = "flex items-center gap-3 px-4 py-2.5";
+      li.className = "flex items-center gap-3 px-4 py-2.5" + (u.isMe ? " bg-purple-500/10" : "");
 
       const rank = document.createElement("span");
       rank.className =
@@ -134,10 +134,11 @@
 
       const name = document.createElement("a");
       name.href = `${base}/user/${encodeURIComponent(u.userName)}`;
+      name.dataset.vtName = "user-header";
       name.className =
         "hover:underline truncate flex-1 min-w-0" +
         (u.rank <= 3 ? " font-medium" : "") +
-        (u.color ? "" : " text-neutral-200");
+        (u.color ? "" : u.isMe ? " text-purple-300" : " text-neutral-200");
       if (u.color) name.style.color = u.color;
       name.textContent = u.userName;
 
@@ -148,6 +149,33 @@
       li.append(rank, name, count);
       node.appendChild(li);
     });
+
+    // The visitor's own standing, appended below the top N - mirrors statisticsChat.ejs's
+    // server-rendered #top-chatters-me-row (see routes/statistics.js's withMyChatterRow).
+    if (payload.myRow) {
+      const u = payload.myRow;
+      const li = document.createElement("li");
+      li.id = "top-chatters-me-row";
+      li.className = "flex items-center gap-3 px-4 py-2.5 bg-purple-500/10";
+
+      const rank = document.createElement("span");
+      rank.className = "w-6 shrink-0 text-center text-xs text-neutral-600 tabular-nums";
+      rank.textContent = String(u.rank);
+
+      const name = document.createElement("a");
+      name.href = `${base}/user/${encodeURIComponent(u.userName)}`;
+      name.dataset.vtName = "user-header";
+      name.className = "hover:underline truncate flex-1 min-w-0" + (u.color ? "" : " text-purple-300");
+      if (u.color) name.style.color = u.color;
+      name.textContent = u.userName;
+
+      const count = document.createElement("span");
+      count.className = "text-neutral-500 text-sm tabular-nums shrink-0";
+      count.textContent = Number(u.messageCount).toLocaleString();
+
+      li.append(rank, name, count);
+      node.appendChild(li);
+    }
   }
 
   // ---------------------------------------------------------------------------------------
@@ -201,9 +229,16 @@
     let userSearchSeq = 0;
     let activeIndex = -1;
 
-    const goToUser = (name) => {
+    // sourceEl is the suggestion <li> the visitor actually picked (mouse or keyboard) - when
+    // present it's tagged view-transition-name: user-header, matching userDashboard.ejs's
+    // header, so the browser morphs that row into the destination profile the same way
+    // page-transitions.js does for real <a> clicks elsewhere on this page. A plain typed-and-
+    // submitted name (no suggestion picked) has no element to morph from, so it's omitted -
+    // that navigation just fades, like an unpaired one anywhere else on the site.
+    const goToUser = (name, sourceEl) => {
       const trimmed = (name || "").trim();
       if (!trimmed) return;
+      if (sourceEl) sourceEl.style.viewTransitionName = "user-header";
       window.location.href = `${base}/user/${encodeURIComponent(trimmed)}`;
     };
 
@@ -238,7 +273,7 @@
         // closeSuggestions would otherwise remove this element out from under a click.
         li.addEventListener("mousedown", (event) => {
           event.preventDefault();
-          goToUser(u.userName);
+          goToUser(u.userName, li);
         });
         userSearchSuggestions.appendChild(li);
       });
@@ -281,7 +316,7 @@
         closeSuggestions();
       } else if (event.key === "Enter" && activeIndex >= 0) {
         event.preventDefault();
-        goToUser(items[activeIndex].dataset.userName);
+        goToUser(items[activeIndex].dataset.userName, items[activeIndex]);
       }
     });
 
@@ -291,7 +326,7 @@
       event.preventDefault();
       if (activeIndex >= 0) {
         const items = userSearchSuggestions.querySelectorAll("li");
-        if (items[activeIndex]) return goToUser(items[activeIndex].dataset.userName);
+        if (items[activeIndex]) return goToUser(items[activeIndex].dataset.userName, items[activeIndex]);
       }
       goToUser(userSearchInput.value);
     });
@@ -358,6 +393,7 @@
       const who = document.createElement("a");
       who.className = "text-purple-400 hover:text-purple-300 shrink-0 text-xs font-medium";
       who.href = `${base}/user/${encodeURIComponent(row.userName)}`;
+      who.dataset.vtName = "user-header";
       who.textContent = row.userName;
 
       const msg = document.createElement("span");

@@ -37,6 +37,40 @@
 
         if (!event.viewTransition) return;
 
+        const from = document.referrer ? new URL(document.referrer) : null;
+
+        // Shared-element morph, reverse direction: leaving a channel's statistics/news page
+        // for home morphs its stats-header (public/css/input.css) back down into the matching
+        // card instead of fading. The forward direction (home -> statistics) is handled in
+        // public/js/page-transitions.js by tagging the clicked card on click - there's no click
+        // to hook on the way back in, so the referrer this handler already parses for slide
+        // direction doubles as the source of which channel to pair up. Runs unconditionally
+        // (even when stashed/activation below will short-circuit the rest) since it must apply
+        // before the browser captures this page's "new" state either way.
+        if (location.pathname === "/" && from) {
+          const channelMatch = from.pathname.match(/^\/([^/]+)\/(?:statistics|news)(?:\/|$)/);
+          if (channelMatch) {
+            const card = document.querySelector(`a[data-channel-login="${CSS.escape(channelMatch[1])}"]`);
+            if (card) card.style.viewTransitionName = "stats-header";
+          }
+        }
+
+        // Same idea for /<channel>/settings: leaving one of its sub-pages (custom-commands,
+        // long-bans, spam-signatures, counters, change-log, moderators, banned-words) - via
+        // their own "back to settings" link OR the browser's Back button, referrer-based
+        // detection doesn't care which - morphs that sub-page's heading (settings-heading,
+        // views/settings.ejs / public/css/input.css) back into the matching quick-link card.
+        // Matched by exact href rather than an id attribute (unlike the home case above)
+        // because every card's href already IS its destination path.
+        if (/^\/[^/]+\/settings$/.test(location.pathname) && from && from.pathname.startsWith(location.pathname + "/")) {
+          for (const a of document.querySelectorAll('a[data-vt-name="settings-heading"]')) {
+            if (a.getAttribute("href") === from.pathname) {
+              a.style.viewTransitionName = "settings-heading";
+              break;
+            }
+          }
+        }
+
         if (stashed) {
           event.viewTransition.types.add(stashed);
           return;
@@ -54,7 +88,6 @@
           return;
         }
 
-        const from = document.referrer ? new URL(document.referrer) : null;
         if (!from) return;
 
         // Same-pathname reload with no explicit transition marker (e.g. a settings

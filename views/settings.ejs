@@ -47,7 +47,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
     <section class="mb-4">
-      <a href="/<%= channel.channelLogin %>/settings/custom-commands" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
+      <a href="/<%= channel.channelLogin %>/settings/custom-commands" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
         <span class="text-2xl leading-none">🛠️</span>
         <span>
           <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.customCommands') %></span>
@@ -57,7 +57,7 @@
     </section>
 
     <section class="mb-4">
-      <a href="/<%= channel.channelLogin %>/settings/long-bans" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
+      <a href="/<%= channel.channelLogin %>/settings/long-bans" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
         <span class="text-2xl leading-none">🔨</span>
         <span>
           <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.longBans') %></span>
@@ -67,21 +67,21 @@
     </section>
 
     <section class="grid sm:grid-cols-2 gap-4">
-      <a href="/<%= channel.channelLogin %>/settings/spam-signatures" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+      <a href="/<%= channel.channelLogin %>/settings/spam-signatures" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
         <span class="text-xl leading-none">🚨</span>
         <span>
           <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.spamSignaturesHeading') %></span>
           <span class="block text-neutral-500 text-sm mt-1"><%= config.spamSignatures.length %> <%= t('channelSettings.wordCountSuffix') %></span>
         </span>
       </a>
-      <a href="/<%= channel.channelLogin %>/settings/counters" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+      <a href="/<%= channel.channelLogin %>/settings/counters" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
         <span class="text-xl leading-none">🔢</span>
         <span>
           <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.counters') %></span>
           <span class="block text-neutral-500 text-sm mt-1"><%= counterCount %> <%= t('channelSettings.counterCountSuffix') %></span>
         </span>
       </a>
-      <a href="/<%= channel.channelLogin %>/settings/change-log" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+      <a href="/<%= channel.channelLogin %>/settings/change-log" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
         <span class="text-xl leading-none">📜</span>
         <span>
           <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.changeLogHeading') %></span>
@@ -89,7 +89,7 @@
         </span>
       </a>
       <% if (canManageModerators) { %>
-        <a href="/<%= channel.channelLogin %>/settings/moderators" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+        <a href="/<%= channel.channelLogin %>/settings/moderators" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
           <span class="text-xl leading-none">🛡️</span>
           <span>
             <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.moderatorsHeading') %></span>
@@ -152,7 +152,7 @@
               <button type="submit" class="save-fab px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.save') %></button>
             </div>
           </div>
-          <a href="/<%= channel.channelLogin %>/settings/banned-words" class="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300"><%= config.bannedWords.words.length %> <%= t('channelSettings.wordCountSuffix') %> →</a>
+          <a href="/<%= channel.channelLogin %>/settings/banned-words" data-vt-name="settings-heading" class="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300"><%= config.bannedWords.words.length %> <%= t('channelSettings.wordCountSuffix') %> →</a>
         </form>
       </div>
 

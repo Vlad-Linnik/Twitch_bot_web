@@ -42,6 +42,21 @@ function formatDuration(ms) {
   return parts.join(" ");
 }
 
+// Flags each row with isMe, and - if the visitor is logged in but not already among them -
+// resolves their real standing as a separate row. Same "top N + your own row below it" shape
+// as the on-site games' leaderboards (routes/games.js's buildLeaderboard, db/gameScoresRepo.js's
+// getUserBestAndRank); statsRepo.getUserRank is that function's Top-Chatters counterpart.
+async function withMyChatterRow(rows, channelLogin, userId, period) {
+  const flagged = rows.map((row) => ({ ...row, isMe: userId != null && String(row.userId) === String(userId) }));
+  if (!userId || flagged.some((row) => row.isMe)) return { rows: flagged, myRow: null };
+
+  const me = await statsRepo.getUserRank(channelLogin, userId, period);
+  if (!me) return { rows: flagged, myRow: null };
+
+  const profile = await profileCacheRepo.getOrFetchProfile(me.userId).catch(() => null);
+  return { rows: flagged, myRow: { ...me, color: profile?.chatColor ?? null } };
+}
+
 // Same rationale as routes/userDashboard.js: requireLevel() renders an HTML error page, which is
 // useless inside a fetch(). Same tier semantics, JSON body.
 function requireLevelJson(maxLevel) {
@@ -181,7 +196,13 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
     const profiles = await Promise.all(
       leaderboard.map((u) => profileCacheRepo.getOrFetchProfile(u.userId).catch(() => null))
     );
-    const topChatters = leaderboard.map((u, i) => ({ ...u, color: profiles[i]?.chatColor ?? null }));
+    const topChattersWithColor = leaderboard.map((u, i) => ({ ...u, color: profiles[i]?.chatColor ?? null }));
+    const { rows: topChatters, myRow: topChattersMyRow } = await withMyChatterRow(
+      topChattersWithColor,
+      channel.channelLogin,
+      req.user?.userId,
+      "all"
+    );
 
     const emotes = await withEmoteImages(channel.channelLogin, emoteCloud.emotes);
 
@@ -190,6 +211,7 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       broadcaster,
       totals,
       topChatters,
+      topChattersMyRow,
       // The server always renders the all-time board (getLeaderboard IS period=all); the toggle
       // starts there and only a change re-fetches via stats.json?component=topchatters.
       topChattersPeriod: "all",
@@ -385,10 +407,9 @@ router.get("/:channel/stats.json", statsReadLimiter, async (req, res, next) => {
         const profiles = await Promise.all(
           chatters.map((u) => profileCacheRepo.getOrFetchProfile(u.userId).catch(() => null))
         );
-        return res.json({
-          period,
-          chatters: chatters.map((u, i) => ({ ...u, color: profiles[i]?.chatColor ?? null })),
-        });
+        const chattersWithColor = chatters.map((u, i) => ({ ...u, color: profiles[i]?.chatColor ?? null }));
+        const { rows, myRow } = await withMyChatterRow(chattersWithColor, channel.channelLogin, req.user?.userId, period);
+        return res.json({ period, chatters: rows, myRow });
       }
       default:
         return res.status(400).json({ error: "unknown_component" });
