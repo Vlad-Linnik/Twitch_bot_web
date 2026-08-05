@@ -43,8 +43,14 @@ async function ensureInitialized() {
 async function recordFlag(input) {
   const col = await ensureInitialized();
   const severity = SEVERITIES.includes(input.severity) ? input.severity : "low";
+  const reasons = Array.isArray(input.reasons) ? input.reasons : [];
+  // scoreOverrun is always "low" (see severityFor()) since the direction is
+  // safe by construction - but it's also the one code that means "our sim
+  // disagrees with the client", worth keeping evidence for even though it's
+  // never urgent. Every other low-severity flag stays replay-less.
+  const worthKeeping = severity !== "low" || reasons.some((r) => r && r.code === "scoreOverrun");
   const keepReplay =
-    severity !== "low" &&
+    worthKeeping &&
     typeof input.replay === "string" &&
     input.replay.length <= MAX_STORED_REPLAY_BYTES;
 
@@ -64,7 +70,7 @@ async function recordFlag(input) {
     previousBest: input.previousBest ?? null,
     verified: Boolean(input.verified),
     rulesVersion: input.rulesVersion ?? null,
-    reasons: Array.isArray(input.reasons) ? input.reasons : [],
+    reasons,
     severity,
     replayHash: input.replayHash || null,
     replayBytes: input.replayBytes ?? null,

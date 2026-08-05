@@ -446,14 +446,20 @@
 
   function resolveAndScore(token) {
     const { steps } = engine.resolveCascade(grid, TYPE_COUNT, run.rng);
+    // Score is added synchronously, right after the cascade resolves and
+    // before its animation plays - the server scores a swap the instant it
+    // resolves too (see lib/gameReplay/match-3.js's DEADLINE_MS comment), so
+    // if endRun() samples `score` mid-animation (run timer expires while a
+    // cascade is still shattering/falling), the swap's points are already in
+    // it instead of stranded in an animation callback that hasn't fired yet.
+    const gained = engine.computeCascadeScore(steps);
+    if (gained > 0) score += gained;
     animateCascadeSteps(
       steps,
       0,
       () => {
         if (token !== runToken) return; // this run was abandoned by a restart - stop the chain
-        const gained = engine.computeCascadeScore(steps);
         if (gained > 0) {
-          score += gained;
           scoreEl.textContent = score;
           const specials = [];
           for (const step of steps) specials.push(...step.specials);
