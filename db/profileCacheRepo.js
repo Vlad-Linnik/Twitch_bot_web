@@ -9,6 +9,12 @@ const { getChatColors } = require("../twitch/chatColor");
 
 const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const UNUSED_AFTER_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+// A doc with a null avatarUrl means Helix's "Get Users" omitted this id entirely - either the
+// account is gone for good, or (a real prod incident, 2026-08-03: #mistercop suspended ~24h)
+// it's a *temporary* Twitch suspension, which Helix responds to identically. The full 7-day
+// window is fine for a genuinely deleted account, but it left a suspended channel's avatar
+// missing for up to a week after the channel came back. Retry those much sooner instead.
+const NULL_PROFILE_RETRY_MS = 24 * 60 * 60 * 1000; // 1 day
 
 let collection;
 
@@ -24,7 +30,9 @@ async function ensureInitialized() {
 // (one-time refetch wave, bounded by actual page usage) - otherwise pages that need names would
 // keep reading name-less docs for up to 7 days.
 function isFresh(doc, now) {
-  return doc && doc.displayName !== undefined && now - doc.lastCheckedAt < STALE_AFTER_MS;
+  if (!doc || doc.displayName === undefined) return false;
+  const staleWindow = doc.avatarUrl == null ? NULL_PROFILE_RETRY_MS : STALE_AFTER_MS;
+  return now - doc.lastCheckedAt < staleWindow;
 }
 
 // ONE Helix "Get Users" call + ONE "Get User Chat Color" call for the whole batch (both chunk
@@ -149,7 +157,14 @@ async function sweepStaleAndUnused() {
   const col = await ensureInitialized();
   const now = Date.now();
 
-  const staleDocs = await col.find({ lastCheckedAt: { $lt: new Date(now - STALE_AFTER_MS) } }).toArray();
+  const staleDocs = await col
+    .find({
+      $or: [
+        { lastCheckedAt: { $lt: new Date(now - STALE_AFTER_MS) } },
+        { avatarUrl: null, lastCheckedAt: { $lt: new Date(now - NULL_PROFILE_RETRY_MS) } },
+      ],
+    })
+    .toArray();
   for (const doc of staleDocs) {
     try {
       const fresh = await fetchFromTwitch(doc.userId);
