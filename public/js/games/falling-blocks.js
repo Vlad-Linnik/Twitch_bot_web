@@ -6,10 +6,11 @@
   "use strict";
 
   const board = document.getElementById("fb-board");
-  if (!board) return;
+  const engine = window.FallingBlocksEngine;
+  if (!board || !engine) return;
 
-  const COLS = 12;
-  const ROWS = 20;
+  const COLS = engine.COLS;
+  const ROWS = engine.ROWS;
   const CELL = 30;
   const NEXT_CELL = 24;
   const BEST_KEY = "fallingBlocksBest";
@@ -17,17 +18,31 @@
   // Seven one-sided tetrominoes - the shapes themselves are game mechanics
   // (public domain); names, colors and rendering here are our own. Colors are
   // the Tailwind 400-series hues the rest of the site already uses.
-  const PIECES = [
-    { color: "#38bdf8", cells: [[0, 1], [1, 1], [2, 1], [3, 1]], size: 4 }, // line
-    { color: "#fbbf24", cells: [[1, 1], [2, 1], [1, 2], [2, 2]], size: 4 }, // square
-    { color: "#c084fc", cells: [[1, 0], [0, 1], [1, 1], [2, 1]], size: 3 }, // tee
-    { color: "#34d399", cells: [[1, 0], [2, 0], [0, 1], [1, 1]], size: 3 }, // ess
-    { color: "#fb7185", cells: [[0, 0], [1, 0], [1, 1], [2, 1]], size: 3 }, // zee
-    { color: "#818cf8", cells: [[0, 0], [0, 1], [1, 1], [2, 1]], size: 3 }, // jay
-    { color: "#fb923c", cells: [[2, 0], [0, 1], [1, 1], [2, 1]], size: 3 }, // ell
-  ];
+  // Piece shapes, scoring, the 7-bag and every rule that decides the score all
+  // live in the engine now, so the server can re-simulate a run through the
+  // exact same code (lib/gameReplay/falling-blocks.js).
+  const PIECES = engine.PIECES;
 
-  const LINE_SCORES = [0, 100, 300, 500, 800];
+  // Anti-cheat: inputs are recorded and the run is replayed server-side. Bump
+  // RULES_VERSION here AND in lib/gameReplay/falling-blocks.js together
+  // whenever a gameplay constant changes - a mismatch makes the server skip
+  // verification rather than mis-score an honest run.
+  const RULES_VERSION = 1;
+
+  const run = window.SoloRun.create({
+    gameKey: "falling-blocks",
+    rulesVersion: RULES_VERSION,
+    rootId: "fb-leaderboard",
+    listId: "fb-lb-list",
+    meWrapId: "fb-lb-me",
+    meRowId: "fb-lb-me-row",
+    // A marathon log outgrows the browser's 64kB keepalive beacon cap, so it
+    // is banked mid-run rather than sent whole at the end.
+    checkpoint: true,
+    // Inputs are timestamped in SIMULATION time, not wall time - see simTime
+    // below - so the recorded clock matches what the server replays.
+    now: () => simTime,
+  });
 
   const ctx = board.getContext("2d");
   const nextCanvas = document.getElementById("fb-next");
@@ -56,10 +71,22 @@
   scaleForDpr(board, ctx);
   scaleForDpr(nextCanvas, nextCtx);
 
-  let grid, current, next, bag;
+  // The authoritative simulation. grid/current/next/score below are read
+  // straight off it by the renderer; nothing outside the engine may change them.
+  let gs = null;
+  // Simulation clock, in ms, advanced only in whole engine steps and only
+  // while the game is actually running. That last part is why no pause opcode
+  // is needed: a pause (including the automatic one on tab blur) simply stops
+  // this clock, so it never happened as far as the replay is concerned.
+  let simTime = 0;
+  let stepAcc = 0;
   let score, lines, level, best;
-  let dropTimer, dropInterval;
   let state = "idle"; // idle | running | paused | over
+  // Guards start() against re-entry: stopLoop() at the top only cancels an
+  // ALREADY-started loop, so it can't stop two clicks that both land while
+  // the first is still awaiting run.begin() - both would otherwise proceed
+  // to their own reset()/startLoop() and race each other.
+  let starting = false;
   let rafId = null;
   let lastTime = 0;
   let particles = [];
@@ -108,136 +135,68 @@
 
   // --- Piece helpers -------------------------------------------------------
 
-  // 7-bag randomizer: every piece appears once per bag, so droughts are bounded.
-  function nextFromBag() {
-    if (!bag || bag.length === 0) {
-      bag = [0, 1, 2, 3, 4, 5, 6];
-      for (let i = bag.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [bag[i], bag[j]] = [bag[j], bag[i]];
-      }
-    }
-    const type = bag.pop();
-    const def = PIECES[type];
-    return {
-      color: def.color,
-      size: def.size,
-      cells: def.cells.map((c) => c.slice()),
-      x: Math.floor((COLS - def.size) / 2),
-      y: 0,
-    };
-  }
-
-  function collides(piece, dx, dy, cells) {
-    const shape = cells || piece.cells;
-    for (const [cx, cy] of shape) {
-      const x = piece.x + cx + dx;
-      const y = piece.y + cy + dy;
-      if (x < 0 || x >= COLS || y >= ROWS) return true;
-      if (y >= 0 && grid[y][x]) return true;
-    }
-    return false;
-  }
-
-  function rotatedCells(piece) {
-    // Clockwise rotation inside the piece's own size×size box.
-    return piece.cells.map(([x, y]) => [piece.size - 1 - y, x]);
-  }
-
-  function tryRotate() {
-    // (The square rotates onto itself - its cells sit centered in the 4-box -
-    // so no special case is needed.)
-    const cells = rotatedCells(current);
-    // Simple wall kicks: try in place, then one/two cells left or right.
-    for (const kick of [0, -1, 1, -2, 2]) {
-      if (!collides(current, kick, 0, cells)) {
-        current.cells = cells;
-        current.x += kick;
-        playSound("rotate");
-        return;
-      }
-    }
-  }
-
-  function ghostOffset() {
-    let dy = 0;
-    while (!collides(current, 0, dy + 1)) dy++;
-    return dy;
-  }
-
   // --- Game flow -----------------------------------------------------------
 
   function reset() {
-    grid = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
-    bag = [];
+    // run.rng is the server's seeded stream while the run is ranked, plain
+    // Math.random otherwise. The 7-bag shuffle is the only gameplay
+    // randomness, and it must come from here - a bare Math.random() would
+    // desync the server's replay immediately.
+    gs = engine.createState(run.rng);
+    simTime = 0;
+    stepAcc = 0;
     score = 0;
     lines = 0;
     level = 1;
     particles = [];
-    dropInterval = 1000;
-    dropTimer = 0;
-    current = nextFromBag();
-    next = nextFromBag();
     hideCombo();
     updateHud();
   }
 
-  function spawn() {
-    current = next;
-    next = nextFromBag();
-    if (collides(current, 0, 0)) {
-      gameOver();
-      return false;
+  // Everything the engine did that the player should SEE or HEAR. The engine
+  // itself is silent and has no idea a DOM exists.
+  function presentResult(result) {
+    if (!result) return;
+    if (result.rotated) playSound("rotate");
+    if (result.locked) playSound("land");
+    for (const row of result.rows || []) spawnRowExplosion(row.y, row.cells);
+    if (result.cleared >= 2) {
+      showCombo(result.cleared);
+      // Pitch climbs with the size of the clear so a tetris feels more
+      // rewarding to hear.
+      playSound("combo", { rate: Math.min(1.6, 1 + (result.cleared - 1) * 0.15) });
     }
-    return true;
-  }
-
-  function lockPiece() {
-    playSound("land");
-    for (const [cx, cy] of current.cells) {
-      const y = current.y + cy;
-      if (y >= 0) grid[y][current.x + cx] = current.color;
-    }
-    clearLines();
-    if (spawn()) draw();
-  }
-
-  function clearLines() {
-    let cleared = 0;
-    for (let y = ROWS - 1; y >= 0; y--) {
-      if (grid[y].every((cell) => cell)) {
-        spawnRowExplosion(y);
-        grid.splice(y, 1);
-        grid.unshift(new Array(COLS).fill(null));
-        cleared++;
-        y++; // re-check the row that just slid down into this index
-      }
-    }
-    if (!cleared) return;
-    lines += cleared;
-    score += LINE_SCORES[cleared] * level;
-    // "Combo" here means several rows clearing at once from a single piece
-    // (double/triple/tetris) - not consecutive clears across separate pieces.
-    if (cleared >= 2) {
-      showCombo(cleared);
-      // Pitch climbs with the size of the clear so a tetris feels more rewarding to hear.
-      playSound("combo", { rate: Math.min(1.6, 1 + (cleared - 1) * 0.15) });
-    }
-    // Level up every 8 lines, ~22% faster per level - the wide 12-column board
-    // gives more room, so the ramp is deliberately steep to compensate.
-    const newLevel = Math.floor(lines / 8) + 1;
-    if (newLevel !== level) {
-      level = newLevel;
-      dropInterval = Math.max(70, 1000 * Math.pow(0.78, level - 1));
-    }
+    score = gs.score;
+    lines = gs.lines;
+    level = gs.level;
     updateHud();
+    if (result.over) gameOver();
+    else if (result.locked) draw();
+  }
+
+  // Applies an input AND records it. `synthetic` marks a derived event - an OS
+  // key auto-repeat, or one step of a drag gesture that produced several moves
+  // from a single pointer event. Those are replayed identically but excluded
+  // from the bot-detection timing analysis: held keys repeat metronomically
+  // (~33ms) and drag bursts land at dt=0, so counting them would flag every
+  // player who holds an arrow key. See lib/gameReplay/inputHeuristics.js.
+  function applyOp(op, synthetic) {
+    if (state !== "running" || gs.over) return;
+    run.record(op, undefined, undefined, undefined, synthetic);
+    presentResult(engine.applyInput(gs, op));
+  }
+
+  function tryRotate() {
+    applyOp(engine.OP_ROTATE);
   }
 
   // --- Explosion particles ---------------------------------------------------
 
-  function spawnRowExplosion(y) {
+  // `cells` is the row's colours as they were BEFORE the engine spliced the
+  // row out - the grid no longer holds them by the time this runs.
+  function spawnRowExplosion(y, cells) {
     for (let x = 0; x < COLS; x++) {
-      const color = grid[y][x];
+      const color = cells[x];
       if (!color) continue;
       const cx = x * CELL + CELL / 2;
       const cy = y * CELL + CELL / 2;
@@ -305,22 +264,12 @@
     comboEl.textContent = "";
   }
 
-  function softDrop() {
-    if (collides(current, 0, 1)) {
-      lockPiece();
-    } else {
-      current.y++;
-      score += 1;
-      updateHud();
-    }
+  function softDrop(synthetic) {
+    applyOp(engine.OP_SOFT_DROP, synthetic);
   }
 
   function hardDrop() {
-    const dy = ghostOffset();
-    current.y += dy;
-    score += dy * 2;
-    updateHud();
-    lockPiece();
+    applyOp(engine.OP_HARD_DROP);
   }
 
   function gameOver() {
@@ -331,134 +280,27 @@
       writeBest(best);
       updateHud();
     }
-    submitScore(score);
+    run.finish(score);
     showOverlay("over");
   }
 
-  // --- Leaderboard ---------------------------------------------------------
-
-  const leaderboard = document.getElementById("fb-leaderboard");
-  const lbList = document.getElementById("fb-lb-list");
-  const lbMeWrap = document.getElementById("fb-lb-me");
-  const lbMeRow = document.getElementById("fb-lb-me-row");
-
-  // Builds one row matching the server-rendered markup in gameFallingBlocks.ejs -
-  // keep the classes in sync with the EJS side.
-  function lbRow(row, isMe) {
-    const li = document.createElement("li");
-    li.className = "flex items-baseline gap-2 text-sm py-1 px-1 rounded" + (isMe ? " bg-purple-500/10" : "");
-    const rank = document.createElement("span");
-    rank.className = "w-5 text-right tabular-nums text-neutral-500 shrink-0";
-    rank.textContent = row.rank;
-    const name = document.createElement("span");
-    name.className = "flex-1 truncate " + (isMe ? "text-purple-300" : "text-neutral-300");
-    name.textContent = row.displayName;
-    if (row.color) name.style.color = row.color;
-    const points = document.createElement("span");
-    points.className = "tabular-nums text-neutral-100";
-    points.textContent = row.score;
-    li.append(rank, name, points);
-    return li;
-  }
-
-  function renderLeaderboard(data) {
-    lbList.textContent = "";
-    if (data.rows.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-neutral-500 py-1";
-      li.textContent = leaderboard.dataset.emptyLabel;
-      lbList.appendChild(li);
-    }
-    for (const row of data.rows) lbList.appendChild(lbRow(row, row.isMe));
-    lbMeRow.textContent = "";
-    if (data.myRow) {
-      lbMeRow.appendChild(lbRow(data.myRow, true));
-      lbMeWrap.hidden = false;
-    } else {
-      lbMeWrap.hidden = true;
-    }
-  }
-
-  // Fire-and-forget: the leaderboard is a side dish, a failed save must never
-  // interrupt the game. Anonymous visitors have no data-csrf (the server
-  // wouldn't accept their score anyway), so we don't even attempt the POST.
-  function submitScore(finalScore) {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || finalScore < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(finalScore) }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data && data.ok) renderLeaderboard(data);
-      })
-      .catch(() => {});
-  }
-
-  // --- Leave-page confirmation ----------------------------------------------
+  // --- Leaderboard / leave-page confirmation ---------------------------------
+  // Both used to be copy-pasted into each of the six solo games; they now live
+  // in soloRunClient.js, which also owns the run token and input recording.
 
   function gameInProgress() {
     return state === "running" || state === "paused";
   }
 
-  // Same request submitScore() makes, but with keepalive so it survives the
-  // navigation that follows right after, and no UI update since we're leaving.
-  function saveScoreBeacon() {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || score < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(score) }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  const leaveDialog = document.getElementById("fb-leave-confirm-dialog");
-  const leaveSaveBtn = document.getElementById("fb-leave-save");
-  const leaveDiscardBtn = document.getElementById("fb-leave-discard");
-  const leaveCancelBtn = document.getElementById("fb-leave-cancel");
-  let pendingLeaveHref = null;
-
-  if (leaveDialog) {
-    // Intercept in-page link clicks (nav, "All games", leaderboard login link,
-    // etc.) mid-game and offer a choice instead of navigating straight away.
-    document.addEventListener("click", (event) => {
-      if (!gameInProgress()) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest("a[href]");
-      if (!link || link.target === "_blank") return;
-      event.preventDefault();
-      pendingLeaveHref = link.href;
-      pause();
-      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
-      leaveDialog.showModal();
-    });
-
-    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
-    leaveDiscardBtn?.addEventListener("click", () => {
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-    leaveSaveBtn?.addEventListener("click", () => {
-      saveScoreBeacon();
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-  }
-
-  // Tab close/refresh/typed URL can't be intercepted with a custom dialog -
-  // this is the browser's own generic "leave site?" prompt.
-  window.addEventListener("beforeunload", (event) => {
-    if (!gameInProgress()) return;
-    event.preventDefault();
-    event.returnValue = "";
+  window.SoloRun.wireLeaveConfirm({
+    dialogId: "fb-leave-confirm-dialog",
+    saveId: "fb-leave-save",
+    discardId: "fb-leave-discard",
+    cancelId: "fb-leave-cancel",
+    isInProgress: gameInProgress,
+    canSave: () => run.canSubmit(),
+    onOpen: pause,
+    onSave: () => run.leaveBeacon(score),
   });
 
   function updateHud() {
@@ -512,22 +354,22 @@
 
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
-        if (grid[y][x]) drawCell(ctx, x, y, CELL, grid[y][x]);
+        if (gs.grid[y][x]) drawCell(ctx, x, y, CELL, gs.grid[y][x]);
       }
     }
 
     if (state === "running" || state === "paused") {
-      const dy = ghostOffset();
+      const dy = engine.ghostOffset(gs);
       if (dy > 0) {
-        for (const [cx, cy] of current.cells) {
-          if (current.y + cy + dy >= 0) {
-            drawCell(ctx, current.x + cx, current.y + cy + dy, CELL, current.color, 0.18);
+        for (const [cx, cy] of gs.current.cells) {
+          if (gs.current.y + cy + dy >= 0) {
+            drawCell(ctx, gs.current.x + cx, gs.current.y + cy + dy, CELL, gs.current.color, 0.18);
           }
         }
       }
-      for (const [cx, cy] of current.cells) {
-        if (current.y + cy >= 0) {
-          drawCell(ctx, current.x + cx, current.y + cy, CELL, current.color);
+      for (const [cx, cy] of gs.current.cells) {
+        if (gs.current.y + cy >= 0) {
+          drawCell(ctx, gs.current.x + cx, gs.current.y + cy, CELL, gs.current.color);
         }
       }
     }
@@ -539,15 +381,15 @@
   function drawNext() {
     const box = 120 / NEXT_CELL; // 5 cells
     nextCtx.clearRect(0, 0, 120, 120);
-    if (!next) return;
-    const xs = next.cells.map((c) => c[0]);
-    const ys = next.cells.map((c) => c[1]);
+    if (!gs.next) return;
+    const xs = gs.next.cells.map((c) => c[0]);
+    const ys = gs.next.cells.map((c) => c[1]);
     const w = Math.max(...xs) - Math.min(...xs) + 1;
     const h = Math.max(...ys) - Math.min(...ys) + 1;
     const offX = (box - w) / 2 - Math.min(...xs);
     const offY = (box - h) / 2 - Math.min(...ys);
-    for (const [cx, cy] of next.cells) {
-      drawCell(nextCtx, cx + offX, cy + offY, NEXT_CELL, next.color);
+    for (const [cx, cy] of gs.next.cells) {
+      drawCell(nextCtx, cx + offX, cy + offY, NEXT_CELL, gs.next.color);
     }
   }
 
@@ -557,14 +399,18 @@
     rafId = requestAnimationFrame(loop);
     const delta = time - lastTime;
     lastTime = time;
-    dropTimer += delta;
     updateParticles(delta);
-    if (dropTimer >= dropInterval) {
-      dropTimer = 0;
-      if (collides(current, 0, 1)) {
-        lockPiece();
-      } else {
-        current.y++;
+
+    // Gravity advances in whole fixed steps only, and only while running. The
+    // server advances the identical loop, so the two stay in step; and because
+    // simTime stops when the game does, a pause is invisible to the replay.
+    if (state === "running" && !gs.over) {
+      stepAcc += delta;
+      while (stepAcc >= engine.FIXED_DT_MS && !gs.over) {
+        const result = engine.step(gs);
+        stepAcc -= engine.FIXED_DT_MS;
+        simTime += engine.FIXED_DT_MS;
+        if (result.locked || result.cleared) presentResult(result);
       }
     }
     if (state === "running") draw();
@@ -572,7 +418,7 @@
 
   function startLoop() {
     lastTime = performance.now();
-    dropTimer = 0;
+    stepAcc = 0;
     rafId = requestAnimationFrame(loop);
   }
 
@@ -618,13 +464,25 @@
     overlay.style.display = "none";
   }
 
-  function start() {
-    stopLoop(); // safe to call while already running (the restart button) - avoids a second rAF loop
-    reset();
-    state = "running";
-    hideOverlay();
-    draw();
-    startLoop();
+  async function start() {
+    if (starting) return;
+    starting = true;
+    try {
+      stopLoop(); // safe to call while already running (the restart button) - avoids a second rAF loop
+      // Register the run before reset() deals the first pieces - it needs the
+      // server's seed. begin() races itself against a short timeout and
+      // resolves either way, so a slow or unreachable server costs a moment,
+      // never the ability to play; the run is simply unranked then.
+      run.abandon();
+      await run.begin();
+      reset();
+      state = "running";
+      hideOverlay();
+      draw();
+      startLoop();
+    } finally {
+      starting = false;
+    }
   }
 
   function pause() {
@@ -662,20 +520,20 @@
   // --- Input ---------------------------------------------------------------
 
   const KEYS = {
-    ArrowLeft: () => move(-1),
-    ArrowRight: () => move(1),
-    ArrowDown: softDrop,
-    ArrowUp: tryRotate,
-    " ": hardDrop,
-    KeyA: () => move(-1),
-    KeyD: () => move(1),
-    KeyS: softDrop,
-    KeyW: tryRotate,
-    KeyR: tryRotate,
+    ArrowLeft: engine.OP_LEFT,
+    ArrowRight: engine.OP_RIGHT,
+    ArrowDown: engine.OP_SOFT_DROP,
+    ArrowUp: engine.OP_ROTATE,
+    " ": engine.OP_HARD_DROP,
+    KeyA: engine.OP_LEFT,
+    KeyD: engine.OP_RIGHT,
+    KeyS: engine.OP_SOFT_DROP,
+    KeyW: engine.OP_ROTATE,
+    KeyR: engine.OP_ROTATE,
   };
 
-  function move(dx) {
-    if (!collides(current, dx, 0)) current.x += dx;
+  function move(dx, synthetic) {
+    applyOp(dx < 0 ? engine.OP_LEFT : engine.OP_RIGHT, synthetic);
   }
 
   document.addEventListener("keydown", (event) => {
@@ -686,10 +544,14 @@
       return;
     }
     if (state !== "running") return;
-    const action = KEYS[event.key] || KEYS[event.code];
-    if (!action) return;
+    const op = KEYS[event.key] !== undefined ? KEYS[event.key] : KEYS[event.code];
+    if (op === undefined) return;
     event.preventDefault(); // keep arrows/space from scrolling the page mid-game
-    action();
+    // event.repeat is the OS auto-repeat of a held key. It is real input and
+    // is replayed as such, but it must not feed the timing heuristics: at a
+    // metronomic ~33ms it would make every player who holds a key look like a
+    // script.
+    applyOp(op, event.repeat);
     draw();
   });
 
@@ -767,7 +629,7 @@
   function pieceCellsAt(col, row) {
     const cx = Math.floor(col);
     const cy = Math.floor(row);
-    return current.cells.some(([px, py]) => current.x + px === cx && current.y + py === cy);
+    return gs.current.cells.some(([px, py]) => gs.current.x + px === cx && gs.current.y + py === cy);
   }
 
   let touch = null;
@@ -804,7 +666,11 @@
     const delta = shift - touch.lastAppliedShift;
     if (delta === 0) return;
     const dir = delta > 0 ? 1 : -1;
-    for (let i = 0; i < Math.abs(delta); i++) move(dir);
+    // One pointer event can cross several columns at once, so this is a burst
+    // of moves at the same instant. All but the first are marked synthetic:
+    // recorded and replayed, but kept out of the timing analysis, where a
+    // cluster at dt=0 would read as superhuman input.
+    for (let i = 0; i < Math.abs(delta); i++) move(dir, i > 0);
     touch.lastAppliedShift = shift;
     draw();
   });

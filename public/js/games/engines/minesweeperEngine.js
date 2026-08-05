@@ -109,6 +109,32 @@ function generateBoard(difficultyKey, safeRow, safeCol, rng) {
     bonus,
     revealed: make2d(rows, cols, false),
     flagged: make2d(rows, cols, false),
+    generated: true,
+  };
+}
+
+// An un-mined placeholder board: same shape generateBoard() produces (so
+// revealCell/toggleFlag/rendering all work unchanged) but with isMine/
+// adjacency/bonus left null and `generated: false`. Lets a caller build and
+// display an empty grid - and accept flags on it - before the real "first
+// click is safe" board is dealt at the moment of the first reveal, using
+// that reveal's own cell as the safe cell (see minesweeper.js's
+// handleReveal / lib/gameReplay/minesweeper.js's replay()).
+function createShell(difficultyKey) {
+  const diff = DIFFICULTIES[difficultyKey];
+  if (!diff) throw new Error("unknown difficulty: " + difficultyKey);
+  const { rows, cols } = diff;
+  return {
+    difficultyKey,
+    rows,
+    cols,
+    points: diff.points,
+    isMine: null,
+    adjacency: null,
+    bonus: null,
+    revealed: make2d(rows, cols, false),
+    flagged: make2d(rows, cols, false),
+    generated: false,
   };
 }
 
@@ -217,7 +243,7 @@ function checkWin(board) {
   return true;
 }
 
-const api = { DIFFICULTIES, mulberry32, generateBoard, revealCell, chordCell, toggleFlag, checkWin };
+const api = { DIFFICULTIES, mulberry32, generateBoard, createShell, revealCell, chordCell, toggleFlag, checkWin };
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = api;

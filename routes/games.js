@@ -2,10 +2,14 @@ const express = require("express");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
+const gameRunsRepo = require("../db/gameRunsRepo");
+const gameRunFlagsRepo = require("../db/gameRunFlagsRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const gamesCatalog = require("../data/gamesCatalog");
+const gameReplay = require("../lib/gameReplay");
+const replayCodec = require("../public/js/games/engines/replayCodec");
 const { verifyToken } = require("../middleware/csrf");
-const { settingsWriteLimiter } = require("../middleware/rateLimiters");
+const { gameRunStartLimiter, gameScoreSubmitLimiter } = require("../middleware/rateLimiters");
 const requireLogin = require("../middleware/requireLogin");
 
 const router = express.Router();
@@ -268,150 +272,246 @@ function requireLoginJson(req, res, next) {
   next();
 }
 
-// Called by the game on game over (public/js/games/falling-blocks.js). Only
-// logged-in visitors can save a score - the client doesn't even attempt the
-// POST otherwise. Responds with the fresh leaderboard so the page can
-// re-render it without a reload.
+// ---------------------------------------------------------------------------
+// Solo-game run lifecycle (anti-cheat).
+//
+// Before this existed, a score submission was a bare integer: log in once,
+// read data-csrf out of any game page's HTML, and POST whatever number you
+// liked. The session CSRF token is minted once per login and shared with every
+// form on the site, so it proves same-origin - never that a game was played.
+//
+// Now a run has to be STARTED server-side (run/start.json), which issues a
+// single-use runId and the RNG seed the game must play with, and the score
+// submission carries the input log recorded during that run. lib/gameReplay/
+// re-simulates it and computes the score itself. The runId is never rendered
+// into a page, so scraping the HTML gets a cheater nothing.
+//
+// See lib/gameReplay/index.js for the verification policy and the per-game
+// driver contract, and db/gameCatalogRepo.js's antiCheat mode for the
+// per-game kill switch.
+// ---------------------------------------------------------------------------
+
+// Replay logs outrun express.urlencoded's 100kB default on a marathon run, so
+// app.js deliberately skips these two paths and they parse their own bodies at
+// a higher ceiling. Raising the limit globally would hand every route on the
+// box a 384kB attacker-controlled buffer instead of just these two.
+const replayBody = express.urlencoded({ extended: false, limit: "384kb" });
+
+// :game arrives from the URL and is used to pick a replay driver module, so it
+// must be checked against the fixed solo-game set before going anywhere near a
+// require() - see lib/gameReplay/index.js's SOLO_GAMES.
+function resolveSoloGame(req, res, next) {
+  if (!gameReplay.isSoloGame(req.params.game)) {
+    return res.status(404).json({ ok: false, error: "game" });
+  }
+  next();
+}
+
+// Mints a run. Called when the player actually starts playing, not on page
+// load - an open run is a claim on wall-clock time, and the plausibility
+// checks are only meaningful if the clock starts when the game does.
 router.post(
-  "/games/falling-blocks/score.json",
-  settingsWriteLimiter,
+  "/games/:game/run/start.json",
+  gameRunStartLimiter,
+  resolveSoloGame,
   requireLoginJson,
   verifyToken,
   async (req, res, next) => {
-    const score = Number.parseInt(req.body.score, 10);
-    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
-      return res.status(400).json({ ok: false, error: "score" });
-    }
     try {
-      await gameScoresRepo.submitScore(GAME_FALLING_BLOCKS, req.user.userId, score);
-      await gameSessionStatsRepo.recordPlay(GAME_FALLING_BLOCKS);
-      const leaderboard = await buildLeaderboard(GAME_FALLING_BLOCKS, req.user.userId);
-      res.json({ ok: true, ...leaderboard });
+      const game = req.params.game;
+      const driver = gameReplay.getDriver(game);
+      const run = await gameRunsRepo.startRun({
+        game,
+        userId: req.user.userId,
+        sessionId: req.sessionID,
+        rulesVersion: driver ? driver.rulesVersion : 0,
+      });
+      res.json({
+        ok: true,
+        runId: run.runId,
+        seed: run.seed,
+        rulesVersion: run.rulesVersion,
+        serverTime: run.startedAt.getTime(),
+      });
     } catch (err) {
       next(err);
     }
   }
 );
 
-// Same shape as falling-blocks' score.json, for public/js/games/pipe-dodger.js.
+// Mid-run flush for the two open-ended games. A browser caps a keepalive:true
+// fetch body at 64kB, which a marathon input log outgrows - checkpointing
+// banks the head of the log so the final submit only carries the tail. Does
+// NOT consume the run.
 router.post(
-  "/games/pipe-dodger/score.json",
-  settingsWriteLimiter,
+  "/games/:game/run/checkpoint.json",
+  replayBody,
+  gameScoreSubmitLimiter,
+  resolveSoloGame,
   requireLoginJson,
   verifyToken,
   async (req, res, next) => {
-    const score = Number.parseInt(req.body.score, 10);
-    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
-      return res.status(400).json({ ok: false, error: "score" });
-    }
     try {
-      await gameScoresRepo.submitScore(GAME_PIPE_DODGER, req.user.userId, score);
-      await gameSessionStatsRepo.recordPlay(GAME_PIPE_DODGER);
-      const leaderboard = await buildLeaderboard(GAME_PIPE_DODGER, req.user.userId);
-      res.json({ ok: true, ...leaderboard });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// Same shape as falling-blocks'/pipe-dodger's score.json, for public/js/games/2048.js.
-router.post(
-  "/games/2048/score.json",
-  settingsWriteLimiter,
-  requireLoginJson,
-  verifyToken,
-  async (req, res, next) => {
-    const score = Number.parseInt(req.body.score, 10);
-    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
-      return res.status(400).json({ ok: false, error: "score" });
-    }
-    try {
-      await gameScoresRepo.submitScore(GAME_2048, req.user.userId, score);
-      await gameSessionStatsRepo.recordPlay(GAME_2048);
-      const leaderboard = await buildLeaderboard(GAME_2048, req.user.userId);
-      res.json({ ok: true, ...leaderboard });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// Same shape as the other three score.json routes, for public/js/games/minesweeper.js.
-router.post(
-  "/games/minesweeper/score.json",
-  settingsWriteLimiter,
-  requireLoginJson,
-  verifyToken,
-  async (req, res, next) => {
-    const score = Number.parseInt(req.body.score, 10);
-    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
-      return res.status(400).json({ ok: false, error: "score" });
-    }
-    try {
-      await gameScoresRepo.submitScore(GAME_MINESWEEPER, req.user.userId, score);
-      await gameSessionStatsRepo.recordPlay(GAME_MINESWEEPER);
-      const leaderboard = await buildLeaderboard(GAME_MINESWEEPER, req.user.userId);
-      res.json({ ok: true, ...leaderboard });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// Same shape as the other score.json routes, for public/js/games/match3.js.
-router.post(
-  "/games/match-3/score.json",
-  settingsWriteLimiter,
-  requireLoginJson,
-  verifyToken,
-  async (req, res, next) => {
-    const score = Number.parseInt(req.body.score, 10);
-    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
-      return res.status(400).json({ ok: false, error: "score" });
-    }
-    try {
-      await gameScoresRepo.submitScore(GAME_MATCH3, req.user.userId, score);
-      await gameSessionStatsRepo.recordPlay(GAME_MATCH3);
-      const leaderboard = await buildLeaderboard(GAME_MATCH3, req.user.userId);
-      res.json({ ok: true, ...leaderboard });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// Same shape as the other score.json routes, for public/js/games/cloud-climber.js.
-// deathClimb is optional (only sent on an actual death, not a leave-and-save
-// beacon) - see gameScoresRepo.submitScore's comment.
-router.post(
-  "/games/cloud-climber/score.json",
-  settingsWriteLimiter,
-  requireLoginJson,
-  verifyToken,
-  async (req, res, next) => {
-    const score = Number.parseInt(req.body.score, 10);
-    if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) {
-      return res.status(400).json({ ok: false, error: "score" });
-    }
-    let deathClimb;
-    if (req.body.deathClimb !== undefined) {
-      const climb = Number.parseInt(req.body.deathClimb, 10);
-      if (!Number.isInteger(climb) || climb < 0 || climb > MAX_CLIMB) {
-        return res.status(400).json({ ok: false, error: "deathClimb" });
+      const replay = typeof req.body.replay === "string" ? req.body.replay : "";
+      const limits = replayCodec.LIMITS[req.params.game];
+      if (!replay || (limits && replay.length > Math.ceil((limits.maxBytes * 4) / 3) + 8)) {
+        return res.status(400).json({ ok: false, error: "replay" });
       }
-      deathClimb = climb;
-    }
-    try {
-      await gameScoresRepo.submitScore(GAME_CLOUD_CLIMBER, req.user.userId, score, deathClimb);
-      await gameSessionStatsRepo.recordPlay(GAME_CLOUD_CLIMBER);
-      const leaderboard = await buildLeaderboard(GAME_CLOUD_CLIMBER, req.user.userId);
-      res.json({ ok: true, ...leaderboard });
+      const saved = await gameRunsRepo.saveCheckpoint({
+        runId: String(req.body.runId || ""),
+        game: req.params.game,
+        userId: req.user.userId,
+        replay,
+        eventCount: Number.parseInt(req.body.events, 10) || 0,
+      });
+      if (!saved) return res.status(409).json({ ok: false, error: "run" });
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }
   }
 );
+
+// One handler for all six games - these were six byte-identical copies before
+// the run lifecycle existed, and keeping them separate would have meant six
+// copies of the verification policy too.
+router.post(
+  "/games/:game/score.json",
+  replayBody,
+  gameScoreSubmitLimiter,
+  resolveSoloGame,
+  requireLoginJson,
+  verifyToken,
+  async (req, res, next) => {
+    const game = req.params.game;
+    try {
+      // Outer sanity bound, unchanged from before: cheap, and rejects a
+      // garbage body before any database work happens.
+      const claimedScore = Number.parseInt(req.body.score, 10);
+      if (!Number.isInteger(claimedScore) || claimedScore < 1 || claimedScore > MAX_SCORE) {
+        return res.status(400).json({ ok: false, error: "score" });
+      }
+
+      let deathClimb;
+      if (req.body.deathClimb !== undefined) {
+        const climb = Number.parseInt(req.body.deathClimb, 10);
+        if (!Number.isInteger(climb) || climb < 0 || climb > MAX_CLIMB) {
+          return res.status(400).json({ ok: false, error: "deathClimb" });
+        }
+        deathClimb = climb;
+      }
+
+      const mode = await gameCatalogRepo.getAntiCheatMode(game);
+      if (mode === "off") return finishSubmission(req, res, game, claimedScore, deathClimb);
+
+      const runId = typeof req.body.runId === "string" ? req.body.runId : "";
+      const replay = typeof req.body.replay === "string" ? req.body.replay : "";
+
+      // ROLLOUT PHASE A: a client cached before this deployed still posts the
+      // old shape. Accept it, subject to the rate ceilings, and flag it - the
+      // player did nothing wrong. lib/assetVersion.js fingerprints script
+      // URLs, so any page reload already picks up the new client; only
+      // long-open tabs land here.
+      if (!runId) {
+        const verdict = gameReplay.verify({
+          game,
+          mode,
+          run: { runId: null, seed: 0 },
+          replayText: "",
+          claimedScore,
+          deathClimb,
+          serverElapsedMs: null,
+          legacyClient: true,
+        });
+        return applyVerdict(req, res, game, verdict, claimedScore, deathClimb, null);
+      }
+
+      const replayHash = gameReplay.hashReplay(runId, replay);
+      const run = await gameRunsRepo.consumeRun({
+        runId,
+        game,
+        userId: req.user.userId,
+        replayHash,
+      });
+
+      if (!run) {
+        // Idempotency: a submit whose response was lost to a network timeout
+        // gets retried with the same runId. That is the SAME request, not a
+        // second attempt - answering it with a 409 would cost an honest
+        // player the score we already stored.
+        const already = await gameRunsRepo.findConsumedRun({
+          runId,
+          game,
+          userId: req.user.userId,
+          replayHash,
+        });
+        if (already) {
+          const leaderboard = await buildLeaderboard(game, req.user.userId);
+          return res.json({ ok: true, ...leaderboard });
+        }
+        return res.status(409).json({ ok: false, error: "run" });
+      }
+
+      const verdict = gameReplay.verify({
+        game,
+        mode,
+        run,
+        replayText: replay,
+        claimedScore,
+        deathClimb,
+        serverElapsedMs: Date.now() - run.startedAt.getTime(),
+      });
+      return applyVerdict(req, res, game, verdict, claimedScore, deathClimb, run);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Stores the verified score and answers with the fresh leaderboard, recording
+// a review flag when anything about the run looked off. A flag NEVER blocks a
+// submission - the timing heuristics in particular have a real false-positive
+// rate, so they queue a run for a human on /admin/game-runs instead.
+async function applyVerdict(req, res, game, verdict, claimedScore, deathClimb, run) {
+  const userId = req.user.userId;
+  const previous = await gameScoresRepo.getUserBestAndRank(game, userId);
+  const previousBest = previous ? previous.bestScore : null;
+
+  if (verdict.reasons.length) {
+    await gameRunFlagsRepo.recordFlag({
+      runId: run ? run.runId : `legacy:${userId}:${Date.now()}`,
+      game,
+      userId,
+      startedAt: run ? run.startedAt : null,
+      serverElapsedMs: run ? Date.now() - run.startedAt.getTime() : null,
+      simElapsedMs: verdict.simElapsedMs,
+      claimedScore,
+      storedScore: verdict.reject ? null : verdict.score,
+      previousBest,
+      verified: verdict.verified,
+      rulesVersion: run ? run.rulesVersion : null,
+      reasons: verdict.reasons,
+      severity: verdict.severity,
+      replayHash: verdict.replayHash,
+      replayBytes: verdict.replayBytes,
+      replay: typeof req.body.replay === "string" ? req.body.replay : null,
+    });
+  }
+
+  if (verdict.reject) {
+    return res.status(verdict.status || 400).json({ ok: false, error: verdict.error || "replay" });
+  }
+
+  if (run) await gameRunsRepo.recordStoredScore(run.runId, verdict.score);
+  return finishSubmission(req, res, game, verdict.score, deathClimb);
+}
+
+async function finishSubmission(req, res, game, score, deathClimb) {
+  await gameScoresRepo.submitScore(game, req.user.userId, score, deathClimb);
+  await gameSessionStatsRepo.recordPlay(game);
+  const leaderboard = await buildLeaderboard(game, req.user.userId);
+  res.json({ ok: true, ...leaderboard });
+}
 
 // Paginated "other players' death marks" for cloud-climber.js's death-marker
 // feature - up to DEATH_MARKS_PAGE_SIZE (20) per call, sorted by climb

@@ -18,6 +18,8 @@ const siteVisitsRepo = require("../db/siteVisitsRepo");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
+const gameRunFlagsRepo = require("../db/gameRunFlagsRepo");
+const { SOLO_GAMES } = require("../lib/gameReplay");
 const gamesCatalog = require("../data/gamesCatalog");
 const { SUPPORTED_LOCALES } = require("../config/i18n");
 const profileCacheRepo = require("../db/profileCacheRepo");
@@ -303,6 +305,121 @@ router.get("/admin/visits", requireAdmin, async (req, res, next) => {
     next(err);
   }
 });
+
+// --- Flagged solo-game runs -------------------------------------------------
+// The review queue for the anti-cheat (lib/gameReplay/). Nothing in that system
+// ever blocks a player on suspicion: hard refusals are reserved for the
+// provably impossible, and everything merely odd - a score the server's replay
+// disagrees with, machine-regular input timing, a stale client - lands here for
+// a human instead. That is deliberate, because the timing heuristics have a
+// real false-positive rate (see lib/gameReplay/inputHeuristics.js).
+const GAME_RUN_FLAGS_PER_PAGE = 25;
+
+router.get("/admin/game-runs", requireAdmin, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const status = ["open", "dismissed", "actioned"].includes(req.query.status)
+      ? req.query.status
+      : "open";
+    const game = SOLO_GAMES.includes(req.query.game) ? req.query.game : null;
+    const severity = ["low", "medium", "high"].includes(req.query.severity) ? req.query.severity : null;
+
+    const { docs, total } = await gameRunFlagsRepo.listFlags({
+      status,
+      game,
+      severity,
+      skip: (page - 1) * GAME_RUN_FLAGS_PER_PAGE,
+      limit: GAME_RUN_FLAGS_PER_PAGE,
+    });
+
+    // Same batch identity lookup the leaderboards use - one $in read plus one
+    // Helix round-trip for whatever's missing.
+    const profiles = await profileCacheRepo.getOrFetchProfiles(docs.map((d) => d.userId));
+    const flags = docs.map((doc) => {
+      const profile = profiles.get(String(doc.userId));
+      return {
+        ...doc,
+        displayName: (profile && profile.displayName) || doc.userId,
+        color: (profile && profile.chatColor) || null,
+      };
+    });
+
+    res.render("adminGameRuns", {
+      tab: "game-runs",
+      flags,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / GAME_RUN_FLAGS_PER_PAGE)),
+      total,
+      filters: { status, game, severity },
+      games: SOLO_GAMES,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Both actions answer JSON to a fetch (so the admin keeps their scroll
+// position) and fall back to a redirect for a plain form POST without JS -
+// same split routes/settings.js uses for autosave.
+function respondToFlagAction(req, res, payload) {
+  if ((req.get("accept") || "").includes("application/json")) return res.json({ ok: true, ...payload });
+  return res.redirect("/admin/game-runs");
+}
+
+router.post(
+  "/admin/game-runs/:id/dismiss",
+  settingsWriteLimiter,
+  requireAdmin,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const ok = await gameRunFlagsRepo.reviewFlag(req.params.id, {
+        status: "dismissed",
+        by: req.user.userId,
+        note: typeof req.body.note === "string" ? req.body.note.slice(0, 500) : null,
+      });
+      if (!ok) return res.status(404).json({ ok: false, error: "notFound" });
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "gameRun.dismiss",
+        target: req.params.id,
+      });
+      respondToFlagAction(req, res, { status: "dismissed" });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  "/admin/game-runs/:id/reset-score",
+  settingsWriteLimiter,
+  requireAdmin,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const flag = await gameRunFlagsRepo.findById(req.params.id);
+      if (!flag) return res.status(404).json({ ok: false, error: "notFound" });
+      // gameScoresRepo.deleteUserScore refuses any key outside SOLO_GAMES, so
+      // this can never reach a multiplayer Elo row.
+      const deleted = await gameScoresRepo.deleteUserScore(flag.game, flag.userId);
+      await gameRunFlagsRepo.reviewFlag(req.params.id, {
+        status: "actioned",
+        by: req.user.userId,
+        note: typeof req.body.note === "string" ? req.body.note.slice(0, 500) : null,
+      });
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "gameRun.resetScore",
+        target: `${flag.game}:${flag.userId}`,
+        details: { runId: flag.runId, deleted },
+      });
+      respondToFlagAction(req, res, { status: "actioned", deleted });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 router.get("/admin/actions", requireAdmin, async (req, res, next) => {
   try {

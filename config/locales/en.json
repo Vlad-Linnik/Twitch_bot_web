@@ -171,6 +171,31 @@
     }
   },
   "games": {
+    "2048": {
+      "name": "2048",
+      "cardDescription": "Slide and merge tiles to reach 2048 and beyond.",
+      "score": "Score",
+      "best": "Best",
+      "controlsTitle": "Controls",
+      "controlsMove": "Move",
+      "newGame": "New game",
+      "swipeHint": "Arrow keys, WASD, or swipe to move",
+      "start": "Start",
+      "won": "You made 2048!",
+      "keepPlaying": "Keep playing",
+      "gameOver": "Game over",
+      "finalScore": "Score",
+      "playAgain": "Play again",
+      "backToGames": "All games",
+      "leaderboardTitle": "Top 10",
+      "leaderboardEmpty": "No scores yet — be the first!",
+      "loginToSave": "Log in to save your score to the leaderboard.",
+      "leaveConfirmTitle": "Leave the game?",
+      "leaveConfirmBody": "Your game is still in progress. Save your current score before you go, or leave without saving?",
+      "leaveSave": "Save & leave",
+      "leaveDiscard": "Leave without saving",
+      "leaveCancel": "Keep playing"
+    },
     "title": "Mini-Games",
     "volume": "Sound volume",
     "sortHandLabel": "Sort hand",
@@ -267,31 +292,6 @@
       "leaveDiscard": "Leave without saving",
       "leaveCancel": "Keep playing",
       "deathMarkerAnonymous": "Player"
-    },
-    "2048": {
-      "name": "2048",
-      "cardDescription": "Slide and merge tiles to reach 2048 and beyond.",
-      "score": "Score",
-      "best": "Best",
-      "controlsTitle": "Controls",
-      "controlsMove": "Move",
-      "newGame": "New game",
-      "swipeHint": "Arrow keys, WASD, or swipe to move",
-      "start": "Start",
-      "won": "You made 2048!",
-      "keepPlaying": "Keep playing",
-      "gameOver": "Game over",
-      "finalScore": "Score",
-      "playAgain": "Play again",
-      "backToGames": "All games",
-      "leaderboardTitle": "Top 10",
-      "leaderboardEmpty": "No scores yet — be the first!",
-      "loginToSave": "Log in to save your score to the leaderboard.",
-      "leaveConfirmTitle": "Leave the game?",
-      "leaveConfirmBody": "Your game is still in progress. Save your current score before you go, or leave without saving?",
-      "leaveSave": "Save & leave",
-      "leaveDiscard": "Leave without saving",
-      "leaveCancel": "Keep playing"
     },
     "durak": {
       "name": "Durak",
@@ -1440,6 +1440,10 @@
         "delete": "News comment removed",
         "restrictUser": "Commenter restricted",
         "unrestrictUser": "Commenter unrestricted"
+      },
+      "gameRun": {
+        "dismiss": "Flagged run dismissed",
+        "resetScore": "Game score reset"
       }
     },
     "news": {
@@ -1479,6 +1483,53 @@
       "formatHint": "Markdown is rendered to HTML; HTML is used as-is. Both are sanitized before publishing.",
       "save": "Publish",
       "cancel": "Cancel"
+    },
+    "tabGameRuns": "Flagged runs",
+    "gameRunsIntro": "Solo-game runs the anti-cheat wants a human to look at. Nothing here was blocked - a flag is a question, not a verdict.",
+    "gameRunsEmpty": "No runs flagged.",
+    "gameRunsAllGames": "All games",
+    "gameRunsColPlayer": "Player",
+    "gameRunsColGame": "Game",
+    "gameRunsColScores": "Score",
+    "gameRunsColTiming": "Timing",
+    "gameRunsColReasons": "Why",
+    "gameRunsVerified": "replayed",
+    "gameRunsUnverified": "not replayed",
+    "gameRunsClaimed": "claimed",
+    "gameRunsPrevBest": "prev best",
+    "gameRunsElapsed": "real",
+    "gameRunsSimulated": "sim",
+    "gameRunsDismiss": "Approve record",
+    "gameRunsResetScore": "Reject record",
+    "gameRunsResetConfirm": "Delete this player s best score for this game? This cannot be undone.",
+    "gameRunsStatus": {
+      "open": "Open",
+      "dismissed": "Approved",
+      "actioned": "Rejected"
+    },
+    "gameRunsReason": {
+      "scoreMismatch": "Claimed more than the replay scored",
+      "scoreOverrun": "Replay scored more than claimed (likely our bug)",
+      "timeTravel": "Run simulated longer than it actually lasted",
+      "staleRules": "Recorded under different game rules",
+      "legacyClient": "Old client, no run token",
+      "noReplay": "No input log sent",
+      "malformedReplay": "Input log was malformed",
+      "wrongGame": "Log was for a different game",
+      "illegalReplay": "Log contained an impossible move",
+      "replayTimeout": "Replay exceeded its time budget",
+      "driverError": "Replay crashed (our bug)",
+      "impossibleRate": "Scored faster than the game allows",
+      "impossiblePerEvent": "Scored more than the inputs allow",
+      "impossibleClimb": "Climbed faster than the game allows",
+      "legacyCapExceeded": "Untokened score above the plausible cap",
+      "highRate": "Scored unusually fast",
+      "climbMismatch": "Score inconsistent with climb reached",
+      "ceilingDisagreesWithReplay": "Rate ceiling disagrees with the replay",
+      "beaconOversize": "Log too large to send on leaving",
+      "constantCadence": "Inputs at a machine-regular interval",
+      "lowJitter": "Input timing too consistent for a hand",
+      "superhumanApm": "More actions per second than a human sustains"
     }
   }
 }

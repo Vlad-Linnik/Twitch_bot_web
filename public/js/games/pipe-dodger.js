@@ -8,32 +8,40 @@
   "use strict";
 
   const board = document.getElementById("pd-board");
-  if (!board) return;
+  const engine = window.PipeDodgerEngine;
+  if (!board || !engine) return;
 
-  const WIDTH = 360;
-  const HEIGHT = 600;
-  const GROUND_H = 70;
+  // Physics, the hitbox and the difficulty ramp all live in the engine now, so
+  // the server can re-simulate a run through the exact same code
+  // (lib/gameReplay/pipe-dodger.js). Only the sizes the renderer needs are
+  // pulled back out here.
+  const WIDTH = engine.WIDTH;
+  const HEIGHT = engine.HEIGHT;
+  const GROUND_H = engine.GROUND_H;
+  const BIRD_X = engine.BIRD_X;
+  const BIRD_W = engine.BIRD_W;
+  const BIRD_H = engine.BIRD_H;
+  const PIPE_W = engine.PIPE_W;
   const BEST_KEY = "pipeDodgerBest";
 
-  const BIRD_X = 110;
-  const BIRD_W = 44;
-  const BIRD_H = 40;
-  // Hitbox smaller than the sprite so near-miss grazes feel fair.
-  const BIRD_HIT_INSET_X = 7;
-  const BIRD_HIT_INSET_Y = 6;
+  // Anti-cheat: flaps are recorded and the run is re-simulated server-side.
+  // Bump RULES_VERSION here AND in lib/gameReplay/pipe-dodger.js together
+  // whenever a physics constant changes - a mismatch makes the server skip
+  // verification rather than mis-score an honest run.
+  const RULES_VERSION = 1;
+  const OP_FLAP = 0;
 
-  const GRAVITY = 1500; // px/s^2
-  const FLAP_VELOCITY = -420; // px/s
-  const MAX_FALL_SPEED = 640; // px/s
-
-  const PIPE_W = 58;
-  const GAP_START = 168;
-  const GAP_MIN = 128;
-  const SPEED_START = 150; // px/s
-  const SPEED_MAX = 260;
-  const SPAWN_SPACING = 235; // px between pipe pairs, at current speed
-  // Difficulty ramps continuously with score until the _MIN/_MAX bounds above.
-  const RAMP_POINTS_TO_MAX = 15; // reach max difficulty by this score
+  const run = window.SoloRun.create({
+    gameKey: "pipe-dodger",
+    rulesVersion: RULES_VERSION,
+    rootId: "pd-leaderboard",
+    listId: "pd-lb-list",
+    meWrapId: "pd-lb-me",
+    meRowId: "pd-lb-me-row",
+    // Flaps are timestamped in SIMULATION time, not wall time - see simTime
+    // below - so the recorded clock matches what the server replays.
+    now: () => simTime,
+  });
 
   const ctx = board.getContext("2d");
 
@@ -118,10 +126,25 @@
 
   // --- Game state ----------------------------------------------------------
 
-  let birdY, birdVy, birdAngle;
-  let pipes, distSinceSpawn, speed, gap;
+  // The authoritative simulation. birdY/pipes/score below are read straight
+  // off it by the renderer; nothing outside the engine may change them.
+  let gs = null;
+  let birdAngle = 0;
+  // Simulation clock, in ms, advanced only in whole engine steps. Deliberately
+  // NOT wall time: a frame is clamped (see stepAccumulator) so a backgrounded
+  // tab can't come back to a dead bird, which means simulated time falls
+  // behind real time. Flap timestamps are recorded against THIS clock, so the
+  // server's replay lines up exactly.
+  let simTime = 0;
+  let stepAcc = 0;
+  let pendingFlap = false;
   let score, best;
   let state = "idle"; // idle | running | paused | over
+  // Guards start() against re-entry: the overlay button stays clickable
+  // across its `await run.begin()`, and a fast-death game like this one
+  // makes an impatient repeat click routine - without this, a second click
+  // starts a second render loop racing the first.
+  let starting = false;
   let rafId = null;
   let lastTime = 0;
   let particles = [];
@@ -129,27 +152,22 @@
   let groundScroll = 0;
   let clouds = [];
 
-  function difficultyFor(currentScore) {
-    const t = Math.min(1, currentScore / RAMP_POINTS_TO_MAX);
-    return {
-      speed: SPEED_START + (SPEED_MAX - SPEED_START) * t,
-      gap: GAP_START - (GAP_START - GAP_MIN) * t,
-    };
-  }
-
   function reset() {
-    birdY = HEIGHT / 2;
-    birdVy = 0;
+    // run.rng is the server's seeded stream while the run is ranked, plain
+    // Math.random otherwise. Pipe gap positions are the only gameplay
+    // randomness, and they must come from it - a bare Math.random() would
+    // desync the server's replay immediately.
+    gs = engine.createState(run.rng);
     birdAngle = 0;
-    pipes = [];
-    distSinceSpawn = 0;
+    simTime = 0;
+    stepAcc = 0;
+    pendingFlap = false;
     score = 0;
     particles = [];
     shake = 0;
     groundScroll = 0;
-    const d = difficultyFor(0);
-    speed = d.speed;
-    gap = d.gap;
+    // Clouds are pure decoration and never touch the simulation, so they keep
+    // their own unseeded randomness.
     clouds = Array.from({ length: 5 }, () => ({
       x: Math.random() * WIDTH,
       y: 30 + Math.random() * 160,
@@ -159,42 +177,13 @@
     updateHud();
   }
 
-  function spawnPipe() {
-    const margin = 40;
-    const usableH = HEIGHT - GROUND_H - margin * 2 - gap;
-    const gapTop = margin + Math.random() * Math.max(0, usableH);
-    pipes.push({ x: WIDTH, gapTop, gapBottom: gapTop + gap, passed: false });
-  }
-
   function flap() {
     if (state !== "running") return;
-    birdVy = FLAP_VELOCITY;
+    // Queued rather than applied immediately: the flap takes effect at the
+    // next fixed step, which is exactly when the server's replay applies it.
+    pendingFlap = true;
+    run.record(OP_FLAP);
     playSound("flap");
-  }
-
-  function birdHitbox() {
-    return {
-      left: BIRD_X - BIRD_W / 2 + BIRD_HIT_INSET_X,
-      right: BIRD_X + BIRD_W / 2 - BIRD_HIT_INSET_X,
-      top: birdY - BIRD_H / 2 + BIRD_HIT_INSET_Y,
-      bottom: birdY + BIRD_H / 2 - BIRD_HIT_INSET_Y,
-    };
-  }
-
-  function rectsOverlap(a, b) {
-    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-  }
-
-  function checkCollision() {
-    const hb = birdHitbox();
-    if (hb.top <= 0 || hb.bottom >= HEIGHT - GROUND_H) return true;
-    for (const pipe of pipes) {
-      if (pipe.x + PIPE_W < hb.left || pipe.x > hb.right) continue;
-      const top = { left: pipe.x, right: pipe.x + PIPE_W, top: 0, bottom: pipe.gapTop };
-      const bottom = { left: pipe.x, right: pipe.x + PIPE_W, top: pipe.gapBottom, bottom: HEIGHT - GROUND_H };
-      if (rectsOverlap(hb, top) || rectsOverlap(hb, bottom)) return true;
-    }
-    return false;
   }
 
   function spawnBirdBurst() {
@@ -203,7 +192,7 @@
       const sp = 1.5 + Math.random() * 3.5;
       particles.push({
         x: BIRD_X,
-        y: birdY,
+        y: gs.birdY,
         vx: Math.cos(angle) * sp,
         vy: Math.sin(angle) * sp - 1,
         color: ["#38bdf8", "#0f7ea8", "#ffffff", "#fb923c"][i % 4],
@@ -252,128 +241,26 @@
       writeBest(best);
       updateHud();
     }
-    submitScore(score);
+    run.finish(score);
     showOverlay("over");
   }
 
-  // --- Leaderboard -----------------------------------------------------------
-  // Identical wiring to public/js/games/falling-blocks.js's leaderboard section -
-  // keep both in sync if the shared markup/response shape ever changes.
-
-  const leaderboard = document.getElementById("pd-leaderboard");
-  const lbList = document.getElementById("pd-lb-list");
-  const lbMeWrap = document.getElementById("pd-lb-me");
-  const lbMeRow = document.getElementById("pd-lb-me-row");
-
-  function lbRow(row, isMe) {
-    const li = document.createElement("li");
-    li.className = "flex items-baseline gap-2 text-sm py-1 px-1 rounded" + (isMe ? " bg-purple-500/10" : "");
-    const rank = document.createElement("span");
-    rank.className = "w-5 text-right tabular-nums text-neutral-500 shrink-0";
-    rank.textContent = row.rank;
-    const name = document.createElement("span");
-    name.className = "flex-1 truncate " + (isMe ? "text-purple-300" : "text-neutral-300");
-    name.textContent = row.displayName;
-    if (row.color) name.style.color = row.color;
-    const points = document.createElement("span");
-    points.className = "tabular-nums text-neutral-100";
-    points.textContent = row.score;
-    li.append(rank, name, points);
-    return li;
-  }
-
-  function renderLeaderboard(data) {
-    lbList.textContent = "";
-    if (data.rows.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-neutral-500 py-1";
-      li.textContent = leaderboard.dataset.emptyLabel;
-      lbList.appendChild(li);
-    }
-    for (const row of data.rows) lbList.appendChild(lbRow(row, row.isMe));
-    lbMeRow.textContent = "";
-    if (data.myRow) {
-      lbMeRow.appendChild(lbRow(data.myRow, true));
-      lbMeWrap.hidden = false;
-    } else {
-      lbMeWrap.hidden = true;
-    }
-  }
-
-  // Fire-and-forget: the leaderboard is a side dish, a failed save must never
-  // interrupt the game. Anonymous visitors have no data-csrf (the server
-  // wouldn't accept their score anyway), so we don't even attempt the POST.
-  function submitScore(finalScore) {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || finalScore < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(finalScore) }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data && data.ok) renderLeaderboard(data);
-      })
-      .catch(() => {});
-  }
-
-  // --- Leave-page confirmation ----------------------------------------------
+  // --- Leaderboard / leave-page confirmation ---------------------------------
+  // Both used to be copy-pasted into each of the six solo games; they now live
+  // in soloRunClient.js, which also owns the run token and input recording.
 
   function gameInProgress() {
     return state === "running" || state === "paused";
   }
 
-  function saveScoreBeacon() {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || score < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(score) }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  const leaveDialog = document.getElementById("pd-leave-confirm-dialog");
-  const leaveSaveBtn = document.getElementById("pd-leave-save");
-  const leaveDiscardBtn = document.getElementById("pd-leave-discard");
-  const leaveCancelBtn = document.getElementById("pd-leave-cancel");
-  let pendingLeaveHref = null;
-
-  if (leaveDialog) {
-    document.addEventListener("click", (event) => {
-      if (!gameInProgress()) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest("a[href]");
-      if (!link || link.target === "_blank") return;
-      event.preventDefault();
-      pendingLeaveHref = link.href;
-      pause();
-      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
-      leaveDialog.showModal();
-    });
-
-    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
-    leaveDiscardBtn?.addEventListener("click", () => {
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-    leaveSaveBtn?.addEventListener("click", () => {
-      saveScoreBeacon();
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-  }
-
-  window.addEventListener("beforeunload", (event) => {
-    if (!gameInProgress()) return;
-    event.preventDefault();
-    event.returnValue = "";
+  window.SoloRun.wireLeaveConfirm({
+    dialogId: "pd-leave-confirm-dialog",
+    saveId: "pd-leave-save",
+    discardId: "pd-leave-discard",
+    cancelId: "pd-leave-cancel",
+    isInProgress: gameInProgress,
+    canSave: () => run.canSubmit(),
+    onSave: () => run.leaveBeacon(score),
   });
 
   function updateHud() {
@@ -443,7 +330,7 @@
   }
 
   function drawPipes() {
-    for (const pipe of pipes) {
+    for (const pipe of gs.pipes) {
       drawPipeSegment(pipe.x, true, 0, pipe.gapTop);
       drawPipeSegment(pipe.x, false, pipe.gapBottom, HEIGHT - GROUND_H - pipe.gapBottom);
     }
@@ -451,7 +338,7 @@
 
   function drawBird() {
     ctx.save();
-    ctx.translate(BIRD_X, birdY);
+    ctx.translate(BIRD_X, gs.birdY);
     ctx.rotate(birdAngle);
     if (birdImg.complete && birdImg.naturalWidth) {
       ctx.drawImage(birdImg, -BIRD_W / 2, -BIRD_H / 2, BIRD_W, BIRD_H);
@@ -481,10 +368,29 @@
 
   function update(delta) {
     const dtS = delta / 1000;
-    const d = difficultyFor(score);
-    speed = d.speed;
-    gap = d.gap;
 
+    // --- Simulation: whole fixed steps only -------------------------------
+    // The server advances the identical loop, so the two stay bit-for-bit in
+    // step. A flap queued between frames is applied before the next step,
+    // which is exactly where the replay applies it.
+    if (pendingFlap) {
+      engine.applyInput(gs, "flap");
+      pendingFlap = false;
+    }
+    stepAcc += delta;
+    while (stepAcc >= engine.FIXED_DT_MS && !gs.dead) {
+      const result = engine.step(gs);
+      stepAcc -= engine.FIXED_DT_MS;
+      simTime += engine.FIXED_DT_MS;
+      for (let i = 0; i < result.scored; i++) {
+        score = gs.score;
+        playSound("point", { rate: 1 + Math.min(0.3, score / 100) });
+        updateHud();
+      }
+    }
+    score = gs.score;
+
+    // --- Presentation: free-running, never feeds back into the simulation --
     for (const c of clouds) {
       c.x -= c.speed * dtS;
       if (c.x < -c.r * 2) {
@@ -492,36 +398,14 @@
         c.y = 30 + Math.random() * 160;
       }
     }
-    groundScroll -= speed * dtS;
-
-    birdVy = Math.min(MAX_FALL_SPEED, birdVy + GRAVITY * dtS);
-    birdY += birdVy * dtS;
-    const targetAngle = Math.max(-0.5, Math.min(1.3, birdVy / 700));
+    groundScroll -= gs.speed * dtS;
+    const targetAngle = Math.max(-0.5, Math.min(1.3, gs.birdVy / 700));
     birdAngle += (targetAngle - birdAngle) * Math.min(1, dtS * 10);
-
-    distSinceSpawn += speed * dtS;
-    if (distSinceSpawn >= SPAWN_SPACING) {
-      distSinceSpawn -= SPAWN_SPACING;
-      spawnPipe();
-    }
-
-    for (const pipe of pipes) {
-      pipe.x -= speed * dtS;
-      if (!pipe.passed && pipe.x + PIPE_W < BIRD_X - BIRD_W / 2) {
-        pipe.passed = true;
-        score++;
-        playSound("point", { rate: 1 + Math.min(0.3, score / 100) });
-        updateHud();
-      }
-    }
-    pipes = pipes.filter((pipe) => pipe.x > -PIPE_W - 5);
 
     updateParticles(delta);
     if (shake > 0) shake = Math.max(0, shake - dtS * 2.5);
 
-    if (checkCollision()) {
-      gameOver();
-    }
+    if (gs.dead) gameOver();
   }
 
   function loop(time) {
@@ -569,12 +453,24 @@
     overlay.style.display = "none";
   }
 
-  function start() {
-    reset();
-    state = "running";
-    hideOverlay();
-    draw();
-    startLoop();
+  async function start() {
+    if (starting) return;
+    starting = true;
+    try {
+      // Register the run before reset() deals the first pipes - it needs the
+      // server's seed. begin() races itself against a short timeout and
+      // resolves either way, so a slow or unreachable server costs a moment,
+      // never the ability to play; the run is simply unranked then.
+      run.abandon();
+      await run.begin();
+      reset();
+      state = "running";
+      hideOverlay();
+      draw();
+      startLoop();
+    } finally {
+      starting = false;
+    }
   }
 
   function pause() {

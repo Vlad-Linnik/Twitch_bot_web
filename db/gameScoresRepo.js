@@ -150,6 +150,23 @@ async function getDeathMarksPage(game, afterClimb, limit, excludeUserId) {
 // players-ever proxy, not a total-plays counter: nothing here records repeat
 // sessions, and Durak's vs-computer mode never reaches this collection at all
 // (see public/js/games/durak.js), so it can never appear in the ranking.
+// Removes one player's score for one solo game - the corrective action behind
+// /admin/game-runs when a flagged run turns out to be a forgery.
+//
+// The SOLO_GAMES guard is not optional. This same collection stores multiplayer
+// Elo ratings under other game keys (see applyEloDelta above), where bestScore
+// is a live rating rather than a personal best - deleting one of those rows
+// would silently destroy a player's standing with no way to recompute it.
+async function deleteUserScore(game, userId) {
+  const { SOLO_GAME_SET } = require("../lib/gameReplay");
+  if (!SOLO_GAME_SET.has(game)) {
+    throw new Error("deleteUserScore refuses a non-solo game key: " + game);
+  }
+  const col = await ensureInitialized();
+  const result = await col.deleteOne({ game, userId: String(userId) });
+  return result.deletedCount > 0;
+}
+
 async function getGameCounts() {
   const col = await ensureInitialized();
   return col.aggregate([{ $group: { _id: "$game", count: { $sum: 1 } } }, { $sort: { count: -1 } }]).toArray();
@@ -163,5 +180,6 @@ module.exports = {
   getTop,
   getUserBestAndRank,
   getDeathMarksPage,
+  deleteUserScore,
   getGameCounts,
 };

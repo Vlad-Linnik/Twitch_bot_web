@@ -20,6 +20,25 @@
   const BEST_KEY = "cloudClimberBest";
   const PLAYER_NAME = (board.dataset.playerName && board.dataset.playerName.trim()) || board.dataset.anonymousLabel || "Player";
 
+  // Anti-cheat: this game gets the run token and the shared submit path, but
+  // NOT replay verification - ~40 gameplay Math.random() sites and analog drag
+  // steering make a deterministic engine its own project. What stands in for a
+  // replay is lib/gameReplay/rateCeilings.js, whose bounds are derived from the
+  // physics constants below (JETPACK_SPEED is the fastest SUSTAINED climb the
+  // game permits, so score can grow at most 0.8*900 + 200*1.8 points/second).
+  // Keep those constants in sync if any of these change. Nothing here records
+  // an input log, so run.record()/run.rng are deliberately never used.
+  const RULES_VERSION = 1;
+
+  const run = window.SoloRun.create({
+    gameKey: "cloud-climber",
+    rulesVersion: RULES_VERSION,
+    rootId: "cc-leaderboard",
+    listId: "cc-lb-list",
+    meWrapId: "cc-lb-me",
+    meRowId: "cc-lb-me-row",
+  });
+
   const PLAYER_W = 40;
   const PLAYER_H = 44;
   // Hitbox narrower than the drawn body so near-miss grazes off a platform's
@@ -333,6 +352,10 @@
   let suck; // {timer, duration, startX, startY, holeX, holeY} - set while state === "sucking"
   let score, bonusScore, best;
   let state = "idle"; // idle | running | paused | dying | sucking | over
+  // Guards start() against re-entry: a repeat click on the overlay button
+  // while the first click's run.begin() is still pending would otherwise
+  // start a second render loop racing the first.
+  let starting = false;
   let rafId = null;
   let lastTime = 0;
   let particles = [];
@@ -784,125 +807,32 @@
       writeBest(best);
       updateHud();
     }
-    submitScore(score, deathClimb);
+    // deathClimb rides along as an extra body field - the route still
+    // validates and stores it, and the death-marker feature depends on it.
+    run.finish(score, { deathClimb: String(deathClimb) });
     showOverlay("over");
   }
 
-  // --- Leaderboard -----------------------------------------------------------
-  // Identical wiring to public/js/games/pipe-dodger.js's leaderboard section -
-  // keep both in sync if the shared markup/response shape ever changes.
-
-  const leaderboard = document.getElementById("cc-leaderboard");
-  const lbList = document.getElementById("cc-lb-list");
-  const lbMeWrap = document.getElementById("cc-lb-me");
-  const lbMeRow = document.getElementById("cc-lb-me-row");
-
-  function lbRow(row, isMe) {
-    const li = document.createElement("li");
-    li.className = "flex items-baseline gap-2 text-sm py-1 px-1 rounded" + (isMe ? " bg-purple-500/10" : "");
-    const rank = document.createElement("span");
-    rank.className = "w-5 text-right tabular-nums text-neutral-500 shrink-0";
-    rank.textContent = row.rank;
-    const name = document.createElement("span");
-    name.className = "flex-1 truncate " + (isMe ? "text-purple-300" : "text-neutral-300");
-    name.textContent = row.displayName;
-    if (row.color) name.style.color = row.color;
-    const points = document.createElement("span");
-    points.className = "tabular-nums text-neutral-100";
-    points.textContent = row.score;
-    li.append(rank, name, points);
-    return li;
-  }
-
-  function renderLeaderboard(data) {
-    lbList.textContent = "";
-    if (data.rows.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-neutral-500 py-1";
-      li.textContent = leaderboard.dataset.emptyLabel;
-      lbList.appendChild(li);
-    }
-    for (const row of data.rows) lbList.appendChild(lbRow(row, row.isMe));
-    lbMeRow.textContent = "";
-    if (data.myRow) {
-      lbMeRow.appendChild(lbRow(data.myRow, true));
-      lbMeWrap.hidden = false;
-    } else {
-      lbMeWrap.hidden = true;
-    }
-  }
-
-  // Fire-and-forget: the leaderboard is a side dish, a failed save must never
-  // interrupt the game. Anonymous visitors have no data-csrf (the server
-  // wouldn't accept their score anyway), so we don't even attempt the POST.
-  function submitScore(finalScore, deathClimb) {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || finalScore < 1) return;
-    const body = { _csrf: leaderboard.dataset.csrf, score: String(finalScore) };
-    if (typeof deathClimb === "number") body.deathClimb = String(deathClimb);
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams(body),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data && data.ok) renderLeaderboard(data);
-      })
-      .catch(() => {});
-  }
-
-  // --- Leave-page confirmation ------------------------------------------------
+  // --- Leaderboard / leave-page confirmation ---------------------------------
+  // Both used to be copy-pasted into each of the six solo games; they now live
+  // in soloRunClient.js, which also owns the run token and the submit path.
+  // No deathClimb on the leave beacon on purpose - leaving mid-climb isn't a
+  // death, so it must not drop a death marker.
 
   function gameInProgress() {
     return state === "running" || state === "paused";
   }
 
-  function saveScoreBeacon() {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || score < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(score) }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  const leaveDialog = document.getElementById("cc-leave-confirm-dialog");
-  const leaveSaveBtn = document.getElementById("cc-leave-save");
-  const leaveDiscardBtn = document.getElementById("cc-leave-discard");
-  const leaveCancelBtn = document.getElementById("cc-leave-cancel");
-  let pendingLeaveHref = null;
-
-  if (leaveDialog) {
-    document.addEventListener("click", (event) => {
-      if (!gameInProgress()) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest("a[href]");
-      if (!link || link.target === "_blank") return;
-      event.preventDefault();
-      pendingLeaveHref = link.href;
-      pause();
-      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
-      leaveDialog.showModal();
-    });
-
-    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
-    leaveDiscardBtn?.addEventListener("click", () => {
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-    leaveSaveBtn?.addEventListener("click", () => {
-      saveScoreBeacon();
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-  }
+  window.SoloRun.wireLeaveConfirm({
+    dialogId: "cc-leave-confirm-dialog",
+    saveId: "cc-leave-save",
+    discardId: "cc-leave-discard",
+    cancelId: "cc-leave-cancel",
+    isInProgress: gameInProgress,
+    canSave: () => run.canSubmit(),
+    onOpen: pause,
+    onSave: () => run.leaveBeacon(score),
+  });
 
   window.addEventListener("beforeunload", (event) => {
     if (!gameInProgress()) return;
@@ -1625,12 +1555,24 @@
     overlay.style.display = "none";
   }
 
-  function start() {
-    reset();
-    state = "running";
-    hideOverlay();
-    draw();
-    startLoop();
+  async function start() {
+    if (starting) return;
+    starting = true;
+    try {
+      reset();
+      // Register the run before the clock starts. begin() races itself against
+      // a short timeout and resolves either way, so a slow or unreachable
+      // server costs a moment, never the ability to play - the run is just
+      // unranked.
+      run.abandon();
+      await run.begin();
+      state = "running";
+      hideOverlay();
+      draw();
+      startLoop();
+    } finally {
+      starting = false;
+    }
   }
 
   function pause() {

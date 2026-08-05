@@ -26,6 +26,30 @@ const autosaveLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Starting a solo-game run and submitting its score get their own buckets
+// rather than sharing settingsWriteLimiter: that one is the explicit-action
+// budget for word/command/counter CRUD, and a player finishing a few games
+// should not be able to eat it. Both are per-IP like every other
+// express-rate-limit bucket here, so they bound automation, not legitimate
+// play - the actual anti-cheat is the run token plus server-side replay
+// (lib/gameReplay/), not a request ceiling.
+const gameRunStartLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Higher than run starts because one run legitimately produces several POSTs:
+// mid-run checkpoints (falling-blocks, 2048) plus the final submit, and a
+// retried submit after a lost response.
+const gameScoreSubmitLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Analytics JSON endpoints (period switches on the dashboards). Cheap individually - the clouds
 // are served from wordStatsRepo's TTL cache - but they are the only routes an anonymous visitor
 // can call in a tight loop, so they get a ceiling.
@@ -93,6 +117,8 @@ module.exports = {
   authLimiter,
   settingsWriteLimiter,
   autosaveLimiter,
+  gameRunStartLimiter,
+  gameScoreSubmitLimiter,
   statsReadLimiter,
   searchLimiter,
   durakRoomCreateLimiter,

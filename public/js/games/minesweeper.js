@@ -24,6 +24,23 @@
   const BONUS_MAX_PROCS = 6;
   const DIFFICULTY_KEY = "beginner";
 
+  // Anti-cheat: the run's inputs are recorded and re-simulated server-side
+  // (lib/gameReplay/minesweeper.js). Bump RULES_VERSION here AND there
+  // together whenever a gameplay constant above changes - a mismatch makes the
+  // server skip verification rather than mis-score an honest run.
+  const RULES_VERSION = 2;
+  const OP_REVEAL = 0;
+  const OP_FLAG = 1;
+
+  const run = window.SoloRun.create({
+    gameKey: "minesweeper",
+    rulesVersion: RULES_VERSION,
+    rootId: "ms-leaderboard",
+    listId: "ms-lb-list",
+    meWrapId: "ms-lb-me",
+    meRowId: "ms-lb-me-row",
+  });
+
   const boardsEl = document.getElementById("ms-boards");
   const timeEl = document.getElementById("ms-time");
   const minesLeftEl = document.getElementById("ms-mines-left");
@@ -68,6 +85,18 @@
   // "running"), so a deferred setTimeout(nextBoard, ...) still pending from a board cleared/lost
   // right before the restart button fired would otherwise swap out the just-started board too.
   let runToken = 0;
+  // Guards startRun() against re-entry: runToken above protects a board
+  // already dealt from a stray deferred swap, but it can't stop two clicks
+  // that both land while the first is still awaiting run.begin() - both
+  // would otherwise proceed to deal their own board on their own timer.
+  let starting = false;
+  // Set the moment a board is finished (cleared or exploded) and cleared again
+  // by nextBoard(). The swap is deferred 250/400ms so the player can see the
+  // result, and without this the finished board stays clickable during that
+  // window - which meant every extra click on an already-cleared board passed
+  // checkWin() again and scored ANOTHER board. Rapid-clicking after a clear
+  // was worth several free points.
+  let boardDone = false;
 
   function fmtTime(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -198,7 +227,17 @@
   }
 
   function handleReveal(r, c) {
-    if (state !== "running") return;
+    if (state !== "running" || boardDone) return;
+    run.record(OP_REVEAL, r * board.cols + c);
+    // The board isn't dealt until this, its first reveal - THIS cell is the
+    // safe one, not some pre-guessed spot, so the very first click can never
+    // be a mine no matter where the player clicks. Any flags placed on the
+    // shell beforehand carry over onto the real board.
+    if (!board.generated) {
+      const flagged = board.flagged;
+      board = engine.generateBoard(DIFFICULTY_KEY, r, c, run.rng);
+      board.flagged = flagged;
+    }
     // Clicking an already-revealed number chords: if its surrounding flags
     // already match its count, reveal the rest of its neighbors in one go.
     const result = board.revealed[r][c] ? engine.chordCell(board, r, c) : engine.revealCell(board, r, c);
@@ -208,6 +247,7 @@
       // the run continues - reveal the rest of the mines for feedback, then
       // deal a fresh board.
       playSound("explosion");
+      boardDone = true;
       revealAllMines();
       const explodedToken = runToken;
       setTimeout(() => {
@@ -222,6 +262,7 @@
     }
     updateMinesLeft();
     if (engine.checkWin(board)) {
+      boardDone = true;
       boardsCleared++;
       boardsEl.textContent = boardsCleared;
       const clearedToken = runToken;
@@ -243,7 +284,10 @@
   }
 
   function handleFlag(r, c) {
-    if (state !== "running") return;
+    if (state !== "running" || boardDone) return;
+    // Flags score nothing but they gate chording, so the server has to see
+    // them to replay the run faithfully.
+    run.record(OP_FLAG, r * board.cols + c);
     const placed = engine.toggleFlag(board, r, c);
     if (placed) playSound("flag");
     renderCell(r, c);
@@ -252,11 +296,16 @@
 
   function nextBoard() {
     if (state !== "running") return;
-    // The engine's "first click is safe" guarantee needs a designated safe
-    // cell up front - the board's own center is a reasonable choice since
-    // the player hasn't clicked yet on a fresh board.
-    const diff = engine.DIFFICULTIES[DIFFICULTY_KEY];
-    board = engine.generateBoard(DIFFICULTY_KEY, Math.floor(diff.rows / 2), Math.floor(diff.cols / 2), Math.random);
+    boardDone = false;
+    // No mines yet - an empty shell so the board can be shown (and flagged)
+    // immediately. The real board isn't dealt until handleReveal()'s first
+    // click, using that click's own cell as the safe one (standard
+    // Minesweeper: the first click is never a mine, wherever it lands).
+    // run.rng is the SERVER's seed for this run (or Math.random when the run
+    // couldn't be registered). One rng for the whole run, never one per board:
+    // generateBoard consumes a data-dependent number of draws, so only a
+    // continuous stream stays in step with the server's replay.
+    board = engine.createShell(DIFFICULTY_KEY);
     buildBoardDom();
     renderAll();
   }
@@ -271,143 +320,59 @@
     timeEl.textContent = fmtTime(remaining);
   }
 
-  function startRun() {
-    if (tickHandle) clearInterval(tickHandle); // safe to call while already running (the restart button)
-    runToken++; // invalidate any deferred nextBoard() still pending from the abandoned run
-    boardsCleared = 0;
-    bonusProcs = 0;
-    boardsEl.textContent = "0";
-    deadline = Date.now() + RUN_MS;
-    state = "running";
-    hideOverlay();
-    nextBoard();
-    tick();
-    tickHandle = setInterval(tick, 250);
+  async function startRun() {
+    if (starting) return;
+    starting = true;
+    try {
+      if (tickHandle) clearInterval(tickHandle); // safe to call while already running (the restart button)
+      runToken++; // invalidate any deferred nextBoard() still pending from the abandoned run
+      boardsCleared = 0;
+      bonusProcs = 0;
+      boardsEl.textContent = "0";
+      // Register the run first: nextBoard() below needs the server's seed, and
+      // the clock must not start until we have it. begin() races itself against
+      // a short timeout and resolves either way, so a slow or unreachable server
+      // costs a moment, never the ability to play (the run is then unranked).
+      await run.begin();
+      deadline = Date.now() + RUN_MS;
+      state = "running";
+      hideOverlay();
+      nextBoard();
+      tick();
+      tickHandle = setInterval(tick, 250);
+    } finally {
+      starting = false;
+    }
   }
 
   function endRun() {
     state = "over";
     clearInterval(tickHandle);
     tickHandle = null;
-    submitScore(boardsCleared);
+    run.finish(boardsCleared);
     showOverlay("over");
   }
 
-  // --- Leaderboard -----------------------------------------------------------
-  // Same wiring as 2048.js/falling-blocks.js - see those files' comments.
-
-  const leaderboard = document.getElementById("ms-leaderboard");
-  const lbList = document.getElementById("ms-lb-list");
-  const lbMeWrap = document.getElementById("ms-lb-me");
-  const lbMeRow = document.getElementById("ms-lb-me-row");
-
-  function lbRow(row, isMe) {
-    const li = document.createElement("li");
-    li.className = "flex items-baseline gap-2 text-sm py-1 px-1 rounded" + (isMe ? " bg-purple-500/10" : "");
-    const rank = document.createElement("span");
-    rank.className = "w-5 text-right tabular-nums text-neutral-500 shrink-0";
-    rank.textContent = row.rank;
-    const name = document.createElement("span");
-    name.className = "flex-1 truncate " + (isMe ? "text-purple-300" : "text-neutral-300");
-    name.textContent = row.displayName;
-    if (row.color) name.style.color = row.color;
-    const points = document.createElement("span");
-    points.className = "tabular-nums text-neutral-100";
-    points.textContent = row.score;
-    li.append(rank, name, points);
-    return li;
-  }
-
-  function renderLeaderboard(data) {
-    lbList.textContent = "";
-    if (data.rows.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-neutral-500 py-1";
-      li.textContent = leaderboard.dataset.emptyLabel;
-      lbList.appendChild(li);
-    }
-    for (const row of data.rows) lbList.appendChild(lbRow(row, row.isMe));
-    lbMeRow.textContent = "";
-    if (data.myRow) {
-      lbMeRow.appendChild(lbRow(data.myRow, true));
-      lbMeWrap.hidden = false;
-    } else {
-      lbMeWrap.hidden = true;
-    }
-  }
-
-  function submitScore(finalScore) {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || finalScore < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(finalScore) }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data && data.ok) renderLeaderboard(data);
-      })
-      .catch(() => {});
-  }
-
-  // --- Leave-page confirmation -------------------------------------------------
+  // --- Leaderboard / leave-page confirmation ---------------------------------
+  // Both used to be copy-pasted into each of the six solo games; they now live
+  // in soloRunClient.js, which also owns the run token and input recording.
 
   function gameInProgress() {
     return state === "running";
   }
 
-  function saveScoreBeacon() {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || boardsCleared < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(boardsCleared) }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  const leaveDialog = document.getElementById("ms-leave-confirm-dialog");
-  const leaveSaveBtn = document.getElementById("ms-leave-save");
-  const leaveDiscardBtn = document.getElementById("ms-leave-discard");
-  const leaveCancelBtn = document.getElementById("ms-leave-cancel");
-  let pendingLeaveHref = null;
-
-  if (leaveDialog) {
-    document.addEventListener("click", (event) => {
-      if (!gameInProgress()) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest("a[href]");
-      if (!link || link.target === "_blank") return;
-      event.preventDefault();
-      pendingLeaveHref = link.href;
-      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
-      leaveDialog.showModal();
-    });
-
-    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
-    leaveDiscardBtn?.addEventListener("click", () => {
+  window.SoloRun.wireLeaveConfirm({
+    dialogId: "ms-leave-confirm-dialog",
+    saveId: "ms-leave-save",
+    discardId: "ms-leave-discard",
+    cancelId: "ms-leave-cancel",
+    isInProgress: gameInProgress,
+    canSave: () => run.canSubmit(),
+    onDiscard: () => clearInterval(tickHandle),
+    onSave: () => {
+      run.leaveBeacon(boardsCleared);
       clearInterval(tickHandle);
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-    leaveSaveBtn?.addEventListener("click", () => {
-      saveScoreBeacon();
-      clearInterval(tickHandle);
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-  }
-
-  window.addEventListener("beforeunload", (event) => {
-    if (!gameInProgress()) return;
-    event.preventDefault();
-    event.returnValue = "";
+    },
   });
 
   // --- Overlay -----------------------------------------------------------

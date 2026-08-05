@@ -83,7 +83,17 @@ function createApp(sessionMiddleware) {
     })
   );
   app.use(siteVisits);
-  app.use(express.urlencoded({ extended: false }));
+  // Every route parses bodies at express.urlencoded's 100kB default EXCEPT the
+  // game replay endpoints, which carry a base64 input log that can reach a few
+  // hundred kB on a marathon run (see replayCodec.js's LIMITS). Those two
+  // paths are skipped here and mount their own higher-limit parser inside
+  // routes/games.js instead - raising the ceiling globally would hand every
+  // route on a 2GB VPS a 384kB attacker-controlled buffer to defend.
+  const replayBodyPath = /^\/games\/[^/]+\/(score|run\/checkpoint)\.json$/;
+  const defaultUrlencoded = express.urlencoded({ extended: false });
+  app.use((req, res, next) =>
+    replayBodyPath.test(req.path) ? next() : defaultUrlencoded(req, res, next)
+  );
   app.use(sessionMiddleware);
   app.use(attachUser);
   app.use(i18nMiddleware);

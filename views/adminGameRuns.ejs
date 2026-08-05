@@ -1,0 +1,168 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabGameRuns') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.gameRunsIntro') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <%# Filters. Plain links, no JS - the page is a triage list, not a form. %>
+  <div class="flex flex-wrap items-center gap-2 mb-6 text-xs">
+    <% const qs = function (over) {
+         const f = Object.assign({}, filters, over);
+         const parts = [];
+         if (f.status) parts.push('status=' + encodeURIComponent(f.status));
+         if (f.game) parts.push('game=' + encodeURIComponent(f.game));
+         if (f.severity) parts.push('severity=' + encodeURIComponent(f.severity));
+         return '?' + parts.join('&');
+       }; %>
+    <% ['open', 'dismissed', 'actioned'].forEach(function (s) { %>
+      <a href="<%= qs({ status: s }) %>"
+         class="px-3 py-1.5 rounded-md border transition-colors <%= filters.status === s ? 'border-purple-600 text-neutral-100' : 'border-neutral-800 text-neutral-400 hover:text-neutral-200' %>">
+        <%= t('admin.gameRunsStatus.' + s) %>
+      </a>
+    <% }) %>
+    <span class="w-px h-5 bg-neutral-800 mx-1"></span>
+    <a href="<%= qs({ game: null }) %>"
+       class="px-3 py-1.5 rounded-md border transition-colors <%= !filters.game ? 'border-purple-600 text-neutral-100' : 'border-neutral-800 text-neutral-400 hover:text-neutral-200' %>">
+      <%= t('admin.gameRunsAllGames') %>
+    </a>
+    <% games.forEach(function (g) { %>
+      <a href="<%= qs({ game: g }) %>"
+         class="px-3 py-1.5 rounded-md border transition-colors <%= filters.game === g ? 'border-purple-600 text-neutral-100' : 'border-neutral-800 text-neutral-400 hover:text-neutral-200' %>"><%= g %></a>
+    <% }) %>
+  </div>
+
+  <div class="rounded-lg border border-neutral-800 overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-neutral-900 text-neutral-400">
+        <tr>
+          <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colWhen') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.gameRunsColPlayer') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.gameRunsColGame') %></th>
+          <th class="text-right font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.gameRunsColScores') %></th>
+          <th class="text-right font-medium px-4 py-2 whitespace-nowrap"><%= t('admin.gameRunsColTiming') %></th>
+          <th class="text-left font-medium px-4 py-2"><%= t('admin.gameRunsColReasons') %></th>
+          <th class="text-right font-medium px-4 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-neutral-800">
+        <% flags.forEach(function (f) { %>
+          <tr class="odd:bg-neutral-950 even:bg-neutral-900/40" data-flag-row data-flag-id="<%= f._id %>">
+            <td class="px-4 py-2 text-neutral-500 whitespace-nowrap align-top">
+              <%= new Date(f.createdAt).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %>
+            </td>
+            <td class="px-4 py-2 align-top">
+              <span class="text-neutral-200" <% if (f.color) { %>style="color: <%= f.color %>"<% } %>><%= f.displayName %></span>
+              <div class="text-[11px] text-neutral-600 font-mono"><%= f.userId %></div>
+            </td>
+            <td class="px-4 py-2 text-neutral-400 align-top whitespace-nowrap">
+              <%= f.game %>
+              <div class="text-[11px] <%= f.verified ? 'text-emerald-600' : 'text-amber-600' %>">
+                <%= f.verified ? t('admin.gameRunsVerified') : t('admin.gameRunsUnverified') %>
+              </div>
+            </td>
+            <%# Claimed vs stored vs previous best is the triage signal: a flagged
+                run that didn't even beat the player's own record rarely matters. %>
+            <td class="px-4 py-2 text-right tabular-nums align-top whitespace-nowrap">
+              <div class="text-neutral-200"><%= f.storedScore == null ? '—' : f.storedScore %></div>
+              <% if (f.claimedScore != null && f.claimedScore !== f.storedScore) { %>
+                <div class="text-[11px] text-rose-400"><%= t('admin.gameRunsClaimed') %>: <%= f.claimedScore %></div>
+              <% } %>
+              <div class="text-[11px] text-neutral-600"><%= t('admin.gameRunsPrevBest') %>: <%= f.previousBest == null ? '—' : f.previousBest %></div>
+            </td>
+            <td class="px-4 py-2 text-right tabular-nums text-[11px] text-neutral-500 align-top whitespace-nowrap">
+              <div><%= t('admin.gameRunsElapsed') %>: <%= f.serverElapsedMs == null ? '—' : Math.round(f.serverElapsedMs / 1000) + 's' %></div>
+              <div><%= t('admin.gameRunsSimulated') %>: <%= f.simElapsedMs == null ? '—' : Math.round(f.simElapsedMs / 1000) + 's' %></div>
+            </td>
+            <td class="px-4 py-2 align-top">
+              <span class="inline-block px-2 py-0.5 rounded text-[11px] mb-1
+                <%= f.severity === 'high' ? 'bg-rose-500/15 text-rose-300'
+                    : f.severity === 'medium' ? 'bg-amber-500/15 text-amber-300'
+                    : 'bg-neutral-700/40 text-neutral-400' %>"><%= f.severity %></span>
+              <div class="flex flex-wrap gap-1">
+                <% (f.reasons || []).forEach(function (r) { %>
+                  <span class="inline-block px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px]"
+                        title="<%= r.detail ? JSON.stringify(r.detail) : '' %>"><%= t('admin.gameRunsReason.' + r.code) %></span>
+                <% }) %>
+              </div>
+            </td>
+            <td class="px-4 py-2 text-right align-top whitespace-nowrap">
+              <% if (f.review && f.review.status === 'open') { %>
+                <%# Plain forms are the no-JS fallback; the script below upgrades
+                    them to fetch so the admin keeps their place in the list. %>
+                <form method="post" action="/admin/game-runs/<%= f._id %>/dismiss" class="inline" data-flag-action>
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button type="submit" class="px-2.5 py-1 rounded-md border border-emerald-900 text-emerald-400 hover:text-emerald-200 hover:border-emerald-600 transition-colors text-xs">
+                    <%= t('admin.gameRunsDismiss') %>
+                  </button>
+                </form>
+                <form method="post" action="/admin/game-runs/<%= f._id %>/reset-score" class="inline" data-flag-action
+                      data-confirm="<%= t('admin.gameRunsResetConfirm') %>">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button type="submit" class="px-2.5 py-1 rounded-md border border-rose-900 text-rose-400 hover:text-rose-200 hover:border-rose-600 transition-colors text-xs">
+                    <%= t('admin.gameRunsResetScore') %>
+                  </button>
+                </form>
+              <% } else { %>
+                <span class="text-[11px] text-neutral-600"><%= t('admin.gameRunsStatus.' + (f.review ? f.review.status : 'open')) %></span>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+        <% if (flags.length === 0) { %>
+          <tr><td colspan="7" class="px-4 py-6 text-center text-neutral-500"><%= t('admin.gameRunsEmpty') %></td></tr>
+        <% } %>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <% if (totalPages > 1) { %>
+    <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
+      <% if (page > 1) { %>
+        <a href="<%= qs({}) %>&page=<%= page - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
+      <% } %>
+      <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %>
+        <a href="<%= qs({}) %>&page=<%= page + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
+      <% } else { %>
+        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
+      <% } %>
+    </nav>
+  <% } %>
+</main>
+
+<script nonce="<%= cspNonce %>">
+  // Progressive enhancement over the plain form POSTs above: reviewing a flag
+  // shouldn't reload the page and throw the admin back to the top of a long
+  // triage list. Without JS the forms still work, they just redirect.
+  document.querySelectorAll("form[data-flag-action]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      var confirmText = form.dataset.confirm;
+      if (confirmText && !window.confirm(confirmText)) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      fetch(form.action, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(new FormData(form)),
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.ok) return;
+          var row = form.closest("[data-flag-row]");
+          if (row) row.remove();
+        })
+        .catch(function () {});
+    });
+  });
+</script>
+
+<%- include('partials/foot') %>

@@ -25,6 +25,25 @@
   const TYPE_COUNT = 6;
   const RUN_MS = 3 * 60 * 1000;
 
+  // Anti-cheat: the run's taps are recorded and re-simulated server-side
+  // (lib/gameReplay/match-3.js). Bump RULES_VERSION here AND there together
+  // whenever a gameplay constant above changes - a mismatch makes the server
+  // skip verification rather than mis-score an honest run.
+  const RULES_VERSION = 1;
+  // One opcode is enough: the whole game state is the grid plus the currently
+  // selected cell, so the engine's isAdjacent/isValidSwap decides on its own
+  // whether a tap selects, swaps, re-selects or is refused - on both sides.
+  const OP_TAP = 0;
+
+  const run = window.SoloRun.create({
+    gameKey: "match-3",
+    rulesVersion: RULES_VERSION,
+    rootId: "m3-leaderboard",
+    listId: "m3-lb-list",
+    meWrapId: "m3-lb-me",
+    meRowId: "m3-lb-me-row",
+  });
+
   // Tinted "socket" backdrop per crystal type (kept subtle - the artwork
   // itself is what tells types apart) plus its sprite, sliced from a
   // hand-generated sheet into public/img/games/match3/.
@@ -186,6 +205,12 @@
   // to be the only way to call startRun() is hidden while state is "running") notice its run
   // ended and abandon itself instead of painting stale cells onto the freshly rebuilt board.
   let runToken = 0;
+  // Guards startRun() against re-entry: state is parked at "idle" during the
+  // await below specifically so the overlay button stays inert to gameplay
+  // taps, but the button itself has no such guard - a second click while the
+  // first is still awaiting run.begin() would otherwise build a second grid
+  // on its own timer.
+  let starting = false;
 
   function fmtTime(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -194,9 +219,16 @@
     return m + ":" + String(s).padStart(2, "0");
   }
 
+  // run.rng is the SERVER's seed for this run (or Math.random when the run
+  // couldn't be registered). One rng for the whole run, never one per grid:
+  // generateGrid and resolveCascade both consume a data-dependent number of
+  // draws, so only a continuous stream stays in step with the server's replay.
+  // The retry loop below is part of that stream - every rejected attempt still
+  // drew - so lib/gameReplay/match-3.js reproduces the loop, not just its
+  // result.
   function freshGrid() {
-    let g = engine.generateGrid(ROWS, COLS, TYPE_COUNT, Math.random);
-    while (!engine.hasAnyLegalMove(g)) g = engine.generateGrid(ROWS, COLS, TYPE_COUNT, Math.random);
+    let g = engine.generateGrid(ROWS, COLS, TYPE_COUNT, run.rng);
+    while (!engine.hasAnyLegalMove(g)) g = engine.generateGrid(ROWS, COLS, TYPE_COUNT, run.rng);
     return g;
   }
 
@@ -361,6 +393,10 @@
 
   function handleTap(r, c) {
     if (state !== "running" || busy) return;
+    // Recorded AFTER the guards, so the log holds exactly the taps that
+    // actually reached the state machine - a tap swallowed by `busy` mid-
+    // animation never happened as far as either side is concerned.
+    run.record(OP_TAP, r * COLS + c);
     if (!selected) {
       selected = { r, c };
       renderCell(r, c);
@@ -409,7 +445,7 @@
   }
 
   function resolveAndScore(token) {
-    const { steps } = engine.resolveCascade(grid, TYPE_COUNT, Math.random);
+    const { steps } = engine.resolveCascade(grid, TYPE_COUNT, run.rng);
     animateCascadeSteps(
       steps,
       0,
@@ -443,146 +479,72 @@
     timeEl.textContent = fmtTime(remaining);
   }
 
-  function startRun() {
-    if (tickHandle) clearInterval(tickHandle); // safe to call while already running (the restart button)
-    runToken++; // invalidate any swap/cascade animation still chaining from the abandoned run
-    score = 0;
-    scoreEl.textContent = "0";
-    selected = null;
-    busy = false;
-    grid = freshGrid();
-    buildBoardDom();
-    renderAll();
-    deadline = Date.now() + RUN_MS;
-    state = "running";
-    hideOverlay();
-    tick();
-    tickHandle = setInterval(tick, 250);
+  async function startRun() {
+    if (starting) return;
+    starting = true;
+    try {
+      if (tickHandle) clearInterval(tickHandle); // safe to call while already running (the restart button)
+      runToken++; // invalidate any swap/cascade animation still chaining from the abandoned run
+      // Parked, not "running", for the duration of the await below: the restart
+      // button can fire mid-run, and leaving state === "running" across the
+      // handshake would let a tap in that window land on the OUTGOING grid -
+      // scoring points on a board the new run is about to throw away, and
+      // recording them into a recorder that no longer exists.
+      state = "idle";
+      score = 0;
+      scoreEl.textContent = "0";
+      selected = null;
+      busy = false;
+      // Register the run first: freshGrid() below needs the server's seed, and
+      // the clock must not start until we have it. begin() races itself against
+      // a short timeout and resolves either way, so a slow or unreachable server
+      // costs a moment, never the ability to play (the run is then unranked).
+      await run.begin();
+      // Set before the grid is built so the client's own cutoff can only land
+      // marginally EARLIER than the recorder's t=0 + RUN_MS, never later - the
+      // server truncates at its deadline, and erring the other way would delete
+      // a tap the player was legitimately paid for.
+      deadline = Date.now() + RUN_MS;
+      grid = freshGrid();
+      buildBoardDom();
+      renderAll();
+      state = "running";
+      hideOverlay();
+      tick();
+      tickHandle = setInterval(tick, 250);
+    } finally {
+      starting = false;
+    }
   }
 
   function endRun() {
     state = "over";
     clearInterval(tickHandle);
     tickHandle = null;
-    submitScore(score);
+    run.finish(score);
     showOverlay("over");
   }
 
-  // --- Leaderboard -----------------------------------------------------------
-  // Same wiring as 2048.js/minesweeper.js - see those files' comments.
-
-  const leaderboard = document.getElementById("m3-leaderboard");
-  const lbList = document.getElementById("m3-lb-list");
-  const lbMeWrap = document.getElementById("m3-lb-me");
-  const lbMeRow = document.getElementById("m3-lb-me-row");
-
-  function lbRow(row, isMe) {
-    const li = document.createElement("li");
-    li.className = "flex items-baseline gap-2 text-sm py-1 px-1 rounded" + (isMe ? " bg-purple-500/10" : "");
-    const rank = document.createElement("span");
-    rank.className = "w-5 text-right tabular-nums text-neutral-500 shrink-0";
-    rank.textContent = row.rank;
-    const name = document.createElement("span");
-    name.className = "flex-1 truncate " + (isMe ? "text-purple-300" : "text-neutral-300");
-    name.textContent = row.displayName;
-    if (row.color) name.style.color = row.color;
-    const points = document.createElement("span");
-    points.className = "tabular-nums text-neutral-100";
-    points.textContent = row.score;
-    li.append(rank, name, points);
-    return li;
-  }
-
-  function renderLeaderboard(data) {
-    lbList.textContent = "";
-    if (data.rows.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-neutral-500 py-1";
-      li.textContent = leaderboard.dataset.emptyLabel;
-      lbList.appendChild(li);
-    }
-    for (const row of data.rows) lbList.appendChild(lbRow(row, row.isMe));
-    lbMeRow.textContent = "";
-    if (data.myRow) {
-      lbMeRow.appendChild(lbRow(data.myRow, true));
-      lbMeWrap.hidden = false;
-    } else {
-      lbMeWrap.hidden = true;
-    }
-  }
-
-  function submitScore(finalScore) {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || finalScore < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(finalScore) }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data && data.ok) renderLeaderboard(data);
-      })
-      .catch(() => {});
-  }
-
-  // --- Leave-page confirmation -------------------------------------------------
+  // --- Leaderboard / leave-page confirmation ---------------------------------
+  // Both used to be copy-pasted into each of the six solo games; they now live
+  // in soloRunClient.js, which also owns the run token and input recording.
 
   function gameInProgress() {
     return state === "running";
   }
 
-  function saveScoreBeacon() {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || score < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(score) }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  const leaveDialog = document.getElementById("m3-leave-confirm-dialog");
-  const leaveSaveBtn = document.getElementById("m3-leave-save");
-  const leaveDiscardBtn = document.getElementById("m3-leave-discard");
-  const leaveCancelBtn = document.getElementById("m3-leave-cancel");
-  let pendingLeaveHref = null;
-
-  if (leaveDialog) {
-    document.addEventListener("click", (event) => {
-      if (!gameInProgress()) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest("a[href]");
-      if (!link || link.target === "_blank") return;
-      event.preventDefault();
-      pendingLeaveHref = link.href;
-      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
-      leaveDialog.showModal();
-    });
-
-    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
-    leaveDiscardBtn?.addEventListener("click", () => {
+  window.SoloRun.wireLeaveConfirm({
+    dialogId: "m3-leave-confirm-dialog",
+    saveId: "m3-leave-save",
+    discardId: "m3-leave-discard",
+    cancelId: "m3-leave-cancel",
+    isInProgress: gameInProgress,
+    canSave: () => run.canSubmit(),
+    onDiscard: () => clearInterval(tickHandle),
+    onSave: () => {
+      run.leaveBeacon(score);
       clearInterval(tickHandle);
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-    leaveSaveBtn?.addEventListener("click", () => {
-      saveScoreBeacon();
-      clearInterval(tickHandle);
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-  }
-
-  window.addEventListener("beforeunload", (event) => {
-    if (!gameInProgress()) return;
-    event.preventDefault();
-    event.returnValue = "";
+    },
   });
 
   // --- Overlay -----------------------------------------------------------------

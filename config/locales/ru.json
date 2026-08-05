@@ -171,6 +171,31 @@
     }
   },
   "games": {
+    "2048": {
+      "name": "2048",
+      "cardDescription": "Сдвигайте и объединяйте плитки, чтобы получить 2048 и больше.",
+      "score": "Счёт",
+      "best": "Рекорд",
+      "controlsTitle": "Управление",
+      "controlsMove": "Движение",
+      "newGame": "Новая игра",
+      "swipeHint": "Стрелки, WASD или свайп, чтобы двигать плитки",
+      "start": "Играть",
+      "won": "Вы собрали 2048!",
+      "keepPlaying": "Продолжить",
+      "gameOver": "Игра окончена",
+      "finalScore": "Счёт",
+      "playAgain": "Ещё раз",
+      "backToGames": "Все игры",
+      "leaderboardTitle": "Топ-10",
+      "leaderboardEmpty": "Пока пусто — станьте первым!",
+      "loginToSave": "Войдите, чтобы сохранять результат в таблицу.",
+      "leaveConfirmTitle": "Покинуть игру?",
+      "leaveConfirmBody": "Игра ещё не окончена. Сохранить текущий результат перед выходом или уйти без сохранения?",
+      "leaveSave": "Сохранить и выйти",
+      "leaveDiscard": "Выйти без сохранения",
+      "leaveCancel": "Продолжить игру"
+    },
     "title": "Мини-игры",
     "volume": "Громкость звука",
     "sortHandLabel": "Сортировка руки",
@@ -267,31 +292,6 @@
       "leaveDiscard": "Выйти без сохранения",
       "leaveCancel": "Продолжить игру",
       "deathMarkerAnonymous": "Игрок"
-    },
-    "2048": {
-      "name": "2048",
-      "cardDescription": "Сдвигайте и объединяйте плитки, чтобы получить 2048 и больше.",
-      "score": "Счёт",
-      "best": "Рекорд",
-      "controlsTitle": "Управление",
-      "controlsMove": "Движение",
-      "newGame": "Новая игра",
-      "swipeHint": "Стрелки, WASD или свайп, чтобы двигать плитки",
-      "start": "Играть",
-      "won": "Вы собрали 2048!",
-      "keepPlaying": "Продолжить",
-      "gameOver": "Игра окончена",
-      "finalScore": "Счёт",
-      "playAgain": "Ещё раз",
-      "backToGames": "Все игры",
-      "leaderboardTitle": "Топ-10",
-      "leaderboardEmpty": "Пока пусто — станьте первым!",
-      "loginToSave": "Войдите, чтобы сохранять результат в таблицу.",
-      "leaveConfirmTitle": "Покинуть игру?",
-      "leaveConfirmBody": "Игра ещё не окончена. Сохранить текущий результат перед выходом или уйти без сохранения?",
-      "leaveSave": "Сохранить и выйти",
-      "leaveDiscard": "Выйти без сохранения",
-      "leaveCancel": "Продолжить игру"
     },
     "durak": {
       "name": "Дурак",
@@ -1440,6 +1440,10 @@
         "delete": "Комментарий удалён",
         "restrictUser": "Комментатор ограничен",
         "unrestrictUser": "Ограничение снято"
+      },
+      "gameRun": {
+        "dismiss": "Пометка забега снята",
+        "resetScore": "Счёт в игре сброшен"
       }
     },
     "news": {
@@ -1479,6 +1483,53 @@
       "formatHint": "Markdown преобразуется в HTML; HTML используется как есть. Оба варианта проходят очистку перед публикацией.",
       "save": "Опубликовать",
       "cancel": "Отмена"
+    },
+    "tabGameRuns": "Подозрительные забеги",
+    "gameRunsIntro": "Забеги в одиночных играх, которые античит вынес на проверку человеком. Ничего из этого не было заблокировано — пометка это вопрос, а не приговор.",
+    "gameRunsEmpty": "Помеченных забегов нет.",
+    "gameRunsAllGames": "Все игры",
+    "gameRunsColPlayer": "Игрок",
+    "gameRunsColGame": "Игра",
+    "gameRunsColScores": "Счёт",
+    "gameRunsColTiming": "Время",
+    "gameRunsColReasons": "Причина",
+    "gameRunsVerified": "пересчитан",
+    "gameRunsUnverified": "не пересчитан",
+    "gameRunsClaimed": "заявлено",
+    "gameRunsPrevBest": "прошлый рекорд",
+    "gameRunsElapsed": "реальное",
+    "gameRunsSimulated": "симуляция",
+    "gameRunsDismiss": "Одобрить рекорд",
+    "gameRunsResetScore": "Отклонить рекорд",
+    "gameRunsResetConfirm": "Удалить рекорд этого игрока в этой игре? Действие необратимо.",
+    "gameRunsStatus": {
+      "open": "Открытые",
+      "dismissed": "Одобренные",
+      "actioned": "Отклонённые"
+    },
+    "gameRunsReason": {
+      "scoreMismatch": "Заявлено больше, чем дал пересчёт",
+      "scoreOverrun": "Пересчёт дал больше заявленного (скорее всего наш баг)",
+      "timeTravel": "Симуляция длиннее реального времени забега",
+      "staleRules": "Записано на других правилах игры",
+      "legacyClient": "Старый клиент, без токена забега",
+      "noReplay": "Журнал ввода не прислан",
+      "malformedReplay": "Журнал ввода повреждён",
+      "wrongGame": "Журнал от другой игры",
+      "illegalReplay": "В журнале невозможный ход",
+      "replayTimeout": "Пересчёт превысил лимит времени",
+      "driverError": "Пересчёт упал (наш баг)",
+      "impossibleRate": "Очки росли быстрее, чем позволяет игра",
+      "impossiblePerEvent": "Очков больше, чем позволяет число действий",
+      "impossibleClimb": "Подъём быстрее, чем позволяет игра",
+      "legacyCapExceeded": "Счёт без токена выше правдоподобного потолка",
+      "highRate": "Необычно быстрый рост очков",
+      "climbMismatch": "Счёт не сходится с достигнутой высотой",
+      "ceilingDisagreesWithReplay": "Потолок скорости противоречит пересчёту",
+      "beaconOversize": "Журнал слишком велик для отправки при уходе",
+      "constantCadence": "Ввод с машинно-ровным интервалом",
+      "lowJitter": "Тайминг ввода слишком стабилен для руки",
+      "superhumanApm": "Действий в секунду больше, чем выдерживает человек"
     }
   }
 }

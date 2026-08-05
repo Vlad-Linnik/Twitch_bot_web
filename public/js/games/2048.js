@@ -9,10 +9,32 @@
   "use strict";
 
   const board = document.getElementById("g2048-board");
-  if (!board) return;
+  const engine = window.Game2048Engine;
+  if (!board || !engine) return;
 
-  const SIZE = 4;
-  const WIN_VALUE = 2048;
+  const SIZE = engine.SIZE;
+  const WIN_VALUE = engine.WIN_VALUE;
+
+  // Anti-cheat: the run's moves are recorded and re-simulated server-side
+  // (lib/gameReplay/2048.js) through this same engine. Bump RULES_VERSION here
+  // AND there together whenever a gameplay rule changes - a mismatch makes the
+  // server skip verification rather than mis-score an honest run.
+  const RULES_VERSION = 1;
+  // Direction rides in the opcode byte itself, no argument bytes - 2 bytes per
+  // move, which is what keeps a long marathon inside its payload ceiling.
+  const OPCODES = { left: 0, right: 1, up: 2, down: 3 };
+
+  const run = window.SoloRun.create({
+    gameKey: "2048",
+    rulesVersion: RULES_VERSION,
+    rootId: "g2048-leaderboard",
+    listId: "g2048-lb-list",
+    meWrapId: "g2048-lb-me",
+    meRowId: "g2048-lb-me-row",
+    // 2048 runs are open-ended, and a browser caps a keepalive:true beacon
+    // body at 64kB - so the log is banked mid-run rather than sent whole.
+    checkpoint: true,
+  });
   const BEST_KEY = "the2048Best";
   const SAVE_KEY = "the2048Save";
   const MOVE_MS = 120;
@@ -72,10 +94,15 @@
   // Tile identity doesn't need to survive the round trip (nothing animates
   // across a page load), so this only stores each cell's value, not tile ids.
 
+  // The saved board is accompanied by the run's INPUT LOG. A restored position
+  // can't be derived from a seed alone, so without the log a resumed game
+  // would be unverifiable - the log is what lets the next session rebuild the
+  // exact same position and keep the same run token.
   function saveGame() {
     try {
       const grid = cells.map((row) => row.map((t) => (t ? t.value : null)));
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ grid, score, won, state }));
+      const runState = run.serialize();
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ grid, score, won, state, run: runState }));
     } catch (_) {
       /* private mode etc. - the game just won't resume next time */
     }
@@ -197,7 +224,7 @@
 
   // --- Game state --------------------------------------------------------------
 
-  let cells; // cells[r][c] = tile object or null
+  let cells; // cells[r][c] = tile object or null - RENDERING only
   let tiles; // Map id -> tile object {id, r, c, value}
   let tileEls; // Map id -> outer positioned element
   let nextId;
@@ -205,40 +232,56 @@
   let won = false;
   let busy = false;
   let state = "idle"; // idle | running | won | over
+  // Guards start() against re-entry: a repeat click on the overlay button
+  // while the first click's run.begin() is still pending would otherwise
+  // deal a second board on top of the first.
+  let starting = false;
+  // The authoritative board. `cells` above mirrors it with tile identities
+  // attached so the DOM layer can animate; the RULES live only here, in the
+  // shared engine, so the server replays exactly what the browser played.
+  let engineState = null;
 
-  function emptyCells() {
-    const res = [];
-    for (let r = 0; r < SIZE; r++) {
-      for (let c = 0; c < SIZE; c++) {
-        if (!cells[r][c]) res.push([r, c]);
-      }
-    }
-    return res;
-  }
-
-  function spawnRandomTile() {
-    const empties = emptyCells();
-    if (empties.length === 0) return null;
-    const [r, c] = empties[Math.floor(Math.random() * empties.length)];
-    const value = Math.random() < 0.9 ? 2 : 4;
-    const tile = { id: nextId++, r, c, value };
-    cells[r][c] = tile;
-    tiles.set(tile.id, tile);
-    createTileEl(tile);
-    return tile;
-  }
-
-  function reset() {
+  function clearTiles() {
     cells = Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
     tiles = new Map();
     tileEls = new Map();
     tilesLayer.textContent = "";
     nextId = 1;
+  }
+
+  // Materializes tile objects/elements for every occupied cell of the engine
+  // grid. Used both for a fresh board and for a restored one - tile identity
+  // never needs to survive either, since nothing animates across them.
+  function buildTilesFromGrid() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const value = engineState.grid[r][c];
+        if (!value) continue;
+        const tile = { id: nextId++, r, c, value };
+        cells[r][c] = tile;
+        tiles.set(tile.id, tile);
+        createTileEl(tile);
+      }
+    }
+  }
+
+  function addSpawnedTile(spawn) {
+    const tile = { id: nextId++, r: spawn.r, c: spawn.c, value: spawn.value };
+    cells[spawn.r][spawn.c] = tile;
+    tiles.set(tile.id, tile);
+    createTileEl(tile);
+  }
+
+  function reset() {
+    clearTiles();
     score = 0;
     won = false;
     busy = false;
-    spawnRandomTile();
-    spawnRandomTile();
+    // run.rng is the server's seeded stream while the run is ranked, plain
+    // Math.random otherwise. Every draw must go through it - a bare
+    // Math.random() here would desync the server's replay immediately.
+    engineState = engine.createState(run.rng);
+    buildTilesFromGrid();
     updateHud();
   }
 
@@ -248,22 +291,9 @@
   }
 
   function restoreFromSave(save) {
-    cells = Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
-    tiles = new Map();
-    tileEls = new Map();
-    tilesLayer.textContent = "";
-    nextId = 1;
-    for (let r = 0; r < SIZE; r++) {
-      for (let c = 0; c < SIZE; c++) {
-        const value = save.grid[r][c];
-        if (value == null) continue;
-        const tile = { id: nextId++, r, c, value };
-        cells[r][c] = tile;
-        tiles.set(tile.id, tile);
-        createTileEl(tile);
-      }
-    }
-    score = save.score;
+    clearTiles();
+    buildTilesFromGrid();
+    score = engineState.score;
     won = !!save.won;
     busy = false;
     updateHud();
@@ -272,75 +302,74 @@
     else hideOverlay();
   }
 
-  // --- Movement ------------------------------------------------------------
-
-  // Each line is 4 [r,c] coordinate pairs ordered toward index 0, i.e. the
-  // direction tiles slide toward for that move.
-  function linesFor(dir) {
-    const lines = [];
-    if (dir === "left" || dir === "right") {
-      for (let r = 0; r < SIZE; r++) {
-        const cols = [0, 1, 2, 3];
-        if (dir === "right") cols.reverse();
-        lines.push(cols.map((c) => [r, c]));
-      }
-    } else {
+  // Rebuilds a saved position by re-running the saved input log from the run's
+  // seed. This is what makes a resumed game verifiable: the server can do the
+  // exact same thing with the exact same log. Replaying through run.rng also
+  // advances that stream to where the previous session left it, so play
+  // continues from the right point.
+  //
+  // Returns false if the rebuild doesn't reproduce the saved board - a save
+  // from an older version of the rules, or a hand-edited localStorage value.
+  // The caller then discards it rather than trying to salvage it.
+  function rebuildFromLog(save) {
+    const rebuilt = engine.createState(run.rng);
+    for (const ev of save.run.events) {
+      const dir = Object.keys(OPCODES).find((k) => OPCODES[k] === ev.opcode);
+      if (!dir) return false;
+      engine.move(rebuilt, dir, run.rng);
+    }
+    if (rebuilt.score !== save.score) return false;
+    for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
-        const rows = [0, 1, 2, 3];
-        if (dir === "down") rows.reverse();
-        lines.push(rows.map((r) => [r, c]));
+        if (rebuilt.grid[r][c] !== (save.grid[r][c] || 0)) return false;
       }
     }
-    return lines;
+    engineState = rebuilt;
+    return true;
   }
+
+  // --- Movement ------------------------------------------------------------
 
   function move(dir) {
     if (state !== "running" || busy) return;
 
-    const lines = linesFor(dir);
+    // The engine decides everything: what slid where, what merged, what was
+    // gained, and where the new tile spawned. A null result is a legal no-op
+    // (pressing into a wall) and draws NOTHING from the rng - spawning on a
+    // no-op would shift every later draw and rewrite the rest of the game.
+    const result = engine.move(engineState, dir, run.rng);
+    if (!result) return;
+
+    // Recorded after the guards and after the no-op check, so the log holds
+    // exactly the moves that changed the board - which is exactly what
+    // lib/gameReplay/2048.js replays.
+    run.record(OPCODES[dir]);
+
     const newCells = Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
     const merges = []; // {primary, secondary, r, c, value}
-    let moved = false;
-    let scoreGain = 0;
 
-    for (const line of lines) {
-      const seq = [];
-      for (const [r, c] of line) {
-        const t = cells[r][c];
-        if (t) seq.push(t);
-      }
-      let i = 0;
-      let slot = 0;
-      while (i < seq.length) {
-        const [r, c] = line[slot];
-        const cur = seq[i];
-        if (i + 1 < seq.length && seq[i + 1].value === cur.value) {
-          const secondary = seq[i + 1];
-          const value = cur.value * 2;
-          scoreGain += value;
-          merges.push({ primary: cur, secondary, r, c, value });
-          cur.r = r;
-          cur.c = c;
-          cur.value = value;
-          newCells[r][c] = cur;
-          tiles.delete(secondary.id);
-          moved = true;
-          i += 2;
-        } else {
-          if (cur.r !== r || cur.c !== c) moved = true;
-          cur.r = r;
-          cur.c = c;
-          newCells[r][c] = cur;
-          i += 1;
-        }
-        slot++;
+    // Map the engine's coordinate-based description back onto tile objects so
+    // the DOM layer can animate them.
+    for (const op of result.ops) {
+      if (op.type === "merge") {
+        const primary = cells[op.primary[0]][op.primary[1]];
+        const secondary = cells[op.secondary[0]][op.secondary[1]];
+        primary.r = op.to[0];
+        primary.c = op.to[1];
+        primary.value = op.value;
+        newCells[op.to[0]][op.to[1]] = primary;
+        tiles.delete(secondary.id);
+        merges.push({ primary, secondary, r: op.to[0], c: op.to[1], value: op.value });
+      } else {
+        const tile = cells[op.from[0]][op.from[1]];
+        tile.r = op.to[0];
+        tile.c = op.to[1];
+        newCells[op.to[0]][op.to[1]] = tile;
       }
     }
 
-    if (!moved) return;
-
     cells = newCells;
-    score += scoreGain;
+    score = engineState.score;
     busy = true;
     updateHud();
 
@@ -362,7 +391,9 @@
       }
       if (merges.length > 0) playSound("merge");
 
-      spawnRandomTile();
+      // The engine already placed this tile on the grid when the move was
+      // applied; this only gives it a DOM presence, after the slide animation.
+      if (result.spawn) addSpawnedTile(result.spawn);
 
       setTimeout(() => {
         busy = false;
@@ -371,34 +402,15 @@
     }, MOVE_MS);
   }
 
-  function hasReachedWinValue() {
-    for (const tile of tiles.values()) {
-      if (tile.value >= WIN_VALUE) return true;
-    }
-    return false;
-  }
-
-  function isGameOver() {
-    if (emptyCells().length > 0) return false;
-    for (let r = 0; r < SIZE; r++) {
-      for (let c = 0; c < SIZE; c++) {
-        const v = cells[r][c].value;
-        if (c + 1 < SIZE && cells[r][c + 1].value === v) return false;
-        if (r + 1 < SIZE && cells[r + 1][c].value === v) return false;
-      }
-    }
-    return true;
-  }
-
   function checkWinAndOver() {
-    if (!won && hasReachedWinValue()) {
+    if (!won && engine.hasReachedWinValue(engineState)) {
       won = true;
       state = "won";
       showOverlay("won");
       saveGame();
       return;
     }
-    if (isGameOver()) {
+    if (engine.isGameOver(engineState)) {
       endGame();
     } else {
       saveGame();
@@ -412,128 +424,27 @@
       writeBest(best);
       updateHud();
     }
-    submitScore(score);
+    run.finish(score);
     showOverlay("over");
     clearSave(); // nothing left to resume once the game has actually ended
   }
 
-  // --- Leaderboard -----------------------------------------------------------
-  // Identical wiring to the other two games' leaderboard sections - keep all
-  // three in sync if the shared markup/response shape ever changes.
-
-  const leaderboard = document.getElementById("g2048-leaderboard");
-  const lbList = document.getElementById("g2048-lb-list");
-  const lbMeWrap = document.getElementById("g2048-lb-me");
-  const lbMeRow = document.getElementById("g2048-lb-me-row");
-
-  function lbRow(row, isMe) {
-    const li = document.createElement("li");
-    li.className = "flex items-baseline gap-2 text-sm py-1 px-1 rounded" + (isMe ? " bg-purple-500/10" : "");
-    const rank = document.createElement("span");
-    rank.className = "w-5 text-right tabular-nums text-neutral-500 shrink-0";
-    rank.textContent = row.rank;
-    const name = document.createElement("span");
-    name.className = "flex-1 truncate " + (isMe ? "text-purple-300" : "text-neutral-300");
-    name.textContent = row.displayName;
-    if (row.color) name.style.color = row.color;
-    const points = document.createElement("span");
-    points.className = "tabular-nums text-neutral-100";
-    points.textContent = row.score;
-    li.append(rank, name, points);
-    return li;
-  }
-
-  function renderLeaderboard(data) {
-    lbList.textContent = "";
-    if (data.rows.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-neutral-500 py-1";
-      li.textContent = leaderboard.dataset.emptyLabel;
-      lbList.appendChild(li);
-    }
-    for (const row of data.rows) lbList.appendChild(lbRow(row, row.isMe));
-    lbMeRow.textContent = "";
-    if (data.myRow) {
-      lbMeRow.appendChild(lbRow(data.myRow, true));
-      lbMeWrap.hidden = false;
-    } else {
-      lbMeWrap.hidden = true;
-    }
-  }
-
-  // Fire-and-forget: the leaderboard is a side dish, a failed save must never
-  // interrupt the game. Anonymous visitors have no data-csrf (the server
-  // wouldn't accept their score anyway), so we don't even attempt the POST.
-  function submitScore(finalScore) {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || finalScore < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(finalScore) }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data && data.ok) renderLeaderboard(data);
-      })
-      .catch(() => {});
-  }
-
-  // --- Leave-page confirmation -------------------------------------------------
+  // --- Leaderboard / leave-page confirmation ---------------------------------
+  // Both used to be copy-pasted into each of the six solo games; they now live
+  // in soloRunClient.js, which also owns the run token and input recording.
 
   function gameInProgress() {
     return state === "running" || state === "won";
   }
 
-  function saveScoreBeacon() {
-    if (!leaderboard || !leaderboard.dataset.submitUrl || score < 1) return;
-    fetch(leaderboard.dataset.submitUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ _csrf: leaderboard.dataset.csrf, score: String(score) }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  const leaveDialog = document.getElementById("g2048-leave-confirm-dialog");
-  const leaveSaveBtn = document.getElementById("g2048-leave-save");
-  const leaveDiscardBtn = document.getElementById("g2048-leave-discard");
-  const leaveCancelBtn = document.getElementById("g2048-leave-cancel");
-  let pendingLeaveHref = null;
-
-  if (leaveDialog) {
-    document.addEventListener("click", (event) => {
-      if (!gameInProgress()) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest("a[href]");
-      if (!link || link.target === "_blank") return;
-      event.preventDefault();
-      pendingLeaveHref = link.href;
-      if (leaveSaveBtn) leaveSaveBtn.hidden = !(leaderboard && leaderboard.dataset.submitUrl);
-      leaveDialog.showModal();
-    });
-
-    leaveCancelBtn?.addEventListener("click", () => leaveDialog.close());
-    leaveDiscardBtn?.addEventListener("click", () => {
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-    leaveSaveBtn?.addEventListener("click", () => {
-      saveScoreBeacon();
-      leaveDialog.close();
-      if (pendingLeaveHref) location.href = pendingLeaveHref;
-    });
-  }
-
-  window.addEventListener("beforeunload", (event) => {
-    if (!gameInProgress()) return;
-    event.preventDefault();
-    event.returnValue = "";
+  window.SoloRun.wireLeaveConfirm({
+    dialogId: "g2048-leave-confirm-dialog",
+    saveId: "g2048-leave-save",
+    discardId: "g2048-leave-discard",
+    cancelId: "g2048-leave-cancel",
+    isInProgress: gameInProgress,
+    canSave: () => run.canSubmit(),
+    onSave: () => run.leaveBeacon(score),
   });
 
   // --- Overlay / state transitions ------------------------------------------
@@ -560,15 +471,28 @@
     overlay.style.display = "none";
   }
 
-  function start() {
-    reset();
-    state = "running";
-    hideOverlay();
-    saveGame();
+  async function start() {
+    if (starting) return;
+    starting = true;
+    try {
+      // Register the run before the board is dealt: reset() below needs the
+      // server's seed. begin() races itself against a short timeout and
+      // resolves either way, so a slow or unreachable server costs a moment,
+      // never the ability to play - the run is simply unranked then.
+      run.abandon();
+      await run.begin();
+      reset();
+      state = "running";
+      hideOverlay();
+      saveGame();
+    } finally {
+      starting = false;
+    }
   }
 
   overlayButton.addEventListener("click", () => {
     if (state === "won") {
+      // "Keep playing" continues the SAME run - don't touch the token.
       state = "running";
       hideOverlay();
       saveGame();
@@ -631,9 +555,17 @@
 
   best = readBest();
   const save = loadSave();
-  if (save) {
+  // A save is only resumable if its run token can be re-adopted AND the saved
+  // input log still rebuilds the saved board. Anything else - an old save from
+  // before the run lifecycle, a save whose run has since expired, a
+  // hand-edited localStorage value - is discarded rather than salvaged: an
+  // unverifiable board is worse than a fresh one.
+  if (save && save.run && run.resume(save.run) && rebuildFromLog(save)) {
     restoreFromSave(save);
   } else {
+    if (save) clearSave();
+    // The board behind the start overlay is decorative - the real one is dealt
+    // by start(), once the run (and its seed) exists.
     reset();
     showOverlay("start");
   }
