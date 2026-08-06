@@ -125,7 +125,14 @@ router.post(
         nextRenewalAt: parsed.unbanAt,
         status: "pending",
       };
-      await longBansRepo.create(doc);
+      try {
+        await longBansRepo.create(doc);
+      } catch (err) {
+        if (err.code === "DUPLICATE_OCCUPYING") {
+          return res.redirect(`${back}?error=already_active`);
+        }
+        throw err;
+      }
       await settingsChangeLogRepo.logChange({
         channelLogin: channel.channelLogin, user: req.user, category: "long_ban",
         action: "create", target: targetUser.login, before: null,

@@ -75,7 +75,19 @@ async function findById(id) {
 
 async function create(doc) {
   const col = await ensureInitialized();
-  await col.insertOne(doc);
+  try {
+    await col.insertOne(doc);
+  } catch (err) {
+    // Mirrors the partial unique index the bot repo maintains on this same collection
+    // (TwitchBot/db/longBansRepo.js) - closes the TOCTOU gap between findOccupyingByLogin()'s
+    // check above and this insert (e.g. a chat !longban landing in between).
+    if (err.code === 11000) {
+      const dupErr = new Error(`LongBans: ${doc.userLogin || doc.userId} already has an occupying entry in channel ${doc.channelId}`);
+      dupErr.code = "DUPLICATE_OCCUPYING";
+      throw dupErr;
+    }
+    throw err;
+  }
 }
 
 // Ends an active or pending long-ban. A still-'pending' one never reached Twitch (nothing to

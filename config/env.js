@@ -8,10 +8,18 @@ function required(name) {
   return value;
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
+// In production these must come from the environment - falling back to the hardcoded
+// dev defaults would silently sign sessions/encrypt tokens with a key visible in source.
+function requiredInProduction(name, devFallback) {
+  return isProduction ? required(name) : process.env[name] || devFallback;
+}
+
 const env = {
   port: parseInt(process.env.PORT, 10) || 3000,
   nodeEnv: process.env.NODE_ENV || "development",
-  isProduction: process.env.NODE_ENV === "production",
+  isProduction,
 
   mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017",
   mongoDb: process.env.MONGODB_DB || "twitch_chat_stats",
@@ -20,14 +28,14 @@ const env = {
   // ../CLAUDE.md's shared-collections table. Same Mongo server, separate database.
   webMongoDb: process.env.WEB_MONGODB_DB || "chatwizardbot_web",
 
-  sessionSecret: process.env.SESSION_SECRET || "dev_only_insecure_secret",
+  sessionSecret: requiredInProduction("SESSION_SECRET", "dev_only_insecure_secret"),
   // Encrypts channel owners' persisted Twitch refresh tokens at rest (db/ownerTokensRepo.js,
   // lib/tokenCrypto.js) - deliberately separate from sessionSecret so one leaking doesn't
   // compromise the other.
-  tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || "dev_only_insecure_token_key",
+  tokenEncryptionKey: requiredInProduction("TOKEN_ENCRYPTION_KEY", "dev_only_insecure_token_key"),
 
-  twitchClientId: process.env.TWITCH_CLIENT_ID || "",
-  twitchClientSecret: process.env.TWITCH_CLIENT_SECRET || "",
+  twitchClientId: requiredInProduction("TWITCH_CLIENT_ID", ""),
+  twitchClientSecret: requiredInProduction("TWITCH_CLIENT_SECRET", ""),
   twitchRedirectUri: process.env.TWITCH_REDIRECT_URI || "http://localhost:3000/auth/callback",
 
   // The bot's author, credited on /about with their real Twitch chat colour and a link to their
