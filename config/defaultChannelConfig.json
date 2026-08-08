@@ -33,6 +33,16 @@
     "customCommandTimer": { "minMessagesBetween": 10 },
     "counterUpdate": { "cooldownMs": 10000 }
   },
+  "unbanBureau": {
+    "enabled": false,
+    "voteApproveEmote": "VoteYea",
+    "voteDenyEmote": "VoteNay",
+    "voteDurationSec": 60,
+    "sniperEnabled": false,
+    "sniperMode": "timeout",
+    "sniperTimeoutSec": 60,
+    "sniperReason": "Шальная пуля Бюро амнистии"
+  },
   "responses": {
     "busy": ["I am busy"],
     "yesNo": ["Yes", "No", "Can't say", "eeeh", "Maybe", "50/50", "Probably yes"],

@@ -1,0 +1,267 @@
+<%- include('partials/head', { title: channel.channelLogin + ' — ' + t('unbanBureau.title') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  «Бюро амнистии» — the unban-appeal review desk for /:channel/unban-bureau
+  (routes/unbanBureau.js, requireLevel(2)).
+
+  A fixed 1920x1080 scene that public/js/games/unban-bureau.js scales to the viewport - every
+  coordinate lives in public/css/unban-bureau.css, pinned to the artwork in main-gui.png. That
+  stylesheet is linked here and ONLY here (see its own header for why it isn't part of input.css).
+
+  Nothing on this page talks to Twitch. Handing a stamped visa through the window records the
+  decision on the shared UnbanRequests doc; TwitchBot/twitch/unbanRequestScheduler.js applies it on
+  its next ~60s poll. Same for the sniper: a shot writes a request, the bot fires it. See
+  ../CLAUDE.md's "Бюро амнистии" section.
+
+  #ub-config at the bottom is the entire server→client contract.
+%>
+
+<link rel="stylesheet" href="<%= asset('/css/unban-bureau.css') %>" />
+
+<% if (!cases.length) { %>
+  <main class="pt-14 max-w-3xl mx-auto px-6 py-16">
+    <h1 class="text-3xl font-bold text-neutral-100 mb-2"><%= t('unbanBureau.title') %></h1>
+    <p class="text-neutral-500 text-sm mb-10"><%= channel.channelLogin %> · <%= t('unbanBureau.subtitle') %></p>
+    <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-16 text-center text-neutral-400">
+      <%= t('unbanBureau.empty') %>
+    </p>
+  </main>
+<% } else { %>
+
+  <div id="ub-wrapper">
+
+    <%# The applicant, behind the booth glass. Parked off-screen until called. %>
+    <div id="ub-character-window">
+      <div id="ub-character">
+        <img id="ub-char-torso" src="" alt="" />
+        <img id="ub-char-avatar" src="" alt="" />
+      </div>
+    </div>
+
+    <%# The booth artwork, plus the things painted onto it. %>
+    <div id="ub-desk">
+      <div id="ub-street"></div>
+      <div id="ub-window-zone"></div>
+      <div id="ub-appeal-zone"></div>
+
+      <div id="ub-loudspeaker" title="<%= t('unbanBureau.callNext') %>"></div>
+      <div id="ub-weight">82</div>
+      <div id="ub-date">—</div>
+
+      <div id="ub-awp" title="<%= t('unbanBureau.sniperHeading') %>"></div>
+      <div id="ub-stamp-toggle"></div>
+    </div>
+
+    <div id="ub-ui-layer">
+      <div id="ub-shift-stats">
+        <span id="ub-stat-total">0 / 0</span> |
+        <%= t('unbanBureau.approvedCount') %> <span id="ub-stat-approved">0</span> |
+        <%= t('unbanBureau.deniedCount') %> <span id="ub-stat-denied">0</span>
+      </div>
+
+      <div id="ub-vote-bar" class="hidden">
+        <div id="ub-vote-yea"><span class="ub-vote-label"><%= voteEmotes.approve %></span> <span id="ub-vote-yea-count">0</span></div>
+        <div id="ub-vote-nay"><span class="ub-vote-label"><%= voteEmotes.deny %></span> <span id="ub-vote-nay-count">0</span></div>
+      </div>
+
+      <a id="ub-exit" class="ub-top-btn" href="/<%= channel.channelLogin %>/settings">&larr; <%= t('channelSettings.backToSettings') %></a>
+
+      <div class="ub-top-buttons">
+        <button type="button" id="ub-settings-btn" class="ub-top-btn"><%= t('unbanBureau.settings') %></button>
+      </div>
+
+      <%# Slides in from the right; its two buttons stamp the visa. %>
+      <div id="ub-stamp-machine">
+        <div id="ub-stamp-machine-body">
+          <div class="ub-stamp-btn" id="ub-stamp-approve" data-decision="approved"></div>
+          <div class="ub-stamp-btn" id="ub-stamp-deny" data-decision="denied"></div>
+        </div>
+      </div>
+
+      <div id="ub-settings-modal">
+        <div class="ub-modal-header"><%= t('unbanBureau.settings') %></div>
+
+        <div class="ub-settings-section">
+          <div class="ub-settings-title"><%= t('unbanBureau.pickModeHeading') %></div>
+          <div class="ub-settings-row">
+            <label class="ub-settings-option"><input type="radio" name="ub-pick-mode" value="shuffle" checked> <%= t('unbanBureau.pickShuffle') %></label>
+            <label class="ub-settings-option"><input type="radio" name="ub-pick-mode" value="oldest"> <%= t('unbanBureau.pickOldest') %></label>
+            <label class="ub-settings-option"><input type="radio" name="ub-pick-mode" value="newest"> <%= t('unbanBureau.pickNewest') %></label>
+          </div>
+        </div>
+
+        <div class="ub-settings-section">
+          <div class="ub-settings-title"><%= t('unbanBureau.fontsHeading') %></div>
+          <div class="ub-settings-row">
+            <span><%= t('unbanBureau.fontChat') %></span>
+            <div class="ub-controls-group">
+              <button type="button" class="ub-font-btn" data-font="chat" data-delta="-1">-</button>
+              <span id="ub-font-chat-display">14px</span>
+              <button type="button" class="ub-font-btn" data-font="chat" data-delta="1">+</button>
+            </div>
+          </div>
+          <div class="ub-settings-row">
+            <span><%= t('unbanBureau.fontAppeal') %></span>
+            <div class="ub-controls-group">
+              <button type="button" class="ub-font-btn" data-font="appeal" data-delta="-1">-</button>
+              <span id="ub-font-appeal-display">30px</span>
+              <button type="button" class="ub-font-btn" data-font="appeal" data-delta="1">+</button>
+            </div>
+          </div>
+          <div class="ub-settings-row">
+            <span><%= t('unbanBureau.fontVisa') %></span>
+            <div class="ub-controls-group">
+              <button type="button" class="ub-font-btn" data-font="visa" data-delta="-1">-</button>
+              <span id="ub-font-visa-display">13px</span>
+              <button type="button" class="ub-font-btn" data-font="visa" data-delta="1">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ub-settings-section">
+          <div class="ub-settings-title"><%= t('unbanBureau.soundsHeading') %></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volMaster') %></span><input type="range" data-vol="master" min="0" max="1" step="0.05" value="0.5"></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volDrag') %></span><input type="range" data-vol="drag" min="0" max="1" step="0.05" value="1"></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volStamp') %></span><input type="range" data-vol="stamp" min="0" max="1" step="0.05" value="1"></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volPrinter') %></span><input type="range" data-vol="printer" min="0" max="1" step="0.05" value="0.8"></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volSpit') %></span><input type="range" data-vol="spit" min="0" max="1" step="0.05" value="1"></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volSpeaker') %></span><input type="range" data-vol="speaker" min="0" max="1" step="0.05" value="0.4"></div>
+          <div class="ub-settings-row"><span><%= t('unbanBureau.volShoot') %></span><input type="range" data-vol="shoot" min="0" max="1" step="0.05" value="0.6"></div>
+        </div>
+
+        <div class="ub-settings-row" style="justify-content:center">
+          <button type="button" id="ub-close-settings" class="ub-top-btn"><%= t('unbanBureau.close') %></button>
+        </div>
+      </div>
+
+      <div id="ub-toast"></div>
+    </div>
+
+    <%# The three documents. Everything inside is filled via textContent by the client. %>
+    <div id="ub-papers-layer">
+      <div class="ub-paper ub-draggable" id="ub-user-card">
+        <img id="ub-uc-avatar" src="" alt="" />
+        <div id="ub-uc-header">
+          <div id="ub-uc-name"></div>
+          <div id="ub-uc-created" class="ub-info-row"></div>
+          <div id="ub-uc-follow" class="ub-info-row"></div>
+          <div id="ub-uc-sub" class="ub-info-row"></div>
+          <%# Twitch's risk read. Hidden unless it has something to report - see renderRisk(). %>
+          <div id="ub-uc-risk" class="ub-info-row" style="display:none"></div>
+        </div>
+        <div id="ub-uc-ban-stats">
+          <div class="ub-stat-box">
+            <div class="ub-stat-label"><%= t('unbanBureau.bannedBy') %></div>
+            <div class="ub-stat-value" id="ub-uc-banned-by">—</div>
+          </div>
+          <div class="ub-stat-box">
+            <div class="ub-stat-label"><%= t('unbanBureau.bannedAt') %></div>
+            <div class="ub-stat-value" id="ub-uc-banned-at">—</div>
+          </div>
+          <div class="ub-stat-box">
+            <div class="ub-stat-label"><%= t('unbanBureau.bans') %></div>
+            <div class="ub-stat-value" id="ub-uc-bans">0</div>
+          </div>
+          <div class="ub-stat-box">
+            <div class="ub-stat-label"><%= t('unbanBureau.timeouts') %></div>
+            <div class="ub-stat-value" id="ub-uc-timeouts">0</div>
+          </div>
+          <div class="ub-stat-box">
+            <div class="ub-stat-label"><%= t('unbanBureau.warns') %></div>
+            <div class="ub-stat-value" id="ub-uc-warns">0</div>
+          </div>
+        </div>
+        <div id="ub-uc-tabs">
+          <div class="ub-tab ub-active" data-ub-tab="log"><%= t('unbanBureau.tabLog') %></div>
+          <div class="ub-tab" data-ub-tab="comments"><%= t('unbanBureau.tabComments') %></div>
+          <div class="ub-tab" data-ub-tab="actions"><%= t('unbanBureau.tabActions') %></div>
+        </div>
+        <label id="ub-hide-bots-toggle" style="display:none">
+          <input type="checkbox" id="ub-hide-bots" checked>
+          <%= t('unbanBureau.hideBots') %>
+        </label>
+        <div id="ub-chat-logs"></div>
+        <div id="ub-mod-comments" style="display:none"></div>
+        <div id="ub-actions" style="display:none"></div>
+      </div>
+
+      <div class="ub-paper ub-draggable" id="ub-appeal-card">
+        <div id="ub-appeal-text"></div>
+      </div>
+
+      <div class="ub-paper ub-draggable" id="ub-visa-card">
+        <div id="ub-visa-name"></div>
+        <textarea id="ub-visa-reason" maxlength="500" placeholder="<%= t('unbanBureau.resolutionPlaceholder') %>"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <%#
+    The server→client contract. `cases` are the raw UnbanRequests docs (ObjectId serializes to its
+    hex string, which is what the client sends back as `id`). i18n is passed as a dictionary rather
+    than rendered into markup because nearly every string here lands in a dynamically built row.
+  %>
+  <div id="ub-config" class="hidden"
+       data-channel="<%= channel.channelLogin %>"
+       data-csrf="<%= csrfToken %>"
+       data-locale="<%= locale %>"
+       data-newest-first="<%= newestFirst ? '1' : '0' %>"
+       data-heartbeat-ms="<%= heartbeatMs %>"
+       data-cases="<%= JSON.stringify(cases) %>"
+       data-i18n="<%= JSON.stringify({
+         allDone: t('unbanBureau.allDone'),
+         notFollowing: t('unbanBureau.notFollowing'),
+         following: t('unbanBureau.following'),
+         accountCreated: t('unbanBureau.accountCreated'),
+         subUnknown: t('unbanBureau.subUnknown'),
+         subNone: t('unbanBureau.subNone'),
+         subActive: t('unbanBureau.subActive'),
+         subTier: t('unbanBureau.subTier'),
+         subPrime: t('unbanBureau.subPrime'),
+         subUnavailable: t('unbanBureau.subUnavailable'),
+         noAppealText: t('unbanBureau.noAppealText'),
+         logEmpty: t('unbanBureau.logEmpty'),
+         needStamp: t('unbanBureau.needStamp'),
+         queued: t('unbanBureau.queued'),
+         applied: t('unbanBureau.applied'),
+         decisionFailed: t('unbanBureau.decisionFailed'),
+         voteQueued: t('unbanBureau.voteQueued'),
+         voteRunning: t('unbanBureau.voteRunning'),
+         voteClosed: t('unbanBureau.voteClosed'),
+         sniperQueued: t('unbanBureau.sniperQueued'),
+         sniperHit: t('unbanBureau.sniperHit'),
+         sniperNoTarget: t('unbanBureau.sniperNoTarget'),
+         failed: t('unbanBureau.failed'),
+         alreadyDecided: t('unbanBureau.alreadyDecided'),
+         voteAlreadyRunning: t('unbanBureau.voteAlreadyRunning'),
+         loadError: t('unbanBureau.loadError'),
+         logBanned: t('unbanBureau.logBanned'),
+         logTimedOut: t('unbanBureau.logTimedOut'),
+         logDeleted: t('unbanBureau.logDeleted'),
+         logWarned: t('unbanBureau.logWarned'),
+         probableCause: t('unbanBureau.probableCause'),
+         botMark: t('unbanBureau.botMark'),
+         commentsEmpty: t('unbanBureau.commentsEmpty'),
+         actionsEmpty: t('unbanBureau.actionsEmpty'),
+         contextHint: t('unbanBureau.contextHint'),
+         contextLoading: t('unbanBureau.contextLoading'),
+         contextEmpty: t('unbanBureau.contextEmpty'),
+         riskEvasionPOSSIBLE: t('unbanBureau.riskEvasionPossible'),
+         riskEvasionLIKELY: t('unbanBureau.riskEvasionLikely'),
+         riskTreatmentACTIVE_MONITORING: t('unbanBureau.riskMonitoring'),
+         riskTreatmentRESTRICTED: t('unbanBureau.riskRestricted'),
+         riskSharedBans: t('unbanBureau.riskSharedBans'),
+         commentShared: t('unbanBureau.commentShared'),
+         countsFromTwitch: t('unbanBureau.countsFromTwitch'),
+         countsFromBot: t('unbanBureau.countsFromBot'),
+         shiftLostTitle: t('unbanBureau.shiftLostTitle'),
+         shiftLostBody: t('unbanBureau.shiftLostBody'),
+         shiftBusySomeone: t('unbanBureau.shiftBusySomeone'),
+         backToSettings: t('channelSettings.backToSettings')
+       }) %>"></div>
+
+  <script src="<%= asset('/js/games/unban-bureau.js') %>" defer></script>
+<% } %>
+
+<%- include('partials/foot') %>

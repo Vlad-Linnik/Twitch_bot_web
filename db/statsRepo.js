@@ -394,4 +394,9 @@ module.exports = {
   getModStats,
   getModeratorSummary,
   getUserNames,
+  // Exported for db/unbanDossierRepo.js, which queries the same two collections and must apply
+  // the identical `#`-prefix rules. Re-deriving them there is exactly how the two sides drift.
+  withHash,
+  bareLogin,
+  MOD_ACTION_CONTEXT_MAX_TTA_MS,
 };

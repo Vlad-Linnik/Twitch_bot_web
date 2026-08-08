@@ -14,6 +14,16 @@ const requireLogin = require("../middleware/requireLogin");
 
 const router = express.Router();
 
+// Every channel this visitor can open a tier-2 page on: the one they own plus the ones they
+// moderate. Read off res.locals.navMenu, which middleware/navMenu.js already computed for this
+// request - deliberately NOT a fresh query. Empty for logged-out visitors (that middleware
+// returns early without setting navMenu).
+function moderatedChannelsFor(res) {
+  const menu = res.locals.navMenu;
+  if (!menu) return [];
+  return [...(menu.ownedChannel ? [menu.ownedChannel] : []), ...(menu.moderatedChannels || [])];
+}
+
 const GAME_FALLING_BLOCKS = "falling-blocks";
 const GAME_PIPE_DODGER = "pipe-dodger";
 const GAME_2048 = "2048";
@@ -99,7 +109,14 @@ router.get("/games", async (req, res, next) => {
       gameCatalogRepo.listCategories(),
     ]);
 
-    const visible = gamesCatalog.filter((g) => !settingsMap.get(g.id)?.hidden);
+    // A `requiresModerator` card (currently only the Unban Bureau) is hidden from visitors who
+    // moderate no channel - its target is tier-2 gated per channel, so for them it's a card that
+    // can only lead to a 403. navMenu already computed both lists for this request
+    // (middleware/navMenu.js), so this costs no extra query.
+    const canModerateSomething = moderatedChannelsFor(res).length > 0;
+    const visible = gamesCatalog.filter(
+      (g) => !settingsMap.get(g.id)?.hidden && (!g.requiresModerator || canModerateSomething)
+    );
     const byCategory = new Map(categories.map((c) => [String(c._id), []]));
     const uncategorized = [];
     visible.forEach((g) => {
@@ -118,6 +135,18 @@ router.get("/games", async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// The Unban Bureau's catalog card can't link straight to a page - the real page is per-channel
+// (/:channel/unban-bureau, routes/unbanBureau.js). This resolves which channel the visitor means:
+// straight through when there's exactly one, a picker when there are several. The per-channel
+// route still runs its own requireLevel(2), so this is a convenience, not the access check.
+router.get("/unban-bureau", requireLogin, (req, res) => {
+  const channels = moderatedChannelsFor(res);
+  if (channels.length === 1) {
+    return res.redirect(`/${channels[0].channelLogin}/unban-bureau`);
+  }
+  res.render("unbanBureauPicker", { channels });
 });
 
 // The cross-game spectator hub - a single page that drops the viewer into a

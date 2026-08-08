@@ -1,0 +1,354 @@
+// /<channel>/unban-bureau - "Бюро разбанов": review Twitch unban appeals with the channel's own
+// chat history as a dossier, in a stamp-and-desk game skin.
+//
+// This app has no Twitch moderation credentials of its own (see ../CLAUDE.md's "Unban requests:
+// written by both repos, executed only by the bot"), so stamping a case here only writes
+// `resolution.status: 'pending'` onto the shared UnbanRequests document - TwitchBot's
+// twitch/unbanRequestScheduler.js (polling every ~60s) is what actually PATCHes Twitch. Same for
+// the advisory chat vote: this writes `vote.status: 'requested'`, the bot posts the prompt.
+//
+// Gated at tier <= 2 like routes/longBans.js - it acts on Twitch moderation state, not statistics.
+// Mounted with the other channel-wildcard routers in routes/index.js (before channelRedirect,
+// whose bare "/:channel" would otherwise swallow every static page).
+//
+// Responses are JSON rather than the PRG-redirect pattern the settings pages use: this is a
+// keyboard-driven single-screen UI, and a redirect would throw the moderator back to the top of
+// the page after every stamp.
+const express = require("express");
+const channelsRepo = require("../db/channelsRepo");
+const channelConfigRepo = require("../db/channelConfigRepo");
+const unbanRequestsRepo = require("../db/unbanRequestsRepo");
+const unbanDossierRepo = require("../db/unbanDossierRepo");
+const unbanBureauShiftRepo = require("../db/unbanBureauShiftRepo");
+const sniperShotsRepo = require("../db/sniperShotsRepo");
+const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
+const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
+const { settingsWriteLimiter, statsReadLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
+const { verifyToken } = require("../middleware/csrf");
+
+// Per-moderator ceiling on sniper shots - see the sniper.json handler for why this exists on
+// top of settingsWriteLimiter.
+const SNIPER_WINDOW_MS = 60 * 1000;
+const SNIPER_MAX_PER_WINDOW = 6;
+
+const router = express.Router();
+
+// Same rationale as routes/statistics.js's own copy: requireLevel() renders an HTML error page,
+// which is useless inside a fetch().
+function requireLevelJson(maxLevel) {
+  return async (req, res, next) => {
+    try {
+      const userId = req.user?.userId ?? null;
+      const level = await computePermission(userId, req.params.channel);
+      if (level > maxLevel) {
+        return res.status(userId ? 403 : 401).json({ error: userId ? "forbidden" : "unauthenticated" });
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+async function loadChannel(req, res) {
+  const channel = await channelsRepo.findByLogin(req.params.channel);
+  if (!channel) {
+    res.status(404).render("errors/404");
+    return null;
+  }
+  return channel;
+}
+
+// Same, for the JSON endpoints - a missing channel there must not render HTML either.
+async function loadChannelJson(req, res) {
+  const channel = await channelsRepo.findByLogin(req.params.channel);
+  if (!channel) {
+    res.status(404).json({ error: "not_found" });
+    return null;
+  }
+  return channel;
+}
+
+// One moderator per channel at the desk (db/unbanBureauShiftRepo.js explains why). Every write
+// endpoint checks the lease as well as the permission tier, so a page that was already open when
+// its shift lapsed can't keep stamping verdicts behind the colleague who took over.
+async function requireShiftJson(req, res) {
+  const holds = await unbanBureauShiftRepo.holds(req.params.channel, req.user.userId);
+  if (holds) return true;
+  const holder = await unbanBureauShiftRepo.current(req.params.channel);
+  res.status(409).json({ error: "shift_taken", holder });
+  return false;
+}
+
+router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => {
+  try {
+    const channel = await loadChannel(req, res);
+    if (!channel) return;
+
+    // Claiming the desk comes before the (much heavier) queue read: a moderator who is being turned
+    // away has no use for the cases, and shouldn't pay for assembling them.
+    const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user);
+    if (!shift.ok) {
+      return res.status(409).render("unbanBureauBusy", { channel, holder: shift.holder });
+    }
+
+    const newestFirst = req.query.sort !== "oldest";
+    const [cases, config] = await Promise.all([
+      unbanRequestsRepo.listPendingForChannel(channel.channelId, { newestFirst }),
+      channelConfigRepo.getConfig(channel.channelLogin),
+    ]);
+
+    // Nothing to hold the desk for, and the empty state runs no client script - so there'd be
+    // nothing renewing the lease either. Give it straight back rather than locking the channel out
+    // for a lease's length because someone glanced at an empty queue.
+    if (!cases.length) await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId);
+
+    res.render("unbanBureau", {
+      channel,
+      cases,
+      newestFirst,
+      // The vote bar labels the two emotes literally, so the HUD itself tells chat what to type -
+      // a translated "For"/"Against" doesn't. Per-channel, hence read here rather than hardcoded.
+      voteEmotes: {
+        approve: config.unbanBureau?.voteApproveEmote || "VoteYea",
+        deny: config.unbanBureau?.voteDenyEmote || "VoteNay",
+      },
+      heartbeatMs: unbanBureauShiftRepo.SHIFT_HEARTBEAT_MS,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The dossier for one case, fetched lazily as the moderator moves between cases (and again with
+// ?before= when they press "load previous" in the log).
+router.get(
+  "/:channel/unban-bureau/dossier.json",
+  statsReadLimiter,
+  requireLevelJson(2),
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+
+      const unbanCase = await unbanRequestsRepo.findById(req.query.id);
+      // The channel check is what stops a valid id from ANOTHER channel being read through this
+      // channel's gate - same guard statsRepo.getModActionContext applies.
+      if (!unbanCase || String(unbanCase.channelId) !== String(channel.channelId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+
+      const dossier = await unbanDossierRepo.getDossier(channel.channelLogin, unbanCase, {
+        before: req.query.before || null,
+      });
+      res.json({ ok: true, dossier });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Keeps the open page's shift alive. On the autosave limiter rather than the write one: it fires on
+// a timer, and a heartbeat burst must never eat the budget the moderator's actual verdicts need.
+router.post(
+  "/:channel/unban-bureau/shift.json",
+  autosaveLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+
+      const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user);
+      // Renewal and re-acquisition are the same call, so a moderator whose lease lapsed while the
+      // tab was backgrounded simply takes the desk back if nobody else has claimed it.
+      if (!shift.ok) return res.status(409).json({ error: "shift_taken", holder: shift.holder });
+      res.json({ ok: true, holder: shift.holder });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Hands the desk back when the page is closed, so the next moderator doesn't wait out the lease.
+// Sent with navigator.sendBeacon, which cannot set headers - hence no Accept: application/json here
+// and the CSRF token travelling in the form body like every other write.
+router.post(
+  "/:channel/unban-bureau/release.json",
+  autosaveLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Stamps a case. Writes the decision for the bot to apply; never calls Twitch.
+router.post(
+  "/:channel/unban-bureau/decide.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      if (!(await requireShiftJson(req, res))) return;
+
+      const decision = req.body.decision;
+      if (decision !== "approved" && decision !== "denied") {
+        return res.status(400).json({ error: "bad_decision" });
+      }
+
+      const before = await unbanRequestsRepo.findById(req.body.id);
+      if (!before || String(before.channelId) !== String(channel.channelId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+
+      const updated = await unbanRequestsRepo.requestDecision(req.body.id, channel.channelId, {
+        decision,
+        text: req.body.resolutionText,
+        user: req.user,
+      });
+      // The repo refuses to overwrite a decision that's already queued or applied - expected on a
+      // double-tap of A/D, or two moderators reaching the same case at once.
+      if (!updated) return res.status(409).json({ error: "already_decided" });
+
+      // The verdict is what ends the chat vote now, so tell the bot to close it (it has to be the
+      // bot: closing announces the tally in chat). Fire-and-forget relative to the response - a
+      // vote left open is cosmetic, and the bot's endsAt ceiling closes it regardless.
+      await unbanRequestsRepo.requestVoteClose(req.body.id, channel.channelId);
+
+      await settingsChangeLogRepo.logChange({
+        channelLogin: channel.channelLogin,
+        user: req.user,
+        category: "unban_request",
+        action: decision === "approved" ? "approve" : "deny",
+        target: before.userLogin,
+        before: { twitchStatus: before.twitchStatus },
+        after: { decision, resolutionText: updated.resolution.text },
+      });
+
+      res.json({ ok: true, resolution: updated.resolution });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Asks the bot to run an advisory chat vote on this case.
+router.post(
+  "/:channel/unban-bureau/vote.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      if (!(await requireShiftJson(req, res))) return;
+
+      const before = await unbanRequestsRepo.findById(req.body.id);
+      if (!before || String(before.channelId) !== String(channel.channelId)) {
+        return res.status(404).json({ error: "not_found" });
+      }
+
+      const updated = await unbanRequestsRepo.requestVote(req.body.id, channel.channelId);
+      if (!updated) return res.status(409).json({ error: "vote_already_running" });
+
+      await settingsChangeLogRepo.logChange({
+        channelLogin: channel.channelLogin,
+        user: req.user,
+        category: "unban_request",
+        action: "vote",
+        target: before.userLogin,
+        before: null,
+        after: { requested: true },
+      });
+
+      res.json({ ok: true, vote: updated.vote });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Fires the "stray bullet". Records a request; TwitchBot's scheduler picks the target and calls
+// Twitch within ~2s. The page cannot name a victim - see db/sniperShotsRepo.js.
+router.post(
+  "/:channel/unban-bureau/sniper.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      if (!(await requireShiftJson(req, res))) return;
+
+      // A second, tighter ceiling on top of settingsWriteLimiter. Every other write on this site
+      // edits a setting; this one times a real viewer out of chat, so "10 a minute" is not a
+      // reasonable ceiling for it even though it is for the rest.
+      const recent = await sniperShotsRepo.countRecentByUser(req.user.userId, SNIPER_WINDOW_MS);
+      if (recent >= SNIPER_MAX_PER_WINDOW) {
+        return res.status(429).json({ error: "too_many_shots" });
+      }
+
+      const shot = await sniperShotsRepo.requestShot(channel, req.user, req.body.id || null);
+
+      await settingsChangeLogRepo.logChange({
+        channelLogin: channel.channelLogin,
+        user: req.user,
+        category: "unban_request",
+        action: "sniper",
+        target: req.user.login,
+        before: null,
+        after: { requested: true },
+      });
+
+      res.json({ ok: true, shotId: String(shot._id) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Polled by the page for the moving vote bar and for "has the bot applied my decision yet".
+router.get(
+  "/:channel/unban-bureau/live.json",
+  statsReadLimiter,
+  requireLevelJson(2),
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+
+      const ids = String(req.query.ids || "").split(",").filter(Boolean).slice(0, 50);
+      const states = await unbanRequestsRepo.getLiveState(channel.channelId, ids);
+      res.json({
+        ok: true,
+        states: states.map((doc) => ({
+          id: String(doc._id),
+          twitchStatus: doc.twitchStatus,
+          vote: doc.vote,
+          resolution: doc.resolution,
+          // The sniper shot the bot fired when this case's vote closed, if the channel has the
+          // mechanic on. Only ever read here - the page never requests a shot, it just reports one.
+          sniper: doc.sniper && doc.sniper.fired ? doc.sniper : null,
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+module.exports = router;

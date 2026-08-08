@@ -1,0 +1,1185 @@
+/* ============================================================================
+   «Бюро амнистии» — the appeal review desk (views/unbanBureau.ejs,
+   public/js/games/unban-bureau.js).
+   ----------------------------------------------------------------------------
+   A SEPARATE stylesheet, linked only by that one page, rather than a block in
+   input.css like every other feature here. Two reasons, both load-bearing:
+
+     1. It is ~1200 lines of pixel-art game chrome that no other page needs, and
+        output.css is loaded by every page on the site.
+     2. The design it is ported from styles `html, body` directly (notably
+        `overflow: hidden !important`) and ships two @font-face files. Folded
+        into the global sheet, those would break every other page. Here, the
+        page-level rules are instead scoped to `body.ub-playing`, a class the
+        client adds on boot and removes on pagehide.
+
+   GEOMETRY: #ub-wrapper is a FIXED 1920x1080 canvas that the client scales with
+   `transform: scale(min(vw/1920, vh/1080))`. Everything inside is positioned in
+   absolute pixels against that design space - so a coordinate here is a real
+   pixel at 1920 wide and stays correct at every other size. Do not convert
+   these to percentages; the whole composition is pinned to the artwork in
+   main-gui.png, which is itself 1920x1080.
+
+   All ids/classes carry a `ub-` prefix so nothing here can collide with the
+   site's own stylesheet.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Monocraft";
+  src: url("/fonts/Monocraft.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "KZTomsHandwritten";
+  src: url("/fonts/KZTomsHandwritten.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Scoped page-level rules - see note 2 in the header. */
+body.ub-playing {
+  overflow: hidden !important;
+  background-color: #000;
+}
+/* The scene is 16:9 and fills the viewport, so there is no letterbox bar for the
+   site nav to sit in - left visible it covers the shift counter at the top of
+   the desk. Both it and the footer are hidden while playing; #ub-exit (top-left
+   of the scene itself) is the way back out. */
+body.ub-playing nav.site-nav,
+body.ub-playing footer {
+  display: none;
+}
+
+#ub-wrapper,
+#ub-wrapper * {
+  box-sizing: border-box;
+}
+
+#ub-wrapper {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  overflow: hidden;
+  background-color: #2b2b2b;
+  font-family: "Monocraft", monospace;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* --- the applicant at the window ------------------------------------------ */
+
+#ub-character-window {
+  position: absolute;
+  top: 51px;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* Starts parked one full screen to the left and slides in when called. Each
+   applicant gets a random --ub-growth so the queue isn't all one height. */
+#ub-character {
+  --ub-growth: 1;
+  position: absolute;
+  bottom: 441px;
+  left: 280px;
+  width: calc(200px * var(--ub-growth));
+  height: calc(300px * var(--ub-growth));
+  transform: translateX(-1920px);
+  transition: transform 1.2s cubic-bezier(0.25, 0.8, 0.25, 1), width 0.1s, height 0.1s;
+}
+#ub-char-torso {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+#ub-char-avatar {
+  position: absolute;
+  bottom: calc(36px * var(--ub-growth));
+  left: 47%;
+  transform: translateX(-50%);
+  width: calc(90px * var(--ub-growth));
+  height: calc(90px * var(--ub-growth));
+  border-radius: 50%;
+  box-shadow: 0 5px 15px rgb(0 0 0 / 0.5);
+  z-index: 2;
+  object-fit: cover;
+  background: #2a211a;
+}
+
+/* --- the booth itself ----------------------------------------------------- */
+
+#ub-desk {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("/img/games/unban-bureau/main-gui.png");
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+  z-index: 5;
+}
+
+#ub-papers-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+#ub-papers-layer .ub-paper {
+  pointer-events: auto;
+}
+
+#ub-ui-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+#ub-ui-layer > * {
+  pointer-events: auto;
+}
+
+/* The megaphone painted on the booth wall - calls the next applicant. */
+#ub-loudspeaker {
+  position: absolute;
+  top: 258px;
+  left: 596px;
+  width: 60px;
+  height: 40px;
+  cursor: pointer;
+  z-index: 100;
+}
+
+#ub-weight {
+  position: absolute;
+  bottom: 108px;
+  left: 560px;
+  font-size: 18px;
+  color: #552f0f;
+  font-weight: bold;
+  z-index: 6;
+  pointer-events: none;
+}
+#ub-date {
+  position: absolute;
+  bottom: 67px;
+  left: 115px;
+  font-size: 16px;
+  color: #552f0f;
+  font-weight: bold;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* --- drop zones ----------------------------------------------------------- */
+
+/* Invisible hit areas, not decoration: the window is where a stamped visa is
+   handed back (that gesture is what submits the verdict), the appeal slot is
+   where the appeal note shrinks down onto the desk. `.ub-debug` reveals them. */
+#ub-window-zone {
+  position: absolute;
+  left: 106px;
+  top: 370px;
+  width: 533px;
+  height: 498px;
+  pointer-events: none;
+  z-index: 10000;
+}
+#ub-appeal-zone {
+  position: absolute;
+  left: 104px;
+  top: 689px;
+  width: 535px;
+  height: 331px;
+  pointer-events: none;
+  z-index: 10000;
+}
+#ub-wrapper.ub-debug #ub-window-zone,
+#ub-wrapper.ub-debug #ub-appeal-zone {
+  background-color: rgb(255 0 0 / 0.25);
+  border: 2px dashed red;
+}
+
+/* --- the three papers ----------------------------------------------------- */
+
+.ub-paper {
+  position: absolute;
+  cursor: grab;
+  background-size: contain;
+  background-repeat: no-repeat;
+  box-shadow: 3px 3px 10px rgb(0 0 0 / 0.3);
+  display: none;
+  image-rendering: pixelated;
+}
+.ub-paper:active {
+  cursor: grabbing;
+}
+/* Dragging must follow the cursor exactly - the slide-in transition would make
+   the paper lag behind it. Toggled by the client for the duration of a drag. */
+.ub-no-transition {
+  transition: none !important;
+}
+
+#ub-user-card {
+  width: 600px;
+  height: 621px;
+  background-image: url("/img/games/unban-bureau/user-card.png");
+  left: 800px;
+  transition: top 1.5s ease-out;
+}
+#ub-visa-card {
+  width: 375px;
+  height: 400px;
+  background-image: url("/img/games/unban-bureau/visa-card.png");
+  left: 1250px;
+  transition: top 1.5s ease-out;
+}
+#ub-appeal-card {
+  width: 320px;
+  height: 320px;
+  background-color: #d1c8b4;
+  background-image: url("/img/games/unban-bureau/appeal-card.png");
+  background-size: 100% 100%;
+  transition: top 0.3s ease-out;
+}
+
+/* Shrunken states, entered by dragging a card over its drop zone. */
+.ub-small-visa {
+  transform: scale(0.45) !important;
+  transform-origin: center center !important;
+}
+.ub-small-appeal {
+  width: 120px !important;
+  height: 120px !important;
+}
+.ub-small-appeal #ub-appeal-text {
+  font-size: 8px !important;
+  top: 20px !important;
+  left: 10px !important;
+  line-height: 1 !important;
+  height: 90px !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* --- user card internals -------------------------------------------------- */
+
+#ub-uc-avatar {
+  position: absolute;
+  top: 31px;
+  left: 45px;
+  width: 86px;
+  height: 85px;
+  object-fit: cover;
+  pointer-events: none;
+}
+#ub-uc-header {
+  position: absolute;
+  top: 28px;
+  left: 152px;
+  width: 410px;
+  pointer-events: none;
+}
+#ub-uc-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 3px;
+}
+.ub-info-row {
+  font-size: 13.5px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  white-space: normal;
+  word-wrap: break-word;
+  line-height: 1.6;
+}
+.ub-info-row svg {
+  width: 14px;
+  height: 17px;
+  fill: currentColor;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+#ub-uc-created { color: #555; }
+#ub-uc-follow { color: #1a6e38; }
+#ub-uc-sub { color: #8512b3; }
+/* Only rendered when Twitch flagged something (renderRisk), so it can afford to shout.
+   Pinned to ONE line: the header block sits directly above #ub-uc-ban-stats with exactly this row's
+   height to spare, so a wrapping risk line (two flags at once, or a long channel count) would push
+   straight through the counters. The full text stays reachable as the row's title. */
+#ub-uc-risk {
+  color: #a32222;
+  font-weight: bold;
+  flex-wrap: nowrap;
+  line-height: 1.4;
+}
+#ub-uc-risk span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The header block has room for exactly three lines before the dashed rule PAINTED ON THE CARD
+   ARTWORK - a fourth one lands on top of it, which no amount of margin fixes because the rule is
+   part of the background image. So when the risk line is present, all four share the space of
+   three instead. Only ever applied then, so the usual card keeps its original spacing. */
+#ub-user-card.ub-has-risk .ub-info-row {
+  font-size: 12px;
+  line-height: 1.25;
+  margin-bottom: 0;
+}
+#ub-user-card.ub-has-risk .ub-info-row svg { height: 14px; }
+
+#ub-uc-ban-stats {
+  position: absolute;
+  top: 149px;
+  left: 43px;
+  width: 514px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.ub-stat-box { text-align: center; }
+.ub-stat-label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 2px;
+}
+.ub-stat-value {
+  font-size: 13px;
+  color: #000;
+}
+
+#ub-uc-tabs {
+  position: absolute;
+  top: 209px;
+  left: 40px;
+  display: flex;
+  gap: 20px;
+}
+.ub-tab {
+  font-size: 14px;
+  font-weight: bold;
+  color: #777;
+  cursor: pointer;
+  padding-bottom: 2px;
+  pointer-events: auto;
+}
+.ub-tab.ub-active {
+  color: #333;
+  border-bottom: 2px solid #a32222;
+}
+.ub-tab:hover { color: #000; }
+
+#ub-hide-bots-toggle {
+  position: absolute;
+  top: 211px;
+  right: 40px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #777;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#ub-hide-bots-toggle input { cursor: pointer; }
+
+#ub-chat-logs,
+#ub-mod-comments,
+#ub-actions {
+  position: absolute;
+  top: 238px;
+  left: 49px;
+  width: 511px;
+  height: 309px;
+  font-size: 14px;
+  color: #333;
+  overflow-y: auto;
+  overflow-x: hidden;
+  pointer-events: auto;
+}
+#ub-chat-logs::-webkit-scrollbar,
+#ub-mod-comments::-webkit-scrollbar,
+#ub-actions::-webkit-scrollbar { width: 8px; }
+#ub-chat-logs::-webkit-scrollbar-track,
+#ub-mod-comments::-webkit-scrollbar-track,
+#ub-actions::-webkit-scrollbar-track { background: rgb(0 0 0 / 0.05); }
+#ub-chat-logs::-webkit-scrollbar-thumb,
+#ub-mod-comments::-webkit-scrollbar-thumb,
+#ub-actions::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+
+/* Sits at the top of the log while an older page is being fetched - the only feedback that
+   scrolling up did something, now that there is no button to press. */
+.ub-log-loading {
+  color: #8a8272;
+  font-size: 11px;
+  font-style: italic;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.ub-log-day {
+  text-align: center;
+  color: #8a8272;
+  font-size: 11px;
+  margin: 8px 0 4px;
+  border-top: 1px dashed rgb(0 0 0 / 0.15);
+  padding-top: 4px;
+}
+.ub-log-message {
+  margin-bottom: 6px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.ub-log-modaction {
+  margin-bottom: 4px;
+  line-height: 1.4;
+  word-break: break-word;
+  background: rgb(255 80 80 / 0.08);
+  border-left: 2px solid #c44;
+  padding: 2px 5px;
+  border-radius: 2px;
+}
+.ub-log-modaction-text {
+  color: #d46060;
+  font-style: italic;
+  font-size: 0.92em;
+}
+.ub-log-time {
+  color: #888;
+  margin-right: 4px;
+  font-size: 10px;
+}
+.ub-log-user {
+  font-weight: bold;
+  margin-right: 4px;
+}
+/* The bot only guesses which message an action was for (it records the user's
+   latest message at action time), and db/unbanDossierRepo.js only trusts that
+   guess inside a 2-minute window. Rows outside it stay unmarked on purpose. */
+.ub-log-flagged {
+  background: rgb(163 34 34 / 0.13);
+  box-shadow: inset 2px 0 0 #a32222;
+  border-radius: 2px;
+  padding: 1px 4px;
+}
+.ub-log-badge {
+  margin-left: 6px;
+  font-size: 10px;
+  color: #a32222;
+}
+.ub-log-system {
+  color: #888;
+  font-style: italic;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.ub-mod-comment {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgb(0 0 0 / 0.04);
+  border-radius: 4px;
+  border-left: 2px solid #9146ff;
+  word-break: break-word;
+}
+.ub-mod-comment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+/* Pushed to the right edge by the author name growing, so the "written in another channel" mark
+   sits between the two rather than being mistaken for part of either. */
+.ub-mod-comment-shared {
+  flex: 1;
+  color: #8a6d1f;
+  font-size: 0.78em;
+  font-style: italic;
+}
+.ub-mod-comment-author {
+  font-weight: bold;
+  color: #7b3fd4;
+  font-size: 0.9em;
+}
+.ub-mod-comment-time {
+  color: #888;
+  font-size: 0.82em;
+}
+.ub-mod-comment-text {
+  font-size: 0.92em;
+  line-height: 1.4;
+}
+
+/* --- punishments tab ---------------------------------------------------- */
+
+.ub-action-row {
+  position: relative;
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  border-left: 2px solid #c44;
+  background: rgb(255 80 80 / 0.07);
+  border-radius: 2px;
+  word-break: break-word;
+}
+.ub-action-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ub-action-time {
+  color: #888;
+  font-size: 10px;
+}
+.ub-action-verb {
+  font-weight: bold;
+  font-size: 0.9em;
+  text-transform: lowercase;
+}
+.ub-action-ban { color: #a32222; }
+.ub-action-timeout { color: #b3661a; }
+.ub-action-warn { color: #8512b3; }
+.ub-action-mod {
+  font-weight: bold;
+  font-size: 0.9em;
+}
+.ub-action-detail {
+  font-size: 0.88em;
+  color: #555;
+  margin-top: 2px;
+}
+.ub-action-hint {
+  font-size: 10px;
+  color: #5c16c5;
+  margin-top: 2px;
+}
+.ub-action-has-context { cursor: help; }
+
+/* The five-messages-before popup. Lives INSIDE the row (rather than being positioned against the
+   viewport) so it inherits #ub-wrapper's scale transform for free - a fixed-position popup would
+   be laid out in screen pixels and drift away from the row at every viewport size. */
+.ub-action-context {
+  display: none;
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 100%;
+  z-index: 50;
+  margin-top: 2px;
+  padding: 6px 8px;
+  background: #fdfbf4;
+  border: 1px solid #b9ad8f;
+  border-radius: 3px;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.25);
+  font-size: 12px;
+}
+.ub-action-row:hover .ub-action-context { display: block; }
+/* The hovered row has to win over the rows below it, or their backgrounds paint on top. */
+.ub-action-row:hover { z-index: 60; }
+.ub-context-line {
+  line-height: 1.4;
+  margin-bottom: 2px;
+  word-break: break-word;
+}
+
+/* --- appeal + visa internals ---------------------------------------------- */
+
+/* The handwritten face of the appeal - the one place the display font earns its
+   keep, since it's a short quoted sentence rather than dense log text. */
+#ub-appeal-text {
+  position: absolute;
+  top: 60px;
+  left: 30px;
+  right: 25px;
+  height: 200px;
+  font-size: 30px;
+  color: #000;
+  font-family: "KZTomsHandwritten", cursive;
+  pointer-events: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#ub-appeal-text::-webkit-scrollbar { width: 6px; }
+#ub-appeal-text::-webkit-scrollbar-track { background: transparent; }
+#ub-appeal-text::-webkit-scrollbar-thumb { background: rgb(0 0 0 / 0.2); border-radius: 3px; }
+
+#ub-visa-name {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 15px;
+  font-weight: bold;
+  color: #444;
+  pointer-events: none;
+}
+#ub-visa-reason {
+  position: absolute;
+  top: 227px;
+  left: 29px;
+  width: 319px;
+  height: 70px;
+  background-color: transparent;
+  border: transparent;
+  font-family: "Monocraft", monospace;
+  font-size: 13px;
+  resize: none;
+  padding: 5px;
+  color: #000;
+  pointer-events: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#ub-visa-reason:focus { outline: none; }
+
+/* The stamp mark itself, appended to the visa when a stamp button is pressed. */
+.ub-imprint {
+  position: absolute;
+  width: 206px;
+  height: auto;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+/* --- stamp machine -------------------------------------------------------- */
+
+#ub-stamp-toggle {
+  position: absolute;
+  top: 459px;
+  right: 105px;
+  width: 31px;
+  height: 171px;
+  background-image: url("/img/games/unban-bureau/button-left.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 100;
+}
+#ub-stamp-machine {
+  position: absolute;
+  right: 105px;
+  top: 434px;
+  width: 480px;
+  height: 160px;
+  z-index: 100005;
+  transform: translateX(125%);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#ub-stamp-machine.ub-open { transform: translateX(0); }
+#ub-stamp-machine-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-image: url("/img/games/unban-bureau/machine-bg.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: drop-shadow(-5px 10px 10px rgb(0 0 0 / 0.6));
+  image-rendering: pixelated;
+}
+.ub-stamp-btn {
+  position: absolute;
+  width: 130px;
+  height: 110px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: pointer;
+  z-index: 2;
+  image-rendering: pixelated;
+}
+.ub-stamp-btn:active { transform: translateY(18px); }
+#ub-stamp-approve {
+  background-image: url("/img/games/unban-bureau/btn-green.png");
+  top: -19px;
+  left: 70px;
+}
+#ub-stamp-deny {
+  background-image: url("/img/games/unban-bureau/btn-red.png");
+  top: -20px;
+  right: 72px;
+}
+
+/* --- the sniper ----------------------------------------------------------- */
+
+#ub-awp {
+  position: absolute;
+  bottom: 220px;
+  right: 105px;
+  width: 75px;
+  height: 170px;
+  background-image: url("/img/games/unban-bureau/button-awp.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: pointer;
+  z-index: 100;
+}
+/* The only feedback that the rifle is in hand besides the cursor itself - see setSniper() in the
+   client, which also plays a sound and toasts a hint on every arm/disarm. */
+#ub-awp.ub-armed {
+  filter: drop-shadow(0 0 10px rgb(255 40 40 / 0.85)) brightness(1.2);
+}
+
+#ub-wrapper.ub-sniper {
+  cursor: url("/img/games/unban-bureau/scope.png") 32 32, crosshair !important;
+}
+/* While aiming, the papers must not swallow the click - the shot is aimed at
+   the street behind them. */
+#ub-wrapper.ub-sniper .ub-paper,
+#ub-wrapper.ub-sniper #ub-stamp-machine {
+  pointer-events: none;
+}
+
+/* --- the street ----------------------------------------------------------- */
+
+#ub-street {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 350px;
+  z-index: 2;
+  overflow: hidden;
+}
+
+/* Three-frame sprite strips, stepped by CSS animation and blown up 3x. */
+.ub-walker,
+.ub-idler,
+.ub-dead {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-repeat: no-repeat;
+  transform: scale(3);
+  transform-origin: bottom center;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+.ub-walker {
+  background-image: url("/img/games/unban-bureau/walk.png");
+  animation: ub-sprite 0.6s steps(3) infinite;
+  z-index: 3;
+}
+.ub-idler {
+  background-image: url("/img/games/unban-bureau/idle.png");
+  animation: ub-sprite 5.5s steps(3) infinite, ub-breathe 4s infinite alternate ease-in-out;
+  z-index: 3;
+}
+.ub-dead {
+  background-image: url("/img/games/unban-bureau/die.png");
+  animation: ub-sprite 0.5s steps(3) forwards;
+  z-index: 2;
+}
+@keyframes ub-sprite {
+  from { background-position: 0 0; }
+  to { background-position: -60px 0; }
+}
+@keyframes ub-breathe {
+  0% { transform: scale(3) scaleY(1); }
+  100% { transform: scale(3) scaleY(0.97); }
+}
+
+/* --- HUD ------------------------------------------------------------------ */
+
+#ub-shift-stats {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgb(0 0 0 / 0.6);
+  border: 2px solid #555;
+  padding: 8px 20px;
+  border-radius: 5px;
+  font-size: 16px;
+  color: #a3a3a3;
+  z-index: 100;
+  pointer-events: none;
+}
+#ub-shift-stats span { color: #fff; }
+
+#ub-vote-bar {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 24px;
+  font-size: 20px;
+  z-index: 100;
+  pointer-events: none;
+  background-color: #000;
+  border: 2px solid #555;
+  padding: 8px 20px;
+  border-radius: 5px;
+  color: #a3a3a3;
+}
+#ub-vote-bar.hidden { display: none; }
+#ub-vote-yea { color: #3db83d; }
+#ub-vote-nay { color: #c03535; }
+.ub-vote-label {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-right: 4px;
+}
+
+#ub-exit {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 9999;
+  text-decoration: none;
+}
+
+.ub-top-buttons {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: flex;
+  gap: 10px;
+  z-index: 9999;
+}
+.ub-top-btn {
+  background: #4a5448;
+  border: 2px solid #2e352b;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: "Monocraft", monospace;
+  font-size: 12px;
+  color: #f0f0f0;
+  cursor: pointer;
+  box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.1), 2px 2px 0 rgb(0 0 0 / 0.5);
+  text-shadow: 1px 1px 0 #000;
+  transition: all 0.1s;
+  user-select: none;
+}
+.ub-top-btn:hover { background: #5d685b; }
+.ub-top-btn:active {
+  box-shadow: inset 2px 2px 5px rgb(0 0 0 / 0.5);
+  transform: translate(2px, 2px);
+}
+
+/* A short-lived line for anything the desk needs to say in words - "the bot
+   will apply this within a minute", a failed shot, an empty queue. */
+#ub-toast {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 900px;
+  background-color: rgb(0 0 0 / 0.8);
+  border: 2px solid #555;
+  border-radius: 5px;
+  padding: 10px 22px;
+  font-size: 15px;
+  color: #e8e8e8;
+  z-index: 100010;
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+#ub-toast.ub-show { opacity: 1; }
+#ub-toast:empty { display: none; }
+
+/* --- settings modal ------------------------------------------------------- */
+
+#ub-settings-modal {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100000;
+  background: rgb(10 10 10 / 0.95);
+  border: 2px solid #3c3a35;
+  border-radius: 6px;
+  padding: 20px;
+  min-width: 400px;
+  box-shadow: 0 0 20px rgb(0 0 0 / 0.8);
+  color: #f0f0f0;
+}
+#ub-settings-modal.ub-open { display: block; }
+#ub-settings-modal .ub-modal-header {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffd166;
+  margin-bottom: 20px;
+  text-align: center;
+  border-bottom: 1px solid #3c3a35;
+  padding-bottom: 10px;
+}
+.ub-settings-section { margin-bottom: 20px; }
+.ub-settings-title {
+  font-size: 12px;
+  color: #555;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+.ub-settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #aaa;
+  gap: 12px;
+}
+.ub-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ub-font-btn {
+  background-color: #3c3a35;
+  color: #fff;
+  border: 2px solid #222;
+  border-top-color: #555;
+  border-left-color: #555;
+  font-family: "Monocraft", monospace;
+  font-size: 14px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ub-font-btn:active {
+  border-color: #555;
+  border-top-color: #222;
+  border-left-color: #222;
+  background-color: #222;
+}
+#ub-settings-modal input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 150px;
+  background: transparent;
+  cursor: pointer;
+}
+#ub-settings-modal input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8px;
+  background: #2b2b2b;
+  border: 1px solid #000;
+}
+#ub-settings-modal input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 10px;
+  background: #d4a373;
+  border: 2px solid #000;
+  margin-top: -5px;
+}
+.ub-settings-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #aaa;
+  cursor: pointer;
+}
+.ub-settings-option input { accent-color: #9147ff; cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  #ub-character,
+  #ub-stamp-machine,
+  .ub-paper { transition: none !important; }
+  .ub-idler { animation: ub-sprite 5.5s steps(3) infinite; }
+}
+
+/* --- "the desk is taken" page (views/unbanBureauBusy.ejs) ------------------
+   Not part of the 1920x1080 scene: this one is a normal, scrollable page that
+   keeps the site nav, so it uses ordinary responsive units rather than the
+   design-space pixels everything above is pinned to. It borrows this sheet
+   only for the fonts and the booth's palette, so being turned away still looks
+   like the same building. */
+
+.ub-busy-page {
+  position: relative;
+  min-height: calc(100vh - 3.5rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 1.25rem 3rem;
+  overflow: hidden;
+}
+
+/* The scene itself, pushed far back behind the glass. */
+.ub-busy-backdrop {
+  position: absolute;
+  inset: 0;
+  background: url("/img/games/unban-bureau/main-gui.png") center / cover no-repeat;
+  image-rendering: pixelated;
+  filter: brightness(0.28) saturate(0.6);
+  z-index: 0;
+}
+.ub-busy-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgb(0 0 0 / 0.1) 0%, rgb(0 0 0 / 0.85) 75%);
+}
+
+.ub-busy-card {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  padding: 2.75rem 2rem 2rem;
+  text-align: center;
+  background: #23282a;
+  border: 3px solid #0f1112;
+  border-radius: 6px;
+  box-shadow:
+    inset 2px 2px 0 rgb(255 255 255 / 0.06),
+    inset -2px -2px 0 rgb(0 0 0 / 0.4),
+    0 18px 40px rgb(0 0 0 / 0.6);
+  font-family: "Monocraft", monospace;
+}
+
+/* The sign hanging on the booth window, tilted like it was dropped there in a hurry. */
+.ub-busy-sign {
+  position: absolute;
+  top: -1.35rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2.5deg);
+  padding: 0.4rem 1.4rem;
+  background: #8b3a3a;
+  border: 3px solid #0f1112;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  color: #ffe6e6;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 0.5);
+  white-space: nowrap;
+}
+
+/* The colleague, standing at the desk. Same idle sprite the street uses - but
+   that sprite is a near-black silhouette drawn to sit on the lit street, so on
+   this dark card it needs a warm rim light to read as a person at all. */
+.ub-busy-worker {
+  width: 20px;
+  height: 20px;
+  margin: 0.75rem auto 1.5rem;
+  background: url("/img/games/unban-bureau/idle.png") no-repeat;
+  image-rendering: pixelated;
+  transform: scale(3.5);
+  transform-origin: center;
+  animation: ub-sprite 5.5s steps(3) infinite;
+  filter: brightness(1.5) drop-shadow(0 0 2px rgb(255 214 150 / 0.55)) drop-shadow(0 0 5px rgb(255 190 110 / 0.35));
+}
+
+.ub-busy-title {
+  font-size: 1.15rem;
+  color: #f0f0f0;
+  text-shadow: 2px 2px 0 #000;
+  margin-bottom: 1rem;
+}
+
+.ub-busy-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.45rem 1.1rem;
+  margin-bottom: 1rem;
+  background: #d4a373;
+  border: 2px solid #000;
+  border-radius: 3px;
+  color: #2a1d10;
+  font-size: 1rem;
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 0.5);
+}
+
+.ub-busy-body {
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: #b9c0b6;
+  margin-bottom: 0.85rem;
+}
+
+.ub-busy-since {
+  font-size: 0.7rem;
+  color: #7d857b;
+  margin-bottom: 1.75rem;
+}
+
+.ub-busy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+.ub-busy-btn {
+  background: #4a5448;
+  border: 2px solid #2e352b;
+  border-radius: 4px;
+  padding: 0.55rem 1.1rem;
+  font-family: "Monocraft", monospace;
+  font-size: 0.75rem;
+  color: #f0f0f0;
+  cursor: pointer;
+  text-decoration: none;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.1), 2px 2px 0 rgb(0 0 0 / 0.5);
+  transition: background 0.1s;
+}
+.ub-busy-btn:hover { background: #5d685b; }
+.ub-busy-btn:active { box-shadow: inset 2px 2px 5px rgb(0 0 0 / 0.5); transform: translate(2px, 2px); }
+.ub-busy-btn-quiet { background: #33393a; border-color: #23282a; }
+.ub-busy-btn-quiet:hover { background: #414849; }
+
+.ub-busy-status {
+  margin-top: 1.5rem;
+  min-height: 1.2em;
+  font-size: 0.68rem;
+  color: #6b736a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ub-busy-worker { animation: none; }
+}
+
+/* The same card, thrown over the desk when a shift is lost while the page is
+   open (unban-bureau.js's shiftLost). Fixed rather than inside #ub-wrapper: it
+   must not be scaled with the scene, and it has to cover the whole viewport so
+   nothing behind it is still clickable. */
+.ub-lost-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgb(0 0 0 / 0.82);
+}

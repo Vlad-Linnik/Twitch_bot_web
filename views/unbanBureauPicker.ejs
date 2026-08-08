@@ -1,0 +1,35 @@
+<%- include('partials/head', { title: t('games.unbanBureauPicker.title') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  Channel chooser behind the Unban Bureau's /games card (routes/games.js's /unban-bureau).
+  Only reached when the visitor can moderate more than one channel - with exactly one they're
+  redirected straight to it, and the per-channel page runs its own requireLevel(2) regardless.
+%>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-12">
+  <header class="mb-8">
+    <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('games.unbanBureauPicker.title') %></h1>
+    <p class="text-sm text-neutral-500"><%= t('games.unbanBureauPicker.subtitle') %></p>
+  </header>
+
+  <% if (!channels.length) { %>
+    <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-8 text-center text-sm text-neutral-400">
+      <%= t('games.unbanBureauPicker.none') %>
+    </p>
+  <% } else { %>
+    <ul class="space-y-2">
+      <% channels.forEach(function (channel) { %>
+        <li>
+          <a href="/<%= channel.channelLogin %>/unban-bureau"
+             class="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 hover:border-purple-700 px-4 py-3 transition-colors">
+            <span class="font-medium text-neutral-200"><%= channel.channelLogin %></span>
+            <span class="text-purple-400">&rarr;</span>
+          </a>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

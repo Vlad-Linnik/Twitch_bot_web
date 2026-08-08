@@ -1067,3 +1067,149 @@ html.js .save-fab.save-visible {
   background-color: rgb(251 191 36 / 0.15); /* amber-400 */
   color: #fbbf24;
 }
+
+/* ============================================================================
+   Бюро амнистии / Amnesty Bureau
+   (views/unbanBureau.ejs, public/js/games/unban-bureau.js)
+   ----------------------------------------------------------------------------
+   An unban-appeal review console: applicant card, the appeal, a merged
+   chat/moderation dossier, a verdict panel, and a strip along the bottom for
+   the advisory chat vote and the sniper's shot.
+
+   THREE THINGS TO KNOW BEFORE EDITING:
+
+   1. This is ORDINARY FLOW LAYOUT, deliberately. The archived first version of
+      this page was an absolutely-positioned 16/9 canvas "stage" whose every
+      size was a percentage, which meant it collapsed to zero height the moment
+      its aspect-ratio was dropped - the same bug that hit match-3 and
+      minesweeper. Nothing here is absolutely positioned except the stamp
+      overlay, so that whole failure mode does not exist. Keep it that way.
+
+   2. NO PIXEL DISPLAY FONT. The archived version shipped Pixelify Sans, whose
+      Cyrillic falls apart below ~14px ("выдал" reads as "еыдал") - and dense
+      small Cyrillic log lines are the entire point of this page. Everything
+      here is the system stack, with a mono stack for the stamp and the labels
+      where a typewriter feel is wanted.
+
+   3. Layout is Tailwind in the view; this file only holds what Tailwind can't
+      express - the stamp animation, the log-row treatments, the vote bar - and
+      every class the CLIENT toggles at runtime, since Tailwind's scanner never
+      sees a class that only exists as a JS string.
+   ========================================================================== */
+
+.ub-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Courier New", monospace;
+}
+
+/* --- the verdict stamp ---------------------------------------------------- */
+
+/* Slams down over the appeal panel when a decision is recorded. Purely a
+   confirmation flourish: the decision is already POSTed by the time it plays,
+   and the status line below carries the real result. */
+.ub-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  padding: 0.5rem 1.75rem;
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  border: 4px double currentColor;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -60%) rotate(-13deg) scale(2.4);
+}
+.ub-stamp-shown {
+  animation: ub-stamp-slam 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4) forwards;
+}
+.ub-stamp-approved { color: #4ade80; } /* green-400 */
+.ub-stamp-denied { color: #f87171; } /* red-400 */
+@keyframes ub-stamp-slam {
+  0% { opacity: 0; transform: translate(-50%, -60%) rotate(-13deg) scale(2.4); }
+  60% { opacity: 1; transform: translate(-50%, -50%) rotate(-13deg) scale(0.92); }
+  100% { opacity: 0.92; transform: translate(-50%, -50%) rotate(-13deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ub-stamp-shown {
+    animation: none;
+    opacity: 0.92;
+    transform: translate(-50%, -50%) rotate(-13deg) scale(1);
+  }
+}
+
+/* --- dossier log ---------------------------------------------------------- */
+
+.ub-log-day {
+  margin: 0.75rem 0 0.25rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed rgb(82 82 82 / 0.6); /* neutral-600 */
+  text-align: center;
+  font-size: 0.6875rem;
+  color: #737373; /* neutral-500 */
+}
+.ub-log-row {
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ub-log-action { color: #a3a3a3; font-style: italic; } /* neutral-400 */
+.ub-log-time {
+  margin-right: 0.4rem;
+  font-size: 0.6875rem;
+  color: #737373;
+}
+.ub-log-mod { font-weight: 600; }
+.ub-log-reason { color: #a3a3a3; }
+/* Set only when the bot recorded the action within 2 minutes of the message
+   (db/unbanDossierRepo.js). Past that the link between the two is a guess, and
+   an unflagged row is the honest presentation to someone judging an appeal. */
+.ub-log-flagged {
+  background: rgb(220 38 38 / 0.12); /* red-600 */
+  box-shadow: inset 2px 0 0 #dc2626;
+}
+.ub-log-badge {
+  margin-left: 0.4rem;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: #f87171;
+}
+
+/* --- chat vote bar -------------------------------------------------------- */
+
+.ub-vote-bar {
+  height: 0.5rem;
+  border-radius: 99px;
+  background: #7f1d1d; /* red-900 - the "against" half is the track itself */
+  overflow: hidden;
+}
+.ub-vote-bar > span {
+  display: block;
+  height: 100%;
+  background: #22c55e; /* green-500 */
+  transition: width 500ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ub-vote-bar > span { transition: none; }
+}
+
+/* --- sniper announcement -------------------------------------------------- */
+
+/* Appears only once the bot reports a shot on live.json, so it must not reserve
+   space while hidden - `hidden` (Tailwind) handles that; this is only the look. */
+.ub-sniper {
+  border: 1px solid rgb(220 38 38 / 0.5);
+  background: rgb(127 29 29 / 0.25);
+  color: #fca5a5; /* red-300 */
+}
+.ub-sniper-shown { animation: ub-sniper-in 0.45s ease-out; }
+@keyframes ub-sniper-in {
+  0% { opacity: 0; transform: translateY(-0.5rem); }
+  100% { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ub-sniper-shown { animation: none; }
+}

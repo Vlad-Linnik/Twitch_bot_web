@@ -214,4 +214,31 @@ module.exports = [
         </g>
       </svg>`,
   },
+  {
+    id: "unban-bureau",
+    // Not a /games/* page: it's per-channel and tier-2 gated, so the card points at a picker
+    // that forwards to /<channel>/unban-bureau (routes/unbanBureau.js). See requiresModerator.
+    url: "/unban-bureau",
+    nameKey: "games.unbanBureau.name",
+    descKey: "games.unbanBureau.cardDescription",
+    // The only catalog entry with this flag: /games is a public hub, but this card is useless
+    // (and its target is a 403) for anyone who moderates no channel, so routes/games.js drops it
+    // for those visitors. Admin hide/categorize still work on top, like every other game.
+    requiresModerator: true,
+    preview: `
+      <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+        <rect x="26" y="14" width="62" height="66" rx="2" fill="#ece5d5" stroke="#171717" stroke-width="1"/>
+        <rect x="34" y="22" width="18" height="18" rx="1" fill="#d6cdb8" stroke="#b91c1c" stroke-width="1" stroke-dasharray="2 2"/>
+        <rect x="58" y="24" width="24" height="3" rx="1.5" fill="#78716c"/>
+        <rect x="58" y="31" width="18" height="3" rx="1.5" fill="#a8a29e"/>
+        <rect x="34" y="48" width="46" height="2.5" rx="1.25" fill="#a8a29e"/>
+        <rect x="34" y="55" width="46" height="2.5" rx="1.25" fill="#a8a29e"/>
+        <rect x="34" y="62" width="30" height="2.5" rx="1.25" fill="#a8a29e"/>
+        <g transform="translate(104,46) rotate(-14)">
+          <rect x="-26" y="-14" width="52" height="28" rx="2" fill="none" stroke="#15803d" stroke-width="3"/>
+          <rect x="-21" y="-9" width="42" height="18" rx="1" fill="none" stroke="#15803d" stroke-width="1"/>
+          <path d="M-10 0 l6 6 l12 -13" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </svg>`,
+  },
 ];

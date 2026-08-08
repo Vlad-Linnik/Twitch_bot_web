@@ -1,0 +1,54 @@
+<%- include('partials/head', { title: channel.channelLogin + ' — ' + t('unbanBureau.title') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  Shown (HTTP 409) instead of the desk when a colleague already holds this channel's shift -
+  routes/unbanBureau.js, db/unbanBureauShiftRepo.js.
+
+  It deliberately looks like the game rather than like an error page: the scene artwork behind the
+  glass, the same pixel font, a booth sign turned to CLOSED. Being turned away is a normal part of
+  the feature, not a fault. It borrows unban-bureau.css for the fonts and the ub-busy-* block, but
+  never adds body.ub-playing - the nav and footer stay, because this page is a dead end and the way
+  out has to be visible.
+
+  The desk frees itself on a lease with no notification channel back to here, so the page re-checks
+  on a timer and lands the moderator straight in as soon as it's theirs. It gives up after a few
+  minutes rather than reloading a shift page forever.
+%>
+
+<link rel="stylesheet" href="<%= asset('/css/unban-bureau.css') %>" />
+
+<main class="ub-busy-page">
+  <div class="ub-busy-backdrop" role="presentation"></div>
+
+  <section class="ub-busy-card">
+    <div class="ub-busy-sign"><%= t('unbanBureau.shiftBusySign') %></div>
+
+    <div class="ub-busy-worker" role="presentation"></div>
+
+    <h1 class="ub-busy-title"><%= t('unbanBureau.shiftBusyTitle') %></h1>
+
+    <%# The nick gets its own plate rather than sitting inside the sentence: it is the one thing the
+        reader actually needs, and splitting a translated sentence around an interpolated <span>
+        would mean shipping half-sentences to the locale files. %>
+    <div class="ub-busy-name"><%= holder && holder.displayName ? holder.displayName : t('unbanBureau.shiftBusySomeone') %></div>
+
+    <p class="ub-busy-body"><%= t('unbanBureau.shiftBusyBody') %></p>
+
+    <p class="ub-busy-since">
+      <% const minutes = holder && holder.startedAt ? Math.floor((Date.now() - new Date(holder.startedAt).getTime()) / 60000) : 0; %>
+      <%= minutes >= 1 ? t('unbanBureau.shiftBusySince', { minutes }) : t('unbanBureau.shiftBusyJustStarted') %>
+    </p>
+
+    <div class="ub-busy-actions">
+      <button type="button" id="ub-busy-retry" class="ub-busy-btn"><%= t('unbanBureau.shiftBusyRetryNow') %></button>
+      <a class="ub-busy-btn ub-busy-btn-quiet" href="/<%= channel.channelLogin %>/settings"><%= t('channelSettings.backToSettings') %></a>
+    </div>
+
+    <p class="ub-busy-status" id="ub-busy-status" data-retry-template="<%= t('unbanBureau.shiftBusyRetry', { seconds: '%s' }) %>" data-stopped="<%= t('unbanBureau.shiftBusyStopped') %>"></p>
+  </section>
+</main>
+
+<script src="<%= asset('/js/unban-bureau-busy.js') %>" defer></script>
+
+<%- include('partials/foot') %>

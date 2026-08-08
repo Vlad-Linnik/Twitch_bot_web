@@ -39,7 +39,12 @@ async function getConfig(channelLogin) {
 async function saveConfig(channelLogin, config, updatedBy) {
   const col = await ensureInitialized();
   const login = channelLogin.toLowerCase();
-  const { bannedWords, spamSignatures, spamBanReason, commands, responses } = config;
+  // Explicit field list, not a spread: it's what keeps a stray body key from ending up in the
+  // channel's stored config. The cost is that a NEW top-level config block has to be added here
+  // too - `unbanBureau` (the Amnesty Bureau + its sniper) is written by
+  // lib/unbanBureauValidation.js's parseUnbanBureau and would silently never persist otherwise,
+  // with the settings form appearing to save and every value snapping back to the default.
+  const { bannedWords, spamSignatures, spamBanReason, commands, responses, unbanBureau } = config;
   await col.updateOne(
     { channelLogin: login },
     {
@@ -49,6 +54,7 @@ async function saveConfig(channelLogin, config, updatedBy) {
         spamBanReason: spamBanReason ?? "",
         commands,
         responses,
+        unbanBureau,
         updatedAt: new Date(),
         updatedBy: String(updatedBy),
       },
