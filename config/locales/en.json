@@ -1484,8 +1484,12 @@
         "unrestrictUser": "Commenter unrestricted"
       },
       "gameRun": {
-        "dismiss": "Flagged run dismissed",
+        "approve": "Flagged run approved",
         "resetScore": "Game score reset"
+      },
+      "settings-log": {
+        "delete-all": "Settings change log wiped",
+        "delete-one": "Settings change log entry deleted"
       }
     },
     "news": {
