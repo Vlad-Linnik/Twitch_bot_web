@@ -119,6 +119,33 @@ async function findLastBan(channelLogin, userId) {
   );
 }
 
+// Which UNBAN_REQUEST_CREATED rows in the Twitch mirror were actually decided (a later
+// UNBAN_REQUEST_APPROVED/DENIED for the same user). The request THIS case is reviewing is, by
+// definition, undecided - nobody has ruled on it yet, that's what "pending" means - so this rule
+// alone is what keeps it out of the log: its text already sits on the desk as the case itself, and
+// every case on this page would otherwise end its log with the same non-fact ("filed an appeal"),
+// since the page only ever shows logs for people who did. An older CREATED row that never got a
+// verdict (expired, or the applicant left before it was reviewed) is dropped for the same reason a
+// pending one is - there is nothing decided to show.
+function resolvedAppealIds(twitchRows) {
+  const chronological = [...twitchRows]
+    .filter((row) => row.type === "UNBAN_REQUEST_CREATED" || row.type === "UNBAN_REQUEST_APPROVED" || row.type === "UNBAN_REQUEST_DENIED")
+    .map((row) => ({ id: row.id, type: row.type, timestamp: new Date(row.timestamp) }))
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  const resolved = new Set();
+  let openId = null;
+  for (const row of chronological) {
+    if (row.type === "UNBAN_REQUEST_CREATED") {
+      openId = row.id;
+    } else if (openId) {
+      resolved.add(openId);
+      openId = null;
+    }
+  }
+  return resolved;
+}
+
 // One page of the merged activity log, oldest-first for display.
 //
 // Paged by MESSAGES (the bulk of the stream), then every moderation action falling inside that
@@ -215,6 +242,7 @@ async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFA
   // witnessed the action itself (it was offline, or joined the channel after it happened), which
   // our own modLogs query above has no row for at all. Matched against actionDocs by the same
   // type+timestamp rule buildActionList uses, so an action both sides recorded doesn't show twice.
+  const resolvedAppeals = resolvedAppealIds(unbanCase?.twitchModLogs?.actions || []);
   const mirroredActions = lowerBound
     ? (unbanCase?.twitchModLogs?.actions || [])
         .map((row) => {
@@ -229,6 +257,9 @@ async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFA
           };
         })
         .filter((row) => row.action && row.timestamp >= lowerBound && row.timestamp < upperBound)
+        // See resolvedAppealIds: an appeal only belongs in the log once it has a verdict - which
+        // also filters out the very appeal this case is reviewing, since that one has none yet.
+        .filter((row) => row.action !== "unbanRequest" || resolvedAppeals.has(row.id))
         .filter(
           (row) =>
             !actionDocs.some(
@@ -352,7 +383,12 @@ async function buildActionList(channelLogin, unbanCase) {
     .sort({ timestamp: -1 })
     .toArray();
 
-  const twitchRows = unbanCase?.twitchModLogs?.actions || [];
+  // UNBAN_REQUEST_CREATED is excluded outright, not just here but from this tab full stop: filing
+  // an appeal isn't a punishment, and this document's own tab already shows the applicant's current
+  // request. unbanApproved/unbanDenied stay - those ARE verdicts on the applicant's record.
+  const twitchRows = (unbanCase?.twitchModLogs?.actions || []).filter(
+    (row) => row.type !== "UNBAN_REQUEST_CREATED"
+  );
 
   // No Twitch mirror (no token, expired session, outage): our own rows become the list, rendered
   // from the same fields so the tab looks identical, just shorter. Oldest first - see the note on
