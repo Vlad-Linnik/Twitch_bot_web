@@ -137,6 +137,11 @@ registerConfigSubPage("/settings/custom-commands", "channelCustomCommandsSetting
   customCommandCount: (await customCommandsRepo.list(channelLogin)).length,
 }));
 registerConfigSubPage("/settings/counters", "channelCountersSettings");
+// The Amnesty Bureau's knobs used to sit in the main settings form, with the settings grid's own
+// "Бюро амнистии" tile jumping straight into the review console. The tile now lands here instead and
+// this page is what offers the console - the settings are a channel-level decision, the console is a
+// shift at a desk, and the grid is a settings grid.
+registerConfigSubPage("/settings/unban-bureau", "channelUnbanBureauSettings");
 
 // Banned Words and Spam Signatures moved off the main settings page onto
 // their own sub-pages (search + add/edit/delete instead of one big textarea

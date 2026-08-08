@@ -1,0 +1,93 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.group.unbanBureau') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-3xl mx-auto px-6 py-16">
+  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+  <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1">🛂 <%= t('channelSettings.group.unbanBureau') %></h1>
+  <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.unbanBureauIntro') %></p>
+
+  <%# The review desk itself. It is NOT under /settings/ - it's a console, not a form - and the
+      settings grid now points here instead of straight at it, so this is its only entry point. %>
+  <a href="/<%= channel.channelLogin %>/unban-bureau"
+     class="inline-flex items-center gap-2 mb-8 px-4 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+    🛂 <%= t('channelSettings.openUnbanBureau') %> →
+  </a>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('channelSettings.saved') %>
+    </div>
+  <% } %>
+
+  <%
+    // Deep-merged over config/defaultChannelConfig.json by channelConfigRepo, so this is only
+    // ever undefined if that default is missing the block - fall back rather than crash the page.
+    const ub = config.unbanBureau || {};
+  %>
+  <form method="post" action="/<%= channel.channelLogin %>/settings/unban-bureau" data-transition="instant" data-autosave class="space-y-6">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <%# The single `.present` marker covers BOTH checkboxes on this page - an unchecked box submits
+        nothing, so without it lib/unbanBureauValidation.js can't tell "turned off" from "this form
+        doesn't render the field" and every save from another page would flip them off. %>
+    <input type="hidden" name="unbanBureau.present" value="1" />
+
+    <section>
+      <label class="flex items-start gap-3 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 cursor-pointer">
+        <input type="checkbox" name="unbanBureau.enabled" class="mt-1 accent-purple-500" <%= ub.enabled ? 'checked' : '' %> />
+        <span>
+          <span class="block text-neutral-100 font-medium"><%= t('channelSettings.unbanBureauEnabledLabel') %></span>
+          <span class="block text-neutral-500 text-sm mt-0.5"><%= t('channelSettings.unbanBureauEnabledHint') %></span>
+        </span>
+      </label>
+    </section>
+
+    <section>
+      <h2 class="text-neutral-200 font-medium mb-1"><%= t('channelSettings.unbanBureauVoteHeading') %></h2>
+      <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.unbanBureauVoteHint') %></p>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauApproveEmoteLabel') %></span>
+          <input type="text" name="unbanBureau.voteApproveEmote" value="<%= ub.voteApproveEmote || '' %>" maxlength="40"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauDenyEmoteLabel') %></span>
+          <input type="text" name="unbanBureau.voteDenyEmote" value="<%= ub.voteDenyEmote || '' %>" maxlength="40"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <%# No on/off box: the bot never fires this by itself, so the only switch is a moderator picking
+          up the rifle at the desk. These three describe what the shot does to whoever it hits. %>
+      <h2 class="text-neutral-200 font-medium mb-1">🎯 <%= t('channelSettings.unbanBureauSniperHeading') %></h2>
+      <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.unbanBureauSniperHint') %></p>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauSniperModeLabel') %></span>
+          <select name="unbanBureau.sniperMode" class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm">
+            <option value="timeout" <%= ub.sniperMode !== 'ban' ? 'selected' : '' %>><%= t('channelSettings.unbanBureauSniperModeTimeout') %></option>
+            <option value="ban" <%= ub.sniperMode === 'ban' ? 'selected' : '' %>><%= t('channelSettings.unbanBureauSniperModeBan') %></option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauSniperSecLabel') %></span>
+          <input type="number" name="unbanBureau.sniperTimeoutSec" value="<%= ub.sniperTimeoutSec %>" min="1" max="3600"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauSniperReasonLabel') %></span>
+          <input type="text" name="unbanBureau.sniperReason" value="<%= ub.sniperReason || '' %>" maxlength="140"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+      </div>
+    </section>
+
+    <%- include('partials/autosaveStatus') %>
+  </form>
+</main>
+
+<script src="<%= asset('/js/autosave.js') %>" defer></script>
+<%- include('partials/foot') %>

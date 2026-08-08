@@ -264,16 +264,11 @@ router.post(
       const updated = await unbanRequestsRepo.requestVote(req.body.id, channel.channelId);
       if (!updated) return res.status(409).json({ error: "vote_already_running" });
 
-      await settingsChangeLogRepo.logChange({
-        channelLogin: channel.channelLogin,
-        user: req.user,
-        category: "unban_request",
-        action: "vote",
-        target: before.userLogin,
-        before: null,
-        after: { requested: true },
-      });
-
+      // Deliberately NOT written to SettingsChangeLog. Only a VERDICT belongs in that journal -
+      // starting an advisory vote is part of reviewing a case, changes nothing on its own, and is
+      // reversible by simply deciding. Since a vote opens for practically every case that reaches
+      // the desk, logging it doubled the journal's volume with a row that carries no accountability
+      // the verdict row (same moderator, same applicant, minutes later) doesn't already carry.
       res.json({ ok: true, vote: updated.vote });
     } catch (err) {
       next(err);

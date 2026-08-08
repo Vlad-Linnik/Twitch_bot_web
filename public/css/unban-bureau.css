@@ -458,6 +458,19 @@ body.ub-playing footer {
   padding: 2px 5px;
   border-radius: 2px;
 }
+/* A lifting is not a strike - see renderLog(). Green for undoing a punishment, neutral grey for the
+   applicant's own entries (an acknowledged warning, a past appeal), so the eye can tell the three
+   kinds apart while scrolling a log that used to contain only one. */
+.ub-log-lifted {
+  background: rgb(80 180 90 / 0.09);
+  border-left-color: #3f8f45;
+}
+.ub-log-lifted .ub-log-modaction-text { color: #3f8f45; }
+.ub-log-selfacted {
+  background: rgb(140 140 140 / 0.1);
+  border-left-color: #8a8a8a;
+}
+.ub-log-selfacted .ub-log-modaction-text { color: #7a7a7a; }
 .ub-log-modaction-text {
   color: #d46060;
   font-style: italic;
@@ -559,10 +572,37 @@ body.ub-playing footer {
 .ub-action-ban { color: #a32222; }
 .ub-action-timeout { color: #b3661a; }
 .ub-action-warn { color: #8512b3; }
+/* Twitch-only rows. The three that UNDO a punishment share one green so a ban/unban pair reads as a
+   pair at a glance - that alternation is the whole reason the list is worth scrolling. The
+   applicant's own two entries stay grey: they are context, not a verdict against them. */
+.ub-action-unban,
+.ub-action-untimeout,
+.ub-action-unbanApproved { color: #2f7d32; }
+.ub-action-unbanDenied { color: #a32222; }
+.ub-action-warnAck,
+.ub-action-unbanRequest { color: #6b6b6b; }
 .ub-action-mod {
   font-weight: bold;
   font-size: 0.9em;
 }
+/* The "what became of it" line folded onto a punishment row - see followUpLine(). Indented under the
+   verb it belongs to, and green when it undid the punishment so it can never read as a second one. */
+.ub-action-followup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 2px;
+  padding-left: 8px;
+  font-size: 0.85em;
+  color: #7a7a7a;
+}
+.ub-action-followup-lifted { color: #3f8f45; }
+.ub-action-followup-mark { opacity: 0.7; }
+.ub-action-followup-verb { font-weight: bold; }
+.ub-action-followup-mod { font-weight: bold; }
+.ub-action-followup-time,
+.ub-action-followup-after { color: #888; font-size: 0.95em; }
 .ub-action-detail {
   font-size: 0.88em;
   color: #555;

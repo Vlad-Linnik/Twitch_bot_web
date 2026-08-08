@@ -29,7 +29,40 @@ const THIN_LOG_MESSAGES = 100;
 // happened, so they differ by network latency - a second or two in practice.
 const ACTION_MATCH_WINDOW_MS = 10 * 1000;
 // Twitch's action type -> the vocabulary our own logs (and the rest of this page) use.
-const ACTION_TYPE_BY_TWITCH = { BAN: "ban", TIMEOUT: "timeout", WARN: "warn" };
+//
+// The bot's own EventSub records only the first three plus `delete`, so the six below it can only
+// ever arrive from Twitch's mirror - which is the point of them: a channel's 17 bans of which 16
+// were LIFTED told the moderator nothing about the lifting until these were read (verified against
+// the live #vlad_261 case).
+const ACTION_TYPE_BY_TWITCH = {
+  BAN: "ban",
+  TIMEOUT: "timeout",
+  WARN: "warn",
+  UNBAN: "unban",
+  UNTIMEOUT: "untimeout",
+  ACKNOWLEDGE_WARNING: "warnAck",
+  UNBAN_REQUEST_CREATED: "unbanRequest",
+  UNBAN_REQUEST_APPROVED: "unbanApproved",
+  UNBAN_REQUEST_DENIED: "unbanDenied",
+};
+// The two the applicant performs on themselves. Their mirrored row carries no moderator at all (see
+// TwitchBot/twitch/viewerCardModLogs.js's `selfActed`), so the page has to name the applicant as the
+// actor instead of resolving a null id through the profile cache.
+const SELF_ACTED = new Set(["warnAck", "unbanRequest"]);
+// Twitch count key -> the dossier's own. Only the first three have a local equivalent; the rest are
+// simply absent when the mirror is (`countHumanActions` cannot know about them), which is why the
+// page only ever renders them when they're above zero.
+const COUNT_KEY_BY_TWITCH = {
+  bans: "ban",
+  timeouts: "timeout",
+  warns: "warn",
+  unbans: "unban",
+  untimeouts: "untimeout",
+  warnAcks: "warnAck",
+  unbanRequests: "unbanRequest",
+  unbanRequestsApproved: "unbanApproved",
+  unbanRequestsDenied: "unbanDenied",
+};
 
 let collections;
 
@@ -184,13 +217,17 @@ async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFA
   // type+timestamp rule buildActionList uses, so an action both sides recorded doesn't show twice.
   const mirroredActions = lowerBound
     ? (unbanCase?.twitchModLogs?.actions || [])
-        .map((row) => ({
-          id: row.id,
-          timestamp: new Date(row.timestamp),
-          action: ACTION_TYPE_BY_TWITCH[row.type] || null,
-          modId: row.modId,
-          detail: row.detail || null,
-        }))
+        .map((row) => {
+          const action = ACTION_TYPE_BY_TWITCH[row.type] || null;
+          return {
+            id: row.id,
+            timestamp: new Date(row.timestamp),
+            action,
+            modId: row.modId,
+            selfActed: Boolean(action && SELF_ACTED.has(action)),
+            detail: row.detail || null,
+          };
+        })
         .filter((row) => row.action && row.timestamp >= lowerBound && row.timestamp < upperBound)
         .filter(
           (row) =>
@@ -239,6 +276,7 @@ async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFA
       timestamp: row.timestamp,
       action: row.action,
       modId: row.modId,
+      selfActed: row.selfActed,
       reason: row.detail,
       durationMs: null,
     })),
@@ -286,7 +324,8 @@ function readMirroredComments(unbanCase) {
   }));
 }
 
-// The punishments tab: every ban, timeout and warning against this user, newest first.
+// The punishments tab: every moderation action against this user, newest first, with each lifting
+// folded onto the punishment it lifted rather than listed separately (see attachFollowUps).
 //
 // Twitch's list is the spine when we have it - it goes back to before the bot joined, and its
 // label already carries the duration and the moderator's stated reason (there is no structured
@@ -320,6 +359,7 @@ async function buildActionList(channelLogin, unbanCase) {
       action: row.action,
       modId: String(row.modID),
       modDisplayName: null, // resolved through the profile cache with the rest of the dossier
+      selfActed: false, // our own records only hold the four types a moderator performs
       detail: row.reason || null,
       durationMs: row.durationMs ?? null,
       contextId: hasUsableContext(row) ? String(row._id) : null,
@@ -328,7 +368,7 @@ async function buildActionList(channelLogin, unbanCase) {
   }
 
   const unmatched = [...localRows];
-  return twitchRows.map((row) => {
+  const rows = twitchRows.map((row) => {
     const action = ACTION_TYPE_BY_TWITCH[row.type] || null;
     const timestamp = new Date(row.timestamp);
     const index = unmatched.findIndex(
@@ -347,12 +387,64 @@ async function buildActionList(channelLogin, unbanCase) {
       // Twitch ships the moderator's display name with the row, so unlike our own rows this needs
       // no profile lookup.
       modDisplayName: row.modDisplayName || row.modLogin || null,
+      selfActed: Boolean(action && SELF_ACTED.has(action)),
       detail: row.detail || null,
       durationMs: local?.durationMs ?? null,
       contextId: local && hasUsableContext(local) ? String(local._id) : null,
       source: "twitch",
     };
   });
+
+  return attachFollowUps(rows);
+}
+
+// What happened to each punishment AFTERWARDS, folded onto the punishment's own row.
+//
+// A lifting is only meaningful next to the thing it lifted: "timeout 2 weeks" followed three rows
+// later by a bare "timeout lifted" makes the reader pair them by eye, and on this user's history
+// (49 timeouts, 16 liftings, often minutes apart) that is not a pairing anyone does reliably. Folded
+// in, the row says the one thing an amnesty decision turns on - how long the punishment ACTUALLY
+// stood, as opposed to how long it was issued for.
+const FOLLOW_UP_TARGET = { unban: "ban", untimeout: "timeout", warnAck: "warn" };
+
+function attachFollowUps(rows) {
+  // Oldest first: a lifting closes the punishment that was open when it happened, so the list has to
+  // be walked forwards even though it is rendered backwards.
+  const chronological = [...rows].reverse();
+  // The punishment of each kind that is currently in force and not yet closed.
+  const open = new Map();
+  const consumed = new Set();
+
+  for (const row of chronological) {
+    const target = FOLLOW_UP_TARGET[row.action];
+    if (!target) {
+      // A fresh punishment supersedes any earlier one of its kind that was never lifted - it simply
+      // expired on its own, and its row correctly shows no follow-up.
+      if (row.action) open.set(row.action, row);
+      continue;
+    }
+    const punishment = open.get(target);
+    // A lifting with nothing open belongs to a punishment older than the rows Twitch returned
+    // (MAX_ACTION_ROWS is per type), so it stays a row of its own rather than being dropped.
+    if (!punishment) continue;
+    punishment.followUp = {
+      id: row.id,
+      action: row.action,
+      timestamp: row.timestamp,
+      modId: row.modId,
+      modDisplayName: row.modDisplayName,
+      selfActed: row.selfActed,
+      // How long it actually stood. Compared against the row's own issued duration by the reader,
+      // which is the whole point: a two-week timeout lifted after a minute is a different fact.
+      afterMs: row.timestamp && punishment.timestamp
+        ? row.timestamp.getTime() - punishment.timestamp.getTime()
+        : null,
+    };
+    consumed.add(row.id);
+    open.delete(target);
+  }
+
+  return rows.filter((row) => !consumed.has(row.id));
 }
 
 // Whether the five-messages-before popup would have anything to show for one of our rows. The
@@ -406,17 +498,20 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     buildActionList(channelLogin, unbanCase),
   ]);
 
-  const counts = twitchCounts
-    ? {
-        ban: twitchCounts.bans || 0,
-        timeout: twitchCounts.timeouts || 0,
-        warn: twitchCounts.warns || 0,
-        // A history longer than the page the bot asked Twitch for - the page renders "1000+"
-        // rather than a number it can't stand behind.
-        truncated: Boolean(twitchCounts.truncated),
-        source: "twitch",
-      }
-    : { ...localCounts, truncated: false, source: "bot" };
+  let counts;
+  if (twitchCounts) {
+    counts = {
+      // A history longer than the page the bot asked Twitch for - the page renders "1000+"
+      // rather than a number it can't stand behind.
+      truncated: Boolean(twitchCounts.truncated),
+      source: "twitch",
+    };
+    for (const [twitchKey, ourKey] of Object.entries(COUNT_KEY_BY_TWITCH)) {
+      counts[ourKey] = twitchCounts[twitchKey] || 0;
+    }
+  } else {
+    counts = { ...localCounts, truncated: false, source: "bot" };
+  }
 
   const modComments = readMirroredComments(unbanCase);
   const activeStrike = unbanCase?.twitchModLogs?.activeStrike || null;
@@ -430,6 +525,9 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     // Twitch-sourced rows already carry a display name, but their modId still resolves the chat
     // colour and the bot mark; a row from our own records has nothing but the id.
     ...actions.map((a) => a.modId).filter(Boolean),
+    // Whoever lifted a punishment is often not whoever issued it - that contrast is half of why the
+    // lifting is shown at all, so their id needs resolving too.
+    ...actions.map((a) => a.followUp?.modId).filter(Boolean),
   ]);
 
   return {
@@ -460,9 +558,13 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
           source: "bot",
         }
       : null,
-    // Twitch's own risk read: ban-evasion likelihood, enforcement treatment, and any ban-sharing
-    // channels that also have this user banned. Null when the mirror is absent.
+    // Twitch's own risk read: ban-evasion AND harassment likelihoods, enforcement treatment, and any
+    // ban-sharing channels that also have this user banned. Null when the mirror is absent.
     risk: unbanCase?.twitchModLogs?.risk || null,
+    // Whether this CHANNEL participates in Twitch's ban sharing, which is what says whether `risk`'s
+    // empty `sharedBanChannels` and the comments tab's missing shared notes mean "nothing to find" or
+    // "we were never allowed to look". Same shape of trap as `subscription`'s three states.
+    banSharing: unbanCase?.twitchModLogs?.banSharing || null,
     log,
     modComments,
     // {state: 'subscribed'|'none'|'unavailable', tier, prime}, or null when the bot never got a

@@ -447,12 +447,27 @@
 
   // --- dossier -------------------------------------------------------------
 
+  // The six below `warn` can only ever come from Twitch's mirror - the bot's own EventSub never
+  // recorded a lifting, which is why a page built on our records alone showed 17 bans and no hint
+  // that 16 of them were undone.
+  var ACTION_LABEL_KEY = {
+    ban: "logBanned",
+    timeout: "logTimedOut",
+    delete: "logDeleted",
+    warn: "logWarned",
+    unban: "logUnbanned",
+    untimeout: "logUntimedOut",
+    warnAck: "logWarnAcked",
+    unbanRequest: "logUnbanRequested",
+    unbanApproved: "logUnbanApproved",
+    unbanDenied: "logUnbanDenied",
+  };
+
+  // The actions that UNDO a punishment rather than impose one. Used for colour in both panes.
+  var LIFTING_ACTIONS = { unban: true, untimeout: true, unbanApproved: true };
+
   function actionLabel(action) {
-    if (action === "ban") return T.logBanned;
-    if (action === "timeout") return T.logTimedOut;
-    if (action === "delete") return T.logDeleted;
-    if (action === "warn") return T.logWarned;
-    return action;
+    return T[ACTION_LABEL_KEY[action]] || action;
   }
 
   function modLabel(dossier, modId) {
@@ -460,6 +475,14 @@
     var node = el("span", "ub-log-user", mod.displayName + (mod.isBot ? " " + T.botMark : ""));
     if (mod.color) node.style.color = mod.color;
     return node;
+  }
+
+  // The actor of a `selfActed` row (an acknowledged warning, a past appeal): the applicant, not a
+  // moderator. Those rows carry no modId at all, and resolving a null one through the profile cache
+  // would print "null" where a name goes.
+  function applicantLabel(className) {
+    var c = currentCase();
+    return el("span", className, (c && (c.userDisplayName || c.userLogin)) || "—");
   }
 
   function renderLog(dossier, prepend) {
@@ -478,12 +501,22 @@
       var day = fmtDay(entry.timestamp);
       if (day !== lastDay) { fragment.appendChild(el("div", "ub-log-day", day)); lastDay = day; }
 
-      var row = el("div", entry.type === "action" ? "ub-log-modaction" : "ub-log-message");
+      // Every action row in this log used to be red-tinted, which was fine while the only rows were
+      // punishments. It is not fine for a lifting: "vlad_261 снял бан" drawn in the ban colour reads
+      // as another strike against the applicant, which is the exact misreading these rows exist to
+      // prevent. The applicant's own entries are neutral for the same reason.
+      var rowClass = "ub-log-message";
+      if (entry.type === "action") {
+        rowClass = "ub-log-modaction";
+        if (LIFTING_ACTIONS[entry.action]) rowClass += " ub-log-lifted";
+        else if (entry.selfActed) rowClass += " ub-log-selfacted";
+      }
+      var row = el("div", rowClass);
       row.appendChild(el("span", "ub-log-time", fmtTime(entry.timestamp)));
 
       if (entry.type === "action") {
         var body = el("span", "ub-log-modaction-text");
-        body.appendChild(modLabel(dossier, entry.modId));
+        body.appendChild(entry.selfActed ? applicantLabel("ub-log-user") : modLabel(dossier, entry.modId));
         body.appendChild(document.createTextNode(" " + actionLabel(entry.action)));
         if (entry.reason) body.appendChild(document.createTextNode(" — " + entry.reason));
         row.appendChild(body);
@@ -536,6 +569,17 @@
   function renderModComments(dossier) {
     var container = $("ub-mod-comments");
     container.textContent = "";
+
+    // Half of this tab - and the whole of the card's shared-ban note - can only ever be filled on a
+    // channel that joined Twitch's ban sharing. Without this line an empty list reads as "no other
+    // channel has anything on them", which is a far stronger claim than "we were never allowed to
+    // look". It goes here rather than in the risk row because that row has three lines to spend and
+    // this notice would occupy one of them on every single applicant of an opted-out channel.
+    var sharing = dossier.banSharing;
+    if (sharing && (!sharing.enabled || !sharing.commentsShared)) {
+      container.appendChild(el("div", "ub-log-system", T.sharingOff));
+    }
+
     if (!dossier.modComments.length) {
       container.appendChild(el("div", "ub-log-system", T.commentsEmpty));
       return;
@@ -574,18 +618,36 @@
   // them permanently while carrying no information; a row that appears only when it matters is
   // read. The trade is that "no row" also covers "no mirror at all" - which is the same thing the
   // rest of the card does when Twitch is unreachable.
-  function renderRisk(risk) {
+  function renderRisk(risk, counts) {
     var row = $("ub-uc-risk");
     var notes = [];
     if (risk) {
       if (risk.banEvasion && risk.banEvasion !== "UNLIKELY") {
         notes.push(T["riskEvasion" + risk.banEvasion] || T.riskEvasionPOSSIBLE);
       }
+      // A second, independent evaluation Twitch answers in the same field. Same silence rule: only
+      // ever shown above "unlikely".
+      if (risk.harassment && risk.harassment !== "UNLIKELY") {
+        notes.push(T["riskHarassment" + risk.harassment] || T.riskHarassmentPOSSIBLE);
+      }
       if (risk.treatment && risk.treatment !== "NONE") {
         notes.push(T["riskTreatment" + risk.treatment] || risk.treatment);
       }
       if (risk.sharedBanChannels && risk.sharedBanChannels.length) {
         notes.push(T.riskSharedBans.replace("{{count}}", risk.sharedBanChannels.length));
+      }
+    }
+    // Recidivism through THIS process, which is the fact an amnesty decision turns on most directly
+    // and which our own records cannot supply (they only go back to when the bot started mirroring
+    // the queue - days, against Twitch's years). Deliberately the RESOLVED counts only: the count of
+    // requests filed includes the one being reviewed right now, so it would read as "has appealed
+    // before" for a first-time applicant.
+    if (counts && counts.source === "twitch") {
+      if (counts.unbanApproved) {
+        notes.push(T.riskPriorApproved.replace("{{count}}", counts.unbanApproved));
+      }
+      if (counts.unbanDenied) {
+        notes.push(T.riskPriorDenied.replace("{{count}}", counts.unbanDenied));
       }
     }
     row.style.display = notes.length ? "flex" : "none";
@@ -627,7 +689,9 @@
       head.appendChild(el("span", "ub-action-time", fmtDateTime(action.timestamp)));
       head.appendChild(el("span", "ub-action-verb " + "ub-action-" + (action.action || "ban"),
         actionLabel(action.action)));
-      if (action.modId || action.modDisplayName) {
+      if (action.selfActed) {
+        head.appendChild(applicantLabel("ub-action-mod"));
+      } else if (action.modId || action.modDisplayName) {
         head.appendChild(actionModLabel(dossier, action));
       }
       row.appendChild(head);
@@ -638,6 +702,11 @@
         detail = fmtDuration(action.durationMs) + (detail ? " — " + detail : "");
       }
       if (detail) row.appendChild(el("div", "ub-action-detail", detail));
+
+      // What became of this punishment. Folded in by the repo rather than listed as its own row, so
+      // "issued for two weeks" and "lifted after a minute" are read together instead of paired by eye
+      // across a list where 49 timeouts and 16 liftings interleave.
+      if (action.followUp) row.appendChild(followUpLine(dossier, action.followUp));
 
       // Only rows we can actually answer for get the affordance - see buildActionList's note on
       // why `contextId` is absent more often than not.
@@ -653,20 +722,44 @@
     });
   }
 
-  function actionModLabel(dossier, action) {
+  // "↳ снял бан — vlad_261 · 16.06.26, 21:13 · через 1 мин". Built out of nodes rather than one
+  // string so the moderator's own chat colour survives, and green (or neutral, for the applicant's
+  // own acknowledgement) so it never reads as a second punishment.
+  function followUpLine(dossier, followUp) {
+    var line = el("div", "ub-action-followup" +
+      (LIFTING_ACTIONS[followUp.action] ? " ub-action-followup-lifted" : ""));
+    line.appendChild(el("span", "ub-action-followup-mark", "↳"));
+    line.appendChild(el("span", "ub-action-followup-verb", actionLabel(followUp.action)));
+    line.appendChild(followUp.selfActed
+      ? applicantLabel("ub-action-followup-mod")
+      : actionModLabel(dossier, followUp, "ub-action-followup-mod"));
+    line.appendChild(el("span", "ub-action-followup-time", fmtDateTime(followUp.timestamp)));
+    // Only ever "after N" - never an absolute claim about how long the punishment was meant to last,
+    // which lives in `detail` above in Twitch's own words.
+    if (followUp.afterMs != null && followUp.afterMs >= 0) {
+      line.appendChild(el("span", "ub-action-followup-after",
+        T.actionLiftedAfter.replace("{{after}}", fmtDuration(followUp.afterMs))));
+    }
+    return line;
+  }
+
+  function actionModLabel(dossier, action, className) {
     var profile = dossier.moderators[action.modId] || {};
     var name = action.modDisplayName || profile.displayName || action.modId;
-    var node = el("span", "ub-action-mod", name + (profile.isBot ? " " + T.botMark : ""));
+    var node = el("span", className || "ub-action-mod", name + (profile.isBot ? " " + T.botMark : ""));
     if (profile.color) node.style.color = profile.color;
     return node;
   }
 
+  // Units come from the locale: this used to hard-code "s"/"m"/"h"/"d", which was easy to overlook
+  // while it only appeared on the handful of rows the bot itself recorded, and reads as a bug now
+  // that every lifted punishment carries a "через 54s" beside it.
   function fmtDuration(ms) {
     var seconds = Math.round(ms / 1000);
-    if (seconds < 60) return seconds + "s";
-    if (seconds < 3600) return Math.round(seconds / 60) + "m";
-    if (seconds < 86400) return Math.round(seconds / 3600) + "h";
-    return Math.round(seconds / 86400) + "d";
+    if (seconds < 60) return seconds + T.unitSec;
+    if (seconds < 3600) return Math.round(seconds / 60) + T.unitMin;
+    if (seconds < 86400) return Math.round(seconds / 3600) + T.unitHour;
+    return Math.round(seconds / 86400) + T.unitDay;
   }
 
   // Lazily fills the "last messages before this action" popup, once, on first hover. The endpoint
@@ -719,6 +812,16 @@
     return truncated ? (value || 0) + "+" : String(value || 0);
   }
 
+  // Twitch's counters count punishments ISSUED and say nothing about the ones the moderators then
+  // undid - and "17 bans, 16 of them lifted" is not the same applicant as 17 that stood. The
+  // follow-up count goes into the box's tooltip rather than beside the number: the card is a pixel
+  // port with room for exactly five values, and the tooltip is already where the counts explain
+  // themselves. The rows themselves are visible without hovering anything, in the punishments tab.
+  function annotateCount(valueId, count, template, base) {
+    var box = $(valueId).parentNode;
+    box.title = count ? base + " · " + template.replace("{{count}}", count) : base;
+  }
+
   // Three states, not a boolean: "not subscribed" is only true of a channel that SELLS
   // subscriptions - on an unaffiliated channel nobody can subscribe, and saying "not subscribed"
   // there reads as a mark against the applicant for something impossible.
@@ -756,6 +859,11 @@
             document.querySelectorAll("#ub-uc-ban-stats .ub-stat-box"),
             function (box) { box.title = countsNote; }
           );
+          // What became of those punishments afterwards. Absent from the bot's own records entirely
+          // (it never recorded a lifting), so these stay silent unless Twitch supplied them.
+          annotateCount("ub-uc-bans", d.counts.unban, T.countsLifted, countsNote);
+          annotateCount("ub-uc-timeouts", d.counts.untimeout, T.countsLifted, countsNote);
+          annotateCount("ub-uc-warns", d.counts.warnAck, T.countsAcked, countsNote);
           if (d.lastBan) {
             var mod = d.moderators[d.lastBan.modId] || {};
             // Twitch ships the moderator's name with the strike; our own rows have only an id to
@@ -768,7 +876,7 @@
             $("ub-uc-banned-by").textContent = "—";
             $("ub-uc-banned-at").textContent = "—";
           }
-          renderRisk(d.risk);
+          renderRisk(d.risk, d.counts);
           renderModComments(d);
           renderActions(d);
         }
@@ -1124,9 +1232,40 @@
 
   $("ub-hide-bots").addEventListener("change", function () {
     if (lastDossier) renderActions(lastDossier);
+    // Remembered with the rest of the panel - see savePrefs(). `prefs` is declared below, in the
+    // settings section, which is fine: this only runs on a user gesture, long after that.
+    prefs.hideBots = $("ub-hide-bots").checked;
+    savePrefs();
   });
 
   // --- settings ------------------------------------------------------------
+
+  // Everything in this panel is a per-VIEWER preference, not channel config: a moderator's font size
+  // and mixer levels are nobody else's business and have no place in Mongo (the channel-level knobs
+  // live on /<channel>/settings/unban-bureau instead). One localStorage key, written on every change
+  // and read once at boot, so the desk comes back the way they left it instead of resetting to
+  // 14px/50% every single shift.
+  var PREFS_KEY = "ubDeskPrefs";
+
+  function loadPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+    } catch (_) {
+      // Storage blocked (private mode, or the user denied it) - the panel still works, it just
+      // forgets between visits. Never worth failing the page over.
+      return {};
+    }
+  }
+
+  var prefs = loadPrefs();
+
+  function savePrefs() {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch (_) {
+      /* ignore - the change still applies for the rest of this shift */
+    }
+  }
 
   var fontTargets = {
     chat: { el: "ub-chat-logs", size: 14, min: 8, max: 24, display: "ub-font-chat-display" },
@@ -1134,45 +1273,100 @@
     visa: { el: "ub-visa-reason", size: 13, min: 8, max: 24, display: "ub-font-visa-display" },
   };
 
+  // Applies one font size to its element, the panel's readout and the stored preference.
+  function setFontSize(key, size) {
+    var target = fontTargets[key];
+    target.size = Math.min(target.max, Math.max(target.min, size));
+    $(target.el).style.fontSize = target.size + "px";
+    $(target.display).textContent = target.size + "px";
+  }
+
   Array.prototype.forEach.call(document.querySelectorAll(".ub-font-btn"), function (btn) {
     btn.addEventListener("click", function () {
       var target = fontTargets[btn.dataset.font];
       var next = target.size + Number(btn.dataset.delta);
       if (next < target.min || next > target.max) return;
-      target.size = next;
-      $(target.el).style.fontSize = next + "px";
-      $(target.display).textContent = next + "px";
+      setFontSize(btn.dataset.font, next);
+      prefs.fonts = prefs.fonts || {};
+      prefs.fonts[btn.dataset.font] = target.size;
+      savePrefs();
     });
   });
 
   Array.prototype.forEach.call(document.querySelectorAll("[data-vol]"), function (slider) {
+    // Applied live while dragging, but only WRITTEN on release - a drag fires `input` dozens of
+    // times and each one would be a JSON serialization plus a synchronous storage write.
     slider.addEventListener("input", function () { vol[slider.dataset.vol] = Number(slider.value); });
+    slider.addEventListener("change", function () {
+      prefs.vol = prefs.vol || {};
+      prefs.vol[slider.dataset.vol] = Number(slider.value);
+      savePrefs();
+    });
   });
 
   Array.prototype.forEach.call(document.querySelectorAll('input[name="ub-pick-mode"]'), function (radio) {
     radio.addEventListener("change", function () {
       if (!radio.checked) return;
       pickMode = radio.value;
+      prefs.pickMode = pickMode;
+      savePrefs();
       applyPickMode();
     });
   });
 
   // Reorders the remaining queue in place. `shuffle` is the original's default — a channel with a
   // backlog gets variety instead of grinding through it in timestamp order.
-  function applyPickMode() {
+  function sortCases() {
     if (pickMode === "shuffle") {
       for (var i = cases.length - 1; i > 0; i -= 1) {
         var j = Math.floor(Math.random() * (i + 1));
         var tmp = cases[i]; cases[i] = cases[j]; cases[j] = tmp;
       }
-    } else {
-      cases.sort(function (a, b) {
-        var delta = new Date(a.requestedAt) - new Date(b.requestedAt);
-        return pickMode === "newest" ? -delta : delta;
-      });
+      return;
     }
+    cases.sort(function (a, b) {
+      var delta = new Date(a.requestedAt) - new Date(b.requestedAt);
+      return pickMode === "newest" ? -delta : delta;
+    });
+  }
+
+  function applyPickMode() {
+    sortCases();
     current = 0;
     renderCase();
+  }
+
+  // Puts the saved preferences back on the controls, before boot's first renderCase(). Ordering
+  // matters for the queue: this only SORTS, leaving the render to boot - calling applyPickMode() here
+  // would render a case and fetch its dossier before the rest of the page had been wired up.
+  //
+  // It also fixes a mismatch that predates the saving: the panel's markup ships with `shuffle`
+  // checked while `pickMode` starts from the server's own newest/oldest ordering, so the radio said
+  // one thing and the queue was in another order until the moderator touched it.
+  function restorePrefs() {
+    Object.keys(fontTargets).forEach(function (key) {
+      var saved = prefs.fonts && Number(prefs.fonts[key]);
+      setFontSize(key, Number.isFinite(saved) && saved > 0 ? saved : fontTargets[key].size);
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-vol]"), function (slider) {
+      var saved = prefs.vol && Number(prefs.vol[slider.dataset.vol]);
+      if (!Number.isFinite(saved)) return;
+      var value = Math.min(1, Math.max(0, saved));
+      vol[slider.dataset.vol] = value;
+      slider.value = String(value);
+    });
+
+    if (prefs.hideBots != null) $("ub-hide-bots").checked = Boolean(prefs.hideBots);
+
+    // An unrecognised stored value (an older build, a hand-edited key) falls through to whatever the
+    // server ordered the queue by, rather than sorting by a mode nothing implements.
+    if (prefs.pickMode === "shuffle" || prefs.pickMode === "oldest" || prefs.pickMode === "newest") {
+      pickMode = prefs.pickMode;
+    }
+    var radio = document.querySelector('input[name="ub-pick-mode"][value="' + pickMode + '"]');
+    if (radio) radio.checked = true;
+    sortCases();
   }
 
   $("ub-settings-btn").addEventListener("click", function () { $("ub-settings-modal").classList.add("ub-open"); });
@@ -1237,6 +1431,9 @@
   var spawnTimer = setInterval(spawnWalker, 600);
   requestAnimationFrame(stepStreet);
 
+  // Must come before the first renderCase(): it decides the queue order and the font sizes the very
+  // first case is drawn with.
+  restorePrefs();
   renderCase();
   var liveTimer = setInterval(pollLive, LIVE_POLL_MS);
   var heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);

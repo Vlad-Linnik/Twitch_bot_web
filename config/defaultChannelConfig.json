@@ -38,7 +38,6 @@
     "voteApproveEmote": "VoteYea",
     "voteDenyEmote": "VoteNay",
     "voteDurationSec": 60,
-    "sniperEnabled": false,
     "sniperMode": "timeout",
     "sniperTimeoutSec": 60,
     "sniperReason": "Шальная пуля Бюро амнистии"
