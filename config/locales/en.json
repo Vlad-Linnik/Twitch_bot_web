@@ -1005,6 +1005,9 @@
     "deleteAllConfirm": "Delete the entire settings change log across all channels? This can't be undone.",
     "deleteRowButton": "Delete",
     "deleteRowConfirm": "Delete this log entry?",
+    "deleteSelectedButton": "Delete selected ({{count}})",
+    "deleteSelectedConfirm": "Delete {{count}} selected log entries? This can't be undone.",
+    "selectAllLabel": "Select all",
     "describe": {
       "commandLabel": "Command !{{name}}",
       "commandEnabled": "enabled",

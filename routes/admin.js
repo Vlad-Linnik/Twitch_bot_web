@@ -235,6 +235,30 @@ router.post("/admin/settings-log/delete-all", settingsWriteLimiter, requireAdmin
   }
 });
 
+// Tier-0 only: removes a checkbox-selected batch of SettingsChangeLog entries in one request,
+// as opposed to delete-all's full wipe or delete/:id's single row. Logs one AdminActionLogs
+// row per deleted entry, same granularity as the single-delete route, so the audit trail
+// doesn't lose per-entry detail just because the click was a batch.
+router.post("/admin/settings-log/delete-many", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const ids = [].concat(req.body.ids || []);
+    const entries = await settingsChangeLogRepo.deleteMany(ids);
+    await Promise.all(
+      entries.map((entry) =>
+        adminActionLogsRepo.logAction({
+          admin: req.user,
+          action: "settings-log.delete-one",
+          target: `${entry.channelLogin}:${entry.category}:${entry.target}`,
+        })
+      )
+    );
+    const page = Math.max(1, parseInt(req.body.page, 10) || 1);
+    res.redirect(`/admin/settings-log?page=${page}&flash=deleted`);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Tier-0 only: removes a single SettingsChangeLog entry (as opposed to delete-all's full wipe).
 // Redirects back to the same page the row was deleted from so the list doesn't jump to page 1.
 router.post("/admin/settings-log/:id/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {

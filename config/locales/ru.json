@@ -1005,6 +1005,9 @@
     "deleteAllConfirm": "Удалить весь журнал изменений настроек по всем каналам? Это необратимо.",
     "deleteRowButton": "Удалить",
     "deleteRowConfirm": "Удалить эту запись из журнала?",
+    "deleteSelectedButton": "Удалить выбранные ({{count}})",
+    "deleteSelectedConfirm": "Удалить {{count}} выбранных записей журнала? Это необратимо.",
+    "selectAllLabel": "Выбрать все",
     "describe": {
       "commandLabel": "Команда !{{name}}",
       "commandEnabled": "включена",

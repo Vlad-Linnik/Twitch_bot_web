@@ -124,4 +124,19 @@ async function deleteOne(id) {
   return entry;
 }
 
-module.exports = { logChange, listRecent, listRecentAll, deleteAll, deleteOne };
+// Tier-0 admin-only (routes/admin.js's /admin/settings-log/delete-many) - removes a
+// specific batch of entries selected via the checkboxes on the admin page. Returns the
+// deleted entries (not just a count) so the caller can log a meaningful target per entry
+// in AdminActionLogs, same as deleteOne. Invalid ids are silently dropped rather than
+// erroring the whole batch - the checkbox list can only ever contain ids the page itself
+// rendered, so a mismatch here means a stale/tampered form, not a real id.
+async function deleteMany(ids) {
+  const objectIds = ids.filter(ObjectId.isValid).map((id) => new ObjectId(id));
+  if (objectIds.length === 0) return [];
+  const col = await ensureInitialized();
+  const entries = await col.find({ _id: { $in: objectIds } }).toArray();
+  if (entries.length > 0) await col.deleteMany({ _id: { $in: objectIds } });
+  return entries;
+}
+
+module.exports = { logChange, listRecent, listRecentAll, deleteAll, deleteOne, deleteMany };

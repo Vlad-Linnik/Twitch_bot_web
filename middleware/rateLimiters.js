@@ -1,10 +1,20 @@
 const rateLimit = require("express-rate-limit");
+const adminAllowlist = require("../db/adminAllowlist");
+
+// Tier-0 app developers (ADMIN_USER_IDS) are trusted operators, not the anonymous/low-trust
+// traffic these buckets exist to bound - and the admin panel's own bulk actions (e.g. deleting
+// many settings-log rows in one go) can legitimately blow through a 10/min ceiling meant for
+// per-channel settings writes. Every express-rate-limit bucket below skips counting for them.
+function skip(req) {
+  return Boolean(req.user?.userId) && adminAllowlist.isAdmin(req.user.userId);
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 const settingsWriteLimiter = rateLimit({
@@ -12,6 +22,7 @@ const settingsWriteLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 // Settings-type forms autosave on every change (public/js/autosave.js), so they need
@@ -24,6 +35,7 @@ const autosaveLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 // Starting a solo-game run and submitting its score get their own buckets
@@ -38,6 +50,7 @@ const gameRunStartLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 // Higher than run starts because one run legitimately produces several POSTs:
@@ -48,6 +61,7 @@ const gameScoreSubmitLimiter = rateLimit({
   max: 40,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 // Analytics JSON endpoints (period switches on the dashboards). Cheap individually - the clouds
@@ -58,6 +72,7 @@ const statsReadLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 // Log search is the one genuinely expensive read on the site: fuzzy matching scans candidate
@@ -69,6 +84,7 @@ const searchLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
 });
 
 // express-rate-limit is request/response-shaped (reads req, increments via its

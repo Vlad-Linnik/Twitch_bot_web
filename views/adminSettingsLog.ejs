@@ -24,13 +24,32 @@
   <% } %>
 
   <% if (entries.length > 0) { %>
-    <form method="post" action="/admin/settings-log/delete-all" data-transition="instant"
-          data-confirm-delete="<%= t('settingsChangeLog.deleteAllConfirm') %>" class="flex justify-end mb-4">
+    <form id="settings-log-bulk-form" method="post" action="/admin/settings-log/delete-many" data-transition="instant">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-      <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors">
-        <%= t('settingsChangeLog.deleteAllButton') %>
-      </button>
+      <input type="hidden" name="page" value="<%= page %>" />
     </form>
+
+    <div class="flex items-center justify-between mb-4 gap-3">
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-xs text-neutral-400 select-none">
+          <input type="checkbox" id="select-all-checkbox" class="rounded border-neutral-700 bg-neutral-900" />
+          <%= t('settingsChangeLog.selectAllLabel') %>
+        </label>
+        <button type="submit" form="settings-log-bulk-form" id="delete-selected-btn" disabled
+                data-label-template="<%= t('settingsChangeLog.deleteSelectedButton') %>"
+                data-confirm-template="<%= t('settingsChangeLog.deleteSelectedConfirm') %>"
+                class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors disabled:opacity-40 disabled:pointer-events-none">
+          <%= t('settingsChangeLog.deleteSelectedButton').replace('{{count}}', '0') %>
+        </button>
+      </div>
+      <form method="post" action="/admin/settings-log/delete-all" data-transition="instant"
+            data-confirm-delete="<%= t('settingsChangeLog.deleteAllConfirm') %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors">
+          <%= t('settingsChangeLog.deleteAllButton') %>
+        </button>
+      </form>
+    </div>
   <% } %>
 
   <div class="rounded-lg border border-neutral-800 overflow-hidden">
@@ -38,6 +57,7 @@
     <table class="w-full text-sm">
       <thead class="bg-neutral-900 text-neutral-400">
         <tr>
+          <th class="px-4 py-2 w-8"></th>
           <th class="text-left font-medium px-4 py-2 whitespace-nowrap"><%= t('settingsChangeLog.colWhen') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('admin.colChannel') %></th>
           <th class="text-left font-medium px-4 py-2"><%= t('settingsChangeLog.colModerator') %></th>
@@ -51,6 +71,10 @@
       <tbody class="divide-y divide-neutral-800">
         <% entries.forEach(function(e) { %>
           <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+            <td class="px-4 py-2">
+              <input type="checkbox" name="ids" value="<%= e._id %>" form="settings-log-bulk-form"
+                     class="log-row-checkbox rounded border-neutral-700 bg-neutral-900" />
+            </td>
             <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= new Date(e.timestamp).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') %></td>
             <td class="px-4 py-2">
               <a href="/<%= e.channelLogin %>/settings/change-log" class="text-purple-400 hover:text-purple-300"><%= e.channelLogin %></a>
@@ -82,13 +106,14 @@
           </tr>
         <% }) %>
         <% if (entries.length === 0) { %>
-          <tr><td colspan="8" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
+          <tr><td colspan="9" class="px-4 py-6 text-center text-neutral-500"><%= t('settingsChangeLog.empty') %></td></tr>
         <% } %>
       </tbody>
     </table>
     </div>
   </div>
   <script src="<%= asset('/js/confirm-delete.js') %>" defer></script>
+  <script src="<%= asset('/js/settings-log-bulk.js') %>" defer></script>
 
   <% if (totalPages > 1) { %>
     <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
