@@ -399,6 +399,7 @@
     $("ub-chat-logs").textContent = "";
     $("ub-mod-comments").textContent = "";
     $("ub-actions").textContent = "";
+    $("ub-log-msg-count").textContent = "";
     // Reset before the fetch, so a scroll landing mid-load can't page the previous applicant's log.
     logState.hasMore = false;
     logState.oldest = null;
@@ -660,7 +661,8 @@
     row.title = text;
   }
 
-  // The punishments tab: every ban/timeout/warning against this user, newest first.
+  // The punishments tab: every ban/timeout/warning against this user, oldest first (newest at the
+  // bottom) - same order as the chat log, rather than fighting it.
   //
   // The row's wording is split by source on purpose. The VERB comes from `action`, written in the
   // viewer's own language; the tail (`detail` - duration and the moderator's stated reason) is
@@ -812,6 +814,13 @@
     return truncated ? (value || 0) + "+" : String(value || 0);
   }
 
+  // Caps at "9999+" - a five-figure exact count would just crowd the label, and getLogPage's own
+  // number is already a best-effort lower bound (see its messageCount comment), not a hard total.
+  function fmtMessageCount(value) {
+    var n = value || 0;
+    return (n > 9999 ? "9999+" : String(n)) + " " + T.messages.toLowerCase();
+  }
+
   // Twitch's counters count punishments ISSUED and say nothing about the ones the moderators then
   // undid - and "17 bans, 16 of them lifted" is not the same applicant as 17 that stood. The
   // follow-up count goes into the box's tooltip rather than beside the number: the card is a pixel
@@ -879,6 +888,13 @@
           renderRisk(d.risk, d.counts);
           renderModComments(d);
           renderActions(d);
+          $("ub-log-msg-count").textContent = fmtMessageCount(d.log.messageCount);
+          // Newest is at the bottom now, like the log - if the actions tab is what the moderator
+          // was already looking at (the active tab carries over between cases), land on the newest
+          // row rather than the oldest one from years back.
+          if ($("ub-actions").style.display !== "none") {
+            $("ub-actions").scrollTop = $("ub-actions").scrollHeight;
+          }
         }
         showLogSpinner(false);
         renderLog(d, Boolean(before));
@@ -1226,12 +1242,17 @@
       $("ub-mod-comments").style.display = wanted === "comments" ? "block" : "none";
       $("ub-actions").style.display = wanted === "actions" ? "block" : "none";
       $("ub-hide-bots-toggle").style.display = wanted === "actions" ? "flex" : "none";
+      $("ub-log-msg-count").style.display = wanted === "log" ? "block" : "none";
       if (wanted === "log") $("ub-chat-logs").scrollTop = $("ub-chat-logs").scrollHeight;
+      if (wanted === "actions") $("ub-actions").scrollTop = $("ub-actions").scrollHeight;
     });
   });
 
   $("ub-hide-bots").addEventListener("change", function () {
-    if (lastDossier) renderActions(lastDossier);
+    if (lastDossier) {
+      renderActions(lastDossier);
+      $("ub-actions").scrollTop = $("ub-actions").scrollHeight;
+    }
     // Remembered with the rest of the panel - see savePrefs(). `prefs` is declared below, in the
     // settings section, which is fine: this only runs on a user gesture, long after that.
     prefs.hideBots = $("ub-hide-bots").checked;

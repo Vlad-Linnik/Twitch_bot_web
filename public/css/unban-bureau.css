@@ -402,6 +402,15 @@ body.ub-playing footer {
 }
 #ub-hide-bots-toggle input { cursor: pointer; }
 
+#ub-log-msg-count {
+  position: absolute;
+  top: 211px;
+  right: 40px;
+  font-size: 12px;
+  color: #777;
+  pointer-events: none;
+}
+
 #ub-chat-logs,
 #ub-mod-comments,
 #ub-actions {

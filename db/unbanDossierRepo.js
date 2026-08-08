@@ -291,6 +291,10 @@ async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFA
     // of the pane, so it is the only thing standing between them and an endless scroll.
     hasMore: ownDocs.length === limit || mirrorRemaining > 0,
     oldestTimestamp: lowerBound,
+    // The larger of the two sources: our own count (unbounded, but only since the bot joined) and
+    // the mirror's (Twitch's real total whenever it fits under the 500-line snapshot the bot took -
+    // see ../CLAUDE.md's "Бюро амнистии"). Whichever is bigger is the better lower bound we have.
+    messageCount: Math.max(ownTotal, mirrored.length),
   };
 }
 
@@ -351,9 +355,10 @@ async function buildActionList(channelLogin, unbanCase) {
   const twitchRows = unbanCase?.twitchModLogs?.actions || [];
 
   // No Twitch mirror (no token, expired session, outage): our own rows become the list, rendered
-  // from the same fields so the tab looks identical, just shorter.
+  // from the same fields so the tab looks identical, just shorter. Oldest first - see the note on
+  // attachFollowUps below for why the whole tab reads that way now, matching the chat log.
   if (!twitchRows.length) {
-    return localRows.map((row) => ({
+    return [...localRows].reverse().map((row) => ({
       id: String(row._id),
       timestamp: row.timestamp,
       action: row.action,
@@ -409,7 +414,8 @@ const FOLLOW_UP_TARGET = { unban: "ban", untimeout: "timeout", warnAck: "warn" }
 
 function attachFollowUps(rows) {
   // Oldest first: a lifting closes the punishment that was open when it happened, so the list has to
-  // be walked forwards even though it is rendered backwards.
+  // be walked forwards - and that's now also the order the punishments tab renders in, newest at the
+  // bottom, matching the chat log rather than fighting it.
   const chronological = [...rows].reverse();
   // The punishment of each kind that is currently in force and not yet closed.
   const open = new Map();
@@ -444,7 +450,7 @@ function attachFollowUps(rows) {
     open.delete(target);
   }
 
-  return rows.filter((row) => !consumed.has(row.id));
+  return chronological.filter((row) => !consumed.has(row.id));
 }
 
 // Whether the five-messages-before popup would have anything to show for one of our rows. The
