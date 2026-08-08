@@ -43,10 +43,9 @@ router.post("/settings", settingsWriteLimiter, requireLogin, verifyToken, async 
 
     await userPreferencesRepo.savePreferences(req.user.userId, {
       locale,
-      // Unchecked boxes are simply absent from a form body, so all three privacy booleans
-      // are written explicitly on every save (the whole form always submits together).
-      hideMessageVolume: req.body.hideMessageVolume === "on",
-      hideChatActivity: req.body.hideChatActivity === "on",
+      // hideMessageVolume/hideChatActivity/hideWordCloud/hideMentions moved onto the profile
+      // page itself (routes/userDashboard.js's panels.json) - this form no longer touches them,
+      // so a save here leaves whatever those panel toggles last set untouched.
       hideProfile: req.body.hideProfile === "on",
     });
 

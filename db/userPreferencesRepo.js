@@ -19,7 +19,7 @@ async function getPreferences(userId) {
 }
 
 // `updates` may include any of: locale, chatColorMode ('twitch'|'custom'), customChatColor,
-// hideMessageVolume, hideChatActivity, hideProfile.
+// hideMessageVolume, hideChatActivity, hideWordCloud, hideMentions, hideProfile.
 async function savePreferences(userId, updates) {
   const col = await ensureInitialized();
   await col.updateOne(

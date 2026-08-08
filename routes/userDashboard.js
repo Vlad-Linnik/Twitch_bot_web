@@ -16,8 +16,19 @@ const userProfileService = require("../db/userProfileService");
 const userPreferencesRepo = require("../db/userPreferencesRepo");
 const { withEmoteImages } = require("../twitch/emoteImages");
 const { computePermission } = require("../middleware/permissions");
-const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters");
+const { statsReadLimiter, searchLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
+const { verifyToken } = require("../middleware/csrf");
 const limits = require("../config/statsLimits");
+
+// Panel key (as used in the view's data-component attributes and the client's fetch calls) ->
+// the UserPreferences field that hides it. Shared by the panels.json POST below and the
+// stats.json GET's gating switch, so the two can never drift on which flag guards which panel.
+const PANEL_FIELDS = {
+  activity: "hideMessageVolume",
+  heatmap: "hideChatActivity",
+  clouds: "hideWordCloud",
+  mentions: "hideMentions",
+};
 
 const router = express.Router();
 
@@ -129,15 +140,16 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       // Two reads of the same index range on purpose: the chart needs period-shaped buckets
       // (getMessageVolume), the heatmap always needs the full day-bucketed window.
       // Sections hidden by the privacy flags skip their query entirely - the data must be
-      // absent from the response, not just undrawn.
+      // absent from the response, not just undrawn. clouds/mentions follow the same rule as
+      // of the panels.json feature (they used to always fetch - see lib/privacy.js).
       privacy.hideMessageVolume
         ? null
         : userStatsRepo.getMessageVolume(channel.channelLogin, identity.userId, period),
       privacy.hideChatActivity
         ? null
         : userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId),
-      userStatsRepo.getMentionStats(channel.channelLogin, identity, period),
-      wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period),
+      privacy.hideMentions ? null : userStatsRepo.getMentionStats(channel.channelLogin, identity, period),
+      privacy.hideWordCloud ? null : wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, period),
       // requireLogin only checks that someone is signed in, not their tier, so
       // req.permissionLevel is unset here - compute it explicitly to decide whether to render
       // the moderator panel.
@@ -157,8 +169,9 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       heatmap,
       mentions,
       // Spread, don't mutate: getUserClouds results are cached inside wordStatsRepo, and
-      // withEmoteImages returns a new array (same contract as the statistics page).
-      clouds: { ...clouds, emotes: await withEmoteImages(channel.channelLogin, clouds.emotes) },
+      // withEmoteImages returns a new array (same contract as the statistics page). null when
+      // hideWordCloud is on - nothing to join images into.
+      clouds: clouds ? { ...clouds, emotes: await withEmoteImages(channel.channelLogin, clouds.emotes) } : null,
       nicknames: userStatsRepo.nicknameHistory(identity),
       // Only decides whether the moderator panel is DRAWN. It is not the security boundary -
       // logs.json independently re-checks the tier on every request - but there is no point
@@ -183,10 +196,13 @@ router.get("/:channel/user/:username/stats.json", requireLoginJson, statsReadLim
     if (!identity) return res.status(404).json({ error: "unknown_user" });
 
     // Enforced server-side, not just in the page render: the privacy flags must hold for
-    // someone hitting the JSON directly, regardless of viewer tier.
+    // someone hitting the JSON directly, regardless of viewer tier. This also covers the
+    // OWNER's own re-fetch right after flipping a panel back on via panels.json - by the time
+    // this runs the flag has already been cleared, so the gate below passes.
     const privacy = await userPreferencesRepo.getPrivacy(identity.userId);
     if (privacy.hideProfile) return res.status(403).json({ error: "profile_hidden" });
-    if (req.query.component === "activity" && privacy.hideMessageVolume) {
+    const gateField = PANEL_FIELDS[req.query.component];
+    if (gateField && privacy[gateField]) {
       return res.status(403).json({ error: "profile_hidden" });
     }
 
@@ -205,6 +221,11 @@ router.get("/:channel/user/:username/stats.json", requireLoginJson, statsReadLim
         return res.json(await userStatsRepo.getMentionStats(channel.channelLogin, identity, period));
       case "activity":
         return res.json(await userStatsRepo.getMessageVolume(channel.channelLogin, identity.userId, period));
+      // No period concept (the heatmap is always the full MAX_HEATMAP_DAYS window) - this case
+      // exists purely so the client can pull the data once when the owner flips the panel back
+      // on, since the page render never inlined it while the panel was hidden.
+      case "heatmap":
+        return res.json(await userStatsRepo.getDailyMessageCounts(channel.channelLogin, identity.userId));
       default:
         return res.status(400).json({ error: "unknown_component" });
     }
@@ -212,6 +233,40 @@ router.get("/:channel/user/:username/stats.json", requireLoginJson, statsReadLim
     next(err);
   }
 });
+
+// --- Panel visibility (owner only) -------------------------------------------------------
+// Lets the profile owner show/hide a panel directly from the profile page (views/partials/
+// panelToggle.ejs) instead of the personal /settings form - see lib/privacy.js. The flags are
+// still per-account, not per-channel, so this needs no channel-scoped write; :channel/:username
+// only exist in the URL because that's the page the button lives on.
+
+router.post(
+  "/:channel/user/:username/panels.json",
+  autosaveLimiter,
+  requireLoginJson,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const field = PANEL_FIELDS[req.body.panel];
+      if (!field) return res.status(400).json({ error: "unknown_panel" });
+
+      const identity = await userStatsRepo.findUserByName(req.params.username);
+      if (!identity) return res.status(404).json({ error: "unknown_user" });
+
+      // A panel is that user's own layout choice, same ownership scope as the privacy flags
+      // it replaces on /settings - nobody may flip another account's panel.
+      if (String(req.user.userId) !== String(identity.userId)) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+
+      const hidden = req.body.hidden === "1";
+      await userPreferencesRepo.savePreferences(identity.userId, { [field]: hidden });
+      res.json({ ok: true, panel: req.body.panel, hidden });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // --- Moderator-only log view ---------------------------------------------------------------
 

@@ -551,12 +551,68 @@
   if (fuzzyInput) fuzzyInput.addEventListener("change", runSearch);
 
   // ---------------------------------------------------------------------------------------
-  // First paint, from the inlined server data. activity/heatmap arrive as null when the
-  // profile owner hides them (the server omits both the data and the section markup).
+  // Panel visibility toggles - buttons only exist in the DOM for the profile owner (see
+  // views/partials/panelToggle.ejs). Hiding is instant and purely visual (the `hidden`
+  // attribute); showing re-fetches the panel's data, since the server never sent it while the
+  // panel was hidden - the privacy flag gates the QUERY, not just the markup
+  // (routes/userDashboard.js).
+  //
+  // The `hidden` attribute lands on the section's [data-panel-body] wrapper, NOT the <section>
+  // itself - the heading and this very button live outside that wrapper specifically so hiding
+  // a panel never hides its own toggle. There would be no way back if it did.
+  // ---------------------------------------------------------------------------------------
+  document.querySelectorAll("[data-panel-toggle]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const panel = button.dataset.panelToggle;
+      const body = document.querySelector(`[data-component="${panel}"] [data-panel-body]`);
+      const nextHidden = button.dataset.hidden !== "1";
+
+      button.disabled = true;
+      try {
+        const res = await fetch(`${base}/panels.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+          body: new URLSearchParams({ _csrf: boot.csrfToken, panel, hidden: nextHidden ? "1" : "0" }),
+        });
+        if (!res.ok) return;
+
+        button.dataset.hidden = nextHidden ? "1" : "0";
+        button.setAttribute("aria-pressed", String(!nextHidden));
+        button.querySelector("[data-icon-visible]").hidden = nextHidden;
+        button.querySelector("[data-icon-hidden]").hidden = !nextHidden;
+        button.title = nextHidden ? button.dataset.showLabel : button.dataset.hideLabel;
+
+        if (nextHidden) {
+          if (body) body.hidden = true;
+          return;
+        }
+        if (body) body.hidden = false;
+
+        // Heatmap has no period toggle/state and isn't handled by refresh() below - fetch and
+        // draw it directly. Everything else reuses the same period-switch machinery, at
+        // whatever period that component was last showing.
+        if (panel === "heatmap") {
+          const data = await (
+            await fetch(`${base}/stats.json?component=heatmap`, { headers: { Accept: "application/json" } })
+          ).json();
+          renderHeatmap(data);
+        } else {
+          await refresh(panel, periods[panel] || boot.period);
+        }
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------
+  // First paint, from the inlined server data. activity/heatmap/clouds/mentions arrive as null
+  // when the profile owner hides them (the server omits both the data and, for non-owners,
+  // the section markup too - see the sections' `|| isOwner` guards in the .ejs).
   // ---------------------------------------------------------------------------------------
   if (boot.activity) renderChart(boot.activity, false);
-  renderClouds(boot.clouds);
-  renderMentions(boot.mentions);
+  if (boot.clouds) renderClouds(boot.clouds);
+  if (boot.mentions) renderMentions(boot.mentions);
   if (boot.heatmap) renderHeatmap(boot.heatmap);
   if (boot.canModerate) runSearch();
 })();

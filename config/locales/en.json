@@ -1077,9 +1077,7 @@
     "saved": "Preferences saved.",
     "languageHeading": "Language",
     "privacyHeading": "Privacy",
-    "privacyHint": "These settings apply to your profile page on every channel of this site.",
-    "privacyHideMessageVolume": "Hide the message volume chart",
-    "privacyHideChatActivity": "Hide the chat activity calendar",
+    "privacyHint": "This setting applies to your profile page on every channel of this site. Individual panels (message chart, activity calendar, clouds, mentions) can be shown or hidden directly on your profile page.",
     "privacyHideProfile": "Hide my profile",
     "privacyHideProfileHint": "Hides your entire profile page from everyone, including channel owners and moderators.",
     "save": "Save preferences"
@@ -1102,6 +1100,7 @@
     "messages": "messages",
     "noMessages": "No messages in this channel yet",
     "messageVolume": "Message volume",
+    "clouds": "Word & emote clouds",
     "wordCloud": "Word cloud",
     "emoteCloud": "Top emotes",
     "mentions": "@mentions",
@@ -1120,6 +1119,8 @@
     "profileHiddenTitle": "This profile is hidden",
     "profileHiddenBody": "The user has chosen to keep their chat statistics private.",
     "profileHiddenOwnerHint": "You can turn this off in your settings",
+    "panelHide": "Hide this panel from your profile",
+    "panelShow": "Show this panel on your profile",
     "period": {
       "day": "Day",
       "week": "Week",
