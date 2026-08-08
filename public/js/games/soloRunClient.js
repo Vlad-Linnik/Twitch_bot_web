@@ -17,6 +17,11 @@
 // Optional `now`: the clock event timestamps come from, defaulting to
 // performance.now(). A fixed-timestep game passes its own SIMULATION clock
 // instead, because that - not wall time - is what the server replays against.
+// CONTRACT: that clock must already read the run's zero point when begin() is
+// called - begin() builds the recorder, and the recorder takes its time origin
+// by reading the clock right then. A game that zeroes its clock afterwards
+// (in its own reset(), say) hands the recorder an origin from the PREVIOUS
+// run, which silently corrupts every dt and the encoded run duration.
 //
 //   await run.begin();          // mints a run; run.rng is now seeded
 //   run.record(OP_REVEAL, cell);
@@ -99,6 +104,24 @@
       points.textContent = row.score;
       li.append(rank, name, points);
       return li;
+    }
+
+    // A run the anti-cheat flagged keeps its score OUT of the leaderboard
+    // until an admin approves it (routes/games.js's applyVerdict). Without a
+    // word about it the player just sees their record fail to appear, which
+    // reads as the game losing their score. The text is localized server-side
+    // and arrives on the response, so this stays game-agnostic and no view
+    // needs a new data-* attribute.
+    function showHeldNotice(message) {
+      if (!message) return;
+      const note = document.createElement("div");
+      note.className =
+        "fixed left-1/2 bottom-6 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-lg " +
+        "border border-amber-700/60 bg-neutral-900 text-amber-200 text-sm shadow-lg";
+      note.setAttribute("role", "status");
+      note.textContent = message;
+      document.body.appendChild(note);
+      setTimeout(() => note.remove(), 10000);
     }
 
     function renderLeaderboard(data) {
@@ -223,6 +246,14 @@
         const body = { score: String(claimedScore), ...(extra || {}) };
         if (runId) {
           body.runId = runId;
+          // `from` is the watermark this tail was sliced at. The server needs
+          // it to stitch the checkpointed head back on at exactly the right
+          // place: a checkpoint whose response was still in flight when the
+          // run ended is banked server-side but has NOT advanced this
+          // counter, so the stored head would otherwise repeat events the
+          // tail also carries - and a replay that plays a stretch of the run
+          // twice scores more than the player did.
+          body.from = String(checkpointedEvents);
           const encoded = recorder.encode(claimedScore, checkpointedEvents);
           if (encoded.length <= MAX_BEACON_BYTES) body.replay = encoded;
         }
@@ -233,7 +264,9 @@
         })
           .then((response) => (response.ok ? response.json() : null))
           .then((data) => {
-            if (data && data.ok) renderLeaderboard(data);
+            if (!data || !data.ok) return;
+            renderLeaderboard(data);
+            if (data.held) showHeldNotice(data.heldMessage);
           })
           .catch(() => {});
       },
@@ -247,6 +280,7 @@
         const body = { score: String(claimedScore), ...(extra || {}) };
         if (runId) {
           body.runId = runId;
+          body.from = String(checkpointedEvents); // see finish() above
           const encoded = recorder.encode(claimedScore, checkpointedEvents);
           if (encoded.length <= MAX_BEACON_BYTES) body.replay = encoded;
         }

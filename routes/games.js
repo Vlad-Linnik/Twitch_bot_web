@@ -489,6 +489,9 @@ router.post(
         claimedScore,
         deathClimb,
         serverElapsedMs: Date.now() - run.startedAt.getTime(),
+        // The event index this tail was sliced at - see soloRunClient.js's
+        // finish(). Absent on a client cached before that shipped.
+        replayFrom: Number.parseInt(req.body.from, 10),
       });
       return applyVerdict(req, res, game, verdict, claimedScore, deathClimb, run);
     } catch (err) {
@@ -498,13 +501,21 @@ router.post(
 );
 
 // Stores the verified score and answers with the fresh leaderboard, recording
-// a review flag when anything about the run looked off. A flag NEVER blocks a
-// submission - the timing heuristics in particular have a real false-positive
-// rate, so they queue a run for a human on /admin/game-runs instead.
+// a review flag when anything about the run looked off.
+//
+// A flagged run is HELD, not published: its score stays out of GameScores
+// until an admin approves the flag on /admin/game-runs. A flag still never
+// costs the player anything by itself - the run is kept intact, with its score
+// and its replay, and approving publishes it exactly as submitted - but a
+// record nobody has vouched for has no business sitting at the top of a
+// leaderboard while it waits for review. The timing heuristics' false-positive
+// rate is the reason this is a queue with a human at the end of it rather than
+// an outright rejection.
 async function applyVerdict(req, res, game, verdict, claimedScore, deathClimb, run) {
   const userId = req.user.userId;
   const previous = await gameScoresRepo.getUserBestAndRank(game, userId);
   const previousBest = previous ? previous.bestScore : null;
+  const held = !verdict.reject && verdict.reasons.length > 0;
 
   if (verdict.reasons.length) {
     await gameRunFlagsRepo.recordFlag({
@@ -515,7 +526,11 @@ async function applyVerdict(req, res, game, verdict, claimedScore, deathClimb, r
       serverElapsedMs: run ? Date.now() - run.startedAt.getTime() : null,
       simElapsedMs: verdict.simElapsedMs,
       claimedScore,
-      storedScore: verdict.reject ? null : verdict.score,
+      // storedScore is what actually reached the leaderboard, which for a
+      // held run is nothing; heldScore is what approving it would publish.
+      storedScore: null,
+      heldScore: held ? verdict.score : null,
+      heldDeathClimb: held && Number.isFinite(deathClimb) ? deathClimb : null,
       previousBest,
       verified: verdict.verified,
       rulesVersion: run ? run.rulesVersion : null,
@@ -531,7 +546,16 @@ async function applyVerdict(req, res, game, verdict, claimedScore, deathClimb, r
     return res.status(verdict.status || 400).json({ ok: false, error: verdict.error || "replay" });
   }
 
-  if (run) await gameRunsRepo.recordStoredScore(run.runId, verdict.score);
+  if (run) await gameRunsRepo.recordStoredScore(run.runId, held ? null : verdict.score);
+
+  if (held) {
+    // The play still counts as a play; only the score is withheld. Answer with
+    // the unchanged leaderboard plus a note the client shows the player, so a
+    // record that doesn't appear reads as "under review", not as lost.
+    await gameSessionStatsRepo.recordPlay(game);
+    const leaderboard = await buildLeaderboard(game, userId);
+    return res.json({ ok: true, held: true, heldMessage: res.locals.t("games.scoreHeld"), ...leaderboard });
+  }
   return finishSubmission(req, res, game, verdict.score, deathClimb);
 }
 

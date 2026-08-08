@@ -469,6 +469,19 @@
     starting = true;
     try {
       stopLoop(); // safe to call while already running (the restart button) - avoids a second rAF loop
+      // Zero the simulation clock BEFORE minting the run, not in reset()
+      // below. begin() builds the recorder, and the recorder captures its
+      // time origin by reading this very clock at that moment (it was handed
+      // `now: () => simTime` above). On the second and every later run of a
+      // page session simTime still held the PREVIOUS run's final value, so
+      // the origin was in the future: the first event's dt clamped to 0
+      // (sliding the whole input log earlier against gravity) and the
+      // encoded run duration went negative, which the varint writer floors
+      // to 0 - so the server replayed no end-of-run gravity at all. That is
+      // the scoreMismatch/scoreOverrun pair that flagged nearly every
+      // restart of this game.
+      simTime = 0;
+      stepAcc = 0;
       // Register the run before reset() deals the first pieces - it needs the
       // server's seed. begin() races itself against a short timeout and
       // resolves either way, so a slow or unreachable server costs a moment,

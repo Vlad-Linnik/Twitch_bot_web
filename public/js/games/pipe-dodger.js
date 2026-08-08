@@ -457,6 +457,15 @@
     if (starting) return;
     starting = true;
     try {
+      // Zero the simulation clock BEFORE minting the run, not in reset()
+      // below: begin() builds the recorder, which captures its time origin by
+      // reading this very clock (handed to it as `now: () => simTime`). Left
+      // to reset(), the origin on every run after the first was the PREVIOUS
+      // run's final simTime - a clock origin in the future, which clamps the
+      // first event's dt to 0 and floors the encoded run duration to 0. See
+      // the same fix in falling-blocks.js for the flags it produced.
+      simTime = 0;
+      stepAcc = 0;
       // Register the run before reset() deals the first pipes - it needs the
       // server's seed. begin() races itself against a short timeout and
       // resolves either way, so a slow or unreachable server costs a moment,

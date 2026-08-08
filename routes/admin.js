@@ -366,6 +366,10 @@ function respondToFlagAction(req, res, payload) {
   return res.redirect("/admin/game-runs");
 }
 
+// Approve: the flag was a false positive, so the score it has been holding
+// back is published to the leaderboard now. This is the ONLY path by which a
+// flagged run reaches GameScores - routes/games.js deliberately declines to
+// write one at submission time (see applyVerdict there).
 router.post(
   "/admin/game-runs/:id/dismiss",
   settingsWriteLimiter,
@@ -373,18 +377,34 @@ router.post(
   verifyToken,
   async (req, res, next) => {
     try {
+      const flag = await gameRunFlagsRepo.findById(req.params.id);
+      if (!flag) return res.status(404).json({ ok: false, error: "notFound" });
       const ok = await gameRunFlagsRepo.reviewFlag(req.params.id, {
         status: "dismissed",
         by: req.user.userId,
         note: typeof req.body.note === "string" ? req.body.note.slice(0, 500) : null,
+        publishedScore: flag.heldScore ?? null,
       });
-      if (!ok) return res.status(404).json({ ok: false, error: "notFound" });
+      // Already resolved by a concurrent click - do NOT publish a second time.
+      if (!ok) return res.status(409).json({ ok: false, error: "reviewed" });
+      // Improve-only, so approving a run the player has since beaten is a
+      // no-op rather than a demotion. Flags predating the hold-until-approved
+      // policy carry no heldScore and have nothing to publish.
+      if (flag.heldScore != null) {
+        await gameScoresRepo.submitScore(
+          flag.game,
+          flag.userId,
+          flag.heldScore,
+          flag.heldDeathClimb ?? undefined
+        );
+      }
       await adminActionLogsRepo.logAction({
         admin: req.user,
-        action: "gameRun.dismiss",
-        target: req.params.id,
+        action: "gameRun.approve",
+        target: `${flag.game}:${flag.userId}`,
+        details: { runId: flag.runId, publishedScore: flag.heldScore ?? null },
       });
-      respondToFlagAction(req, res, { status: "dismissed" });
+      respondToFlagAction(req, res, { status: "dismissed", publishedScore: flag.heldScore ?? null });
     } catch (err) {
       next(err);
     }
@@ -400,14 +420,18 @@ router.post(
     try {
       const flag = await gameRunFlagsRepo.findById(req.params.id);
       if (!flag) return res.status(404).json({ ok: false, error: "notFound" });
-      // gameScoresRepo.deleteUserScore refuses any key outside SOLO_GAMES, so
-      // this can never reach a multiplayer Elo row.
-      const deleted = await gameScoresRepo.deleteUserScore(flag.game, flag.userId);
-      await gameRunFlagsRepo.reviewFlag(req.params.id, {
+      // Rejecting is what happens to the held score by default - it is simply
+      // never published. Deleting the player's stored best on top of that is
+      // for the case where an EARLIER run of theirs already got through.
+      const ok = await gameRunFlagsRepo.reviewFlag(req.params.id, {
         status: "actioned",
         by: req.user.userId,
         note: typeof req.body.note === "string" ? req.body.note.slice(0, 500) : null,
       });
+      if (!ok) return res.status(409).json({ ok: false, error: "reviewed" });
+      // gameScoresRepo.deleteUserScore refuses any key outside SOLO_GAMES, so
+      // this can never reach a multiplayer Elo row.
+      const deleted = await gameScoresRepo.deleteUserScore(flag.game, flag.userId);
       await adminActionLogsRepo.logAction({
         admin: req.user,
         action: "gameRun.resetScore",

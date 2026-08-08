@@ -64,11 +64,19 @@
                 <%= f.verified ? t('admin.gameRunsVerified') : t('admin.gameRunsUnverified') %>
               </div>
             </td>
-            <%# Claimed vs stored vs previous best is the triage signal: a flagged
-                run that didn't even beat the player's own record rarely matters. %>
+            <%# Claimed vs held/published vs previous best is the triage signal: a
+                flagged run that didn't even beat the player's own record rarely
+                matters. While the flag is open its score is HELD - it is not on
+                the leaderboard, and approving is what puts it there. %>
+            <% const pendingScore = f.review && f.review.status === 'open' ? f.heldScore : null; %>
             <td class="px-4 py-2 text-right tabular-nums align-top whitespace-nowrap">
-              <div class="text-neutral-200"><%= f.storedScore == null ? '—' : f.storedScore %></div>
-              <% if (f.claimedScore != null && f.claimedScore !== f.storedScore) { %>
+              <% if (pendingScore != null) { %>
+                <div class="text-amber-300"><%= pendingScore %></div>
+                <div class="text-[11px] text-amber-600"><%= t('admin.gameRunsHeld') %></div>
+              <% } else { %>
+                <div class="text-neutral-200"><%= f.storedScore == null ? '—' : f.storedScore %></div>
+              <% } %>
+              <% if (f.claimedScore != null && f.claimedScore !== (pendingScore != null ? pendingScore : f.storedScore)) { %>
                 <div class="text-[11px] text-rose-400"><%= t('admin.gameRunsClaimed') %>: <%= f.claimedScore %></div>
               <% } %>
               <div class="text-[11px] text-neutral-600"><%= t('admin.gameRunsPrevBest') %>: <%= f.previousBest == null ? '—' : f.previousBest %></div>
@@ -93,7 +101,8 @@
               <% if (f.review && f.review.status === 'open') { %>
                 <%# Plain forms are the no-JS fallback; the script below upgrades
                     them to fetch so the admin keeps their place in the list. %>
-                <form method="post" action="/admin/game-runs/<%= f._id %>/dismiss" class="inline" data-flag-action>
+                <form method="post" action="/admin/game-runs/<%= f._id %>/dismiss" class="inline" data-flag-action
+                      data-confirm="<%= t('admin.gameRunsApproveConfirm') %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button type="submit" class="px-2.5 py-1 rounded-md border border-emerald-900 text-emerald-400 hover:text-emerald-200 hover:border-emerald-600 transition-colors text-xs">
                     <%= t('admin.gameRunsDismiss') %>

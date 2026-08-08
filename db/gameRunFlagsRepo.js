@@ -5,9 +5,14 @@
 // that collection is shared with the multiplayer Elo path (gameScoresRepo's
 // applyEloDelta) and must not grow anti-cheat state.
 //
-// Nothing here ever blocks a player. Timing heuristics in particular have a
-// real false-positive rate (a player holding an arrow key, a browser that
-// coarsens performance.now() for privacy), so they FLAG and a human decides.
+// Nothing here ever ends a player's run or discards their score. What a flag
+// DOES do is hold the score back from the leaderboard: `heldScore` is the
+// number routes/games.js declined to publish, and it reaches GameScores only
+// when an admin approves the flag. Timing heuristics in particular have a real
+// false-positive rate (a player holding an arrow key, a browser that coarsens
+// performance.now() for privacy), which is why a human is the one who decides
+// - and why the run's replay is kept for them to look at.
+//
 // The hard rejections - a missing/expired/spent run token, a structurally
 // impossible replay - never reach this collection; they're refused outright at
 // the route.
@@ -64,7 +69,11 @@ async function recordFlag(input) {
     serverElapsedMs: input.serverElapsedMs ?? null,
     simElapsedMs: input.simElapsedMs ?? null,
     claimedScore: input.claimedScore ?? null,
+    // What reached the leaderboard (null while held) vs what approving this
+    // flag would publish.
     storedScore: input.storedScore ?? null,
+    heldScore: input.heldScore ?? null,
+    heldDeathClimb: input.heldDeathClimb ?? null,
     // Triage shortcut: a flagged run that didn't even beat the player's own
     // previous best is almost never worth an admin's attention.
     previousBest: input.previousBest ?? null,
@@ -113,9 +122,15 @@ async function findById(id) {
   return col.findOne({ _id: new ObjectId(id) });
 }
 
-// status: "dismissed" (nothing wrong, let it expire) or "actioned" (the admin
-// took a corrective step, e.g. reset the score).
-async function reviewFlag(id, { status, by, note }) {
+// status: "dismissed" (nothing wrong - the held score is published) or
+// "actioned" (the admin took a corrective step; the held score is discarded).
+// `publishedScore` records what was actually written to GameScores, so the
+// admin list can show that the record went live rather than leaving heldScore
+// looking like it is still waiting.
+//
+// Matches only an OPEN flag, so two clicks on the same row resolve it once:
+// the second gets `false` and the caller skips the leaderboard write.
+async function reviewFlag(id, { status, by, note, publishedScore }) {
   const col = await ensureInitialized();
   const { ObjectId } = require("mongodb");
   if (!ObjectId.isValid(id)) return false;
@@ -125,11 +140,12 @@ async function reviewFlag(id, { status, by, note }) {
     "review.at": new Date(),
     "review.note": note || null,
   };
+  if (publishedScore != null) set.storedScore = publishedScore;
   // Only a resolved flag gets an expiry - open ones must never quietly vanish.
   if (status === "dismissed" || status === "actioned") {
     set.expiresAt = new Date(Date.now() + DISMISSED_RETENTION_MS);
   }
-  const result = await col.updateOne({ _id: new ObjectId(id) }, { $set: set });
+  const result = await col.updateOne({ _id: new ObjectId(id), "review.status": "open" }, { $set: set });
   return result.matchedCount > 0;
 }
 
