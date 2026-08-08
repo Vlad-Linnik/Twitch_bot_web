@@ -85,6 +85,16 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     const channel = await loadChannel(req, res);
     if (!channel) return;
 
+    // unbanBureau.enabled off means the channel opted out of the whole feature, not just future
+    // Twitch mirroring (TwitchBot/twitch/unbanRequestScheduler.js's own read of this flag) - a 404
+    // here is what makes the channel actually disappear from the game, matching the picker/catalog
+    // filter in routes/games.js. Read before claiming the desk: no point taking the lease for a
+    // page that's about to 404.
+    const config = await channelConfigRepo.getConfig(channel.channelLogin);
+    if (!config.unbanBureau?.enabled) {
+      return res.status(404).render("errors/404");
+    }
+
     // Claiming the desk comes before the (much heavier) queue read: a moderator who is being turned
     // away has no use for the cases, and shouldn't pay for assembling them.
     const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user);
@@ -93,10 +103,7 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     }
 
     const newestFirst = req.query.sort !== "oldest";
-    const [cases, config] = await Promise.all([
-      unbanRequestsRepo.listPendingForChannel(channel.channelId, { newestFirst }),
-      channelConfigRepo.getConfig(channel.channelLogin),
-    ]);
+    const cases = await unbanRequestsRepo.listPendingForChannel(channel.channelId, { newestFirst });
 
     // Nothing to hold the desk for, and the empty state runs no client script - so there'd be
     // nothing renewing the lease either. Give it straight back rather than locking the channel out

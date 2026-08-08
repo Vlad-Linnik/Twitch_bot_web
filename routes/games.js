@@ -1,5 +1,6 @@
 const express = require("express");
 const gameScoresRepo = require("../db/gameScoresRepo");
+const channelConfigRepo = require("../db/channelConfigRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
 const gameRunsRepo = require("../db/gameRunsRepo");
@@ -22,6 +23,17 @@ function moderatedChannelsFor(res) {
   const menu = res.locals.navMenu;
   if (!menu) return [];
   return [...(menu.ownedChannel ? [menu.ownedChannel] : []), ...(menu.moderatedChannels || [])];
+}
+
+// Narrowed to channels that also have the Amnesty Bureau turned on (ChannelConfig's
+// unbanBureau.enabled) - a channel that opted out shouldn't appear as a destination for the game
+// at all, matching the 404 routes/unbanBureau.js now gives that channel's own page. `enabled`
+// defaults to off (config/defaultChannelConfig.json), so a channel with no ChannelConfig doc yet
+// is correctly excluded rather than defaulting to visible.
+async function channelsWithBureauEnabled(res) {
+  const channels = moderatedChannelsFor(res);
+  const configs = await Promise.all(channels.map((c) => channelConfigRepo.getConfig(c.channelLogin)));
+  return channels.filter((c, i) => configs[i].unbanBureau?.enabled);
 }
 
 const GAME_FALLING_BLOCKS = "falling-blocks";
@@ -110,10 +122,10 @@ router.get("/games", async (req, res, next) => {
     ]);
 
     // A `requiresModerator` card (currently only the Unban Bureau) is hidden from visitors who
-    // moderate no channel - its target is tier-2 gated per channel, so for them it's a card that
-    // can only lead to a 403. navMenu already computed both lists for this request
-    // (middleware/navMenu.js), so this costs no extra query.
-    const canModerateSomething = moderatedChannelsFor(res).length > 0;
+    // don't moderate a channel with the feature turned on - its target is tier-2 gated per channel
+    // AND now 404s outright when unbanBureau.enabled is off, so for them it's a card that can only
+    // lead to a dead end either way.
+    const canModerateSomething = (await channelsWithBureauEnabled(res)).length > 0;
     const visible = gamesCatalog.filter(
       (g) => !settingsMap.get(g.id)?.hidden && (!g.requiresModerator || canModerateSomething)
     );
@@ -140,13 +152,19 @@ router.get("/games", async (req, res, next) => {
 // The Unban Bureau's catalog card can't link straight to a page - the real page is per-channel
 // (/:channel/unban-bureau, routes/unbanBureau.js). This resolves which channel the visitor means:
 // straight through when there's exactly one, a picker when there are several. The per-channel
-// route still runs its own requireLevel(2), so this is a convenience, not the access check.
-router.get("/unban-bureau", requireLogin, (req, res) => {
-  const channels = moderatedChannelsFor(res);
-  if (channels.length === 1) {
-    return res.redirect(`/${channels[0].channelLogin}/unban-bureau`);
+// route still runs its own requireLevel(2) plus the same unbanBureau.enabled check, so this is a
+// convenience, not the access check - it only exists so a disabled channel doesn't show up as an
+// option to begin with.
+router.get("/unban-bureau", requireLogin, async (req, res, next) => {
+  try {
+    const channels = await channelsWithBureauEnabled(res);
+    if (channels.length === 1) {
+      return res.redirect(`/${channels[0].channelLogin}/unban-bureau`);
+    }
+    res.render("unbanBureauPicker", { channels });
+  } catch (err) {
+    next(err);
   }
-  res.render("unbanBureauPicker", { channels });
 });
 
 // The cross-game spectator hub - a single page that drops the viewer into a
