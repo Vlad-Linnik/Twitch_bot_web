@@ -449,6 +449,29 @@
     dealPapers();
   }
 
+  // The experts sheet's home, which is exactly where main-gui.png draws it. Measured off the
+  // artwork, not eyeballed - the docked card wears the artwork's own pixels, so a pixel out and the
+  // seam shows.
+  var EXPERTS_HOME = { left: 231, top: 879 };
+
+  // The sheet is painted into the desk artwork, so the drawn copy has to be hidden whenever the card
+  // is not sitting on top of it - otherwise picking the card up leaves a second, immovable sheet
+  // lying in the pocket. #ub-experts-slot is a patch of empty pocket that covers it.
+  function syncExpertsSlot() {
+    $("ub-experts-slot").style.display =
+      $("ub-experts-card").classList.contains("ub-small-experts") ? "none" : "block";
+  }
+
+  // Puts the sheet back in its pocket, square and at exactly the drawn sheet's coordinates.
+  function dockExperts() {
+    var card = $("ub-experts-card");
+    card.classList.add("ub-small-experts");
+    card.style.left = EXPERTS_HOME.left + "px";
+    card.style.top = EXPERTS_HOME.top + "px";
+    card.style.transform = "rotate(0deg)";
+    syncExpertsSlot();
+  }
+
   // Renders the two expert speeches onto the fourth sheet, or its empty state.
   //
   // Every string here goes through textContent, like the rest of this file: these are model-written
@@ -521,14 +544,9 @@
     appeal.style.transform = "rotate(" + (Math.floor(Math.random() * 10) - 5) + "deg)";
 
     // The fourth sheet is not printed with the others - it is already lying on the desk in the
-    // artwork, so it snaps back to exactly the drawn sheet's coordinates (measured off main-gui.png,
-    // see the stylesheet) rather than sliding up from below. `ub-no-transition` is what stops it
-    // gliding across the desk from wherever the previous case left it.
+    // artwork, so it snaps back into its pocket rather than sliding up from below.
     experts.classList.add("ub-no-transition");
-    experts.classList.add("ub-small-experts");
-    experts.style.left = "231px";
-    experts.style.top = "879px";
-    experts.style.transform = "rotate(0deg)";
+    dockExperts();
     experts.style.zIndex = "";
 
     user.classList.add("ub-no-transition");
@@ -1129,6 +1147,8 @@
         paper.style.left = point.x - dragOffset.x + "px";
         paper.style.top = point.y - dragOffset.y + "px";
         shrinkArmed[paper.id] = false;
+        // The pocket is now empty - the drawn sheet has to go with the card it just became.
+        if (paper.id === "ub-experts-card") syncExpertsSlot();
       } else {
         dragOffset = { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale };
         if (docked) shrinkArmed[paper.id] = true;
@@ -1170,6 +1190,9 @@
     if (inside && DOCKED[dragging.id]) dragging.style.transform = "rotate(0deg)";
     dragging.style.left = point.x - dragOffset.x + "px";
     dragging.style.top = point.y - dragOffset.y + "px";
+    // Held over its own pocket the card is small again, so the drawn sheet underneath must stay
+    // hidden - without this the shrink-preview shows two sheets stacked.
+    if (dragging.id === "ub-experts-card") syncExpertsSlot();
   });
 
   document.addEventListener("mouseup", function (event) {
@@ -1177,6 +1200,16 @@
     var paper = dragging;
     dragging = null;
     play("dragStop");
+
+    // Dropped anywhere over its corner of the desk, the experts sheet magnets back into its pocket
+    // rather than being left wherever the cursor happened to be. It is the only paper with a drawn
+    // home to line up with: a few pixels out and the card no longer covers the sheet painted into
+    // the artwork, which is exactly the seam this whole arrangement exists to hide.
+    if (paper.id === "ub-experts-card") {
+      if (inZone(toStage(event), "ub-experts-zone")) dockExperts();
+      else syncExpertsSlot();
+      return;
+    }
 
     // Handing the visa back through the window is what submits the verdict — but only once it
     // carries a stamp, which is the entire point of the stamp machine.
@@ -1197,6 +1230,10 @@
     var decision = currentDecision;
     $("ub-character").style.transform = "translateX(-1920px)";
     Array.prototype.forEach.call(document.querySelectorAll(".ub-paper"), function (n) { n.style.display = "none"; });
+    // With the papers cleared the desk goes back to its painted state, so the empty-pocket patch
+    // comes off too - otherwise a case stamped while the sheet was in hand leaves a hole in the
+    // artwork until the next case deals.
+    $("ub-experts-slot").style.display = "none";
 
     // Only meaningful for an approval - see #ub-visa-effective's own comment in the view. Sent as
     // the native date input's raw "YYYY-MM-DD" value; the server is what actually validates it.
