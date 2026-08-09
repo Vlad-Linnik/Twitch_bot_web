@@ -87,6 +87,17 @@ const searchLimiter = rateLimit({
   skip,
 });
 
+// /admin/api/* is bearer-token gated (middleware/adminApiAuth.js), not session-based, so `skip`
+// above never applies here (req.user is never set on this path) - this is the route's only
+// throttle. 30/min per IP is generous for a handful of ad-hoc lookups but bounds brute-forcing
+// the token via raw request volume (the token compare itself is already constant-time).
+const adminApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // express-rate-limit is request/response-shaped (reads req, increments via its
 // store per matched HTTP request) and doesn't fit a WebSocket message handler,
 // which never goes through Express's request cycle. Pulling in a second
@@ -137,6 +148,7 @@ module.exports = {
   gameScoreSubmitLimiter,
   statsReadLimiter,
   searchLimiter,
+  adminApiLimiter,
   durakRoomCreateLimiter,
   durakStickerLimiter,
   // Exported so realtime/quickMatchManager.js can build its own per-game

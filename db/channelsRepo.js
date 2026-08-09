@@ -54,6 +54,14 @@ async function findManyByIds(channelIds) {
   return col.find({ channelId: { $in: channelIds.map(String) }, enabled: true }).sort({ channelLogin: 1 }).toArray();
 }
 
+// Resolves a channelId back to its channel doc regardless of `enabled` - unlike findManyByIds
+// (scoped to "still-active channels" for the nav dropdown). Needed wherever only a channelId is
+// on hand, e.g. resolving a channel-scoped Mongo doc (UnbanRequests) back to its login.
+async function findByChannelId(channelId) {
+  const col = await ensureInitialized();
+  return col.findOne({ channelId: String(channelId) });
+}
+
 async function upsertChannel({ channelLogin, channelId, ownerId }) {
   const col = await ensureInitialized();
   const login = channelLogin.toLowerCase();
@@ -112,6 +120,7 @@ module.exports = {
   listVisibleOnHomepage,
   listAll,
   upsertChannel,
+  findByChannelId,
   findByOwnerId,
   findManyByIds,
   setEnabled,

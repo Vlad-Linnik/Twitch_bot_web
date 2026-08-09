@@ -54,6 +54,14 @@ const env = {
       .map((id) => id.trim())
       .filter(Boolean)
   ),
+
+  // Bearer-token credential for the read-only /admin/api/* routes (middleware/adminApiAuth.js) -
+  // a machine-to-machine secret, deliberately separate from ADMIN_USER_IDS (that allowlist gates
+  // human Twitch-OAuth logins; this gates a script with no session at all). Optional and NOT
+  // requiredInProduction like SESSION_SECRET/TOKEN_ENCRYPTION_KEY - those are core to the app
+  // working, this is a niche add-on that should fail closed (routes 404) rather than take the
+  // whole site down if unset.
+  adminApiToken: process.env.ADMIN_API_TOKEN || null,
 };
 
 module.exports = env;

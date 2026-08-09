@@ -14,6 +14,7 @@ router.use("/", require("./about"));
 router.use("/", require("./privacy"));
 router.use("/", require("./requestBot"));
 router.use("/", require("./admin"));
+router.use("/", require("./adminApi"));
 
 // Channel-scoped routes go LAST, and channelRedirect goes last of all.
 //
