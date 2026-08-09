@@ -399,6 +399,7 @@
 
     currentDecision = null;
     $("ub-visa-reason").value = "";
+    $("ub-visa-effective-date").value = "";
     $("ub-visa-card").classList.remove("ub-small-visa");
     Array.prototype.forEach.call(document.querySelectorAll(".ub-imprint"), function (n) { n.remove(); });
 
@@ -1014,6 +1015,7 @@
       var target = event.target;
       // Anything interactive inside a paper keeps its own click.
       if (target.tagName.toLowerCase() === "textarea") return;
+      if (target.id === "ub-visa-effective-date") return;
       if (target.classList.contains("ub-tab")) return;
       // Let the scroll bars of the log/appeal panes work instead of starting a drag.
       if ((target.id === "ub-chat-logs" || target.id === "ub-mod-comments" ||
@@ -1103,7 +1105,16 @@
     $("ub-character").style.transform = "translateX(-1920px)";
     Array.prototype.forEach.call(document.querySelectorAll(".ub-paper"), function (n) { n.style.display = "none"; });
 
-    post("decide.json", { id: c._id, decision: decision, resolutionText: $("ub-visa-reason").value })
+    // Only meaningful for an approval - see #ub-visa-effective's own comment in the view. Sent as
+    // the native date input's raw "YYYY-MM-DD" value; the server is what actually validates it.
+    var effectiveAt = decision === "approved" ? $("ub-visa-effective-date").value : "";
+
+    post("decide.json", {
+      id: c._id,
+      decision: decision,
+      resolutionText: $("ub-visa-reason").value,
+      effectiveAt: effectiveAt,
+    })
       .then(function (result) {
         if (result.status === 409) { toast(T.alreadyDecided); }
         else if (!result.data.ok) { toast(T.failed); }
@@ -1112,7 +1123,9 @@
           stats.handled += 1;
           if (decision === "approved") stats.approved += 1; else stats.denied += 1;
           renderStats();
-          toast(T.queued);
+          toast(c.resolution.effectiveAt
+            ? T.approveScheduled.replace("{{date}}", fmtDate(c.resolution.effectiveAt))
+            : T.queued);
         }
         advance();
       })
@@ -1472,6 +1485,17 @@
       String(now.getMonth() + 1).padStart(2, "0") + "." +
       String(now.getFullYear()).slice(-2);
   }
+
+  // Keeps the visa's effective-date picker from offering today/the past - the server rejects those
+  // too (lib/unbanDecisionValidation.js), this just steers the picker itself away from them.
+  (function setEffectiveDateMin() {
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    $("ub-visa-effective-date").min =
+      tomorrow.getFullYear() + "-" +
+      String(tomorrow.getMonth() + 1).padStart(2, "0") + "-" +
+      String(tomorrow.getDate()).padStart(2, "0");
+  })();
 
   // --- boot ----------------------------------------------------------------
 

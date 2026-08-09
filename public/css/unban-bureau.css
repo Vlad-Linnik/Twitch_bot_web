@@ -713,6 +713,37 @@ body.ub-playing footer {
 }
 #ub-visa-reason:focus { outline: none; }
 
+/* "решение вступает в силу" - sits in the gap between the reason textarea (ends at top:297px) and
+   the name stamped at the card's bottom (bottom:6px), on the 375x400 visa card. */
+#ub-visa-effective {
+  position: absolute;
+  top: 302px;
+  left: 29px;
+  width: 319px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+#ub-visa-effective-label {
+  font-family: "Monocraft", monospace;
+  font-size: 11px;
+  color: #444;
+  white-space: nowrap;
+}
+#ub-visa-effective-date {
+  flex: 1;
+  min-width: 0;
+  font-family: "Monocraft", monospace;
+  font-size: 11px;
+  background-color: transparent;
+  border: 1px solid rgb(0 0 0 / 0.3);
+  border-radius: 2px;
+  color: #000;
+  padding: 1px 3px;
+}
+#ub-visa-effective-date:focus { outline: none; border-color: rgb(0 0 0 / 0.6); }
+
 /* The stamp mark itself, appended to the visa when a stamp button is pressed. */
 .ub-imprint {
   position: absolute;

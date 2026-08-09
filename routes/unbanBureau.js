@@ -23,6 +23,7 @@ const unbanBureauShiftRepo = require("../db/unbanBureauShiftRepo");
 const sniperShotsRepo = require("../db/sniperShotsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
+const { parseEffectiveAt } = require("../lib/unbanDecisionValidation");
 const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
 const { settingsWriteLimiter, statsReadLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
@@ -224,6 +225,15 @@ router.post(
         return res.status(400).json({ error: "bad_decision" });
       }
 
+      // "решение вступает в силу" - only meaningful for an approval; a denial is never scheduled,
+      // so whatever the client sent for one is simply discarded rather than trusted.
+      let effectiveAt = null;
+      if (decision === "approved" && req.body.effectiveAt) {
+        const parsed = parseEffectiveAt(req.body.effectiveAt, Date.now());
+        if (!parsed.ok) return res.status(400).json({ error: `effective_date_${parsed.reason}` });
+        effectiveAt = parsed.effectiveAt;
+      }
+
       const before = await unbanRequestsRepo.findById(req.body.id);
       if (!before || String(before.channelId) !== String(channel.channelId)) {
         return res.status(404).json({ error: "not_found" });
@@ -233,6 +243,7 @@ router.post(
         decision,
         text: req.body.resolutionText,
         user: req.user,
+        effectiveAt,
       });
       // The repo refuses to overwrite a decision that's already queued or applied - expected on a
       // double-tap of A/D, or two moderators reaching the same case at once.
@@ -250,7 +261,11 @@ router.post(
         action: decision === "approved" ? "approve" : "deny",
         target: before.userLogin,
         before: { twitchStatus: before.twitchStatus },
-        after: { decision, resolutionText: updated.resolution.text },
+        after: {
+          decision,
+          resolutionText: updated.resolution.text,
+          effectiveAt: updated.resolution.effectiveAt,
+        },
       });
 
       res.json({ ok: true, resolution: updated.resolution });

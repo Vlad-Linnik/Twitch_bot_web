@@ -194,6 +194,13 @@
       <div class="ub-paper ub-draggable" id="ub-visa-card">
         <div id="ub-visa-name"></div>
         <textarea id="ub-visa-reason" maxlength="500" placeholder="<%= t('unbanBureau.resolutionPlaceholder') %>"></textarea>
+        <%# Only acted on for an "approved" stamp - see submitDecision(). A blank date means
+            immediately, the default; picking one asks the bot to hold the actual Twitch unban
+            until that date instead of applying it on its next ~60s tick. %>
+        <div id="ub-visa-effective">
+          <label id="ub-visa-effective-label" for="ub-visa-effective-date"><%= t('unbanBureau.effectiveLabel') %></label>
+          <input type="date" id="ub-visa-effective-date" />
+        </div>
       </div>
     </div>
   </div>
@@ -228,6 +235,7 @@
          needStamp: t('unbanBureau.needStamp'),
          queued: t('unbanBureau.queued'),
          applied: t('unbanBureau.applied'),
+         approveScheduled: t('unbanBureau.approveScheduled'),
          decisionFailed: t('unbanBureau.decisionFailed'),
          voteQueued: t('unbanBureau.voteQueued'),
          voteRunning: t('unbanBureau.voteRunning'),

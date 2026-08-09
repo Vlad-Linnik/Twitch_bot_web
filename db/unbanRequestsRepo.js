@@ -43,7 +43,16 @@ async function listPendingForChannel(channelId, { newestFirst = true } = {}) {
   const col = await ensureInitialized();
   return col
     .find(
-      { channelId: String(channelId), twitchStatus: "pending" },
+      {
+        channelId: String(channelId),
+        twitchStatus: "pending",
+        // A case a moderator already stamped stays twitchStatus: "pending" at Twitch until the
+        // bot's next tick actually PATCHes it (routes/unbanBureau.js's decide.json only records
+        // the decision) - for an immediate decision that's under a minute, but an approval with a
+        // future "решение вступает в силу" date can sit here for weeks, and without this it would
+        // reappear in the queue on every page load until the bot gets to it.
+        "resolution.status": { $ne: "pending" },
+      },
       { projection: { twitchModLogs: 0 } }
     )
     .sort({ requestedAt: newestFirst ? -1 : 1 })
@@ -60,7 +69,7 @@ async function findById(id) {
 // decision that's already queued or applied: the page is a fast keyboard-driven UI, so a
 // double-tap of A/D (or two moderators on the same case at once) is expected, not exceptional.
 // Returns the updated doc, or null if the case was already decided / not in this channel.
-async function requestDecision(id, channelId, { decision, text, user }) {
+async function requestDecision(id, channelId, { decision, text, user, effectiveAt = null }) {
   const col = await ensureInitialized();
   const result = await col.findOneAndUpdate(
     {
@@ -75,6 +84,11 @@ async function requestDecision(id, channelId, { decision, text, user }) {
         "resolution.status": "pending",
         "resolution.decision": decision,
         "resolution.text": text ? text.slice(0, MAX_RESOLUTION_TEXT) : null,
+        // "решение вступает в силу" - when the bot should actually PATCH Twitch. null means
+        // immediately (TwitchBot/twitch/unbanRequestScheduler.js's findResolutionPending() applies
+        // it on its very next tick); routes/unbanBureau.js's decide.json only ever passes a future
+        // date through here, and only for an 'approved' decision.
+        "resolution.effectiveAt": effectiveAt || null,
         "resolution.decidedById": String(user.userId),
         "resolution.decidedByLogin": user.login,
         "resolution.decidedByDisplayName": user.displayName,
