@@ -45,9 +45,12 @@
       <div id="ub-window-zone"></div>
       <div id="ub-appeal-zone"></div>
       <div id="ub-experts-zone"></div>
+      <div id="ub-rules-zone"></div>
       <%# Covers the sheet painted into the desk artwork while the experts card is off its home,
           so lifting the card leaves an empty pocket instead of a second, immovable sheet. %>
       <div id="ub-experts-slot"></div>
+      <%# Same idea for the notebook of channel rules - see ub-rules-slot's CSS. %>
+      <div id="ub-rules-slot"></div>
 
       <div id="ub-loudspeaker" title="<%= t('unbanBureau.callNext') %>"></div>
       <div id="ub-weight">82</div>
@@ -129,6 +132,14 @@
               <button type="button" class="ub-font-btn" data-font="experts" data-delta="1">+</button>
             </div>
           </div>
+          <div class="ub-settings-row">
+            <span><%= t('unbanBureau.fontRules') %></span>
+            <div class="ub-controls-group">
+              <button type="button" class="ub-font-btn" data-font="rules" data-delta="-1">-</button>
+              <span id="ub-font-rules-display">13px</span>
+              <button type="button" class="ub-font-btn" data-font="rules" data-delta="1">+</button>
+            </div>
+          </div>
         </div>
 
         <div class="ub-settings-section">
@@ -150,7 +161,7 @@
       <div id="ub-toast"></div>
     </div>
 
-    <%# The four documents. Everything inside is filled via textContent by the client. %>
+    <%# The five documents. Everything inside is filled via textContent by the client. %>
     <div id="ub-papers-layer">
       <div class="ub-paper ub-draggable" id="ub-user-card">
         <img id="ub-uc-avatar" src="" alt="" />
@@ -214,6 +225,16 @@
         <div id="ub-experts-body"></div>
         <div id="ub-experts-empty"><%= t('unbanBureau.expertsEmpty') %></div>
         <div id="ub-experts-mark"></div>
+      </div>
+
+      <%# The notebook: this channel's own posted chat rules (Twitch's chatSettings.rules,
+          mirrored by the bot). Channel-wide, not per-case - see db/unbanDossierRepo.js's
+          getDossier() and renderRules() in the client. %>
+      <div class="ub-paper ub-draggable" id="ub-rules-card">
+        <div id="ub-rules-title"><%= t('unbanBureau.rulesHeading') %></div>
+        <div id="ub-rules-body"></div>
+        <div id="ub-rules-empty"><%= t('unbanBureau.rulesEmpty') %></div>
+        <div id="ub-rules-mark"></div>
       </div>
 
       <div class="ub-paper ub-draggable" id="ub-visa-card">

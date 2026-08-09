@@ -199,17 +199,19 @@ body.ub-playing footer {
   pointer-events: none;
   z-index: 10000;
 }
-/* The two desk-docked papers share ONE hit area, deliberately: the whole desktop
-   in front of the moderator is "put it down over there", and having the appeal
-   note forgiving while the experts sheet needed aiming at a small target was the
-   difference you felt rather than saw. Declared as a single rule so the two
-   cannot drift apart in a later edit.
-   They still land in different places - #ub-appeal-card shrinks wherever it was
-   let go, #ub-experts-card magnets to the sheet drawn at 231,879 (see
-   dockExperts()) - because only one of them has a home painted into the
+/* The three desk-docked papers share ONE hit area, deliberately: the whole
+   desktop in front of the moderator is "put it down over there", and having
+   the appeal note forgiving while the experts sheet needed aiming at a small
+   target was the difference you felt rather than saw. Declared as a single
+   rule so the three cannot drift apart in a later edit.
+   They still land in different places - #ub-appeal-card shrinks wherever it
+   was let go, #ub-experts-card magnets to the sheet drawn at 231,879 (see
+   dockExperts()) and #ub-rules-card magnets to the notebook drawn at 440,888
+   (see dockRules()) - because only those two have a home painted into the
    artwork to line up with. */
 #ub-appeal-zone,
-#ub-experts-zone {
+#ub-experts-zone,
+#ub-rules-zone {
   position: absolute;
   left: 104px;
   top: 689px;
@@ -242,14 +244,32 @@ body.ub-playing footer {
   display: none;
   pointer-events: none;
 }
+/* Same idea as #ub-experts-slot, for the notebook drawn into the artwork at
+   440,888 (82x110, measured off the artwork the same way). notebook-slot.png
+   is built the same way experts-slot.png was - row by row, interpolating
+   between the pixels immediately either side of the notebook - so lifting it
+   uncovers plausible tray wood instead of a second, immovable notebook. */
+#ub-rules-slot {
+  position: absolute;
+  left: 440px;
+  top: 888px;
+  width: 82px;
+  height: 110px;
+  background-image: url("/img/games/unban-bureau/notebook-slot.png");
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  display: none;
+  pointer-events: none;
+}
 #ub-wrapper.ub-debug #ub-window-zone,
 #ub-wrapper.ub-debug #ub-appeal-zone,
-#ub-wrapper.ub-debug #ub-experts-zone {
+#ub-wrapper.ub-debug #ub-experts-zone,
+#ub-wrapper.ub-debug #ub-rules-zone {
   background-color: rgb(255 0 0 / 0.25);
   border: 2px dashed red;
 }
 
-/* --- the four papers ------------------------------------------------------ */
+/* --- the papers ------------------------------------------------------------ */
 
 .ub-paper {
   position: absolute;
@@ -353,6 +373,44 @@ body.ub-playing footer {
 }
 .ub-small-experts #ub-experts-title,
 .ub-small-experts #ub-experts-body {
+  display: none !important;
+}
+
+/* The notebook: this channel's own posted chat rules (Twitch's `chatSettings.rules`,
+   mirrored by the bot - see ../CLAUDE.md's "Бюро амнистии"). Same treatment as the
+   fourth sheet above and for the same reason - it is THE notebook drawn in
+   main-gui.png (notebook-card.png, cropped straight out at 440,888 82x110), not a
+   lookalike beside it. Opened, that crop would be a blur, so the enlarged page is
+   redrawn here from the artwork's sampled colour plus the dotted rule, same as the
+   experts sheet. Channel-wide rather than per-case - the same list reads the same
+   on every applicant from this channel - but it still lives on this desk rather
+   than in the settings modal: an accusation citing a rule needed the rule within
+   reach, not a tab switch away. */
+#ub-rules-card {
+  width: 460px;
+  height: 560px;
+  background-color: #efe7d8;
+  /* Same as #ub-experts-card: already lying on the desk in the artwork, so it
+     snaps to its home instead of sliding there - see dealPapers(). */
+}
+#ub-rules-card::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border: 2px dotted #b7a988;
+  pointer-events: none;
+}
+.ub-small-rules::before { display: none; }
+
+/* Exactly the drawn notebook's footprint in main-gui.png, wearing the artwork's
+   own pixels - see .ub-small-experts above for why. */
+.ub-small-rules {
+  width: 82px !important;
+  height: 110px !important;
+  background: url("/img/games/unban-bureau/notebook-card.png") no-repeat center / 100% 100% !important;
+}
+.ub-small-rules #ub-rules-title,
+.ub-small-rules #ub-rules-body {
   display: none !important;
 }
 
@@ -867,6 +925,81 @@ body.ub-playing footer {
   pointer-events: none;
 }
 .ub-small-experts.ub-has-opinions #ub-experts-mark { display: block; }
+
+/* --- notebook internals ---------------------------------------------------- */
+
+#ub-rules-title {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  right: 22px;
+  font-size: 15px;
+  letter-spacing: 2px;
+  text-align: center;
+  color: #3b3327;
+  border-bottom: 1px solid rgb(0 0 0 / 0.25);
+  padding-bottom: 8px;
+  pointer-events: none;
+}
+#ub-rules-body {
+  position: absolute;
+  top: 62px;
+  left: 24px;
+  right: 22px;
+  bottom: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1e1a13;
+  pointer-events: auto;
+  word-break: break-word;
+}
+#ub-rules-body::-webkit-scrollbar { width: 6px; }
+#ub-rules-body::-webkit-scrollbar-track { background: transparent; }
+#ub-rules-body::-webkit-scrollbar-thumb { background: rgb(0 0 0 / 0.2); border-radius: 3px; }
+
+/* One line per array entry, exactly as Twitch stores them - NOT re-numbered here.
+   A broadcaster's own rules list is free-form (see toChannelRules() on the bot
+   side): some lines are section headers ("- Запрещено -"), others already carry
+   their own hand-typed numbering that restarts after each header, so a second,
+   auto-generated number would double up against the broadcaster's own. */
+.ub-rule-item {
+  margin-bottom: 8px;
+}
+
+#ub-rules-empty {
+  position: absolute;
+  top: 50%;
+  left: 24px;
+  right: 22px;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: 13px;
+  color: #8a7c63;
+  pointer-events: none;
+}
+.ub-small-rules #ub-rules-empty { display: none !important; }
+
+/* Docked, the notebook is 82px wide and says nothing. Same affordance as
+   #ub-experts-mark: a few ruled lines, shown only when the channel actually
+   posted rules, so a moderator on a channel with none never has to pick the
+   notebook up to find that out. */
+#ub-rules-mark {
+  display: none;
+  position: absolute;
+  top: 22px;
+  left: 18px;
+  right: 10px;
+  height: 70px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.4) 0 2px,
+    rgb(0 0 0 / 0) 2px 8px
+  );
+  pointer-events: none;
+}
+.ub-small-rules.ub-has-rules #ub-rules-mark { display: block; }
 
 #ub-visa-name {
   position: absolute;

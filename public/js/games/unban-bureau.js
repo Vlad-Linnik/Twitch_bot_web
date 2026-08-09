@@ -1,7 +1,7 @@
 // «Бюро амнистии» — client for /:channel/unban-bureau (views/unbanBureau.ejs).
 //
 // Runs the whole desk: a queue of pedestrians on the street, an applicant who walks up to the
-// window when called, four documents you physically drag around, a stamp machine that slides out
+// window when called, five documents you physically drag around, a stamp machine that slides out
 // of the right wall, and a rifle scope for the "stray bullet".
 //
 // NOTHING HERE TALKS TO TWITCH. Handing a stamped visa back through the window POSTs to
@@ -472,6 +472,47 @@
     syncExpertsSlot();
   }
 
+  // The notebook's home - same idea as EXPERTS_HOME, measured off the artwork the same way.
+  var RULES_HOME = { left: 440, top: 888 };
+
+  // Same idea as syncExpertsSlot(): #ub-rules-slot covers the notebook painted into the desk
+  // artwork while the card is off its home.
+  function syncRulesSlot() {
+    $("ub-rules-slot").style.display =
+      $("ub-rules-card").classList.contains("ub-small-rules") ? "none" : "block";
+  }
+
+  // Puts the notebook back on the desk, square and at exactly the drawn notebook's coordinates.
+  function dockRules() {
+    var card = $("ub-rules-card");
+    card.classList.add("ub-small-rules");
+    card.style.left = RULES_HOME.left + "px";
+    card.style.top = RULES_HOME.top + "px";
+    card.style.transform = "rotate(0deg)";
+    syncRulesSlot();
+  }
+
+  // Renders this channel's own posted chat rules (Twitch's chatSettings.rules, mirrored by the
+  // bot), or the notebook's empty state. Channel-wide, not per-case - see db/unbanDossierRepo.js's
+  // getDossier(). Free-form strings the broadcaster typed, so - like every other Mongo-sourced
+  // string on this page - they go through textContent, never innerHTML.
+  function renderRules(rules) {
+    var body = $("ub-rules-body");
+    var card = $("ub-rules-card");
+    body.textContent = "";
+
+    var has = Boolean(rules && rules.length);
+    card.classList.toggle("ub-has-rules", has);
+    $("ub-rules-empty").style.display = has ? "none" : "";
+    if (!has) return;
+
+    // NOT re-numbered - see the CSS. Each entry is exactly the line Twitch stored, which may
+    // already be a section header or carry the broadcaster's own hand-typed numbering.
+    rules.forEach(function (rule) {
+      body.appendChild(el("div", "ub-rule-item", rule));
+    });
+  }
+
   // Renders the two expert speeches onto the fourth sheet, or its empty state.
   //
   // Every string here goes through textContent, like the rest of this file: these are model-written
@@ -528,12 +569,13 @@
     body.scrollTop = 0;
   }
 
-  // Slides the four documents up from below the desk, as if printed out.
+  // Slides the five documents up from below the desk, as if printed out.
   function dealPapers() {
     var user = $("ub-user-card");
     var visa = $("ub-visa-card");
     var appeal = $("ub-appeal-card");
     var experts = $("ub-experts-card");
+    var rules = $("ub-rules-card");
 
     Array.prototype.forEach.call(document.querySelectorAll(".ub-paper"), function (n) { n.style.display = "block"; });
 
@@ -544,10 +586,15 @@
     appeal.style.transform = "rotate(" + (Math.floor(Math.random() * 10) - 5) + "deg)";
 
     // The fourth sheet is not printed with the others - it is already lying on the desk in the
-    // artwork, so it snaps back into its pocket rather than sliding up from below.
+    // artwork, so it snaps back into its pocket rather than sliding up from below. Same for the
+    // notebook.
     experts.classList.add("ub-no-transition");
     dockExperts();
     experts.style.zIndex = "";
+
+    rules.classList.add("ub-no-transition");
+    dockRules();
+    rules.style.zIndex = "";
 
     user.classList.add("ub-no-transition");
     visa.classList.add("ub-no-transition");
@@ -1017,6 +1064,9 @@
           renderRisk(d.risk, d.counts);
           renderModComments(d);
           renderActions(d);
+          // Channel-wide, not per-case - the same list on every applicant from this channel - but
+          // reloaded with every dossier anyway rather than cached, same as everything else here.
+          renderRules(d.channelRules);
           // Sent only on a first load, not on a ?before= log page - the route omits the field
           // entirely there rather than re-sending an unchanged sheet with every scroll-back.
           renderOpinions(payload.opinions || null);
@@ -1095,12 +1145,13 @@
   // single shared flag would let one card's pickup disarm the other's.
   var shrinkArmed = {};
 
-  // The two papers that live docked on the desk rather than being held in front of the moderator.
+  // The three papers that live docked on the desk rather than being held in front of the moderator.
   // `small`/`big` are the grab offsets used while the card is in each state - a card that changes
   // size under the cursor has to be re-centred on it or it jumps out from under the pointer.
   var DOCKED = {
     "ub-appeal-card": { cls: "ub-small-appeal", zone: "ub-appeal-zone", small: { x: 60, y: 60 }, big: { x: 150, y: 150 } },
     "ub-experts-card": { cls: "ub-small-experts", zone: "ub-experts-zone", small: { x: 31, y: 57 }, big: { x: 250, y: 120 } },
+    "ub-rules-card": { cls: "ub-small-rules", zone: "ub-rules-zone", small: { x: 41, y: 55 }, big: { x: 230, y: 140 } },
   };
 
   function zoneRect(id) {
@@ -1121,10 +1172,10 @@
       if (target.tagName.toLowerCase() === "textarea") return;
       if (target.id === "ub-visa-effective-date") return;
       if (target.classList.contains("ub-tab")) return;
-      // Let the scroll bars of the log/appeal/experts panes work instead of starting a drag.
+      // Let the scroll bars of the log/appeal/experts/rules panes work instead of starting a drag.
       if ((target.id === "ub-chat-logs" || target.id === "ub-mod-comments" ||
            target.id === "ub-actions" || target.id === "ub-appeal-text" ||
-           target.id === "ub-experts-body") &&
+           target.id === "ub-experts-body" || target.id === "ub-rules-body") &&
           event.offsetX > target.clientWidth - 15) return;
 
       dragging = paper;
@@ -1147,8 +1198,9 @@
         paper.style.left = point.x - dragOffset.x + "px";
         paper.style.top = point.y - dragOffset.y + "px";
         shrinkArmed[paper.id] = false;
-        // The pocket is now empty - the drawn sheet has to go with the card it just became.
+        // The pocket is now empty - the drawn sheet/notebook has to go with the card it just became.
         if (paper.id === "ub-experts-card") syncExpertsSlot();
+        if (paper.id === "ub-rules-card") syncRulesSlot();
       } else {
         dragOffset = { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale };
         if (docked) shrinkArmed[paper.id] = true;
@@ -1190,9 +1242,10 @@
     if (inside && DOCKED[dragging.id]) dragging.style.transform = "rotate(0deg)";
     dragging.style.left = point.x - dragOffset.x + "px";
     dragging.style.top = point.y - dragOffset.y + "px";
-    // Held over its own pocket the card is small again, so the drawn sheet underneath must stay
-    // hidden - without this the shrink-preview shows two sheets stacked.
+    // Held over its own pocket the card is small again, so the drawn sheet/notebook underneath
+    // must stay hidden - without this the shrink-preview shows two copies stacked.
     if (dragging.id === "ub-experts-card") syncExpertsSlot();
+    if (dragging.id === "ub-rules-card") syncRulesSlot();
   });
 
   document.addEventListener("mouseup", function (event) {
@@ -1202,15 +1255,21 @@
     play("dragStop");
 
     // Dropped anywhere on the desktop - the same forgiving area the appeal note uses, they share one
-    // zone - the experts sheet magnets back into its pocket rather than being left wherever the
-    // cursor happened to be. It is the only paper with a drawn home to line up with: a few pixels
-    // out and the card no longer covers the sheet painted into the artwork, which is exactly the
-    // seam this whole arrangement exists to hide. Note the shrink preview during the drag is now
-    // rare (the zone is large enough that the cursor may never leave it, and shrinkArmed suppresses
-    // the preview until it does) - the snap on release is what tells the moderator it landed.
+    // zone - the experts sheet and the notebook magnet back into their pocket rather than being left
+    // wherever the cursor happened to be. They are the only papers with a drawn home to line up
+    // with: a few pixels out and the card no longer covers the shape painted into the artwork,
+    // which is exactly the seam this whole arrangement exists to hide. Note the shrink preview
+    // during the drag is now rare (the zone is large enough that the cursor may never leave it, and
+    // shrinkArmed suppresses the preview until it does) - the snap on release is what tells the
+    // moderator it landed.
     if (paper.id === "ub-experts-card") {
       if (inZone(toStage(event), "ub-experts-zone")) dockExperts();
       else syncExpertsSlot();
+      return;
+    }
+    if (paper.id === "ub-rules-card") {
+      if (inZone(toStage(event), "ub-rules-zone")) dockRules();
+      else syncRulesSlot();
       return;
     }
 
@@ -1233,10 +1292,11 @@
     var decision = currentDecision;
     $("ub-character").style.transform = "translateX(-1920px)";
     Array.prototype.forEach.call(document.querySelectorAll(".ub-paper"), function (n) { n.style.display = "none"; });
-    // With the papers cleared the desk goes back to its painted state, so the empty-pocket patch
-    // comes off too - otherwise a case stamped while the sheet was in hand leaves a hole in the
-    // artwork until the next case deals.
+    // With the papers cleared the desk goes back to its painted state, so the empty-pocket patches
+    // come off too - otherwise a case stamped while the sheet/notebook was in hand leaves a hole in
+    // the artwork until the next case deals.
     $("ub-experts-slot").style.display = "none";
+    $("ub-rules-slot").style.display = "none";
 
     // Only meaningful for an approval - see #ub-visa-effective's own comment in the view. Sent as
     // the native date input's raw "YYYY-MM-DD" value; the server is what actually validates it.
@@ -1476,6 +1536,7 @@
     appeal: { el: "ub-appeal-text", size: 30, min: 10, max: 60, display: "ub-font-appeal-display" },
     visa: { el: "ub-visa-reason", size: 13, min: 8, max: 24, display: "ub-font-visa-display" },
     experts: { el: "ub-experts-body", size: 13, min: 8, max: 24, display: "ub-font-experts-display" },
+    rules: { el: "ub-rules-body", size: 13, min: 8, max: 24, display: "ub-font-rules-display" },
   };
 
   // Applies one font size to its element, the panel's readout and the stored preference.
