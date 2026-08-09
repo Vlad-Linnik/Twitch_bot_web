@@ -210,6 +210,7 @@
        data-newest-first="<%= newestFirst ? '1' : '0' %>"
        data-heartbeat-ms="<%= heartbeatMs %>"
        data-cases="<%= JSON.stringify(cases) %>"
+       data-emotes="<%= JSON.stringify(emoteList) %>"
        data-i18n="<%= JSON.stringify({
          allDone: t('unbanBureau.allDone'),
          notFollowing: t('unbanBureau.notFollowing'),
@@ -285,6 +286,7 @@
          backToSettings: t('channelSettings.backToSettings')
        }) %>"></div>
 
+  <script src="<%= asset('/js/emoteMatch.js') %>" defer></script>
   <script src="<%= asset('/js/games/unban-bureau.js') %>" defer></script>
 <% } %>
 

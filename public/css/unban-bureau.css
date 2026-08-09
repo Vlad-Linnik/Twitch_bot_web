@@ -458,6 +458,15 @@ body.ub-playing footer {
   line-height: 1.5;
   word-break: break-word;
 }
+/* Inline emote images swapped in for their name - see appendWithEmotes() in unban-bureau.js.
+   Sized off line-height so a message full of emotes doesn't grow taller than plain text. */
+.ub-inline-emote {
+  display: inline-block;
+  height: 1.4em;
+  width: auto;
+  vertical-align: text-bottom;
+  margin: 0 2px;
+}
 .ub-log-modaction {
   margin-bottom: 4px;
   line-height: 1.4;

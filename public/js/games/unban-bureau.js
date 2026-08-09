@@ -31,6 +31,13 @@
   var cases = JSON.parse(config.dataset.cases);
   var newestFirst = config.dataset.newestFirst === "1";
   var HEARTBEAT_MS = parseInt(config.dataset.heartbeatMs, 10) || 25000;
+  // name -> {name, url}, same channel-wide map the news comments box resolves against
+  // (public/js/emoteMatch.js, shared with that page). Used to swap emote names for their real
+  // image in the appeal text and chat log - EmoteMatch.tokenizeForPreview does the whole-token
+  // matching, appendWithEmotes below turns its output into Text/<img> nodes.
+  var EMOTE_INDEX = window.EmoteMatch
+    ? window.EmoteMatch.buildEmoteIndex(JSON.parse(config.dataset.emotes || "[]"))
+    : new Map();
 
   var DESIGN_W = 1920;
   var DESIGN_H = 1080;
@@ -118,6 +125,32 @@
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
+  }
+
+  // Same substitution the news comments box does (lib/commentEmotes.js's renderCommentBody), but
+  // built out of real DOM nodes instead of an HTML string - this page's hard rule is that no
+  // Mongo/user-sourced text ever goes through innerHTML (see the file header). Every token that
+  // isn't a recognized emote name still goes through document.createTextNode, so this doesn't
+  // weaken that rule at all - the only element ever created is an <img> whose src came from our
+  // own EMOTE_INDEX, never from the message text itself.
+  function appendWithEmotes(parent, text) {
+    if (!window.EmoteMatch || !EMOTE_INDEX.size) {
+      parent.appendChild(document.createTextNode(text || ""));
+      return;
+    }
+    window.EmoteMatch.tokenizeForPreview(text || "", EMOTE_INDEX).forEach(function (token) {
+      if (token.type === "emote") {
+        var img = document.createElement("img");
+        img.src = token.url;
+        img.alt = token.name;
+        img.title = token.name;
+        img.loading = "lazy";
+        img.className = "ub-inline-emote";
+        parent.appendChild(img);
+      } else {
+        parent.appendChild(document.createTextNode(token.value));
+      }
+    });
   }
 
   var toastTimer = null;
@@ -388,7 +421,9 @@
     // does, rather than defaulting to the much stronger claim "not subscribed".
     infoRow($("ub-uc-sub"), SVG_SUB, T.subUnknown);
 
-    $("ub-appeal-text").textContent = c.text || T.noAppealText;
+    var appealTextEl = $("ub-appeal-text");
+    appealTextEl.textContent = "";
+    appendWithEmotes(appealTextEl, c.text || T.noAppealText);
     $("ub-visa-name").textContent = "ВИЗА: " + c.userLogin;
 
     renderVote(c.vote);
@@ -522,7 +557,9 @@
         if (entry.reason) body.appendChild(document.createTextNode(" — " + entry.reason));
         row.appendChild(body);
       } else {
-        row.appendChild(el("span", null, entry.text));
+        var textSpan = el("span", null, null);
+        appendWithEmotes(textSpan, entry.text);
+        row.appendChild(textSpan);
         if (entry.probableCause) {
           row.classList.add("ub-log-flagged");
           row.appendChild(el("span", "ub-log-badge", T.probableCause));

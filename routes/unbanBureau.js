@@ -22,6 +22,7 @@ const unbanDossierRepo = require("../db/unbanDossierRepo");
 const unbanBureauShiftRepo = require("../db/unbanBureauShiftRepo");
 const sniperShotsRepo = require("../db/sniperShotsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
+const emoteImages = require("../twitch/emoteImages");
 const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
 const { settingsWriteLimiter, statsReadLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
@@ -110,10 +111,18 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     // for a lease's length because someone glanced at an empty queue.
     if (!cases.length) await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId);
 
+    // Same channel-wide name -> image map the emote cloud and the news comments box resolve
+    // against (twitch/emoteImages.js) - so an emote name typed in an appeal or said in chat
+    // renders as the actual emote in the log/appeal panes, not its text signature.
+    const emoteMap = cases.length
+      ? await emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map())
+      : new Map();
+
     res.render("unbanBureau", {
       channel,
       cases,
       newestFirst,
+      emoteList: [...emoteMap].filter(([, url]) => url).map(([name, url]) => ({ name, url })),
       // The vote bar labels the two emotes literally, so the HUD itself tells chat what to type -
       // a translated "For"/"Against" doesn't. Per-channel, hence read here rather than hardcoded.
       voteEmotes: {
