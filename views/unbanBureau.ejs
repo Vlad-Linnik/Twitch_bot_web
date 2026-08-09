@@ -199,7 +199,15 @@
             until that date instead of applying it on its next ~60s tick. %>
         <div id="ub-visa-effective">
           <label id="ub-visa-effective-label" for="ub-visa-effective-date"><%= t('unbanBureau.effectiveLabel') %></label>
-          <input type="date" id="ub-visa-effective-date" />
+          <%# Native date inputs render their OWN locale placeholder ("tt.mm.jjjj", "dd/mm/yyyy", ...)
+              when empty - there's no attribute that swaps that text for "Немедленно". So the input's
+              own text is made transparent while empty (see .ub-date-empty in the stylesheet) and this
+              overlay sits on top instead; pointer-events:none lets a click still reach the input
+              underneath and open its picker. Toggled by updateEffectiveDatePlaceholder() in the client. %>
+          <div id="ub-visa-effective-wrap">
+            <input type="date" id="ub-visa-effective-date" class="ub-date-empty" />
+            <span id="ub-visa-effective-placeholder"><%= t('unbanBureau.effectiveImmediate') %></span>
+          </div>
         </div>
       </div>
     </div>

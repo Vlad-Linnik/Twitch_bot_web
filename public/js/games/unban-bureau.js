@@ -400,6 +400,7 @@
     currentDecision = null;
     $("ub-visa-reason").value = "";
     $("ub-visa-effective-date").value = "";
+    updateEffectiveDatePlaceholder();
     $("ub-visa-card").classList.remove("ub-small-visa");
     Array.prototype.forEach.call(document.querySelectorAll(".ub-imprint"), function (n) { n.remove(); });
 
@@ -1496,6 +1497,15 @@
       String(tomorrow.getMonth() + 1).padStart(2, "0") + "-" +
       String(tomorrow.getDate()).padStart(2, "0");
   })();
+
+  // An empty date input shows the browser's OWN locale placeholder ("tt.mm.jjjj", "dd/mm/yyyy",
+  // ...), which no attribute can swap for "Немедленно" - so instead the input's own text is made
+  // transparent (.ub-date-empty, unban-bureau.css) and #ub-visa-effective-placeholder reads
+  // "Немедленно" on top of it. This just keeps that class in sync with whether it's actually empty.
+  function updateEffectiveDatePlaceholder() {
+    $("ub-visa-effective-date").classList.toggle("ub-date-empty", !$("ub-visa-effective-date").value);
+  }
+  $("ub-visa-effective-date").addEventListener("input", updateEffectiveDatePlaceholder);
 
   // --- boot ----------------------------------------------------------------
 

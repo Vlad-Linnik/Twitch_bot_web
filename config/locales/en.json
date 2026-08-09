@@ -1628,6 +1628,7 @@
     "resolutionLabel": "Note for the user (optional)",
     "resolutionPlaceholder": "Shown to them on Twitch, up to 500 characters",
     "effectiveLabel": "Takes effect:",
+    "effectiveImmediate": "Immediately",
     "approve": "Approve",
     "deny": "Deny",
     "approveStamp": "APPROVED",

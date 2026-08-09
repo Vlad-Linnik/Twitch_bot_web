@@ -731,9 +731,13 @@ body.ub-playing footer {
   color: #444;
   white-space: nowrap;
 }
-#ub-visa-effective-date {
+#ub-visa-effective-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+#ub-visa-effective-date {
+  width: 100%;
   font-family: "Monocraft", monospace;
   font-size: 11px;
   background-color: transparent;
@@ -743,6 +747,28 @@ body.ub-playing footer {
   padding: 1px 3px;
 }
 #ub-visa-effective-date:focus { outline: none; border-color: rgb(0 0 0 / 0.6); }
+/* No attribute makes an empty date input show custom placeholder text - its "tt.mm.jjjj"/"dd/mm/yyyy"
+   segments are the browser's own locale format, not something a placeholder attribute reaches. So
+   the input's own text is made transparent while empty and #ub-visa-effective-placeholder (below)
+   reads "Немедленно" on top of it instead - the calendar icon (::-webkit-calendar-picker-indicator)
+   isn't part of this rule and stays visible either way. */
+#ub-visa-effective-date.ub-date-empty { color: transparent; }
+/* Hidden by default, shown only next to an empty input (the ".ub-date-empty" sibling rule below) -
+   pure CSS off the input's own class, so the client only ever has to toggle one thing. pointer-
+   events:none lets a click still reach the input underneath and open its picker. */
+#ub-visa-effective-placeholder {
+  display: none;
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: "Monocraft", monospace;
+  font-size: 11px;
+  color: #444;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#ub-visa-effective-date.ub-date-empty + #ub-visa-effective-placeholder { display: block; }
 
 /* The stamp mark itself, appended to the visa when a stamp button is pressed. */
 .ub-imprint {

@@ -1628,6 +1628,7 @@
     "resolutionLabel": "Комментарий для пользователя (необязательно)",
     "resolutionPlaceholder": "Увидит на Twitch, до 500 символов",
     "effectiveLabel": "Вступает в силу:",
+    "effectiveImmediate": "Немедленно",
     "approve": "Одобрить",
     "deny": "Отказать",
     "approveStamp": "ОДОБРЕНО",
