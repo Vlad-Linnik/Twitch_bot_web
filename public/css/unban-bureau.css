@@ -199,28 +199,22 @@ body.ub-playing footer {
   pointer-events: none;
   z-index: 10000;
 }
-#ub-appeal-zone {
+/* The two desk-docked papers share ONE hit area, deliberately: the whole desktop
+   in front of the moderator is "put it down over there", and having the appeal
+   note forgiving while the experts sheet needed aiming at a small target was the
+   difference you felt rather than saw. Declared as a single rule so the two
+   cannot drift apart in a later edit.
+   They still land in different places - #ub-appeal-card shrinks wherever it was
+   let go, #ub-experts-card magnets to the sheet drawn at 231,879 (see
+   dockExperts()) - because only one of them has a home painted into the
+   artwork to line up with. */
+#ub-appeal-zone,
+#ub-experts-zone {
   position: absolute;
   left: 104px;
   top: 689px;
   width: 535px;
   height: 331px;
-  pointer-events: none;
-  z-index: 10000;
-}
-/* The blank sheet lying on the desk left of the typewriter, where the two expert
-   opinions dock. Its home is measured off main-gui.png rather than eyeballed:
-   the drawn sheet occupies exactly 231..293 x 879..992, so #ub-experts-card's
-   shrunken size (63x114 below) covers the artwork's sheet and nothing else.
-   The hit area is padded out around it, since a 63px-wide drop target is
-   unusable with a card held under the cursor. It sits INSIDE #ub-appeal-zone,
-   which is harmless: each drag only ever tests its own card's zone. */
-#ub-experts-zone {
-  position: absolute;
-  left: 165px;
-  top: 805px;
-  width: 150px;
-  height: 250px;
   pointer-events: none;
   z-index: 10000;
 }

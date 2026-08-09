@@ -1201,10 +1201,13 @@
     dragging = null;
     play("dragStop");
 
-    // Dropped anywhere over its corner of the desk, the experts sheet magnets back into its pocket
-    // rather than being left wherever the cursor happened to be. It is the only paper with a drawn
-    // home to line up with: a few pixels out and the card no longer covers the sheet painted into
-    // the artwork, which is exactly the seam this whole arrangement exists to hide.
+    // Dropped anywhere on the desktop - the same forgiving area the appeal note uses, they share one
+    // zone - the experts sheet magnets back into its pocket rather than being left wherever the
+    // cursor happened to be. It is the only paper with a drawn home to line up with: a few pixels
+    // out and the card no longer covers the sheet painted into the artwork, which is exactly the
+    // seam this whole arrangement exists to hide. Note the shrink preview during the drag is now
+    // rare (the zone is large enough that the cursor may never leave it, and shrinkArmed suppresses
+    // the preview until it does) - the snap on release is what tells the moderator it landed.
     if (paper.id === "ub-experts-card") {
       if (inZone(toStage(event), "ub-experts-zone")) dockExperts();
       else syncExpertsSlot();
