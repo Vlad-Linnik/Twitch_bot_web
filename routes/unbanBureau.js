@@ -306,16 +306,8 @@ router.post(
 
       const shot = await sniperShotsRepo.requestShot(channel, req.user, req.body.id || null);
 
-      await settingsChangeLogRepo.logChange({
-        channelLogin: channel.channelLogin,
-        user: req.user,
-        category: "unban_request",
-        action: "sniper",
-        target: req.user.login,
-        before: null,
-        after: { requested: true },
-      });
-
+      // Deliberately NOT written to SettingsChangeLog (was, until 2026-08-09) - see
+      // db/sniperShotsRepo.js for the shot record itself, which is the audit trail now.
       res.json({ ok: true, shotId: String(shot._id) });
     } catch (err) {
       next(err);
