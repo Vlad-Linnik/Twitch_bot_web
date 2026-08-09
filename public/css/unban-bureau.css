@@ -208,13 +208,30 @@ body.ub-playing footer {
   pointer-events: none;
   z-index: 10000;
 }
+/* The blank sheet lying on the desk left of the typewriter, where the two expert
+   opinions dock. Its home is measured off main-gui.png rather than eyeballed:
+   the drawn sheet occupies exactly 231..293 x 879..992, so #ub-experts-card's
+   shrunken size (63x114 below) covers the artwork's sheet and nothing else.
+   The hit area is padded out around it, since a 63px-wide drop target is
+   unusable with a card held under the cursor. It sits INSIDE #ub-appeal-zone,
+   which is harmless: each drag only ever tests its own card's zone. */
+#ub-experts-zone {
+  position: absolute;
+  left: 200px;
+  top: 845px;
+  width: 125px;
+  height: 182px;
+  pointer-events: none;
+  z-index: 10000;
+}
 #ub-wrapper.ub-debug #ub-window-zone,
-#ub-wrapper.ub-debug #ub-appeal-zone {
+#ub-wrapper.ub-debug #ub-appeal-zone,
+#ub-wrapper.ub-debug #ub-experts-zone {
   background-color: rgb(255 0 0 / 0.25);
   border: 2px dashed red;
 }
 
-/* --- the three papers ----------------------------------------------------- */
+/* --- the four papers ------------------------------------------------------ */
 
 .ub-paper {
   position: absolute;
@@ -257,6 +274,30 @@ body.ub-playing footer {
   transition: top 0.3s ease-out;
 }
 
+/* The fourth sheet: the prosecutor's and advocate's speeches, typed rather than
+   handwritten (the appeal is the applicant's own hand; this came off the desk's
+   typewriter). No PNG of its own - the other three are photographed props, this
+   one is a plain sheet, so it's drawn here: paper stock, a hairline rule under
+   the heading, and the hatched binding strip the artwork's blank sheet has down
+   its left edge. Sized to be read, not to fit: the speeches run ~750 characters
+   each and the body scrolls. */
+#ub-experts-card {
+  width: 440px;
+  height: 620px;
+  background-color: #efe9dc;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgb(0 0 0 / 0.11) 0 3px,
+    rgb(0 0 0 / 0) 3px 8px
+  );
+  background-size: 26px 100%;
+  background-repeat: no-repeat;
+  border: 1px solid #b3a88f;
+  /* Deliberately no `transition: top` (the other papers have one): this sheet is
+     already lying on the desk in the artwork rather than being printed out, so
+     it snaps to its home instead of sliding there - see dealPapers(). */
+}
+
 /* Shrunken states, entered by dragging a card over its drop zone. */
 .ub-small-visa {
   transform: scale(0.45) !important;
@@ -274,6 +315,18 @@ body.ub-playing footer {
   height: 90px !important;
   overflow: hidden !important;
   pointer-events: none !important;
+}
+/* Exactly the drawn sheet's footprint in main-gui.png, so docked it reads as the
+   artwork rather than as a card sitting on top of it. Nothing is legible at this
+   size, so the text is hidden outright instead of being shrunk to noise. */
+.ub-small-experts {
+  width: 63px !important;
+  height: 114px !important;
+  border-color: rgb(0 0 0 / 0.2) !important;
+}
+.ub-small-experts #ub-experts-title,
+.ub-small-experts #ub-experts-body {
+  display: none !important;
 }
 
 /* --- user card internals -------------------------------------------------- */
@@ -682,6 +735,111 @@ body.ub-playing footer {
 #ub-appeal-text::-webkit-scrollbar { width: 6px; }
 #ub-appeal-text::-webkit-scrollbar-track { background: transparent; }
 #ub-appeal-text::-webkit-scrollbar-thumb { background: rgb(0 0 0 / 0.2); border-radius: 3px; }
+
+/* Filing date, printed under the appeal text near the card's bottom edge (text ends at
+   top:60px + height:200px = 260px on the 320x320 card). */
+#ub-appeal-date {
+  position: absolute;
+  bottom: 12px;
+  left: 30px;
+  right: 25px;
+  font-family: "Monocraft", monospace;
+  font-size: 12px;
+  color: rgb(0 0 0 / 0.55);
+  text-align: right;
+  pointer-events: none;
+}
+.ub-small-appeal #ub-appeal-date { display: none; }
+
+/* --- fourth sheet internals ----------------------------------------------- */
+
+#ub-experts-title {
+  position: absolute;
+  top: 20px;
+  left: 44px;
+  right: 22px;
+  font-size: 15px;
+  letter-spacing: 2px;
+  text-align: center;
+  color: #3b3327;
+  border-bottom: 1px solid rgb(0 0 0 / 0.25);
+  padding-bottom: 8px;
+  pointer-events: none;
+}
+#ub-experts-body {
+  position: absolute;
+  top: 62px;
+  left: 44px;
+  right: 22px;
+  bottom: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1e1a13;
+  pointer-events: auto;
+  word-break: break-word;
+}
+#ub-experts-body::-webkit-scrollbar { width: 6px; }
+#ub-experts-body::-webkit-scrollbar-track { background: transparent; }
+#ub-experts-body::-webkit-scrollbar-thumb { background: rgb(0 0 0 / 0.2); border-radius: 3px; }
+
+.ub-speech + .ub-speech { margin-top: 16px; }
+.ub-speech-role {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #6a5c42;
+  margin-bottom: 3px;
+}
+/* pre-wrap so a paragraph break an agent typed survives, without letting the
+   text forge structure - the string is set via textContent, never as markup. */
+.ub-speech-text { white-space: pre-wrap; }
+/* The prosecutor's second move is a reply to the defence, so it is indented and
+   ruled off - otherwise it reads as a third, separate accusation. */
+.ub-speech-rebuttal {
+  border-left: 2px solid rgb(0 0 0 / 0.2);
+  padding-left: 10px;
+}
+/* Says the accusation above is the rewritten one. Without it a moderator has no
+   way to tell a first draft from a second, and the difference is the whole
+   reason the prosecutor gets a second move. */
+.ub-speech-note {
+  font-size: 11px;
+  color: #7a6a4d;
+  margin-top: 4px;
+}
+#ub-experts-empty {
+  position: absolute;
+  top: 50%;
+  left: 44px;
+  right: 22px;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: 13px;
+  color: #8a7c63;
+  pointer-events: none;
+}
+.ub-small-experts #ub-experts-empty { display: none !important; }
+
+/* Docked, the sheet is 63px wide and says nothing. This is the one bit of ink
+   visible at that size: a few typed-looking rules, shown only when the case
+   actually has opinions, so a moderator can see there is something to pick up
+   without picking up every case's sheet to find out. */
+#ub-experts-mark {
+  display: none;
+  position: absolute;
+  top: 22px;
+  left: 26px;
+  right: 8px;
+  height: 60px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.45) 0 2px,
+    rgb(0 0 0 / 0) 2px 7px
+  );
+  pointer-events: none;
+}
+.ub-small-experts.ub-has-opinions #ub-experts-mark { display: block; }
 
 #ub-visa-name {
   position: absolute;

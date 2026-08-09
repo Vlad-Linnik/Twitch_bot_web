@@ -607,6 +607,12 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     // empty `sharedBanChannels` and the comments tab's missing shared notes mean "nothing to find" or
     // "we were never allowed to look". Same shape of trap as `subscription`'s three states.
     banSharing: unbanCase?.twitchModLogs?.banSharing || null,
+    // The channel's own posted chat rules (Twitch's `chatSettings.rules`), mirrored by the bot off
+    // the same private GraphQL call as everything else in `twitchModLogs` - see
+    // TwitchBot/twitch/viewerCardModLogs.js's toChannelRules. Null when the channel posted none or
+    // the mirror is absent; never invented here. Only lib/unbanCaseBrief.js reads it so far: an
+    // accusation has to cite a rule, and these are the rules.
+    channelRules: unbanCase?.twitchModLogs?.channelRules || null,
     log,
     modComments,
     // {state: 'subscribed'|'none'|'unavailable', tier, prime}, or null when the bot never got a
@@ -617,8 +623,56 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
   };
 }
 
+// The punishments that a context window is worth building for. A lifting, an acknowledgement or a
+// past appeal has no "what did they say just before it" to show - nobody is muted for the message
+// preceding their own unban.
+const CONTEXTABLE_ACTIONS = new Set(["ban", "timeout", "warn"]);
+
+/**
+ * The handful of messages immediately preceding each of the applicant's recent punishments.
+ *
+ * The review page never needed this: a moderator hovers a row and pulls the context for that one
+ * action (routes/statistics.js's /mod-action-context.json). lib/unbanCaseBrief.js does, because the
+ * two expert agents have no hover - and without these windows neither side can check the appeal's
+ * own account of events. On the live `mandju_edo` case the applicant blames a Dota meme; only these
+ * ten lines show that nothing of the sort appears anywhere near the ban.
+ *
+ * Implemented on top of getLogPage() rather than querying `messages` directly, and that is the
+ * whole point: the two sources (ours and Twitch's mirror) may not simply be concatenated - see that
+ * function's THIN/DEEP comment - and a second, subtly different merge here is exactly how the two
+ * would drift. Asking it for `limit` entries ending at the action's timestamp gives the correct
+ * window for free, at the cost of one query per action.
+ */
+async function getPunishmentContexts(
+  channelLogin,
+  unbanCase,
+  { perAction = 10, maxActions = 5 } = {}
+) {
+  const actions = await buildActionList(channelLogin, unbanCase);
+  const punishments = actions.filter((a) => CONTEXTABLE_ACTIONS.has(a.action)).slice(0, maxActions);
+
+  return Promise.all(
+    punishments.map(async (action) => {
+      const page = await getLogPage(channelLogin, unbanCase, {
+        before: action.timestamp,
+        limit: perAction,
+      });
+      return {
+        action: action.action,
+        timestamp: action.timestamp,
+        modDisplayName: action.modDisplayName || null,
+        durationMs: action.durationMs ?? null,
+        // Actions inside the window are dropped: this is "what they were saying", and a second
+        // punishment three lines up is already its own entry in this list.
+        messages: page.entries.filter((entry) => entry.type === "message"),
+      };
+    })
+  );
+}
+
 module.exports = {
   DEFAULT_LOG_LIMIT,
   getDossier,
   getLogPage,
+  getPunishmentContexts,
 };

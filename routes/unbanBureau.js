@@ -20,6 +20,7 @@ const channelConfigRepo = require("../db/channelConfigRepo");
 const unbanRequestsRepo = require("../db/unbanRequestsRepo");
 const unbanDossierRepo = require("../db/unbanDossierRepo");
 const unbanBureauShiftRepo = require("../db/unbanBureauShiftRepo");
+const unbanOpinionsRepo = require("../db/unbanOpinionsRepo");
 const sniperShotsRepo = require("../db/sniperShotsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
@@ -158,7 +159,20 @@ router.get(
       const dossier = await unbanDossierRepo.getDossier(channel.channelLogin, unbanCase, {
         before: req.query.before || null,
       });
-      res.json({ ok: true, dossier });
+
+      // The fourth sheet's two speeches ride along here rather than in the page's `data-cases`
+      // attribute, for the reason unbanRequestsRepo.listPendingForChannel projects twitchModLogs
+      // out: everything embedded in that attribute is paid for by every case in the queue on every
+      // page load, and three paragraphs per case is exactly the kind of thing that grew one
+      // channel's markup from 1KB to 25KB last time. Most cases have no opinions at all.
+      //
+      // Skipped when paging the log (?before=): that request is a scroll-back for more chat lines
+      // and re-sending an unchanged sheet with each page is pure waste.
+      const opinions = req.query.before
+        ? undefined
+        : await unbanOpinionsRepo.findByCaseId(String(unbanCase._id));
+
+      res.json({ ok: true, dossier, ...(opinions === undefined ? {} : { opinions: opinions || null }) });
     } catch (err) {
       next(err);
     }

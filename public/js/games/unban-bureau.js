@@ -1,7 +1,7 @@
 // «Бюро амнистии» — client for /:channel/unban-bureau (views/unbanBureau.ejs).
 //
 // Runs the whole desk: a queue of pedestrians on the street, an applicant who walks up to the
-// window when called, three documents you physically drag around, a stamp machine that slides out
+// window when called, four documents you physically drag around, a stamp machine that slides out
 // of the right wall, and a rifle scope for the "stray bullet".
 //
 // NOTHING HERE TALKS TO TWITCH. Handing a stamped visa back through the window POSTs to
@@ -426,6 +426,7 @@
     var appealTextEl = $("ub-appeal-text");
     appealTextEl.textContent = "";
     appendWithEmotes(appealTextEl, c.text || T.noAppealText);
+    $("ub-appeal-date").textContent = c.requestedAt ? T.appealSubmitted + " " + fmtDate(c.requestedAt) : "";
     $("ub-visa-name").textContent = "ВИЗА: " + c.userLogin;
 
     renderVote(c.vote);
@@ -437,6 +438,9 @@
     $("ub-mod-comments").textContent = "";
     $("ub-actions").textContent = "";
     $("ub-log-msg-count").textContent = "";
+    // Cleared before the fetch like the panes above: the sheet must never show the previous
+    // applicant's speeches during the round-trip, and most cases have none at all.
+    renderOpinions(null);
     // Reset before the fetch, so a scroll landing mid-load can't page the previous applicant's log.
     logState.hasMore = false;
     logState.oldest = null;
@@ -445,11 +449,68 @@
     dealPapers();
   }
 
-  // Slides the three documents up from below the desk, as if printed out.
+  // Renders the two expert speeches onto the fourth sheet, or its empty state.
+  //
+  // Every string here goes through textContent, like the rest of this file: these are model-written
+  // paragraphs quoting an applicant's own chat lines back, i.e. attacker-influenced text on a page a
+  // tier-2 moderator is logged into.
+  //
+  // `null` is the normal case, not an error - most appeals are never argued. The sheet then shows
+  // its empty state and, docked, carries no ink mark, so the moderator can tell at a glance from the
+  // desk whether there is anything on it to pick up.
+  function renderOpinions(opinions) {
+    var body = $("ub-experts-body");
+    var card = $("ub-experts-card");
+    body.textContent = "";
+
+    var has = Boolean(opinions && opinions.prosecutor && opinions.advocate);
+    card.classList.toggle("ub-has-opinions", has);
+    $("ub-experts-empty").style.display = has ? "none" : "";
+    if (!has) return;
+
+    // The order is the order of the hearing, and it matters: the advocate is answering the
+    // accusation directly above it, and the prosecutor's reply answers the defence above that.
+    var speeches = [
+      { role: T.expertProsecutor, text: opinions.prosecutor.final,
+        note: opinions.decision === "rewrite" ? T.expertRewritten : null },
+      { role: T.expertAdvocate, text: opinions.advocate.final },
+    ];
+    if (opinions.prosecutor.rebuttal) {
+      speeches.push({ role: T.expertRebuttal, text: opinions.prosecutor.rebuttal, rebuttal: true });
+    }
+
+    speeches.forEach(function (speech) {
+      if (!speech.text) return;
+      var block = document.createElement("div");
+      block.className = "ub-speech" + (speech.rebuttal ? " ub-speech-rebuttal" : "");
+
+      var role = document.createElement("div");
+      role.className = "ub-speech-role";
+      role.textContent = speech.role;
+      block.appendChild(role);
+
+      var text = document.createElement("div");
+      text.className = "ub-speech-text";
+      text.textContent = speech.text;
+      block.appendChild(text);
+
+      if (speech.note) {
+        var note = document.createElement("div");
+        note.className = "ub-speech-note";
+        note.textContent = speech.note;
+        block.appendChild(note);
+      }
+      body.appendChild(block);
+    });
+    body.scrollTop = 0;
+  }
+
+  // Slides the four documents up from below the desk, as if printed out.
   function dealPapers() {
     var user = $("ub-user-card");
     var visa = $("ub-visa-card");
     var appeal = $("ub-appeal-card");
+    var experts = $("ub-experts-card");
 
     Array.prototype.forEach.call(document.querySelectorAll(".ub-paper"), function (n) { n.style.display = "block"; });
 
@@ -458,6 +519,17 @@
     appeal.style.left = "317px";
     appeal.style.top = "640px";
     appeal.style.transform = "rotate(" + (Math.floor(Math.random() * 10) - 5) + "deg)";
+
+    // The fourth sheet is not printed with the others - it is already lying on the desk in the
+    // artwork, so it snaps back to exactly the drawn sheet's coordinates (measured off main-gui.png,
+    // see the stylesheet) rather than sliding up from below. `ub-no-transition` is what stops it
+    // gliding across the desk from wherever the previous case left it.
+    experts.classList.add("ub-no-transition");
+    experts.classList.add("ub-small-experts");
+    experts.style.left = "231px";
+    experts.style.top = "879px";
+    experts.style.transform = "rotate(0deg)";
+    experts.style.zIndex = "";
 
     user.classList.add("ub-no-transition");
     visa.classList.add("ub-no-transition");
@@ -927,6 +999,9 @@
           renderRisk(d.risk, d.counts);
           renderModComments(d);
           renderActions(d);
+          // Sent only on a first load, not on a ?before= log page - the route omits the field
+          // entirely there rather than re-sending an unchanged sheet with every scroll-back.
+          renderOpinions(payload.opinions || null);
           $("ub-log-msg-count").textContent = fmtMessageCount(d.log.messageCount);
           // Newest is at the bottom now, like the log - if the actions tab is what the moderator
           // was already looking at (the active tab carries over between cases), land on the newest
@@ -994,11 +1069,21 @@
   // Date.now(), which wraps every ~100s of absolute epoch time and can hand out a SMALLER value to
   // a paper picked up later) guarantees "most recently grabbed" always wins.
   var topZCounter = 0;
-  // Whether the appeal note is allowed to auto-shrink back down while the cursor is still over its
-  // home zone. Picking it up off the desk un-shrinks it immediately (see the mousedown handler
+  // Whether a desk-docked paper is allowed to auto-shrink back down while the cursor is still over
+  // its home zone. Picking one up off the desk un-shrinks it immediately (see the mousedown handler
   // below); without this guard, the very next mousemove would see the cursor still inside the zone
   // it was just grabbed from and shrink it right back, producing a big-then-small flicker.
-  var appealArmed = true;
+  // Keyed by paper id, because both the appeal note and the experts sheet dock this way and a
+  // single shared flag would let one card's pickup disarm the other's.
+  var shrinkArmed = {};
+
+  // The two papers that live docked on the desk rather than being held in front of the moderator.
+  // `small`/`big` are the grab offsets used while the card is in each state - a card that changes
+  // size under the cursor has to be re-centred on it or it jumps out from under the pointer.
+  var DOCKED = {
+    "ub-appeal-card": { cls: "ub-small-appeal", zone: "ub-appeal-zone", small: { x: 60, y: 60 }, big: { x: 150, y: 150 } },
+    "ub-experts-card": { cls: "ub-small-experts", zone: "ub-experts-zone", small: { x: 31, y: 57 }, big: { x: 220, y: 120 } },
+  };
 
   function zoneRect(id) {
     var style = window.getComputedStyle($(id));
@@ -1018,9 +1103,10 @@
       if (target.tagName.toLowerCase() === "textarea") return;
       if (target.id === "ub-visa-effective-date") return;
       if (target.classList.contains("ub-tab")) return;
-      // Let the scroll bars of the log/appeal panes work instead of starting a drag.
+      // Let the scroll bars of the log/appeal/experts panes work instead of starting a drag.
       if ((target.id === "ub-chat-logs" || target.id === "ub-mod-comments" ||
-           target.id === "ub-actions" || target.id === "ub-appeal-text") &&
+           target.id === "ub-actions" || target.id === "ub-appeal-text" ||
+           target.id === "ub-experts-body") &&
           event.offsetX > target.clientWidth - 15) return;
 
       dragging = paper;
@@ -1032,16 +1118,20 @@
       var point = toStage(event);
       var rect = paper.getBoundingClientRect();
 
-      // Picking the appeal note up off the desk un-shrinks it, so grab it by its middle.
-      if (paper.id === "ub-appeal-card" && paper.classList.contains("ub-small-appeal")) {
-        paper.classList.remove("ub-small-appeal");
-        dragOffset = { x: 150, y: 150 };
+      // Picking a docked paper up off the desk un-shrinks it, so grab it by its middle.
+      var docked = DOCKED[paper.id];
+      if (docked && paper.classList.contains(docked.cls)) {
+        paper.classList.remove(docked.cls);
+        // The experts sheet snaps rather than animating (dealPapers() leaves ub-no-transition on
+        // it), but the class is re-added on every mousedown above anyway - so un-shrinking here is
+        // instant for both papers regardless.
+        dragOffset = docked.big;
         paper.style.left = point.x - dragOffset.x + "px";
         paper.style.top = point.y - dragOffset.y + "px";
-        appealArmed = false;
+        shrinkArmed[paper.id] = false;
       } else {
         dragOffset = { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale };
-        if (paper.id === "ub-appeal-card") appealArmed = true;
+        if (docked) shrinkArmed[paper.id] = true;
       }
       event.preventDefault();
     });
@@ -1054,20 +1144,20 @@
     dragging.style.left = point.x - dragOffset.x + "px";
     dragging.style.top = point.y - dragOffset.y + "px";
 
-    // Both papers shrink while held over their drop zone, which is the whole feedback that the
+    // The papers shrink while held over their drop zone, which is the whole feedback that the
     // zone is live — there is no highlight on the artwork itself.
-    var shrink = null;
-    if (dragging.id === "ub-visa-card") shrink = { cls: "ub-small-visa", zone: "ub-window-zone", small: { x: 65, y: 70 }, big: { x: 140, y: 150 } };
-    else if (dragging.id === "ub-appeal-card") shrink = { cls: "ub-small-appeal", zone: "ub-appeal-zone", small: { x: 60, y: 60 }, big: { x: 150, y: 150 } };
+    var shrink = dragging.id === "ub-visa-card"
+      ? { cls: "ub-small-visa", zone: "ub-window-zone", small: { x: 65, y: 70 }, big: { x: 140, y: 150 } }
+      : DOCKED[dragging.id];
     if (!shrink) return;
 
     var inside = inZone(point, shrink.zone);
 
-    // See appealArmed's declaration: suppress the appeal note's shrink-preview until the cursor has
+    // See shrinkArmed's declaration: suppress a docked paper's shrink-preview until the cursor has
     // actually left its home zone once since pickup, or grabbing it in place would flicker.
-    if (shrink.cls === "ub-small-appeal") {
-      if (!inside) appealArmed = true;
-      if (!appealArmed) return;
+    if (DOCKED[dragging.id]) {
+      if (!inside) shrinkArmed[dragging.id] = true;
+      if (!shrinkArmed[dragging.id]) return;
     }
 
     var isSmall = dragging.classList.contains(shrink.cls);
@@ -1075,7 +1165,9 @@
 
     dragging.classList.toggle(shrink.cls, inside);
     dragOffset = inside ? shrink.small : shrink.big;
-    if (inside && shrink.cls === "ub-small-appeal") dragging.style.transform = "rotate(0deg)";
+    // Docked papers lie square on the desk; only the appeal note is dealt at a random angle, and
+    // that tilt has to come off as it settles into its slot.
+    if (inside && DOCKED[dragging.id]) dragging.style.transform = "rotate(0deg)";
     dragging.style.left = point.x - dragOffset.x + "px";
     dragging.style.top = point.y - dragOffset.y + "px";
   });
@@ -1343,6 +1435,7 @@
     chat: { el: "ub-chat-logs", size: 14, min: 8, max: 24, display: "ub-font-chat-display" },
     appeal: { el: "ub-appeal-text", size: 30, min: 10, max: 60, display: "ub-font-appeal-display" },
     visa: { el: "ub-visa-reason", size: 13, min: 8, max: 24, display: "ub-font-visa-display" },
+    experts: { el: "ub-experts-body", size: 13, min: 8, max: 24, display: "ub-font-experts-display" },
   };
 
   // Applies one font size to its element, the panel's readout and the stored preference.

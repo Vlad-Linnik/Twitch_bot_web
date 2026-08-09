@@ -44,6 +44,7 @@
       <div id="ub-street"></div>
       <div id="ub-window-zone"></div>
       <div id="ub-appeal-zone"></div>
+      <div id="ub-experts-zone"></div>
 
       <div id="ub-loudspeaker" title="<%= t('unbanBureau.callNext') %>"></div>
       <div id="ub-weight">82</div>
@@ -117,6 +118,14 @@
               <button type="button" class="ub-font-btn" data-font="visa" data-delta="1">+</button>
             </div>
           </div>
+          <div class="ub-settings-row">
+            <span><%= t('unbanBureau.fontExperts') %></span>
+            <div class="ub-controls-group">
+              <button type="button" class="ub-font-btn" data-font="experts" data-delta="-1">-</button>
+              <span id="ub-font-experts-display">13px</span>
+              <button type="button" class="ub-font-btn" data-font="experts" data-delta="1">+</button>
+            </div>
+          </div>
         </div>
 
         <div class="ub-settings-section">
@@ -138,7 +147,7 @@
       <div id="ub-toast"></div>
     </div>
 
-    <%# The three documents. Everything inside is filled via textContent by the client. %>
+    <%# The four documents. Everything inside is filled via textContent by the client. %>
     <div id="ub-papers-layer">
       <div class="ub-paper ub-draggable" id="ub-user-card">
         <img id="ub-uc-avatar" src="" alt="" />
@@ -189,6 +198,19 @@
 
       <div class="ub-paper ub-draggable" id="ub-appeal-card">
         <div id="ub-appeal-text"></div>
+        <div id="ub-appeal-date"></div>
+      </div>
+
+      <%# The fourth sheet: the prosecutor's and advocate's speeches on this case. Written by
+          Claude Code through the admin API (see routes/adminApi.js) and stored web-only - the
+          bot never sees them and a verdict is decided identically without them. Every string
+          inside is set from Mongo via textContent by renderOpinions(); nothing here is
+          server-rendered per case. %>
+      <div class="ub-paper ub-draggable" id="ub-experts-card">
+        <div id="ub-experts-title"><%= t('unbanBureau.expertsHeading') %></div>
+        <div id="ub-experts-body"></div>
+        <div id="ub-experts-empty"><%= t('unbanBureau.expertsEmpty') %></div>
+        <div id="ub-experts-mark"></div>
       </div>
 
       <div class="ub-paper ub-draggable" id="ub-visa-card">
@@ -238,9 +260,14 @@
          subPrime: t('unbanBureau.subPrime'),
          subUnavailable: t('unbanBureau.subUnavailable'),
          noAppealText: t('unbanBureau.noAppealText'),
+         appealSubmitted: t('unbanBureau.appealSubmitted'),
          logEmpty: t('unbanBureau.logEmpty'),
          messages: t('unbanBureau.messages'),
          needStamp: t('unbanBureau.needStamp'),
+         expertProsecutor: t('unbanBureau.expertProsecutor'),
+         expertAdvocate: t('unbanBureau.expertAdvocate'),
+         expertRebuttal: t('unbanBureau.expertRebuttal'),
+         expertRewritten: t('unbanBureau.expertRewritten'),
          queued: t('unbanBureau.queued'),
          applied: t('unbanBureau.applied'),
          approveScheduled: t('unbanBureau.approveScheduled'),
