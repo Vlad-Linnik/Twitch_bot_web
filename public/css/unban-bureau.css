@@ -981,25 +981,11 @@ body.ub-playing footer {
 }
 .ub-small-rules #ub-rules-empty { display: none !important; }
 
-/* Docked, the notebook is 82px wide and says nothing. Same affordance as
-   #ub-experts-mark: a few ruled lines, shown only when the channel actually
-   posted rules, so a moderator on a channel with none never has to pick the
-   notebook up to find that out. */
-#ub-rules-mark {
-  display: none;
-  position: absolute;
-  top: 22px;
-  left: 18px;
-  right: 10px;
-  height: 70px;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgb(0 0 0 / 0.4) 0 2px,
-    rgb(0 0 0 / 0) 2px 8px
-  );
-  pointer-events: none;
-}
-.ub-small-rules.ub-has-rules #ub-rules-mark { display: block; }
+/* Unlike the fourth sheet - genuinely blank when empty, so it needs an ink mark to
+   signal there's something to pick up - the notebook's cover already has a badge
+   and ruled lines painted into the artwork at every size. A synthetic "has content"
+   overlay on top of that (tried at first, dropped 2026-08-09) only fought with the
+   existing artwork and read as a rendering glitch, not a hint. */
 
 #ub-visa-name {
   position: absolute;

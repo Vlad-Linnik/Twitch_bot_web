@@ -498,11 +498,9 @@
   // string on this page - they go through textContent, never innerHTML.
   function renderRules(rules) {
     var body = $("ub-rules-body");
-    var card = $("ub-rules-card");
     body.textContent = "";
 
     var has = Boolean(rules && rules.length);
-    card.classList.toggle("ub-has-rules", has);
     $("ub-rules-empty").style.display = has ? "none" : "";
     if (!has) return;
 
