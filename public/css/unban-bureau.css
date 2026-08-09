@@ -299,23 +299,16 @@ body.ub-playing footer {
    artwork's own pixels (experts-card.png, cropped straight out at 231,879
    63x114), so it and the tray it sits in are the same picture. Opened, that
    63px crop would be a 7x blur, so the enlarged sheet is redrawn here from the
-   artwork's SAMPLED colours - #fefefe stock, #b1b1b1 hatch and dotted rule.
-   The one deliberate difference: on the drawn sheet the hatched binding strip
-   covers ~40% of its width, which at 440px would run under half the text, so
-   enlarged it stays a strip.
+   artwork's SAMPLED colour - #fefefe stock - plus the dotted rule. The drawn
+   sheet's hatched binding strip is dropped at this size: it ate a visible
+   column of the sheet's width for no reading value, and the text needs the
+   room more than the sheet needs to match the artwork exactly.
    Sized to be read, not to fit: the speeches run ~750 characters each and the
    body scrolls. */
 #ub-experts-card {
-  width: 440px;
+  width: 500px;
   height: 620px;
   background-color: #fefefe;
-  background-image: repeating-linear-gradient(
-    45deg,
-    #b1b1b1 0 4px,
-    rgb(255 255 255 / 0) 4px 12px
-  );
-  background-size: 46px 100%;
-  background-repeat: no-repeat;
   /* Deliberately no `transition: top` (the other papers have one): this sheet is
      already lying on the desk in the artwork rather than being printed out, so
      it snaps to its home instead of sliding there - see dealPapers(). */
@@ -790,7 +783,7 @@ body.ub-playing footer {
 #ub-experts-title {
   position: absolute;
   top: 20px;
-  left: 44px;
+  left: 24px;
   right: 22px;
   font-size: 15px;
   letter-spacing: 2px;
@@ -803,7 +796,7 @@ body.ub-playing footer {
 #ub-experts-body {
   position: absolute;
   top: 62px;
-  left: 44px;
+  left: 24px;
   right: 22px;
   bottom: 20px;
   overflow-y: auto;
@@ -845,7 +838,7 @@ body.ub-playing footer {
 #ub-experts-empty {
   position: absolute;
   top: 50%;
-  left: 44px;
+  left: 24px;
   right: 22px;
   transform: translateY(-50%);
   text-align: center;

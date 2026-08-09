@@ -1100,7 +1100,7 @@
   // size under the cursor has to be re-centred on it or it jumps out from under the pointer.
   var DOCKED = {
     "ub-appeal-card": { cls: "ub-small-appeal", zone: "ub-appeal-zone", small: { x: 60, y: 60 }, big: { x: 150, y: 150 } },
-    "ub-experts-card": { cls: "ub-small-experts", zone: "ub-experts-zone", small: { x: 31, y: 57 }, big: { x: 220, y: 120 } },
+    "ub-experts-card": { cls: "ub-small-experts", zone: "ub-experts-zone", small: { x: 31, y: 57 }, big: { x: 250, y: 120 } },
   };
 
   function zoneRect(id) {
