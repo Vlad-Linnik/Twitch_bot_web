@@ -1,0 +1,153 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabDiskUsage') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const dayFmt = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short' });
+
+  function formatBytes(bytes) {
+    const sign = bytes < 0 ? '-' : '';
+    const abs = Math.abs(bytes || 0);
+    if (abs < 1) return sign + '0 B';
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(sizes.length - 1, Math.floor(Math.log(abs) / Math.log(1024)));
+    return sign + (abs / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2) + ' ' + sizes[i];
+  }
+  function formatSignedBytesPerDay(bytesPerDay) {
+    const sign = bytesPerDay > 0 ? '+' : '';
+    return sign + formatBytes(bytesPerDay) + t('admin.diskUsagePerDay');
+  }
+
+  // Same static server-rendered SVG area chart as adminVisits.ejs - no client JS, the data is
+  // fixed at page load. Plotted by sample index (roughly-hourly, uniform spacing) rather than by
+  // timestamp, same simplification adminVisits.ejs makes for its daily buckets.
+  const CHART_W = 800, CHART_H = 200, PLOT_PAD = 4;
+  const fs = trends && trends.filesystem;
+  const series = fs ? fs.series : [];
+  const maxPct = 100;
+  const yFor = (pct) => CHART_H - PLOT_PAD - (pct / maxPct) * (CHART_H - 2 * PLOT_PAD);
+  const step = series.length > 1 ? CHART_W / (series.length - 1) : 0;
+
+  let areaPath = `M 0 ${CHART_H}`;
+  series.forEach(function (p, i) {
+    const x = series.length === 1 ? CHART_W / 2 : i * step;
+    areaPath += ` L ${x.toFixed(1)} ${yFor(p.usedPct).toFixed(1)}`;
+  });
+  areaPath += ` L ${CHART_W} ${CHART_H} Z`;
+
+  function tickIndices(n, want) {
+    const count = Math.min(want, n);
+    if (count <= 1) return n ? [0] : [];
+    const idx = [];
+    for (let i = 0; i < count; i++) idx.push(Math.round((i * (n - 1)) / (count - 1)));
+    return [...new Set(idx)];
+  }
+  const ticks = tickIndices(series.length, 6);
+
+  const collections = (trends && trends.collections) || [];
+  const maxCollectionSize = Math.max(...collections.map((c) => c.currentSize), 1);
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <section>
+    <p class="text-xs text-neutral-600 mb-6"><%= t('admin.diskUsageIntro') %></p>
+
+    <% if (!trends || !fs) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.diskUsageEmpty') %> (<%= sampleCount %>)</p>
+    <% } else { %>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.diskUsageUsed') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fs.usedPct.toFixed(1) %>%</p>
+          <p class="text-[11px] text-neutral-600"><%= formatBytes(fs.usedBytes) %> / <%= formatBytes(fs.totalBytes) %></p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.diskUsageGrowth') %></p>
+          <p class="text-xl font-semibold tabular-nums <%= fs.growthBytesPerDay > 0 ? 'text-amber-400' : 'text-neutral-100' %>">
+            <%= formatSignedBytesPerDay(fs.growthBytesPerDay) %>
+          </p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.diskUsageDaysToFull') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums">
+            <%= fs.daysToFull != null ? Math.round(fs.daysToFull) : t('admin.diskUsageNoProjection') %>
+          </p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.diskUsageSampleSpan') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= (trends.spanHours / 24).toFixed(1) %>d</p>
+        </div>
+      </div>
+
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.diskUsageChartHeading') %></h2>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 mb-10">
+        <div class="flex gap-2">
+          <div class="flex flex-col justify-between py-0.5 text-[11px] text-neutral-500 text-right shrink-0 w-8">
+            <span>100%</span>
+            <span>50%</span>
+            <span>0%</span>
+          </div>
+          <svg viewBox="0 0 <%= CHART_W %> <%= CHART_H %>" preserveAspectRatio="none" class="w-full h-40">
+            <defs>
+              <linearGradient id="disk-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#a855f7" stop-opacity="0.5" />
+                <stop offset="100%" stop-color="#a855f7" stop-opacity="0.03" />
+              </linearGradient>
+            </defs>
+            <% [PLOT_PAD, CHART_H / 2, CHART_H - PLOT_PAD].forEach(function (y) { %>
+              <line x1="0" y1="<%= y %>" x2="<%= CHART_W %>" y2="<%= y %>" stroke="#262626" stroke-width="1" vector-effect="non-scaling-stroke" />
+            <% }) %>
+            <path d="<%= areaPath %>" fill="url(#disk-fill)" stroke="#a855f7" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+          </svg>
+        </div>
+        <div class="flex justify-between text-[11px] text-neutral-500 mt-1 pl-10">
+          <% ticks.forEach(function (i) { %>
+            <span><%= dayFmt.format(series[i].timestamp) %></span>
+          <% }) %>
+        </div>
+      </div>
+
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.diskUsageCollectionsHeading') %></h2>
+      <p class="text-xs text-neutral-600 mb-4"><%= t('admin.diskUsageCollectionsIntro') %></p>
+
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[11px] text-neutral-500 border-b border-neutral-800">
+              <th class="px-4 py-2 font-medium"><%= t('admin.diskUsageColCollection') %></th>
+              <th class="px-4 py-2 font-medium text-right"><%= t('admin.diskUsageColSize') %></th>
+              <th class="px-4 py-2 font-medium text-right"><%= t('admin.diskUsageColGrowth') %></th>
+              <th class="px-4 py-2 font-medium text-right"><%= t('admin.diskUsageColDocs') %></th>
+              <th class="px-4 py-2 font-medium text-right"><%= t('admin.diskUsageColDocsPerDay') %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% collections.forEach(function (c) { %>
+              <tr class="border-b border-neutral-900 last:border-0">
+                <td class="px-4 py-2 text-neutral-200">
+                  <%= c.name %>
+                  <div class="h-1 rounded-full bg-neutral-800 overflow-hidden mt-1 w-24">
+                    <div class="h-full bg-purple-500 rounded-full" style="width: <%= Math.round((c.currentSize / maxCollectionSize) * 100) %>%"></div>
+                  </div>
+                </td>
+                <td class="px-4 py-2 text-right text-neutral-300 tabular-nums"><%= formatBytes(c.currentSize) %></td>
+                <td class="px-4 py-2 text-right tabular-nums <%= c.growthBytesPerDay > 0 ? 'text-amber-400' : 'text-neutral-500' %>">
+                  <%= formatSignedBytesPerDay(c.growthBytesPerDay) %>
+                </td>
+                <td class="px-4 py-2 text-right text-neutral-300 tabular-nums"><%= c.currentCount.toLocaleString(dateLocale) %></td>
+                <td class="px-4 py-2 text-right text-neutral-500 tabular-nums"><%= Math.round(c.growthDocsPerDay) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

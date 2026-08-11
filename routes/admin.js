@@ -15,6 +15,8 @@ const ownerTokensRepo = require("../db/ownerTokensRepo");
 const adminHealthRepo = require("../db/adminHealthRepo");
 const botHeartbeatRepo = require("../db/botHeartbeatRepo");
 const siteVisitsRepo = require("../db/siteVisitsRepo");
+const diskUsageRepo = require("../db/diskUsageRepo");
+const { computeDiskUsageTrends } = require("../lib/diskUsageAnalysis");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
@@ -325,6 +327,20 @@ router.get("/admin/visits", requireAdmin, async (req, res, next) => {
       .sort((a, b) => b.sessions - a.sessions);
 
     res.render("adminVisits", { tab: "statistics", dailyVisits, totalVisits, todayVisits, games });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Matches TwitchBot's db/diskUsageRepo.js TTL retention (90 days) - shows every sample the bot
+// hasn't expired yet, rather than an arbitrary shorter window.
+const DISK_USAGE_LOOKBACK_DAYS = 90;
+
+router.get("/admin/disk-usage", requireAdmin, async (req, res, next) => {
+  try {
+    const samples = await diskUsageRepo.getSamples(DISK_USAGE_LOOKBACK_DAYS);
+    const trends = computeDiskUsageTrends(samples);
+    res.render("adminDiskUsage", { tab: "disk-usage", trends, sampleCount: samples.length });
   } catch (err) {
     next(err);
   }
