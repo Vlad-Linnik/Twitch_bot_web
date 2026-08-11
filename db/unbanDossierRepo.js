@@ -15,7 +15,7 @@
 const { connect } = require("./connection");
 const { withHash, bareLogin, MOD_ACTION_CONTEXT_MAX_TTA_MS } = require("./statsRepo");
 const { getKnownBotIdentifiers } = require("../lib/knownBotIds");
-const { buildCaseBrief } = require("../lib/unbanCaseBrief");
+const { buildCaseBrief, pickLogBudget } = require("../lib/unbanCaseBrief");
 const profileCacheRepo = require("./profileCacheRepo");
 
 const DEFAULT_LOG_LIMIT = 40;
@@ -112,12 +112,42 @@ async function countHumanActions(channelLogin, userId) {
 // to see. Note the bot never records `unban`/`untimeout` (twitch/events.js only logs
 // ban/timeout/delete/warn), so this is "the last ban on record", not proof they're still banned -
 // though for a case that came out of Twitch's own unban-request queue, they are.
+//
+// One exception, unlike the bot-identity rule above: `reason: "duel"` (TwitchBot/games/muteDuel.js's
+// literal string, the only writer of that reason) is a lost minigame, not a moderation judgment -
+// showing it as "the ban being appealed" would be actively misleading, not merely incomplete.
 async function findLastBan(channelLogin, userId) {
   const { modLogs } = await ensureInitialized();
   return modLogs.findOne(
-    { channel: bareLogin(channelLogin), userId: String(userId), action: { $in: ["ban", "timeout"] } },
+    {
+      channel: bareLogin(channelLogin),
+      userId: String(userId),
+      action: { $in: ["ban", "timeout"] },
+      reason: { $ne: "duel" },
+    },
     { sort: { timestamp: -1 } }
   );
+}
+
+// Per-action-type counts of `!muteduel` losses (TwitchBot/games/muteDuel.js's literal
+// `reason: "duel"`, the only writer of that reason) - subtracted from Twitch's own totals below,
+// since Twitch's mirror has no concept of "issued by a minigame" and would otherwise count a lost
+// duel as a real punishment in a user's history. Mirrors countHumanActions()'s shape/defaults so
+// the subtraction below can index it the same way.
+async function countDuelActions(channelLogin, userId) {
+  const { modLogs } = await ensureInitialized();
+  const rows = await modLogs
+    .aggregate([
+      { $match: { channel: bareLogin(channelLogin), userId: String(userId), reason: "duel" } },
+      { $group: { _id: "$action", count: { $sum: 1 } } },
+    ])
+    .toArray();
+
+  const counts = { ban: 0, timeout: 0, delete: 0, warn: 0 };
+  for (const row of rows) {
+    if (row._id in counts) counts[row._id] = row.count;
+  }
+  return counts;
 }
 
 // Which UNBAN_REQUEST_CREATED rows in the Twitch mirror were actually decided (a later
@@ -534,8 +564,12 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
   // at 17 bans had 0 on record here). So the local aggregation is a fallback, not the default -
   // and it isn't even run when the mirrored numbers are there.
   const twitchCounts = unbanCase?.twitchModLogs?.counts || null;
-  const [localCounts, lastBan, log, actions] = await Promise.all([
+  const [localCounts, duelCounts, lastBan, log, actions] = await Promise.all([
     twitchCounts ? null : countHumanActions(channelLogin, userId),
+    // Only worth the extra query on the Twitch-sourced path: countHumanActions() above already
+    // excludes every bot-issued action (chatwizardbot included) on the fallback path, duels along
+    // with everything else.
+    twitchCounts ? countDuelActions(channelLogin, userId) : null,
     findLastBan(channelLogin, userId),
     getLogPage(channelLogin, unbanCase, { before, limit }),
     buildActionList(channelLogin, unbanCase),
@@ -550,7 +584,11 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
       source: "twitch",
     };
     for (const [twitchKey, ourKey] of Object.entries(COUNT_KEY_BY_TWITCH)) {
-      counts[ourKey] = twitchCounts[twitchKey] || 0;
+      const raw = twitchCounts[twitchKey] || 0;
+      // Only ban/timeout/delete/warn have a duel count to subtract (countDuelActions()'s own
+      // defaults); the six Twitch-only keys (lifts, warn-ack, appeal history) just get 0 back.
+      const duel = duelCounts[ourKey] || 0;
+      counts[ourKey] = Math.max(0, raw - duel);
     }
   } else {
     counts = { ...localCounts, truncated: false, source: "bot" };
@@ -679,11 +717,21 @@ async function getPunishmentContexts(
 // moderator can't see. Lives in the repo rather than in lib/ because it touches Mongo; the
 // formatter it calls stays pure and unit-tested.
 async function getCaseBrief(channelLogin, unbanCase) {
+  // How much log this case gets is decided ONCE, up front, from signals already on unbanCase - no
+  // model asks for more mid-hearing (that would be a paid extra turn per request; see
+  // lib/unbanCaseBrief.js's pickLogBudget for why a flat, pre-decided ceiling was chosen instead).
+  const budget = pickLogBudget(unbanCase);
   const [dossier, contexts] = await Promise.all([
-    getDossier(channelLogin, unbanCase),
-    getPunishmentContexts(channelLogin, unbanCase),
+    getDossier(channelLogin, unbanCase, { limit: budget.logLimit }),
+    getPunishmentContexts(channelLogin, unbanCase, { perAction: budget.perAction, maxActions: budget.maxActions }),
   ]);
-  return buildCaseBrief({ request: unbanCase, dossier, contexts, channelLogin });
+  return buildCaseBrief({
+    request: unbanCase,
+    dossier,
+    contexts,
+    channelLogin,
+    recentMessages: budget.recentMessages,
+  });
 }
 
 module.exports = {
