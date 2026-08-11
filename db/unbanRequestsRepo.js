@@ -59,6 +59,27 @@ async function listPendingForChannel(channelId, { newestFirst = true } = {}) {
     .toArray();
 }
 
+// Approved appeals sitting on a future "решение вступает в силу" date. listPendingForChannel()
+// deliberately excludes these (see its own comment) once a moderator stamps the decision, so
+// without this there is nowhere on the site to see that one is scheduled - routes/longBans.js
+// surfaces it on the Long Bans page since that's the other place a channel tracks a pending
+// change to someone's chat access.
+async function listScheduledAmnestyForChannel(channelId) {
+  const col = await ensureInitialized();
+  return col
+    .find(
+      {
+        channelId: String(channelId),
+        "resolution.status": "pending",
+        "resolution.decision": "approved",
+        "resolution.effectiveAt": { $ne: null },
+      },
+      { projection: { twitchModLogs: 0 } }
+    )
+    .sort({ "resolution.effectiveAt": 1 })
+    .toArray();
+}
+
 async function findById(id) {
   if (!ObjectId.isValid(id)) return null;
   const col = await ensureInitialized();
@@ -180,6 +201,7 @@ async function getLiveState(channelId, ids) {
 module.exports = {
   MAX_RESOLUTION_TEXT,
   listPendingForChannel,
+  listScheduledAmnestyForChannel,
   findById,
   requestDecision,
   requestVote,

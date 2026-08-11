@@ -1265,6 +1265,15 @@
       "cancelled": "cancelled",
       "failed": "failed"
     },
+    "scheduledAmnesty": {
+      "title": "Scheduled amnesty",
+      "none": "No pending Amnesty Bureau decisions yet",
+      "badge": "amnesty",
+      "applyingNow": "applying now…",
+      "effectiveOn": "takes effect",
+      "decidedBy": "decided by",
+      "viewLink": "Open the Amnesty Bureau →"
+    },
     "errors": {
       "user_required": "A user is required",
       "mode_invalid": "Pick a mode: timeout or ban",

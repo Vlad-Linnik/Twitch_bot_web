@@ -104,6 +104,39 @@
     <% } %>
   </section>
 
+  <!-- Scheduled amnesty: Unban Bureau approvals recorded with a future "вступает в силу" date.
+       Once a moderator stamps that decision the case leaves the Bureau's own queue (see
+       db/unbanRequestsRepo.js's listPendingForChannel) and there is nowhere else on the site to
+       see it's still pending, so it's surfaced here - the other page this channel tracks a
+       pending change to someone's chat access from. -->
+  <section class="mt-10" id="scheduled-amnesty">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('longBans.scheduledAmnesty.title') %> <span class="text-neutral-600 text-sm">(<%= scheduledAmnesty.length %>)</span></h2>
+
+    <% if (scheduledAmnesty.length === 0) { %>
+      <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-6 text-center text-neutral-600 text-sm"><%= t('longBans.scheduledAmnesty.none') %></p>
+    <% } else { %>
+      <ul class="rounded-lg border border-sky-800/40 bg-sky-950/10 divide-y divide-sky-900/30">
+        <% scheduledAmnesty.forEach(function(r) { %>
+          <li class="px-4 py-3 flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-neutral-200 font-medium">@<%= r.userLogin %></span>
+                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-600/20 text-sky-400 border border-sky-600/30"><%= t('longBans.scheduledAmnesty.badge') %></span>
+                <% if (new Date(r.resolution.effectiveAt).getTime() <= Date.now()) { %>
+                  <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-500 border border-neutral-700"><%= t('longBans.scheduledAmnesty.applyingNow') %></span>
+                <% } %>
+              </div>
+              <p class="text-sm text-neutral-400 mt-1"><%= t('longBans.scheduledAmnesty.effectiveOn') %> <%= new Date(r.resolution.effectiveAt).toLocaleString(locale) %></p>
+              <% if (r.resolution.text) { %><p class="text-sm text-neutral-500 mt-0.5 break-words"><%= r.resolution.text %></p><% } %>
+              <p class="text-xs text-neutral-600 mt-1"><%= t('longBans.scheduledAmnesty.decidedBy') %>: <%= r.resolution.decidedByDisplayName || r.resolution.decidedByLogin %></p>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+      <p class="text-xs text-neutral-600 mt-2"><a href="/<%= channel.channelLogin %>/unban-bureau" class="text-sky-500 hover:text-sky-400"><%= t('longBans.scheduledAmnesty.viewLink') %></a></p>
+    <% } %>
+  </section>
+
   <!-- History: every long-ban ever requested for this channel, including ones issued via
        !longban in chat - the only place that usage is visible on the site, since
        SettingsChangeLog only records web-originated actions. -->

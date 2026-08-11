@@ -10,6 +10,7 @@
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const longBansRepo = require("../db/longBansRepo");
+const unbanRequestsRepo = require("../db/unbanRequestsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
@@ -35,12 +36,13 @@ router.get("/:channel/settings/long-bans", requireLevel(2), async (req, res, nex
     if (!channel) return;
 
     const historyPage = Math.max(1, parseInt(req.query.historyPage, 10) || 1);
-    const [longBans, history] = await Promise.all([
+    const [longBans, history, scheduledAmnesty] = await Promise.all([
       longBansRepo.listActiveForChannel(channel.channelId),
       longBansRepo.listHistoryForChannel(channel.channelId, {
         page: historyPage,
         limit: HISTORY_PER_PAGE,
       }),
+      unbanRequestsRepo.listScheduledAmnestyForChannel(channel.channelId),
     ]);
     res.render("longBans", {
       channel,
@@ -48,6 +50,7 @@ router.get("/:channel/settings/long-bans", requireLevel(2), async (req, res, nex
       history: history.entries,
       historyPage: history.page,
       historyTotalPages: history.totalPages,
+      scheduledAmnesty,
       maxUnbanYear: MAX_UNBAN_YEAR,
       maxReasonLength: MAX_REASON_LENGTH,
       error: req.query.error || null,
