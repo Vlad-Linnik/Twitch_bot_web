@@ -107,38 +107,53 @@ async function countHumanActions(channelLogin, userId) {
   return counts;
 }
 
-// The most recent ban - "Banned By" / "Banned at" in the dossier header. Deliberately NOT
-// bot-filtered: if a bot issued the ban being appealed, that is exactly what the moderator needs
-// to see. Note the bot never records `unban`/`untimeout` (twitch/events.js only logs
-// ban/timeout/delete/warn), so this is "the last ban on record", not proof they're still banned -
-// though for a case that came out of Twitch's own unban-request queue, they are.
+// The most recent ban - "Banned By" / "Banned at" in the dossier header.
 //
-// One exception, unlike the bot-identity rule above: `reason: "duel"` (TwitchBot/games/muteDuel.js's
-// literal string, the only writer of that reason) is a lost minigame, not a moderation judgment -
-// showing it as "the ban being appealed" would be actively misleading, not merely incomplete.
+// UNLIKE countHumanActions() below, this used to deliberately skip bot-filtering: if a bot issued
+// the ban being appealed (e.g. isInsult.js's automod), that is exactly what the moderator needs to
+// see, and hiding it would make the header lie about there being no punishment on record at all.
+// Owner's call 2026-08-11, knowingly overriding that: known-bot actions (chatwizardbot, moobot,
+// mistercopus_bot - config/knownBots.js's KNOWN_BOT_LOGINS, same set countHumanActions() already
+// excludes) are hidden here too, on every path, including when one of them turns out to be the
+// applicant's actual current punishment. Note the bot never records `unban`/`untimeout`
+// (twitch/events.js only logs ban/timeout/delete/warn), so this is "the last ban on record", not
+// proof they're still banned - though for a case that came out of Twitch's own unban-request queue,
+// they are.
 async function findLastBan(channelLogin, userId) {
   const { modLogs } = await ensureInitialized();
+  const { ids, logins } = await getKnownBotIdentifiers();
   return modLogs.findOne(
     {
       channel: bareLogin(channelLogin),
       userId: String(userId),
       action: { $in: ["ban", "timeout"] },
-      reason: { $ne: "duel" },
+      modID: { $nin: [...ids, ...logins] },
     },
     { sort: { timestamp: -1 } }
   );
 }
 
-// Per-action-type counts of `!muteduel` losses (TwitchBot/games/muteDuel.js's literal
-// `reason: "duel"`, the only writer of that reason) - subtracted from Twitch's own totals below,
-// since Twitch's mirror has no concept of "issued by a minigame" and would otherwise count a lost
-// duel as a real punishment in a user's history. Mirrors countHumanActions()'s shape/defaults so
-// the subtraction below can index it the same way.
-async function countDuelActions(channelLogin, userId) {
+// Per-action-type counts of actions issued by a known bot account (config/knownBots.js's
+// KNOWN_BOT_LOGINS - chatwizardbot, moobot, mistercopus_bot), any reason - subtracted from Twitch's
+// own totals below, since Twitch's mirror has no concept of "issued by an automated account" and
+// would otherwise count e.g. a lost `!muteduel` or a third-party bot's auto-timeout as a real
+// punishment in a user's history. Same exclusion set and reasoning as countHumanActions() above
+// (own comment: "a user auto-timed-out six times by the spam filter isn't the same as one a human
+// moderator judged six times"), just applied by ADDING instead of the fallback path's own $nin scan
+// - kept as a separate query rather than reusing countHumanActions() itself so the two can be
+// composed (this one only runs on the Twitch-sourced branch; see getDossier() below).
+async function countBotIssuedActions(channelLogin, userId) {
   const { modLogs } = await ensureInitialized();
+  const { ids, logins } = await getKnownBotIdentifiers();
   const rows = await modLogs
     .aggregate([
-      { $match: { channel: bareLogin(channelLogin), userId: String(userId), reason: "duel" } },
+      {
+        $match: {
+          channel: bareLogin(channelLogin),
+          userId: String(userId),
+          modID: { $in: [...ids, ...logins] },
+        },
+      },
       { $group: { _id: "$action", count: { $sum: 1 } } },
     ])
     .toArray();
@@ -543,10 +558,10 @@ async function resolveModeratorNames(modIds) {
     resolved[id] = {
       displayName: profile?.displayName || id,
       color: profile?.chatColor || null,
-      // Lets the page mark a bot-issued action. Needed because the ban/timeout COUNTS exclude bots
-      // while `lastBan` deliberately doesn't (if a bot issued the ban being appealed, that's the
-      // first thing the moderator needs to see) - without this mark, "Banned by: chatwizardbot"
-      // sitting above "Bans: 0" reads as a bug rather than as the two different questions they are.
+      // Lets the page mark a bot-issued action. `counts` and `lastBan` both exclude known bots now
+      // (2026-08-11), but the punishments tab (`actions`, built by buildActionList()) and the raw
+      // log still show every action Twitch/the bot recorded, bots included - this is what tells that
+      // view "chatwizardbot" isn't a person without a second lookup.
       isBot: botSet.has(id) || botSet.has((profile?.login || "").toLowerCase()),
     };
   }
@@ -564,16 +579,18 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
   // at 17 bans had 0 on record here). So the local aggregation is a fallback, not the default -
   // and it isn't even run when the mirrored numbers are there.
   const twitchCounts = unbanCase?.twitchModLogs?.counts || null;
-  const [localCounts, duelCounts, lastBan, log, actions] = await Promise.all([
+  const [localCounts, botIssuedCounts, botIds, lastBan, log, actions] = await Promise.all([
     twitchCounts ? null : countHumanActions(channelLogin, userId),
     // Only worth the extra query on the Twitch-sourced path: countHumanActions() above already
-    // excludes every bot-issued action (chatwizardbot included) on the fallback path, duels along
-    // with everything else.
-    twitchCounts ? countDuelActions(channelLogin, userId) : null,
+    // excludes every bot-issued action (chatwizardbot, moobot, mistercopus_bot included) on the
+    // fallback path.
+    twitchCounts ? countBotIssuedActions(channelLogin, userId) : null,
+    getKnownBotIdentifiers(),
     findLastBan(channelLogin, userId),
     getLogPage(channelLogin, unbanCase, { before, limit }),
     buildActionList(channelLogin, unbanCase),
   ]);
+  const botSet = new Set([...botIds.ids, ...botIds.logins]);
 
   let counts;
   if (twitchCounts) {
@@ -585,17 +602,22 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     };
     for (const [twitchKey, ourKey] of Object.entries(COUNT_KEY_BY_TWITCH)) {
       const raw = twitchCounts[twitchKey] || 0;
-      // Only ban/timeout/delete/warn have a duel count to subtract (countDuelActions()'s own
-      // defaults); the six Twitch-only keys (lifts, warn-ack, appeal history) just get 0 back.
-      const duel = duelCounts[ourKey] || 0;
-      counts[ourKey] = Math.max(0, raw - duel);
+      // Only ban/timeout/delete/warn have a bot-issued count to subtract (countBotIssuedActions()'s
+      // own defaults); the six Twitch-only keys (lifts, warn-ack, appeal history) just get 0 back.
+      const botIssued = botIssuedCounts[ourKey] || 0;
+      counts[ourKey] = Math.max(0, raw - botIssued);
     }
   } else {
     counts = { ...localCounts, truncated: false, source: "bot" };
   }
 
   const modComments = readMirroredComments(unbanCase);
-  const activeStrike = unbanCase?.twitchModLogs?.activeStrike || null;
+  // Twitch's own real-time answer, bot-filtered the same as everything else above (owner's call,
+  // 2026-08-11): a strike a known bot currently holds against this user is not what the moderator
+  // is being asked to judge, even when it happens to be their only recorded punishment - falls
+  // through to our own (also bot-filtered) findLastBan() below exactly as if Twitch had no answer.
+  const rawActiveStrike = unbanCase?.twitchModLogs?.activeStrike || null;
+  const activeStrike = rawActiveStrike && botSet.has(String(rawActiveStrike.modId)) ? null : rawActiveStrike;
 
   // Comment authors carry their own display name and chat colour from Twitch, so only the log's
   // and the last ban's moderator ids need resolving through the profile cache.
@@ -615,9 +637,9 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     counts,
     actions,
     // The restriction IN FORCE, which is what the card's "banned by / banned at" is asking about.
-    // Twitch's answer wins outright when we have it: ours is the last ban the bot happened to
-    // WITNESS, and on the test case that was a different moderator on a different date than the
-    // ban actually being appealed.
+    // Twitch's answer wins outright when we have it (and it isn't bot-issued, filtered above): ours
+    // is the last ban the bot happened to WITNESS, and on the test case that was a different
+    // moderator on a different date than the ban actually being appealed.
     lastBan: activeStrike
       ? {
           action: activeStrike.kind,
