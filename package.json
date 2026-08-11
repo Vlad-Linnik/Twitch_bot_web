@@ -12,6 +12,7 @@
     "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
     "axios": "^1.7.2",
     "compression": "^1.8.1",
     "connect-mongo": "^5.1.0",

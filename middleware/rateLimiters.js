@@ -140,8 +140,20 @@ const durakRoomCreateLimiter = createSimpleLimiter({ windowMs: 10 * 60 * 1000, m
 // board for everyone else at the table.
 const durakStickerLimiter = createSimpleLimiter({ windowMs: 8 * 1000, max: 4 });
 
+// Generating the Amnesty Bureau's fourth sheet is the only action on this site that spends money
+// per press (~2 cents, see lib/unbanOpinionsGenerator.js). The real bound is elsewhere - a case
+// that already has a sheet is refused with 409, so the spend is capped by how many appeals are
+// actually queued - and this is the backstop against a runaway loop rather than the primary
+// control, hence a ceiling generous enough to work through a whole queue in one sitting.
+//
+// Deliberately hand-rolled rather than an express-rate-limit bucket: those key on IP and `skip`
+// tier-0 app developers entirely, and the app developer is precisely the account whose accidental
+// loop would be billed. Keyed per user, exempting nobody.
+const opinionsGenerateLimiter = createSimpleLimiter({ windowMs: 60 * 60 * 1000, max: 30 });
+
 module.exports = {
   authLimiter,
+  opinionsGenerateLimiter,
   settingsWriteLimiter,
   autosaveLimiter,
   gameRunStartLimiter,

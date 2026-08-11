@@ -18,7 +18,6 @@ const channelsRepo = require("../db/channelsRepo");
 const unbanRequestsRepo = require("../db/unbanRequestsRepo");
 const unbanDossierRepo = require("../db/unbanDossierRepo");
 const unbanOpinionsRepo = require("../db/unbanOpinionsRepo");
-const { buildCaseBrief } = require("../lib/unbanCaseBrief");
 const { parseOpinions, MAX_OPINION_CHARS } = require("../lib/unbanOpinionsValidation");
 
 const router = express.Router();
@@ -101,18 +100,9 @@ router.get("/admin/api/unban-requests/:id/brief", async (req, res, next) => {
     if (!loaded) return;
     const { unbanCase, channel } = loaded;
 
-    // Both reads hit the same merged log builder; contexts costs one query per punishment window.
-    const [dossier, contexts] = await Promise.all([
-      unbanDossierRepo.getDossier(channel.channelLogin, unbanCase),
-      unbanDossierRepo.getPunishmentContexts(channel.channelLogin, unbanCase),
-    ]);
-
-    const brief = buildCaseBrief({
-      request: unbanCase,
-      dossier,
-      contexts,
-      channelLogin: channel.channelLogin,
-    });
+    // Composed in the repo so this and the moderator-facing "заказать разбор" button read the
+    // same brief - see db/unbanDossierRepo.js's getCaseBrief().
+    const brief = await unbanDossierRepo.getCaseBrief(channel.channelLogin, unbanCase);
 
     if (req.query.format === "text") {
       res.type("text/plain; charset=utf-8").send(brief);

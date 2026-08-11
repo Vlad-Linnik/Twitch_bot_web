@@ -15,6 +15,7 @@
 const { connect } = require("./connection");
 const { withHash, bareLogin, MOD_ACTION_CONTEXT_MAX_TTA_MS } = require("./statsRepo");
 const { getKnownBotIdentifiers } = require("../lib/knownBotIds");
+const { buildCaseBrief } = require("../lib/unbanCaseBrief");
 const profileCacheRepo = require("./profileCacheRepo");
 
 const DEFAULT_LOG_LIMIT = 40;
@@ -670,9 +671,25 @@ async function getPunishmentContexts(
   );
 }
 
+// The plain-text brief both readers of this dossier argue from: the admin API's GET .../brief and
+// the moderator-facing "заказать разбор" button. Composed here rather than at either call site so
+// the two cannot drift - the brief's wording is load-bearing (see lib/unbanCaseBrief.js's header:
+// coverage caveats, three-state fields, the "reason not given is normal" note), and a caller that
+// assembled its own would quietly drop the parts that stop an agent reasoning from a fact the
+// moderator can't see. Lives in the repo rather than in lib/ because it touches Mongo; the
+// formatter it calls stays pure and unit-tested.
+async function getCaseBrief(channelLogin, unbanCase) {
+  const [dossier, contexts] = await Promise.all([
+    getDossier(channelLogin, unbanCase),
+    getPunishmentContexts(channelLogin, unbanCase),
+  ]);
+  return buildCaseBrief({ request: unbanCase, dossier, contexts, channelLogin });
+}
+
 module.exports = {
   DEFAULT_LOG_LIMIT,
   getDossier,
   getLogPage,
   getPunishmentContexts,
+  getCaseBrief,
 };

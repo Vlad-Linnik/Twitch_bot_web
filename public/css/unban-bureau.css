@@ -906,6 +906,28 @@ body.ub-playing footer {
 }
 .ub-small-experts #ub-experts-empty { display: none !important; }
 
+/* The order button sits inside the empty state so it disappears with it - both when the sheet is
+   docked and the moment a hearing lands. The wrapper carries `pointer-events: none` (the whole
+   sheet is draggable and the empty notice must not swallow a drag), so the button has to opt back
+   in for itself. Styled as ink on paper rather than as the desk's dark chrome buttons: it lives on
+   the sheet, not on the desktop. */
+#ub-experts-empty { pointer-events: none; }
+#ub-experts-empty-text { margin-bottom: 10px; }
+#ub-experts-generate {
+  pointer-events: auto;
+  font-family: "Monocraft", monospace;
+  font-size: 12px;
+  color: #5b4f3a;
+  background: rgb(0 0 0 / 0.03);
+  border: 1px dashed #a89878;
+  border-radius: 2px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+#ub-experts-generate:hover { background: rgb(0 0 0 / 0.07); color: #3d3427; }
+#ub-experts-generate:disabled { cursor: default; opacity: 0.6; }
+
 /* Docked, the sheet is 63px wide and says nothing. This is the one bit of ink
    visible at that size: a few typed-looking rules, shown only when the case
    actually has opinions, so a moderator can see there is something to pick up

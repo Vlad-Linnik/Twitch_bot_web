@@ -62,6 +62,14 @@ const env = {
   // working, this is a niche add-on that should fail closed (routes 404) rather than take the
   // whole site down if unset.
   adminApiToken: process.env.ADMIN_API_TOKEN || null,
+
+  // The one credential on this site that costs money per use: it buys the two speeches on the
+  // Amnesty Bureau desk's fourth sheet (lib/unbanOpinionsGenerator.js). Optional and fail-closed
+  // for the same reason as adminApiToken above - unset simply greys out one button on one page,
+  // and taking the whole site down over a missing key for an advisory feature would be absurd.
+  // Roughly two cents per generated case at the configured model; the endpoint that spends it is
+  // rate-limited per moderator and refuses a case that already has a sheet.
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
 };
 
 module.exports = env;

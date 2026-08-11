@@ -520,10 +520,57 @@
   // `null` is the normal case, not an error - most appeals are never argued. The sheet then shows
   // its empty state and, docked, carries no ink mark, so the moderator can tell at a glance from the
   // desk whether there is anything on it to pick up.
+  // Orders the hearing for the case on screen. The call is slow - two sequential model turns, tens
+  // of seconds - which makes "the moderator moved on while it ran" the normal case rather than an
+  // edge one. So the case is captured up front and the sheet is only painted if that same case is
+  // still the one being looked at; otherwise the result is announced and left for the moderator to
+  // find when they come back to it (it is already stored server-side by then).
+  var generating = false;
+  function requestOpinions() {
+    if (generating) return;
+    var c = currentCase();
+    if (!c) return;
+
+    generating = true;
+    syncGenerateBtn();
+
+    // `_id`, not `id` - the queue in data-cases carries raw case documents, and every other write
+    // on this page (decide/vote/sniper) addresses them the same way.
+    var requestedId = c._id;
+    post("opinions.json", { id: requestedId }).then(function (res) {
+      generating = false;
+      syncGenerateBtn();
+
+      if (res.status === 200 && res.data && res.data.opinions) {
+        var shown = currentCase();
+        if (shown && shown._id === requestedId) renderOpinions(res.data.opinions);
+        else toast(T.expertsGenerated);
+        return;
+      }
+      // shift_taken is already handled inside post(), which draws its own notice over the scene.
+      if (res.status === 409 && res.data && res.data.error === "shift_taken") return;
+      if (res.status === 503) return toast(T.expertsGenerateUnavailable);
+      if (res.status === 429) return toast(T.expertsGenerateTooMany);
+      // 409 already_generated lands here too: someone filled this sheet since the page loaded, so
+      // the honest thing to say is the same as any other failure - the sheet did not come from us.
+      toast(T.expertsGenerateFailed);
+    });
+  }
+
+  // One hearing at a time per page, and the button says so on whichever blank sheet is on screen.
+  // The lock is global rather than per case on purpose: clicking through the queue would otherwise
+  // let a moderator start a paid call on every case in a few seconds.
+  function syncGenerateBtn() {
+    var btn = $("ub-experts-generate");
+    btn.disabled = generating;
+    btn.textContent = generating ? T.expertsGenerating : T.expertsGenerate;
+  }
+
   function renderOpinions(opinions) {
     var body = $("ub-experts-body");
     var card = $("ub-experts-card");
     body.textContent = "";
+    syncGenerateBtn();
 
     var has = Boolean(opinions && opinions.prosecutor && opinions.advocate);
     card.classList.toggle("ub-has-opinions", has);
@@ -1168,6 +1215,7 @@
       var target = event.target;
       // Anything interactive inside a paper keeps its own click.
       if (target.tagName.toLowerCase() === "textarea") return;
+      if (target.tagName.toLowerCase() === "button") return;
       if (target.id === "ub-visa-effective-date") return;
       if (target.classList.contains("ub-tab")) return;
       // Let the scroll bars of the log/appeal/experts/rules panes work instead of starting a drag.
@@ -1345,6 +1393,8 @@
     play("speaker");
     advance();
   });
+
+  $("ub-experts-generate").addEventListener("click", requestOpinions);
 
   // --- stamp machine -------------------------------------------------------
 

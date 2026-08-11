@@ -223,7 +223,12 @@
       <div class="ub-paper ub-draggable" id="ub-experts-card">
         <div id="ub-experts-title"><%= t('unbanBureau.expertsHeading') %></div>
         <div id="ub-experts-body"></div>
-        <div id="ub-experts-empty"><%= t('unbanBureau.expertsEmpty') %></div>
+        <%# Empty state doubles as the order form: a blank sheet is the only place the hearing can
+            be requested from, which is also the server's rule (a case with a sheet answers 409). %>
+        <div id="ub-experts-empty">
+          <div id="ub-experts-empty-text"><%= t('unbanBureau.expertsEmpty') %></div>
+          <button type="button" id="ub-experts-generate"><%= t('unbanBureau.expertsGenerate') %></button>
+        </div>
         <div id="ub-experts-mark"></div>
       </div>
 
@@ -291,6 +296,12 @@
          expertAdvocate: t('unbanBureau.expertAdvocate'),
          expertRebuttal: t('unbanBureau.expertRebuttal'),
          expertRewritten: t('unbanBureau.expertRewritten'),
+         expertsGenerate: t('unbanBureau.expertsGenerate'),
+         expertsGenerating: t('unbanBureau.expertsGenerating'),
+         expertsGenerated: t('unbanBureau.expertsGenerated'),
+         expertsGenerateFailed: t('unbanBureau.expertsGenerateFailed'),
+         expertsGenerateUnavailable: t('unbanBureau.expertsGenerateUnavailable'),
+         expertsGenerateTooMany: t('unbanBureau.expertsGenerateTooMany'),
          queued: t('unbanBureau.queued'),
          applied: t('unbanBureau.applied'),
          approveScheduled: t('unbanBureau.approveScheduled'),
