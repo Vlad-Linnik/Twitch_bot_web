@@ -1423,6 +1423,8 @@
     "botDegradedItem": "{{label}} - down for {{since}}, {{failures}} failed attempt(s) ({{detail}})",
     "botDegradedPending": "{{label}} - failed {{since}} ago, waiting for it to recover ({{detail}})",
     "botEventRepeat": "repeats: {{count}}",
+    "gqlPausedTitle": "Private-GraphQL lookups paused",
+    "gqlPausedHint": "The token is fine - it is the requests that are paused, because Twitch refused them or did not answer. Last failure {{failedAgo}}, {{failures}} in a row, reason: \"{{reason}}\". While paused the Amnesty Bureau shows the bot's own log counts instead of Twitch's. Nothing to do; retrying {{retryIn}}.",
     "gqlTokenExpiredTitle": "GQL token needs re-capturing",
     "gqlTokenExpiredHint": "Twitch rejected the private-GraphQL session token (gql_auth_token) {{failedAgo}}, so the Amnesty Bureau's moderator comments and real ban/timeout counts are unavailable. Re-capture the auth-token cookie of a logged-in moderator session into the bot's .env. Retrying automatically {{retryIn}}.",
     "requestsHeading": "Bot-join requests",
