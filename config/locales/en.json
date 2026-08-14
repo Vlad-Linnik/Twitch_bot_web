@@ -98,11 +98,9 @@
     "access": {
       "mod": "mod",
       "all": "all",
-      "allPinExempt": "all (mod-only if set; pinning needs a mod)",
       "allExceptionListed": "all (or mod/exception-listed)"
     },
     "category": {
-      "customCommands": "Managing custom commands",
       "counters": "Counters",
       "chatStats": "Chat stats",
       "moderation": "Moderation",
@@ -110,13 +108,6 @@
       "channelCustom": "Custom commands added on this channel"
     },
     "desc": {
-      "addcommand": "Create a custom command, or edit its text if it already exists.",
-      "delcommand": "Delete a custom command.",
-      "settimer": "Auto-post that command's text on an interval (minimum 60s); off disables it.",
-      "setpin": "Toggle auto-pin for that command's sends.",
-      "setannounce": "Toggle sending that command as a colored chat announcement instead of a plain message.",
-      "customcommands": "List all custom command names for the channel.",
-      "triggerCustom": "Trigger a custom command (or one of its aliases). Prefix with \"@user \" to send the reply to @user instead of yourself.",
       "addcounter": "Create a counter starting at 0; add mod to restrict updates to mods.",
       "delcounter": "Delete a counter.",
       "counters": "List all counter names.",
@@ -140,13 +131,6 @@
       "longbans": "List the channel's currently active long-bans."
     },
     "useCase": {
-      "addcommand": "Set up a !discord or !socials command once and let chat trigger it any time.",
-      "delcommand": "Retire a command that's no longer relevant.",
-      "settimer": "Auto-remind viewers of a !discord link every 10 minutes without anyone typing it.",
-      "setpin": "Keep an important announcement pinned whenever it's sent.",
-      "setannounce": "Make a scheduled reminder actually stand out in a busy chat.",
-      "customcommands": "Let viewers discover what commands a channel has set up.",
-      "triggerCustom": "Everyday use of any mod-created command.",
       "addcounter": "Track deaths, wins, or any running tally live during a stream.",
       "delcounter": "Remove a counter once a challenge/event is over.",
       "counters": "Check what counters exist before creating a duplicate.",

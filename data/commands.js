@@ -19,18 +19,6 @@
 // !muteaccept).
 module.exports = [
   {
-    categoryKey: "commands.category.customCommands",
-    commands: [
-      { signature: "!addcommand !name text", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addcommand", useCaseKey: "commands.useCase.addcommand", configKey: "addcommand" },
-      { signature: "!delcommand !name", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.delcommand", useCaseKey: "commands.useCase.delcommand", configKey: "delcommand" },
-      { signature: "!settimer !name <seconds>|off", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.settimer", useCaseKey: "commands.useCase.settimer", configKey: "settimer" },
-      { signature: "!setpin !name on|off", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.setpin", useCaseKey: "commands.useCase.setpin", configKey: "setpin" },
-      { signature: "!setannounce !name on|off", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.setannounce", useCaseKey: "commands.useCase.setannounce", configKey: "setannounce" },
-      { signature: "!customcommands", accessKey: "commands.access.all", cooldown: null, descriptionKey: "commands.desc.customcommands", useCaseKey: "commands.useCase.customcommands" },
-      { signature: "!name", accessKey: "commands.access.allPinExempt", cooldown: null, descriptionKey: "commands.desc.triggerCustom", useCaseKey: "commands.useCase.triggerCustom" },
-    ],
-  },
-  {
     categoryKey: "commands.category.counters",
     commands: [
       { signature: "!addcounter #name [mod]", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addcounter", useCaseKey: "commands.useCase.addcounter", configKey: "addcounter" },

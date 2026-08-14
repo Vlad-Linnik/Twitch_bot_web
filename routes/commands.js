@@ -29,7 +29,10 @@ router.get("/commands", async (req, res, next) => {
     }
 
     const resolvedGroups = resolveCommandGroups(commandGroups, channelCommandsConfig);
-    if (customCommands.length) resolvedGroups.push(buildCustomCommandsGroup(customCommands));
+    // Unshift, not push: the channel's own custom commands are what most visitors
+    // are actually looking for, so that group leads both the "everyone" and
+    // "moderators" sections (partitionIntoSections preserves resolvedGroups order).
+    if (customCommands.length) resolvedGroups.unshift(buildCustomCommandsGroup(customCommands));
 
     const sections = partitionIntoSections(resolvedGroups);
 

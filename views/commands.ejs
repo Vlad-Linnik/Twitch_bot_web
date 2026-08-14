@@ -83,19 +83,29 @@
       <% sections.forEach(function(section) { %>
         <% if (section.groups.length) { %>
           <div data-command-section>
-          <h2 id="section-<%= section.id %>" class="text-xl font-bold text-neutral-100 mb-6 mt-2 first:mt-0 scroll-mt-20"><%= t(section.labelKey) %></h2>
+          <% const isModSection = section.id === 'moderators'; %>
+          <h2 id="section-<%= section.id %>" class="<%= isModSection
+            ? 'flex items-center gap-2 text-xl font-bold text-amber-400 mb-6 mt-2 first:mt-0 scroll-mt-20 pl-3 border-l-4 border-amber-500'
+            : 'text-xl font-bold text-neutral-100 mb-6 mt-2 first:mt-0 scroll-mt-20' %>">
+            <% if (isModSection) { %>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 shrink-0"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/></svg>
+            <% } %>
+            <%= t(section.labelKey) %>
+          </h2>
 
           <% section.groups.forEach(function(group) { %>
             <section class="mb-10 scroll-mt-20" id="<%= group.anchorId %>" data-command-group>
-              <h3 class="text-lg font-semibold text-neutral-100 mb-3"><%= t(group.categoryKey) %></h3>
-              <div class="rounded-lg border border-neutral-800 overflow-hidden">
+              <h3 class="text-lg font-semibold mb-3 <%= isModSection ? 'text-amber-300' : 'text-neutral-100' %>"><%= t(group.categoryKey) %></h3>
+              <div class="rounded-lg border overflow-hidden <%= isModSection ? 'border-amber-700/50' : 'border-neutral-800' %>">
                 <div class="overflow-x-auto">
                 <table class="w-full text-sm">
-                  <thead class="bg-neutral-900 text-neutral-400">
+                  <thead class="text-neutral-400 <%= isModSection ? 'bg-amber-950/30' : 'bg-neutral-900' %>">
                     <tr>
                       <th class="text-left font-medium px-4 py-2"><%= t('commands.colCommand') %></th>
-                      <th class="text-left font-medium px-4 py-2 w-32"><%= t('commands.colAccess') %></th>
-                      <th class="text-left font-medium px-4 py-2 w-24"><%= t('commands.colCooldown') %></th>
+                      <% if (!group.isCustom) { %>
+                        <th class="text-left font-medium px-4 py-2 w-32"><%= t('commands.colAccess') %></th>
+                        <th class="text-left font-medium px-4 py-2 w-24"><%= t('commands.colCooldown') %></th>
+                      <% } %>
                       <th class="text-left font-medium px-4 py-2 w-64"><%= t('commands.colDescription') %></th>
                       <% if (!group.isCustom) { %><th class="text-left font-medium px-4 py-2 w-72"><%= t('commands.colExample') %></th><% } %>
                     </tr>
@@ -103,7 +113,7 @@
                   <tbody class="divide-y divide-neutral-800">
                     <% group.commands.forEach(function(cmd) { %>
                       <% const searchText = (cmd.signature + ' ' + (cmd.isCustom ? cmd.resultPreview : t(cmd.descriptionKey) + ' ' + t(cmd.useCaseKey))).toLowerCase(); %>
-                      <tr class="odd:bg-neutral-950 even:bg-neutral-900/40<%= cmd.enabled === false ? ' opacity-50' : '' %>" data-command-row data-search-text="<%= searchText %>">
+                      <tr class="<%= isModSection ? 'odd:bg-amber-950/10 even:bg-amber-950/5' : 'odd:bg-neutral-950 even:bg-neutral-900/40' %><%= cmd.enabled === false ? ' opacity-50' : '' %>" data-command-row data-search-text="<%= searchText %>">
                         <td class="px-4 py-2 font-mono text-purple-300 whitespace-nowrap">
                           <%= cmd.signature %>
                           <% if (cmd.enabled === false) { %>
@@ -120,8 +130,10 @@
                             <% }) %>
                           <% } %>
                         </td>
-                        <td class="px-4 py-2 text-neutral-400"><%= t(cmd.accessKey) %></td>
-                        <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
+                        <% if (!group.isCustom) { %>
+                          <td class="px-4 py-2 text-neutral-400"><%= t(cmd.accessKey) %></td>
+                          <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= cmd.cooldown || t('commands.noneNoCooldown') %></td>
+                        <% } %>
                         <% if (cmd.isCustom) { %>
                           <td class="px-4 py-2 text-neutral-300"><%= cmd.resultPreview %></td>
                         <% } else { %>
