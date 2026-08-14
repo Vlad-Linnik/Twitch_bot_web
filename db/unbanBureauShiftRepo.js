@@ -115,6 +115,37 @@ async function holds(channelLogin, userId) {
   return Boolean(holder && holder.userId === String(userId));
 }
 
+// Takes the desk regardless of who holds it. The escape hatch for the one failure the lease cannot
+// resolve on its own: a moderator whose tab is genuinely still renewing (see the visibility rule in
+// public/js/games/unban-bureau.js) but who is not at it.
+//
+// Route-gated to the channel owner and site admins - NOT to tier-2 moderators, who would otherwise
+// be able to eject each other, which is the thing the lease exists to prevent. The eviction is
+// written to SettingsChangeLog by the caller, because unlike every other shift transition this one
+// takes something away from a named colleague.
+//
+// No filter and no upsert race to worry about: _id is the channel login, so this either replaces
+// the live document or creates the only one there can be.
+async function forceAcquire(channelLogin, user) {
+  const col = await ensureInitialized();
+  const now = new Date();
+  const previous = await col.findOne({ _id: channelLogin });
+  const doc = await col.findOneAndUpdate(
+    { _id: channelLogin },
+    {
+      $set: {
+        userId: String(user.userId),
+        login: user.login,
+        displayName: user.displayName || user.login,
+        startedAt: now,
+        expiresAt: new Date(now.getTime() + SHIFT_LEASE_MS),
+      },
+    },
+    { upsert: true, returnDocument: "after" }
+  );
+  return { holder: holderOf(doc), previous: holderOf(previous) };
+}
+
 // Explicit hand-back on pagehide. Scoped by userId so a stale beacon from a moderator whose lease
 // already rolled over to a colleague can't end the colleague's shift.
 async function release(channelLogin, userId) {
@@ -125,6 +156,7 @@ async function release(channelLogin, userId) {
 
 module.exports = {
   acquire,
+  forceAcquire,
   current,
   holds,
   release,

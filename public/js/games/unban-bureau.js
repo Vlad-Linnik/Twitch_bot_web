@@ -229,12 +229,66 @@
     document.body.appendChild(overlay);
   }
 
+  // The heartbeat proves the BROWSER is alive. It does not prove the MODERATOR is here, and until
+  // 2026-08-15 nothing did — a backgrounded tab throttles its timers to roughly once a minute,
+  // which is still inside the 90s lease, so an abandoned tab renewed the shift indefinitely. One
+  // channel's desk was held for 500 minutes by someone who had simply gone home. The lease was
+  // built to survive a closed laptop, a crashed tab and a dropped connection; "tab open, human
+  // gone" was the one case it never considered, and it is by far the most common of the four.
+  //
+  // So a hidden tab stops renewing after HIDDEN_RELEASE_MS and hands the desk back explicitly.
+  // Nothing else had to change: routes/unbanBureau.js's shift.json treats renewal and re-acquisition
+  // as the same call, so coming back to the tab silently retakes the desk if nobody claimed it —
+  // and if somebody did, post() already turns that 409 into the "shift lost" notice.
+  //
+  // Only visibility, deliberately not an idle timer on a VISIBLE tab: a hidden tab is definitively
+  // not being reviewed, while "visible but untouched for N minutes" is a guess that costs a
+  // moderator their place mid-case when it guesses wrong.
+  var HIDDEN_RELEASE_MS = 3 * 60 * 1000;
+  // null, not 0: this is a "no value" sentinel, and 0 is also a legitimate clock reading. With a
+  // falsy sentinel the lazy stamp below re-stamps an already-hidden tab on every beat, so the grace
+  // period restarts forever and the desk is never handed back - the exact bug this code exists to
+  // fix. Date.now() never returns 0 in a browser, so it would have hidden here indefinitely.
+  var hiddenSince = null;
+  var handedBack = false;
+
   // A failed heartbeat is ignored on purpose: the lease is several beats long, so a single blip
   // doesn't cost the shift, and reacting to one would turn a flaky connection into a lockout.
   function sendHeartbeat() {
     if (shiftEnded) return;
+
+    if (document.hidden) {
+      // Stamped here as well as in the visibilitychange handler, because a page opened in a
+      // background tab is hidden from the start and never fires that event.
+      if (hiddenSince === null) hiddenSince = Date.now();
+      if (Date.now() - hiddenSince < HIDDEN_RELEASE_MS) {
+        post("shift.json", {}).catch(function () {});
+        return;
+      }
+      // Past the grace: hand the desk back once, then stay quiet until the tab is looked at again.
+      // Explicit release rather than just letting the lease lapse, so a colleague waiting on the
+      // busy screen gets in now instead of 90 seconds from now.
+      if (!handedBack) {
+        handedBack = true;
+        post("release.json", {}).catch(function () {});
+      }
+      return;
+    }
+
     post("shift.json", {}).catch(function () {});
   }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      if (hiddenSince === null) hiddenSince = Date.now();
+      return;
+    }
+    hiddenSince = null;
+    handedBack = false;
+    // Immediately, not on the next tick: this either retakes a desk nobody claimed (invisible to
+    // the moderator, which is the common case) or discovers it was taken and draws the notice.
+    sendHeartbeat();
+  });
 
   // --- the street ----------------------------------------------------------
   // A queue shuffling toward the booth along a fixed polyline, each walker keeping its own personal

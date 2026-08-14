@@ -45,6 +45,18 @@
       <a class="ub-busy-btn ub-busy-btn-quiet" href="/<%= channel.channelLogin %>/settings"><%= t('channelSettings.backToSettings') %></a>
     </div>
 
+    <%# Owner/admin only (routes/unbanBureau.js sets canTakeOver) - moderators must not be able to
+        eject each other, which is exactly what the lease exists to prevent. A plain form so it
+        works without JS like the rest of this page's fallbacks, and separated from the actions row
+        above because it takes the desk away from a named colleague rather than just waiting. %>
+    <% if (canTakeOver) { %>
+      <form class="ub-busy-takeover" method="post" action="/<%= channel.channelLogin %>/unban-bureau/takeover">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="ub-busy-btn ub-busy-btn-danger"><%= t('unbanBureau.shiftTakeOver') %></button>
+        <span class="ub-busy-takeover-note"><%= t('unbanBureau.shiftTakeOverNote') %></span>
+      </form>
+    <% } %>
+
     <p class="ub-busy-status" id="ub-busy-status" data-retry-template="<%= t('unbanBureau.shiftBusyRetry', { seconds: '%s' }) %>" data-stopped="<%= t('unbanBureau.shiftBusyStopped') %>"></p>
   </section>
 </main>

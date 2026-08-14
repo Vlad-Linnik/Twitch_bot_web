@@ -126,7 +126,13 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     // away has no use for the cases, and shouldn't pay for assembling them.
     const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user);
     if (!shift.ok) {
-      return res.status(409).render("unbanBureauBusy", { channel, holder: shift.holder });
+      // permissionLevel comes from requireLevel(2) above; the busy page uses it to decide whether
+      // to offer the takeover button, which is owner/admin-only (see the takeover route).
+      return res.status(409).render("unbanBureauBusy", {
+        channel,
+        holder: shift.holder,
+        canTakeOver: req.permissionLevel <= 1,
+      });
     }
 
     const newestFirst = req.query.sort !== "oldest";
@@ -220,6 +226,53 @@ router.post(
       // tab was backgrounded simply takes the desk back if nobody else has claimed it.
       if (!shift.ok) return res.status(409).json({ error: "shift_taken", holder: shift.holder });
       res.json({ ok: true, holder: shift.holder });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Ejects whoever is at the desk and takes it. The escape hatch for an abandoned tab that is still
+// renewing its lease - the client now hands the desk back on its own when the tab is hidden
+// (public/js/games/unban-bureau.js), but that only helps a page running the current build, and it
+// cannot help a machine left awake with the Bureau on screen.
+//
+// requireLevel(1), NOT the tier-2 gate the rest of this router uses: letting moderators eject each
+// other would undo the single-occupancy rule this whole lease exists to enforce. Owner and site
+// admin only.
+//
+// A plain form POST with a redirect rather than the JSON convention above - the busy page is an
+// ordinary page, this is a once-in-a-while action, and the redirect lands the moderator straight at
+// the desk it just freed.
+router.post(
+  "/:channel/unban-bureau/takeover",
+  settingsWriteLimiter,
+  requireLevel(1),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannel(req, res);
+      if (!channel) return;
+
+      const { previous } = await unbanBureauShiftRepo.forceAcquire(channel.channelLogin, req.user);
+
+      // Unlike starting a vote or firing the sniper (both dropped from this journal as duplicates
+      // of a record kept elsewhere), an eviction has no other record anywhere and it is taken
+      // against a named colleague. Skipped when there was nobody to evict - the lease had already
+      // lapsed, so nothing was taken from anyone.
+      if (previous && previous.userId !== String(req.user.userId)) {
+        await settingsChangeLogRepo.logChange({
+          channelLogin: channel.channelLogin,
+          user: req.user,
+          category: "unban_request",
+          action: "takeover",
+          target: previous.login,
+          before: { holder: previous.login, startedAt: previous.startedAt },
+          after: { holder: req.user.login },
+        });
+      }
+
+      res.redirect(`/${channel.channelLogin}/unban-bureau`);
     } catch (err) {
       next(err);
     }

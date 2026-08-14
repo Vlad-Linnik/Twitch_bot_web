@@ -1599,6 +1599,27 @@ body.ub-playing footer {
 .ub-busy-btn-quiet { background: #33393a; border-color: #23282a; }
 .ub-busy-btn-quiet:hover { background: #414849; }
 
+/* Owner/admin eviction. Set apart from the actions row above and muted rather than alarming: it is
+   a legitimate tool for an abandoned desk, not a red emergency button, but it does take the shift
+   from a named colleague - so it does not sit shoulder to shoulder with "retry" and "back". */
+.ub-busy-takeover {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #2e352b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ub-busy-btn-danger { background: #6b4038; border-color: #3d241f; }
+.ub-busy-btn-danger:hover { background: #7d4c42; }
+.ub-busy-takeover-note {
+  font-size: 0.62rem;
+  line-height: 1.7;
+  color: #6b736a;
+  max-width: 34ch;
+}
+
 .ub-busy-status {
   margin-top: 1.5rem;
   min-height: 1.2em;

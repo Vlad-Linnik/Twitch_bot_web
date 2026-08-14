@@ -982,7 +982,8 @@
       "approve": "Approved",
       "deny": "Denied",
       "sniper": "Shot fired",
-      "vote": "Chat vote"
+      "vote": "Chat vote",
+      "takeover": "Shift taken over"
     },
     "colChanges": "What changed",
     "rawDetails": "Raw data",
@@ -1610,6 +1611,8 @@
     "shiftBusyRetry": "Checking again in {{seconds}}s",
     "shiftBusyRetryNow": "Check now",
     "shiftBusyStopped": "Auto-check stopped — press “Check now”.",
+    "shiftTakeOver": "Take the desk",
+    "shiftTakeOverNote": "The moderator loses their shift and is told so. Use this when a tab was left open and abandoned.",
     "shiftLostTitle": "The desk was taken over",
     "shiftLostBody": "Your shift ended and another moderator has taken the desk. They are handling the queue now.",
     "empty": "No appeals awaiting review.",
