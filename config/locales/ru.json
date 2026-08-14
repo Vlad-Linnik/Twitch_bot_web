@@ -1753,6 +1753,7 @@
     "sniperQueued": "Выстрел — бот выбирает цель.",
     "sniperHit": "{{target}} поймал шальную пулю.",
     "sniperNoTarget": "Сейчас в чате некого подстрелить.",
+    "sniperRejected": "Twitch не дал наказать цель — выстрел мимо.",
     "sniperArmed": "Винтовка наготове. ПКМ — убрать.",
     "sniperDisarmed": "Винтовка убрана.",
     "approvedCount": "Одобрено:",

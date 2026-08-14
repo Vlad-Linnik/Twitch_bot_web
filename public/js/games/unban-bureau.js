@@ -430,7 +430,8 @@
     $("ub-visa-name").textContent = "ВИЗА: " + c.userLogin;
 
     renderVote(c.vote);
-    renderSniper(c);
+    // No renderSniper() here: a shot is not a property of the case being shown any more (it isn't
+    // tied to an appeal at all), so it is announced from the live poll and nowhere else.
     renderStats();
     scheduleVote(c);
 
@@ -1162,13 +1163,23 @@
     else if (vote.status === "closed") toast(T.voteClosed);
   }
 
-  function renderSniper(c) {
-    var shot = c && c.sniper;
-    if (!shot || !shot.fired || announcedShots[c._id + ":" + shot.firedAt]) return;
-    announcedShots[c._id + ":" + shot.firedAt] = true;
-    toast(shot.success
-      ? T.sniperHit.replace("{{target}}", "@" + shot.targetLogin)
-      : T.sniperNoTarget);
+  // The answer to a shot the moderator fired, announced once per shot.
+  //
+  // Keyed by the shot's own id (it comes from SniperShots now, not from a case sub-document), and
+  // channel-level rather than per case, because a shot isn't tied to an appeal. Three outcomes,
+  // all of which used to be silence: it landed, there was nobody in chat eligible to hit, or
+  // Twitch refused the ban - see TwitchBot/twitch/TwitchBanAPI.js on why that last one used to be
+  // reported as a hit.
+  function renderSniper(shot) {
+    if (!shot || !shot.id || announcedShots[shot.id]) return;
+    announcedShots[shot.id] = true;
+    if (shot.status === "done") {
+      toast(T.sniperHit.replace("{{target}}", "@" + shot.targetLogin));
+    } else if (shot.failureReason === "no_target") {
+      toast(T.sniperNoTarget);
+    } else {
+      toast(T.sniperRejected);
+    }
   }
 
   // --- dragging ------------------------------------------------------------
@@ -1695,22 +1706,22 @@
 
   function pollLive() {
     var ids = cases.map(function (c) { return c._id; }).slice(0, 50).join(",");
-    if (!ids) return;
+    // No early return on an empty queue any more: the sniper is fired independently of any case,
+    // so its outcome still has to reach the desk when there is nothing to review.
     fetch("/" + CHANNEL + "/unban-bureau/live.json?ids=" + encodeURIComponent(ids), { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
         if (!payload.ok) return;
+        renderSniper(payload.sniper);
         payload.states.forEach(function (state) {
           var c = cases.find(function (item) { return item._id === state.id; });
           if (!c) return;
           c.vote = state.vote;
           c.resolution = state.resolution;
-          c.sniper = state.sniper;
 
           var shown = currentCase();
           if (!shown || shown._id !== state.id) return;
           renderVote(state.vote);
-          renderSniper(c);
           if (state.resolution && state.resolution.status === "failed") {
             toast(state.resolution.failureReason || T.decisionFailed);
           }

@@ -1753,6 +1753,7 @@
     "sniperQueued": "Shot fired — the bot is picking a target.",
     "sniperHit": "{{target}} caught a stray bullet.",
     "sniperNoTarget": "Nobody in chat to hit right now.",
+    "sniperRejected": "Twitch refused the punishment — the shot missed.",
     "sniperArmed": "Rifle ready. Right-click to holster.",
     "sniperDisarmed": "Rifle holstered.",
     "approvedCount": "Approved:",

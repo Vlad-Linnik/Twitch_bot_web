@@ -182,10 +182,13 @@ async function requestVoteClose(id, channelId) {
 // Just the volatile bits, for the page's live vote bar / decision-applied polling. Projected down
 // so a 2s poll doesn't drag the whole appeal text and enrichment along every time.
 //
-// `sniper` rides along on this same poll rather than getting a channel of its own: the shot is
-// fired by the bot at the exact moment the vote closes (TwitchBot/twitch/unbanRequestScheduler.js),
-// so the page is already polling for that transition - one extra projected field is the whole cost
-// of announcing it.
+// The sniper shot deliberately does NOT come from here. It used to (`sniper: 1` in the projection
+// below), from a `sniper` sub-document written back when a shot fired automatically as a vote
+// closed and was therefore 1:1 with a case. The bot stopped writing it when the shot became a
+// manual act with its own `SniperShots` collection, and this kept projecting a field that no
+// longer moves - so the desk never announced an outcome at all. The route reads
+// db/sniperShotsRepo.js's findLatestResolved() alongside this instead: channel-level, because a
+// shot is not tied to an appeal.
 async function getLiveState(channelId, ids) {
   const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
   if (!objectIds.length) return [];
@@ -193,7 +196,7 @@ async function getLiveState(channelId, ids) {
   return col
     .find(
       { _id: { $in: objectIds }, channelId: String(channelId) },
-      { projection: { vote: 1, resolution: 1, twitchStatus: 1, sniper: 1 } }
+      { projection: { vote: 1, resolution: 1, twitchStatus: 1 } }
     )
     .toArray();
 }

@@ -52,6 +52,11 @@ function getAnthropicClient() {
 // top of settingsWriteLimiter.
 const SNIPER_WINDOW_MS = 60 * 1000;
 const SNIPER_MAX_PER_WINDOW = 6;
+// How recently a shot must have resolved for live.json to still report it. The bot resolves one
+// within ~2s of the request, so this only needs to cover a couple of missed polls - long enough
+// that a dropped poll doesn't lose the answer, short enough that reopening the page doesn't
+// re-announce a shot from earlier in the shift.
+const SNIPER_REPORT_WINDOW_MS = 2 * 60 * 1000;
 
 const router = express.Router();
 
@@ -462,7 +467,13 @@ router.get(
       if (!channel) return;
 
       const ids = String(req.query.ids || "").split(",").filter(Boolean).slice(0, 50);
-      const states = await unbanRequestsRepo.getLiveState(channel.channelId, ids);
+      const [states, shot] = await Promise.all([
+        unbanRequestsRepo.getLiveState(channel.channelId, ids),
+        // Channel-level, not per case: a shot is fired whenever the moderator feels like it and is
+        // not tied to an appeal. See db/sniperShotsRepo.js's findLatestResolved for why this reads
+        // SniperShots rather than the `sniper` sub-document this used to project.
+        sniperShotsRepo.findLatestResolved(channel.channelId, SNIPER_REPORT_WINDOW_MS),
+      ]);
       res.json({
         ok: true,
         states: states.map((doc) => ({
@@ -470,10 +481,18 @@ router.get(
           twitchStatus: doc.twitchStatus,
           vote: doc.vote,
           resolution: doc.resolution,
-          // The sniper shot the bot fired when this case's vote closed, if the channel has the
-          // mechanic on. Only ever read here - the page never requests a shot, it just reports one.
-          sniper: doc.sniper && doc.sniper.fired ? doc.sniper : null,
         })),
+        // Only what the desk announces - never who requested it, which the page has no use for.
+        sniper: shot
+          ? {
+            id: String(shot._id),
+            status: shot.status,
+            targetLogin: shot.targetLogin || null,
+            mode: shot.mode || null,
+            durationSec: shot.durationSec || null,
+            failureReason: shot.failureReason || null,
+          }
+          : null,
       });
     } catch (err) {
       next(err);

@@ -47,6 +47,32 @@ async function requestShot(channel, user, caseId) {
   return { ...doc, _id: result.insertedId };
 }
 
+// The most recently RESOLVED shot in this channel, if it resolved inside `windowMs`.
+//
+// This is how the outcome gets back to the desk, and until 2026-08-14 nothing did: the shot moved
+// out of the `UnbanRequests.sniper` sub-document into this collection when it stopped being 1:1
+// with a case, but `live.json` kept reading that sub-document — which the bot no longer writes. So
+// the page announced "выстрел — бот выбирает цель" and then went quiet forever, whether the shot
+// hit, found nobody, or was refused by Twitch. A moderator watching chat for a ban that never
+// came had no way to tell which.
+//
+// Channel-level rather than per-case on purpose: a shot is not tied to an appeal (see requestShot),
+// so there is no case document to hang the answer off.
+//
+// The window keeps a page opened an hour later from toasting a shot from the previous shift; the
+// bot resolves one within ~2s, so anything this old has already been seen.
+async function findLatestResolved(channelId, windowMs) {
+  const col = await ensureInitialized();
+  return col.findOne(
+    {
+      channelId: String(channelId),
+      status: { $in: ["done", "failed"] },
+      resolvedAt: { $gte: new Date(Date.now() - windowMs) },
+    },
+    { sort: { resolvedAt: -1 } }
+  );
+}
+
 // How many shots this moderator has fired in the last `windowMs`. The route uses it as a
 // per-moderator ceiling: settingsWriteLimiter alone is too loose here, because unlike every other
 // write on this site each one of these times a real person out of chat.
@@ -58,4 +84,4 @@ async function countRecentByUser(userId, windowMs) {
   });
 }
 
-module.exports = { requestShot, countRecentByUser };
+module.exports = { requestShot, countRecentByUser, findLatestResolved };
