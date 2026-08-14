@@ -164,6 +164,17 @@
     <%# The five documents. Everything inside is filled via textContent by the client. %>
     <div id="ub-papers-layer">
       <div class="ub-paper ub-draggable" id="ub-user-card">
+        <%# Covers the card until Twitch's half of the dossier is on it. The bot is the only side
+            that can read it (see ../CLAUDE.md's "Бюро амнистии"), so the site asks and waits ~2s.
+            This exists to prevent the alternative, which is worse than a wait: painting the bot's
+            own much smaller counts - which a moderator may read and decide on - and then swapping
+            them for Twitch's real ones a moment later. Held back by a CSS transition delay, so a
+            case whose card is already mirrored never flashes it. %>
+        <div id="ub-uc-preparing" aria-hidden="true">
+          <div id="ub-uc-preparing-title"><%= t('unbanBureau.preparingTitle') %></div>
+          <div class="ub-prep-dots"><span></span><span></span><span></span></div>
+          <div id="ub-uc-preparing-note"><%= t('unbanBureau.preparingNote') %></div>
+        </div>
         <img id="ub-uc-avatar" src="" alt="" />
         <div id="ub-uc-header">
           <div id="ub-uc-name"></div>
@@ -274,6 +285,9 @@
        data-locale="<%= locale %>"
        data-newest-first="<%= newestFirst ? '1' : '0' %>"
        data-heartbeat-ms="<%= heartbeatMs %>"
+       <%# Identifies this page load at the desk. Echoed back on the heartbeat and the pagehide
+           hand-back so a reload's beacon can't delete the lease the NEW page just took. %>
+       data-shift-token="<%= shiftToken %>"
        data-cases="<%= JSON.stringify(cases) %>"
        data-emotes="<%= JSON.stringify(emoteList) %>"
        data-i18n="<%= JSON.stringify({

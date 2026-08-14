@@ -14,6 +14,7 @@
 // Responses are JSON rather than the PRG-redirect pattern the settings pages use: this is a
 // keyboard-driven single-screen UI, and a redirect would throw the moderator back to the top of
 // the page after every stamp.
+const crypto = require("crypto");
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
@@ -96,6 +97,16 @@ async function loadChannelJson(req, res) {
   return channel;
 }
 
+// The page-load token the desk page was handed, echoed back on its heartbeat and its hand-back.
+// Client-supplied and therefore never trusted for authorisation - it only ever narrows a delete
+// that is already scoped to this user's own lease, so the worst a forged one can do is fail to
+// release a shift the moderator already holds. Bounded and type-checked so a junk body can't reach
+// Mongo as an object.
+function shiftTokenOf(req) {
+  const token = req.body?.shiftToken;
+  return typeof token === "string" && token.length && token.length <= 100 ? token : null;
+}
+
 // One moderator per channel at the desk (db/unbanBureauShiftRepo.js explains why). Every write
 // endpoint checks the lease as well as the permission tier, so a page that was already open when
 // its shift lapsed can't keep stamping verdicts behind the colleague who took over.
@@ -122,9 +133,15 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
       return res.status(404).render("errors/404");
     }
 
+    // Identifies THIS page load at the desk, not the moderator - see the repo's release(). Minted
+    // server-side because the claim happens here, before any client script has run.
+    const shiftToken = crypto.randomUUID();
+
     // Claiming the desk comes before the (much heavier) queue read: a moderator who is being turned
     // away has no use for the cases, and shouldn't pay for assembling them.
-    const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user);
+    const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user, {
+      token: shiftToken,
+    });
     if (!shift.ok) {
       // permissionLevel comes from requireLevel(2) above; the busy page uses it to decide whether
       // to offer the takeover button, which is owner/admin-only (see the takeover route).
@@ -141,7 +158,9 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     // Nothing to hold the desk for, and the empty state runs no client script - so there'd be
     // nothing renewing the lease either. Give it straight back rather than locking the channel out
     // for a lease's length because someone glanced at an empty queue.
-    if (!cases.length) await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId);
+    if (!cases.length) {
+      await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId, shiftToken);
+    }
 
     // Same channel-wide name -> image map the emote cloud and the news comments box resolve
     // against (twitch/emoteImages.js) - so an emote name typed in an appeal or said in chat
@@ -162,6 +181,7 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
         deny: config.unbanBureau?.voteDenyEmote || "VoteNay",
       },
       heartbeatMs: unbanBureauShiftRepo.SHIFT_HEARTBEAT_MS,
+      shiftToken,
     });
   } catch (err) {
     next(err);
@@ -190,6 +210,25 @@ router.get(
         before: req.query.before || null,
       });
 
+      // Opening a case is what makes the bot read Twitch's viewer card for it (see
+      // unbanRequestsRepo.requestViewerCard). Skipped when paging the log - a scroll-back is the
+      // same case still open, and the request is already in flight or long since served.
+      //
+      // `preparing` is only true when we hold NO mirror at all, and it drives the "Подготовка дела"
+      // screen rather than a spinner over live numbers. A case that has a mirror renders straight
+      // away even if the bot is about to refresh it: those are real Twitch figures, just minutes
+      // old, and blanking the card to re-fetch what is already correct would be theatre. What the
+      // screen prevents is the opposite and much worse case - painting the bot's own much smaller
+      // counts, which a moderator may read and act on, and then silently swapping them for Twitch's
+      // two seconds later.
+      let preparing = false;
+      if (!req.query.before) {
+        preparing = !unbanCase.twitchModLogs;
+        unbanRequestsRepo
+          .requestViewerCard(String(unbanCase._id), channel.channelId)
+          .catch((err) => console.error("[unban-bureau] viewer-card request failed:", err));
+      }
+
       // The fourth sheet's two speeches ride along here rather than in the page's `data-cases`
       // attribute, for the reason unbanRequestsRepo.listPendingForChannel projects twitchModLogs
       // out: everything embedded in that attribute is paid for by every case in the queue on every
@@ -202,7 +241,12 @@ router.get(
         ? undefined
         : await unbanOpinionsRepo.findByCaseId(String(unbanCase._id));
 
-      res.json({ ok: true, dossier, ...(opinions === undefined ? {} : { opinions: opinions || null }) });
+      res.json({
+        ok: true,
+        dossier,
+        preparing,
+        ...(opinions === undefined ? {} : { opinions: opinions || null }),
+      });
     } catch (err) {
       next(err);
     }
@@ -221,7 +265,9 @@ router.post(
       const channel = await loadChannelJson(req, res);
       if (!channel) return;
 
-      const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user);
+      const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user, {
+        token: shiftTokenOf(req),
+      });
       // Renewal and re-acquisition are the same call, so a moderator whose lease lapsed while the
       // tab was backgrounded simply takes the desk back if nobody else has claimed it.
       if (!shift.ok) return res.status(409).json({ error: "shift_taken", holder: shift.holder });
@@ -291,7 +337,7 @@ router.post(
     try {
       const channel = await loadChannelJson(req, res);
       if (!channel) return;
-      await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId);
+      await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId, shiftTokenOf(req));
       res.json({ ok: true });
     } catch (err) {
       next(err);

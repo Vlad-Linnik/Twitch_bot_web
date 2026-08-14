@@ -573,6 +573,66 @@ body.ub-playing footer {
 #ub-mod-comments::-webkit-scrollbar-thumb,
 #ub-actions::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
 
+/* "Подготовка дела" - covers the applicant card while the bot fetches Twitch's half of the dossier.
+   Painted in the card's own stock rather than a grey scrim: a dim overlay on sepia artwork reads as
+   a broken image, this reads as a document not finished yet.
+
+   Two deliberate details. It never takes pointer events, so the appeal note and the desk stay usable
+   underneath. And it only becomes VISIBLE after a fifth of a second (opacity transition-delay): the
+   class goes on at every case switch, so a case whose card is already mirrored - which answers from
+   Mongo in ~100ms - drops it again before anything appears. Removing the class hides it instantly,
+   since the base rule carries no transition. */
+#ub-uc-preparing {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgb(226 216 194 / 0.94);
+  color: #6b6455;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+#ub-user-card.ub-preparing #ub-uc-preparing {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.18s ease 0.22s;
+}
+#ub-uc-preparing-title {
+  font-size: 17px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+#ub-uc-preparing-note {
+  font-size: 11px;
+  font-style: italic;
+  color: #8a8272;
+}
+.ub-prep-dots {
+  display: flex;
+  gap: 7px;
+}
+.ub-prep-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b6455;
+  animation: ub-prep-blink 1.2s ease-in-out infinite;
+}
+.ub-prep-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ub-prep-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ub-prep-blink {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ub-prep-dots span { animation: none; opacity: 0.6; }
+}
+
 /* Sits at the top of the log while an older page is being fetched - the only feedback that
    scrolling up did something, now that there is no button to press. */
 .ub-log-loading {

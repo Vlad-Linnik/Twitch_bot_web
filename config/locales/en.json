@@ -1748,6 +1748,8 @@
     "volSpit": "Spit:",
     "volSpeaker": "Speaker:",
     "volShoot": "Shoot:",
+    "preparingTitle": "Preparing the case",
+    "preparingNote": "Requesting Twitch's records…",
     "subUnknown": "Subscription unknown",
     "subNone": "Not subscribed",
     "subActive": "Subscribed",

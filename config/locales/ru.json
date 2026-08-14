@@ -1748,6 +1748,8 @@
     "volSpit": "Выдача:",
     "volSpeaker": "Громкоговоритель:",
     "volShoot": "Выстрел:",
+    "preparingTitle": "Подготовка дела",
+    "preparingNote": "Запрашиваем данные Twitch…",
     "subUnknown": "Подписка неизвестна",
     "subNone": "Не подписан",
     "subActive": "Подписан",

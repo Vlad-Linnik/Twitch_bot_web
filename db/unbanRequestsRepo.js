@@ -179,6 +179,29 @@ async function requestVoteClose(id, channelId) {
   return unwrap(result);
 }
 
+// Asks the bot to fetch this case's Twitch viewer card - the moderator comments, the real lifetime
+// counts, the risk read and the channel's chat rules. Same "the site asks, the bot executes"
+// contract as requestDecision/requestVote above, and for the same reason: those facts come from
+// Twitch's private GraphQL, which needs a full browser-session token this app deliberately does not
+// hold (see ../CLAUDE.md's "Бюро амнистии").
+//
+// Called when a moderator OPENS a case, which since 2026-08-15 is the only thing that causes the
+// bot to read that endpoint at all. It used to mirror the whole pending queue on a 30-minute timer
+// whether anyone looked or not - an appeal nobody reached in three days cost ~144 requests to an
+// undocumented, rate-limited endpoint where one would have done.
+//
+// Unconditional on purpose: this app does not know the freshness TTL (it lives in the bot, next to
+// the fetch), so it flags every first dossier load and lets the bot decide. Reopening a case inside
+// the window costs one tiny $set here and no Twitch call at all. Fire-and-forget - a failure here
+// must never fail the dossier the moderator asked for, which renders fine from our own records.
+async function requestViewerCard(id, channelId) {
+  const col = await ensureInitialized();
+  await col.updateOne(
+    { _id: new ObjectId(id), channelId: String(channelId) },
+    { $set: { viewerCardRequestedAt: new Date() } }
+  );
+}
+
 // Just the volatile bits, for the page's live vote bar / decision-applied polling. Projected down
 // so a 2s poll doesn't drag the whole appeal text and enrichment along every time.
 //
@@ -209,5 +232,6 @@ module.exports = {
   requestDecision,
   requestVote,
   requestVoteClose,
+  requestViewerCard,
   getLiveState,
 };

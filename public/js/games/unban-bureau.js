@@ -31,6 +31,7 @@
   var cases = JSON.parse(config.dataset.cases);
   var newestFirst = config.dataset.newestFirst === "1";
   var HEARTBEAT_MS = parseInt(config.dataset.heartbeatMs, 10) || 25000;
+  var SHIFT_TOKEN = config.dataset.shiftToken || "";
   // name -> {name, url}, same channel-wide map the news comments box resolves against
   // (public/js/emoteMatch.js, shared with that page). Used to swap emote names for their real
   // image in the appeal text and chat log - EmoteMatch.tokenizeForPreview does the whole-token
@@ -179,7 +180,10 @@
     return fetch("/" + CHANNEL + "/unban-bureau/" + path, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body: new URLSearchParams(Object.assign({ _csrf: CSRF }, body)),
+      // shiftToken rides on every write, not just the two shift endpoints: it identifies this PAGE
+      // LOAD (see routes/unbanBureau.js), the desk endpoints are the ones that read it, and sending
+      // it from one place is what keeps a future caller from forgetting to.
+      body: new URLSearchParams(Object.assign({ _csrf: CSRF, shiftToken: SHIFT_TOKEN }, body)),
     }).then(function (res) {
       return res.json().then(function (data) {
         // Every write endpoint checks the shift, so any of them can be the one that discovers the
@@ -499,6 +503,11 @@
     // Reset before the fetch, so a scroll landing mid-load can't page the previous applicant's log.
     logState.hasMore = false;
     logState.oldest = null;
+    // Covered from the moment the case switches, not from the first response: the five stat boxes
+    // still hold the PREVIOUS applicant's counts until the dossier lands, which is the same
+    // misreading this screen exists to prevent. The CSS delay means a mirrored case - answered from
+    // Mongo in about 100ms - drops the cover again before it is ever visible.
+    showPreparing(true);
     loadDossier(c, null);
 
     dealPapers();
@@ -1118,7 +1127,21 @@
     return subscription.prime ? label + " " + T.subPrime : label;
   }
 
-  function loadDossier(c, before) {
+  // How long the desk waits for the bot to bring Twitch's half of the dossier before giving up and
+  // showing the case from our own records. The bot picks the request up on its 2-second tick and one
+  // card takes well under a second, so this is sized for "the bot is restarting", not for the normal
+  // case. Past the deadline the card renders with `counts.source: "bot"`, which the tooltip already
+  // says out loud - honest, just smaller numbers.
+  var PREPARE_POLL_MS = 1500;
+  var PREPARE_MAX_WAIT_MS = 25000;
+
+  function showPreparing(on) {
+    $("ub-user-card").classList.toggle("ub-preparing", Boolean(on));
+  }
+
+  // `waitUntil` is set only on the retries this function schedules for itself, so the deadline is
+  // measured from the moderator opening the case rather than restarting with every poll.
+  function loadDossier(c, before, waitUntil) {
     var url = "/" + CHANNEL + "/unban-bureau/dossier.json?id=" + encodeURIComponent(c._id) +
       (before ? "&before=" + encodeURIComponent(before) : "");
     logState.loading = true;
@@ -1182,9 +1205,29 @@
         renderLog(d, Boolean(before));
         if (!before) $("ub-chat-logs").scrollTop = $("ub-chat-logs").scrollHeight;
         logState.loading = false;
+
+        // Everything above has already painted underneath the cover, so lifting it here shows the
+        // finished card in one step - no window in which the bot's own counts are readable and then
+        // replaced. `preparing` is only ever true when the case has no Twitch mirror at all.
+        if (before) return;
+        var shown = currentCase();
+        var stillOpen = shown && String(shown._id) === String(c._id);
+        var deadline = waitUntil || Date.now() + PREPARE_MAX_WAIT_MS;
+        if (payload.preparing && stillOpen && Date.now() < deadline) {
+          showPreparing(true);
+          setTimeout(function () {
+            // Re-checked rather than trusted: the moderator may have moved on during the wait, and
+            // reloading a case they have left would paint another applicant's dossier over theirs.
+            var open = currentCase();
+            if (open && String(open._id) === String(c._id)) loadDossier(c, null, deadline);
+          }, PREPARE_POLL_MS);
+        } else {
+          showPreparing(false);
+        }
       })
       .catch(function () {
         showLogSpinner(false);
+        showPreparing(false);
         // Left unlocked on purpose: the next scroll retries, which is the only way back for a
         // dropped page now that there is no button to press.
         logState.loading = false;
@@ -1846,10 +1889,16 @@
     // Hand the desk back. sendBeacon rather than fetch because the page is already going away - a
     // normal request is cancelled on unload. It can't set headers, so the CSRF token rides in the
     // body (URLSearchParams sends the form content type the server's parser expects).
+    //
+    // shiftToken matters most HERE, and a reload is why. Reloading fires this and loads the new page
+    // in no guaranteed order; landing second, this used to delete the lease the new page had just
+    // taken - leaving the desk unheld while the page believed it held it, so the next verdict came
+    // back "shift_taken" naming nobody. The new page carries a new token, so this now matches
+    // nothing and does nothing.
     if (!shiftEnded && navigator.sendBeacon) {
       navigator.sendBeacon(
         "/" + CHANNEL + "/unban-bureau/release.json",
-        new URLSearchParams({ _csrf: CSRF })
+        new URLSearchParams({ _csrf: CSRF, shiftToken: SHIFT_TOKEN })
       );
     }
   });

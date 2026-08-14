@@ -49,7 +49,10 @@ function holderOf(doc) {
 // The _id IS the channel login, which is what makes this atomic without a transaction: the upsert
 // either matches the holder's own (or a lapsed) document and rewrites it, or collides with the live
 // one on the primary key. There is no window in which two callers both think they won.
-async function acquire(channelLogin, user, attempt = 0) {
+//
+// `token` identifies the PAGE, not the person - see release(). Optional: a caller that doesn't pass
+// one leaves whatever was there, so a heartbeat from an older client build can't blank it.
+async function acquire(channelLogin, user, { token = null, attempt = 0 } = {}) {
   const col = await ensureInitialized();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SHIFT_LEASE_MS);
@@ -70,6 +73,7 @@ async function acquire(channelLogin, user, attempt = 0) {
             login: user.login,
             displayName: user.displayName || user.login,
             expiresAt,
+            token: token === null ? { $ifNull: ["$token", null] } : token,
             startedAt: {
               $cond: [
                 { $eq: ["$userId", String(user.userId)] },
@@ -84,15 +88,26 @@ async function acquire(channelLogin, user, attempt = 0) {
     );
     return { ok: true, holder: holderOf(doc) };
   } catch (err) {
-    // Duplicate key = the filter didn't match, so a document exists and it is somebody else's live
-    // lease. Anything else is a real failure and must not read as "busy".
+    // Duplicate key = the filter didn't match when the update ran, so a document exists. Anything
+    // else is a real failure and must not read as "busy".
     if (err && err.code === 11000) {
       const doc = await col.findOne({ _id: channelLogin });
+
+      // IT IS ALREADY OURS. Not a conflict at all - "this user holds the desk" is precisely the
+      // success condition, and the filter above says so too. It can only be reached by two of this
+      // user's OWN requests racing, which is exactly what reloading the page does: the old page's
+      // in-flight heartbeat (or its pagehide release) overlaps the new page's claim, one of them
+      // wins the insert, and the loser used to fall through to the branch below and render the busy
+      // page - naming the moderator who was staring at it as the one occupying the desk.
+      if (doc && doc.userId === String(user.userId) && doc.expiresAt > new Date()) {
+        return { ok: true, holder: holderOf(doc) };
+      }
+
       // Lapsed between the upsert and this read (or released outright) — retry rather than turning
       // this moderator away on a lease nobody holds. Bounded: a third collision means someone else
       // is genuinely winning the race, and reporting them as busy is the correct answer.
       if ((!doc || doc.expiresAt <= new Date()) && attempt < 2) {
-        return acquire(channelLogin, user, attempt + 1);
+        return acquire(channelLogin, user, { token, attempt: attempt + 1 });
       }
       if (!doc) return { ok: false, holder: null };
       return { ok: false, holder: holderOf(doc) };
@@ -148,9 +163,21 @@ async function forceAcquire(channelLogin, user) {
 
 // Explicit hand-back on pagehide. Scoped by userId so a stale beacon from a moderator whose lease
 // already rolled over to a colleague can't end the colleague's shift.
-async function release(channelLogin, userId) {
+//
+// ALSO scoped by the page's own token, because "a colleague" was never the only way this beacon
+// arrived late. Reloading the desk fires pagehide on the old page and loads the new one, in no
+// guaranteed order: with the beacon landing second it deleted the lease the new page had just
+// taken, leaving the desk unheld while the page believed otherwise - so the next verdict came back
+// 409 "shift_taken" naming nobody, until the 25s heartbeat quietly took it again. The token is
+// minted per page load, so the old page's beacon now matches nothing and is a no-op.
+//
+// A missing token falls back to the old userId-only delete: a client cached from before this must
+// still be able to hand the desk back, and the lease is its own backstop either way.
+async function release(channelLogin, userId, token = null) {
   const col = await ensureInitialized();
-  const result = await col.deleteOne({ _id: channelLogin, userId: String(userId) });
+  const filter = { _id: channelLogin, userId: String(userId) };
+  if (token) filter.token = token;
+  const result = await col.deleteOne(filter);
   return result.deletedCount > 0;
 }
 
