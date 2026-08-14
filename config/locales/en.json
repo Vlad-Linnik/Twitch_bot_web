@@ -93,7 +93,8 @@
     "customBadge": {
       "pinned": "pinned",
       "announced": "announcement",
-      "timerEvery": "every"
+      "timerEvery": "every",
+      "category": "current category"
     },
     "access": {
       "mod": "mod",

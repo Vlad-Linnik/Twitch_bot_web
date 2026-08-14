@@ -93,7 +93,8 @@
     "customBadge": {
       "pinned": "закреплено",
       "announced": "объявление",
-      "timerEvery": "каждые"
+      "timerEvery": "каждые",
+      "category": "текущая категория"
     },
     "access": {
       "mod": "модератор",

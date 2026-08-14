@@ -3,6 +3,7 @@ const commandGroups = require("../data/commands");
 const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
+const { getCurrentCategory } = require("../twitch/currentCategory");
 const { resolveCommandGroups, buildCustomCommandsGroup, partitionIntoSections } = require("../lib/commandsView");
 
 const router = express.Router();
@@ -22,17 +23,24 @@ router.get("/commands", async (req, res, next) => {
 
     let channelCommandsConfig = null;
     let customCommands = [];
+    let currentCategory = null;
     if (selectedChannel) {
       const config = await channelConfigRepo.getConfig(selectedChannel.channelLogin);
       channelCommandsConfig = config.commands;
       customCommands = await customCommandsRepo.list(selectedChannel.channelLogin);
+      // Only pay for a live Helix call when it could actually change what's shown - same
+      // economy as the bot's own resolveCommandText (TwitchBot/commands/CustomCommands.js),
+      // which likewise skips the check entirely for commands with no category overrides.
+      if (customCommands.some((c) => c.categoryTexts && c.categoryTexts.length)) {
+        currentCategory = await getCurrentCategory(selectedChannel.channelId);
+      }
     }
 
     const resolvedGroups = resolveCommandGroups(commandGroups, channelCommandsConfig);
     // Unshift, not push: the channel's own custom commands are what most visitors
     // are actually looking for, so that group leads both the "everyone" and
     // "moderators" sections (partitionIntoSections preserves resolvedGroups order).
-    if (customCommands.length) resolvedGroups.unshift(buildCustomCommandsGroup(customCommands));
+    if (customCommands.length) resolvedGroups.unshift(buildCustomCommandsGroup(customCommands, currentCategory));
 
     const sections = partitionIntoSections(resolvedGroups);
 
