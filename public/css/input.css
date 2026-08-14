@@ -318,6 +318,35 @@ html:active-view-transition-type(instant) {
   }
 }
 
+/* Save-button pulse: fired instead of closing the create/edit dialog when it holds unsaved
+   changes (public/js/custom-commands.js's pulseSaveButton) - a growing fuchsia ring (a brighter,
+   more saturated color than the button's own purple, so the ring reads as a distinct signal
+   rather than blending into it) that fades out as the button itself flashes brighter and scales
+   up more noticeably, three times, to pull the eye to the one control that keeps the edit rather
+   than interrupting with a second dialog. */
+@keyframes cc-save-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(232 121 249 / 0.9);
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 0 18px rgb(232 121 249 / 0);
+    transform: scale(1.18);
+    filter: brightness(1.4);
+  }
+}
+.cc-save-pulse {
+  animation: cc-save-pulse 550ms ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-save-pulse {
+    animation: none;
+    box-shadow: 0 0 0 4px rgb(232 121 249 / 0.9);
+  }
+}
+
 /* Custom radio buttons: a plain circle instead of the native OS control,
    filled with a smaller dot when checked. */
 input[type="radio"].radio-custom {

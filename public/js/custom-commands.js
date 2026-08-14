@@ -32,6 +32,7 @@
   const modal = document.getElementById("command-modal");
   const openCreateBtn = document.getElementById("open-create-modal");
   const modalClose = document.getElementById("modal-close");
+  const saveButton = form.querySelector('button[type="submit"]');
 
   const originalHeading = heading.textContent;
 
@@ -67,6 +68,54 @@
   // The command currently loaded into the form for editing (button.dataset.name), or null while
   // creating a new one - excluded from conflict checks so a command doesn't collide with itself.
   let editingCommand = null;
+
+  // --- Unsaved-changes guard: a snapshot of the form taken the moment the modal opens (create or
+  // edit), compared against the live form on every way of closing it (the × button, Cancel, a
+  // backdrop click, or Escape). Rather than interrupting with a second dialog, a dirty form just
+  // refuses to close - the Save button gets scrolled into view and pulses instead, so the mod's
+  // attention lands on the one control that actually keeps the edit. Includes the alias text box's
+  // live draft, since it has no name attribute and wouldn't otherwise show up in a FormData-based
+  // diff.
+  let formSnapshotAtOpen = null;
+
+  function serializeFormState() {
+    const data = new FormData(form);
+    data.delete("_csrf");
+    const parts = [];
+    for (const [key, value] of data.entries()) parts.push(`${key}=${value}`);
+    parts.sort();
+    parts.push(`__aliasDraft=${aliasInput.value}`);
+    return parts.join("&");
+  }
+
+  function snapshotFormState() {
+    formSnapshotAtOpen = serializeFormState();
+  }
+
+  function isFormDirty() {
+    return formSnapshotAtOpen !== null && serializeFormState() !== formSnapshotAtOpen;
+  }
+
+  // Restarting the animation on a class that's already applied (a mod hammering Escape) needs the
+  // class removed and the layout flushed first, or the browser just sees "no change" and skips it.
+  function pulseSaveButton() {
+    saveButton.scrollIntoView({ behavior: "smooth", block: "center" });
+    saveButton.classList.remove("cc-save-pulse");
+    void saveButton.offsetWidth;
+    saveButton.classList.add("cc-save-pulse");
+  }
+
+  saveButton.addEventListener("animationend", () => saveButton.classList.remove("cc-save-pulse"));
+
+  // Shared by every way of dismissing the dialog without saving - a dirty form pulses the Save
+  // button and stays open instead of closing.
+  function requestCloseModal() {
+    if (isFormDirty()) {
+      pulseSaveButton();
+      return;
+    }
+    modal.close();
+  }
 
   // Same normalization the server applies (lib/commandValidation.js's normalizeName): trim,
   // lowercase, drop a leading "!" if someone types the command the way they'd type it in chat.
@@ -269,6 +318,7 @@
     renderAliasChips();
     nameError.hidden = true;
     updateConflict();
+    formSnapshotAtOpen = null;
   }
 
   // --- Create/edit modal: a native <dialog> (same convention as views/partials/nav.ejs's
@@ -279,17 +329,30 @@
   // the same regardless of which control (or key) triggered it.
   openCreateBtn.addEventListener("click", () => {
     resetFormToCreateMode();
+    snapshotFormState();
     modal.showModal();
     name.focus();
   });
 
+  // Cancel means cancel - it always discards and closes, unguarded, unlike the × button/backdrop/
+  // Escape below (those read as an accidental dismissal of the dialog, not an explicit "discard my
+  // edit" decision, so they pulse the Save button instead of closing over unsaved changes).
   cancel.addEventListener("click", () => modal.close());
-  modalClose.addEventListener("click", () => modal.close());
+  modalClose.addEventListener("click", requestCloseModal);
 
   // A click landing on the <dialog> element itself (never a descendant) is a click on its
   // backdrop/edge - dialog has no way to distinguish that from a normal click otherwise.
   modal.addEventListener("click", (event) => {
-    if (event.target === modal) modal.close();
+    if (event.target === modal) requestCloseModal();
+  });
+
+  // Escape fires a cancelable "cancel" event before the dialog actually closes - block it the same
+  // way requestCloseModal() blocks the other close paths, so Escape doesn't bypass the guard.
+  modal.addEventListener("cancel", (event) => {
+    if (isFormDirty()) {
+      event.preventDefault();
+      pulseSaveButton();
+    }
   });
 
   modal.addEventListener("close", resetFormToCreateMode);
@@ -467,6 +530,7 @@
         heading.textContent = `${originalHeading} — !${button.dataset.name}`;
         updateConflict();
 
+        snapshotFormState();
         modal.showModal();
         result.focus();
       });
