@@ -1,0 +1,222 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabMemory') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const dayFmt = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short' });
+  const stampFmt = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  function formatBytes(bytes) {
+    const sign = bytes < 0 ? '-' : '';
+    const abs = Math.abs(bytes || 0);
+    if (abs < 1) return sign + '0 B';
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(sizes.length - 1, Math.floor(Math.log(abs) / Math.log(1024)));
+    return sign + (abs / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + sizes[i];
+  }
+  function formatSignedBytesPerDay(bytesPerDay) {
+    const sign = bytesPerDay > 0 ? '+' : '';
+    return sign + formatBytes(bytesPerDay) + t('admin.memoryPerDay');
+  }
+
+  // Same static server-rendered SVG as adminDiskUsage.ejs/adminVisits.ejs - no client JS, the data
+  // is fixed at page load. Two paths rather than one: the band is the hourly min/max spread and the
+  // line is the hourly average, because a single average line would hide exactly the momentary dip
+  // this page exists to catch.
+  const CHART_W = 800, CHART_H = 220, PLOT_PAD = 4;
+  const series = chartSeries || [];
+  const yFor = (p) => CHART_H - PLOT_PAD - (p / 100) * (CHART_H - 2 * PLOT_PAD);
+  const step = series.length > 1 ? CHART_W / (series.length - 1) : 0;
+  const xFor = (i) => (series.length === 1 ? CHART_W / 2 : i * step);
+
+  let bandPath = '';
+  let linePath = '';
+  series.forEach(function (p, i) {
+    bandPath += (i === 0 ? 'M' : ' L') + ` ${xFor(i).toFixed(1)} ${yFor(p.maxPct).toFixed(1)}`;
+    linePath += (i === 0 ? 'M' : ' L') + ` ${xFor(i).toFixed(1)} ${yFor(p.avgPct).toFixed(1)}`;
+  });
+  for (let i = series.length - 1; i >= 0; i--) {
+    bandPath += ` L ${xFor(i).toFixed(1)} ${yFor(series[i].minPct).toFixed(1)}`;
+  }
+  if (bandPath) bandPath += ' Z';
+
+  function tickIndices(n, want) {
+    const count = Math.min(want, n);
+    if (count <= 1) return n ? [0] : [];
+    const idx = [];
+    for (let i = 0; i < count; i++) idx.push(Math.round((i * (n - 1)) / (count - 1)));
+    return [...new Set(idx)];
+  }
+  const ticks = tickIndices(series.length, 6);
+
+  // The danger band. 10% of 1833 MB is ~183 MB - not a threshold the kernel knows about, just the
+  // region where a single spike stops having anywhere to go on a machine with no swap.
+  const DANGER_PCT = 10;
+  const processes = (trends && trends.processes) || [];
+  const maxProcessRss = Math.max(...processes.map((p) => p.rssBytes), 1);
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <section>
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+      <p class="text-xs text-neutral-600 max-w-2xl"><%= t('admin.memoryIntro') %></p>
+      <div class="flex items-center gap-1 shrink-0">
+        <span class="text-[11px] text-neutral-600 mr-1"><%= t('admin.memoryWindow') %></span>
+        <% windows.forEach(function (w) { %>
+          <a href="/admin/memory?days=<%= w %>"
+             class="px-2 py-1 rounded text-xs tabular-nums transition-colors <%= w === days ? 'bg-purple-500/20 text-purple-300' : 'text-neutral-500 hover:text-neutral-300' %>">
+            <%= w %><%= t('admin.memoryWindowDays') %>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+
+    <% if (!trends) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.memoryEmpty') %> (<%= sampleCount %>)</p>
+    <% } else { %>
+      <% if (trends.swap.known && !trends.swap.present) { %>
+        <div class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 mb-6">
+          <p class="text-sm font-semibold text-amber-300"><%= t('admin.memoryNoSwapTitle') %></p>
+          <p class="text-xs text-amber-200/70 mt-1"><%= t('admin.memoryNoSwapBody') %></p>
+        </div>
+      <% } %>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.memoryAvailableNow') %></p>
+          <p class="text-xl font-semibold tabular-nums <%= trends.current.availablePct < DANGER_PCT ? 'text-red-400' : 'text-neutral-100' %>">
+            <%= trends.current.availablePct.toFixed(1) %>%
+          </p>
+          <p class="text-[11px] text-neutral-600">
+            <%= formatBytes(trends.current.availableBytes) %> <%= t('admin.memoryOf') %> <%= formatBytes(trends.current.totalBytes) %>
+          </p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.memoryLowWater') %></p>
+          <p class="text-xl font-semibold tabular-nums <%= trends.lowWater && trends.lowWater.availablePct < DANGER_PCT ? 'text-red-400' : 'text-neutral-100' %>">
+            <%= trends.lowWater ? trends.lowWater.availablePct.toFixed(1) + '%' : '—' %>
+          </p>
+          <p class="text-[11px] text-neutral-600">
+            <% if (trends.lowWater) { %>
+              <%= formatBytes(trends.lowWater.availableBytes) %> · <%= stampFmt.format(trends.lowWater.timestamp) %>
+            <% } %>
+          </p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.memoryTrend') %></p>
+          <p class="text-xl font-semibold tabular-nums <%= trends.trend && trends.trend.availableBytesPerDay < 0 ? 'text-amber-400' : 'text-neutral-100' %>">
+            <%= trends.trend ? formatSignedBytesPerDay(trends.trend.availableBytesPerDay) : '—' %>
+          </p>
+          <p class="text-[11px] text-neutral-600">
+            <%= t('admin.memoryDaysToExhaustion') %>:
+            <%= trends.trend && trends.trend.daysToExhaustion != null ? Math.round(trends.trend.daysToExhaustion) : t('admin.memoryNoProjection') %>
+          </p>
+        </div>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+          <p class="text-xs text-neutral-500"><%= t('admin.memorySampleSpan') %></p>
+          <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= (trends.spanHours / 24).toFixed(1) %>d</p>
+          <p class="text-[11px] text-neutral-600">
+            <% if (trends.swap.known && trends.swap.present) { %>
+              <%= t('admin.memorySwapPresent') %>: <%= formatBytes(trends.swap.totalBytes) %>
+            <% } else if (!trends.swap.known) { %>
+              <%= t('admin.memorySwapUnknown') %>
+            <% } else { %>
+              <%= trends.sampleCount.toLocaleString(dateLocale) %> × 30s
+            <% } %>
+          </p>
+        </div>
+      </div>
+
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.memoryChartHeading') %></h2>
+      <p class="text-xs text-neutral-600 mb-4"><%= t('admin.memoryChartLegend') %></p>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 mb-10">
+        <div class="flex gap-2">
+          <div class="flex flex-col justify-between py-0.5 text-[11px] text-neutral-500 text-right shrink-0 w-8">
+            <span>100%</span>
+            <span>50%</span>
+            <span>0%</span>
+          </div>
+          <svg viewBox="0 0 <%= CHART_W %> <%= CHART_H %>" preserveAspectRatio="none" class="w-full h-48">
+            <rect x="0" y="<%= yFor(DANGER_PCT).toFixed(1) %>" width="<%= CHART_W %>"
+                  height="<%= (CHART_H - PLOT_PAD - yFor(DANGER_PCT)).toFixed(1) %>"
+                  fill="#ef4444" fill-opacity="0.08" />
+            <% [PLOT_PAD, CHART_H / 2, CHART_H - PLOT_PAD].forEach(function (y) { %>
+              <line x1="0" y1="<%= y %>" x2="<%= CHART_W %>" y2="<%= y %>" stroke="#262626" stroke-width="1" vector-effect="non-scaling-stroke" />
+            <% }) %>
+            <% if (bandPath) { %>
+              <path d="<%= bandPath %>" fill="#22d3ee" fill-opacity="0.18" />
+              <path d="<%= linePath %>" fill="none" stroke="#22d3ee" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+            <% } %>
+          </svg>
+        </div>
+        <div class="flex justify-between text-[11px] text-neutral-500 mt-1 pl-10">
+          <% ticks.forEach(function (i) { %>
+            <span><%= dayFmt.format(series[i].timestamp) %></span>
+          <% }) %>
+        </div>
+      </div>
+
+      <% if (trends.self) { %>
+        <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.memoryBotHeading') %></h2>
+        <p class="text-xs text-neutral-600 mb-4"><%= t('admin.memoryBotIntro') %></p>
+        <div class="grid grid-cols-3 gap-3 mb-10">
+          <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+            <p class="text-xs text-neutral-500"><%= t('admin.memoryBotCurrent') %></p>
+            <p class="text-lg font-semibold text-neutral-100 tabular-nums"><%= formatBytes(trends.self.currentBytes) %></p>
+          </div>
+          <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+            <p class="text-xs text-neutral-500"><%= t('admin.memoryBotPeak') %></p>
+            <p class="text-lg font-semibold text-neutral-100 tabular-nums"><%= formatBytes(trends.self.peakBytes) %></p>
+          </div>
+          <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+            <p class="text-xs text-neutral-500"><%= t('admin.memoryBotGrowth') %></p>
+            <p class="text-lg font-semibold tabular-nums <%= trends.self.growthBytesPerDay > 0 ? 'text-amber-400' : 'text-neutral-100' %>">
+              <%= trends.self.growthBytesPerDay != null ? formatSignedBytesPerDay(trends.self.growthBytesPerDay) : '—' %>
+            </p>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (processes.length) { %>
+        <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.memoryProcessesHeading') %></h2>
+        <p class="text-xs text-neutral-600 mb-4"><%= t('admin.memoryProcessesIntro') %></p>
+
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-[11px] text-neutral-500 border-b border-neutral-800">
+                <th class="px-4 py-2 font-medium"><%= t('admin.memoryColProcess') %></th>
+                <th class="px-4 py-2 font-medium text-right"><%= t('admin.memoryColPid') %></th>
+                <th class="px-4 py-2 font-medium text-right"><%= t('admin.memoryColRss') %></th>
+                <th class="px-4 py-2 font-medium text-right"><%= t('admin.memoryColShare') %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% processes.forEach(function (p) { %>
+                <tr class="border-b border-neutral-900 last:border-0">
+                  <td class="px-4 py-2 text-neutral-200">
+                    <%= p.name %><% if (p.cwd) { %> <span class="text-neutral-500">· <%= p.cwd %></span><% } %>
+                    <div class="text-[11px] text-neutral-600 truncate max-w-md"><%= p.command %></div>
+                    <div class="h-1 rounded-full bg-neutral-800 overflow-hidden mt-1 w-24">
+                      <div class="h-full bg-cyan-500 rounded-full" style="width: <%= Math.round((p.rssBytes / maxProcessRss) * 100) %>%"></div>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-right text-neutral-500 tabular-nums"><%= p.pid %></td>
+                  <td class="px-4 py-2 text-right text-neutral-300 tabular-nums"><%= formatBytes(p.rssBytes) %></td>
+                  <td class="px-4 py-2 text-right text-neutral-400 tabular-nums"><%= p.pct.toFixed(1) %>%</td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    <% } %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

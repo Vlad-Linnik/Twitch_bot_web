@@ -17,6 +17,8 @@ const botHeartbeatRepo = require("../db/botHeartbeatRepo");
 const siteVisitsRepo = require("../db/siteVisitsRepo");
 const diskUsageRepo = require("../db/diskUsageRepo");
 const { computeDiskUsageTrends } = require("../lib/diskUsageAnalysis");
+const memoryUsageRepo = require("../db/memoryUsageRepo");
+const { computeMemoryTrends, downsampleSeries } = require("../lib/memoryUsageAnalysis");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
@@ -341,6 +343,35 @@ router.get("/admin/disk-usage", requireAdmin, async (req, res, next) => {
     const samples = await diskUsageRepo.getSamples(DISK_USAGE_LOOKBACK_DAYS);
     const trends = computeDiskUsageTrends(samples);
     res.render("adminDiskUsage", { tab: "disk-usage", trends, sampleCount: samples.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Memory gets a switchable window where disk doesn't, because the two are read for different
+// reasons: the disk tab is only ever asked "how long until it fills", while memory is also asked
+// "what happened last night" right after an unexplained restart - and a 90-day chart flattens a
+// one-hour dip into nothing. Defaults to 14 days; the whole 90-day retention is one click away.
+const MEMORY_WINDOWS = [1, 7, 14, 30, 90];
+const MEMORY_DEFAULT_DAYS = 14;
+// Buckets are hourly, so 90 days is 2,160 of them - collapsed (never sampled, see
+// lib/memoryUsageAnalysis.js's downsampleSeries) to keep the server-rendered SVG path sane.
+const MEMORY_CHART_POINTS = 400;
+
+router.get("/admin/memory", requireAdmin, async (req, res, next) => {
+  try {
+    const requestedDays = Number(req.query.days);
+    const days = MEMORY_WINDOWS.includes(requestedDays) ? requestedDays : MEMORY_DEFAULT_DAYS;
+    const samples = await memoryUsageRepo.getSamples(days);
+    const trends = computeMemoryTrends(samples);
+    res.render("adminMemory", {
+      tab: "memory",
+      trends,
+      chartSeries: trends ? downsampleSeries(trends.series, MEMORY_CHART_POINTS) : [],
+      days,
+      windows: MEMORY_WINDOWS,
+      sampleCount: samples.length,
+    });
   } catch (err) {
     next(err);
   }
