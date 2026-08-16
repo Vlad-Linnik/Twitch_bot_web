@@ -56,6 +56,22 @@ const REPLAY_MAX_DAYS = 180;
 const REPLAY_DEFAULT_DAYS = 30;
 const REPLAY_MAX_RESULTS = 60;
 
+/**
+ * Что этот канал знает про свои слова: частотность (ранжирование по редкости) и множество
+ * эмоутов (их нельзя предлагать ни ключевыми, ни исключающими словами).
+ *
+ * И то и другое - улучшение, а не требование: канал без ChatWordStats и без синхронизированных
+ * эмоутов получит корректные слова, просто отсортированные хуже. Поэтому обе выборки падают
+ * молча в пустое множество, а не роняют кнопку, ради которой модератор сюда пришёл.
+ */
+async function channelVocabulary(channelLogin) {
+  const [wordFrequency, emoteWords] = await Promise.all([
+    wordStatsRepo.getStemFrequency(channelLogin, stem).catch(() => new Map()),
+    wordStatsRepo.getEmoteWordSet(channelLogin).catch(() => new Set()),
+  ]);
+  return { wordFrequency, emoteWords };
+}
+
 async function loadChannel(req, res) {
   const channel = await channelsRepo.findByLogin(req.params.channel);
   if (!channel) {
@@ -173,21 +189,38 @@ router.post(
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).json({ error: "unknown_channel" });
 
-      // Rarity ranking is a nicety, not a requirement: a channel with no ChatWordStats yet
-      // still gets correct keywords, just ordered by how many examples used them.
-      let wordFrequency = new Map();
-      try {
-        wordFrequency = await wordStatsRepo.getStemFrequency(channel.channelLogin, stem);
-      } catch {
-        wordFrequency = new Map();
-      }
-
-      const derived = validation.suggestKeywords(req.body.examples, wordFrequency);
+      const { wordFrequency, emoteWords } = await channelVocabulary(channel.channelLogin);
+      const derived = validation.suggestKeywords(req.body.examples, wordFrequency, emoteWords);
       res.json({
         required: derived.required,
         optional: derived.optional,
         warning: derived.warning,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// --- исключающие слова из помеченных ложных срабатываний ---------------------------------
+
+router.post(
+  "/:channel/auto-answers/exclusions.json",
+  requireLevelJson(2),
+  searchLimiter,
+  async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.channel);
+      if (!channel) return res.status(404).json({ error: "unknown_channel" });
+
+      const { wordFrequency, emoteWords } = await channelVocabulary(channel.channelLogin);
+      const derived = validation.suggestExclusions(req.body.examples, req.body.antiExamples, {
+        wordFrequency,
+        emoteWords,
+        requiredWords: req.body.requiredWords,
+        optionalWords: req.body.optionalWords,
+      });
+      res.json(derived);
     } catch (err) {
       next(err);
     }

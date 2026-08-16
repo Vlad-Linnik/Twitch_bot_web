@@ -1859,6 +1859,7 @@
       "required_words_required": "At least one required word is needed - without it the topic would fire on everything.",
       "not_found": "Topic not found.",
       "bad_mode": "Unknown mode."
-    }
+    },
+    "excludeButton": "Suggest excluding words"
   }
 }

@@ -180,14 +180,14 @@
         </label>
       </div>
 
-      <% if (editing && (editing.antiExamples || []).length) { %>
-        <div>
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('autoAnswers.field.antiExamples') %></label>
-          <p class="text-neutral-600 text-xs mb-1.5"><%= t('autoAnswers.field.antiExamplesHint') %></p>
-          <textarea name="antiExamples" rows="3"
-                    class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-400 font-mono focus:outline-none focus:border-purple-500"><%= (editing.antiExamples || []).join('\n') %></textarea>
-        </div>
-      <% } %>
+      <div>
+        <label class="block text-sm text-neutral-300 mb-1"><%= t('autoAnswers.field.antiExamples') %></label>
+        <p class="text-neutral-600 text-xs mb-1.5"><%= t('autoAnswers.field.antiExamplesHint') %></p>
+        <textarea name="antiExamples" rows="3" id="aa-anti"
+                  class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-400 font-mono focus:outline-none focus:border-purple-500"><%= editing ? (editing.antiExamples || []).join('\n') : '' %></textarea>
+        <button type="button" id="aa-exclusions" class="mt-2 px-3 py-1.5 rounded-md border border-red-800 text-red-300 hover:border-red-600 text-xs"><%= t('autoAnswers.excludeButton') %></button>
+        <span id="aa-exclusions-note" class="ml-2 text-xs text-neutral-500"></span>
+      </div>
 
       <div class="flex items-center gap-3 pt-1">
         <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium"><%= t('autoAnswers.save') %></button>

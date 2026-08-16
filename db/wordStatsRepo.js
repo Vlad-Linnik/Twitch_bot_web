@@ -254,6 +254,40 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
 }
 
 /**
+ * Every emote word this channel knows, lowercased - the same three-way union the bot's
+ * ChatStats.emoteExclusionCache builds and getUserClouds() uses below.
+ *
+ * Used by the auto-answer authoring page to keep emotes out of the suggested keywords and, more
+ * importantly, out of the suggested EXCLUDING words. On the real marked sample from #mistercop
+ * the top of that list came back as `eeeh`, `Susge`, `Hmm`, `Jokerge` - emotes that happened to
+ * ride along on the messages a moderator marked wrong. Excluding on an emote is meaningless (it
+ * would silence the topic on any message carrying that emote, whatever it was about) and they
+ * ate half the slots, leaving real messages uncovered.
+ *
+ * The union rather than `whiteList` alone for the reason documented in ../CLAUDE.md's "Words vs
+ * emotes": a channel can stop tracking an emote while its chat keeps using it.
+ */
+async function getEmoteWordSet(channelLogin) {
+  const { whiteList, wordLifetimeStats, emoteExclusions } = await ensureInitialized();
+  const channel = withHash(channelLogin);
+  const projection = { projection: { _id: 0, word: 1 } };
+
+  const [tracked, seen, tombstoned] = await Promise.all([
+    whiteList.find({ channel }, projection).toArray(),
+    wordLifetimeStats.find({ channel }, projection).toArray(),
+    emoteExclusions.find({ channel }, projection).toArray(),
+  ]);
+
+  const out = new Set();
+  for (const rows of [tracked, seen, tombstoned]) {
+    for (const row of rows) {
+      if (row.word) out.add(String(row.word).toLowerCase());
+    }
+  }
+  return out;
+}
+
+/**
  * How often each STEM has been said in this channel, all-time - used to rank the keyword
  * suggestions when a moderator creates an auto-answer topic.
  *
@@ -286,6 +320,7 @@ async function getStemFrequency(channelLogin, stemFn) {
 
 module.exports = {
   getStemFrequency,
+  getEmoteWordSet,
   getChannelWordCloud,
   getChannelEmoteCloud,
   getTrackedEmoteCount,

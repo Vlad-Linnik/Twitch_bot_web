@@ -132,17 +132,28 @@
     }
 
     for (const hit of data.hits) {
-      const row = el("div", "mt-2 pt-2 border-t border-neutral-800/70");
+      const row = el("div", "mt-2 pt-2 border-t border-neutral-800/70 flex items-start justify-between gap-3");
+      const left = el("div", "min-w-0");
       const meta = el("div", "text-xs text-neutral-500");
       meta.append(
         el("span", "tabular-nums", new Date(hit.at).toLocaleString("ru-RU")),
         document.createTextNode(" · "),
         el("span", "text-neutral-400", hit.userName)
       );
-      row.appendChild(meta);
+      left.appendChild(meta);
       const body = el("p", "text-sm text-neutral-200 break-words");
       renderMessage(body, hit.message, hit.spans);
-      row.appendChild(body);
+      left.appendChild(body);
+      row.appendChild(left);
+
+      // Пометить прямо в результатах прогона, а не только в журнале живых срабатываний:
+      // прогон показывает месяц истории сразу, и разметить его за один заход - это и есть
+      // самый быстрый способ довести правило до ума, ещё до того как тема кого-то увидит.
+      const mark = el("button", "aa-mark shrink-0 px-2 py-1 rounded-md border border-neutral-700 text-neutral-400 hover:border-red-700 hover:text-red-400 text-xs", "не то");
+      mark.type = "button";
+      mark.dataset.message = hit.message;
+      row.appendChild(mark);
+
       out.appendChild(row);
     }
 
@@ -162,6 +173,84 @@
           row.appendChild(el("p", "text-[11px] text-neutral-600", `сумма ${miss.score}/${miss.threshold} · против: ${miss.against.join(" · ")}`));
         }
         out.appendChild(row);
+      }
+    }
+  }
+
+  // --- пометка в результатах прогона + вывод исключающих слов -----------------------------
+
+  if (form) {
+    const anti = document.getElementById("aa-anti");
+    const out = document.getElementById("aa-replay-out");
+    const excludeBtn = document.getElementById("aa-exclusions");
+    const excludeNote = document.getElementById("aa-exclusions-note");
+    const channel = form.dataset.channel;
+
+    const antiLines = () =>
+      anti.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+
+    /** Добавить сообщение в антипримеры, не плодя дублей. */
+    function addAnti(message) {
+      const lines = antiLines();
+      if (lines.includes(message)) return false;
+      lines.push(message);
+      anti.value = lines.join("\n");
+      return true;
+    }
+
+    out?.addEventListener("click", (event) => {
+      const button = event.target.closest(".aa-mark");
+      if (!button || button.disabled) return;
+      addAnti(button.dataset.message);
+      button.disabled = true;
+      button.textContent = "помечено";
+      button.className = "shrink-0 px-2 py-1 rounded-md border border-red-800 text-red-400 text-xs opacity-60";
+      excludeNote.textContent = `Помечено: ${antiLines().length}. Теперь можно вывести исключающие слова.`;
+    });
+
+    excludeBtn?.addEventListener("click", async () => {
+      if (!antiLines().length) {
+        excludeNote.textContent = "Сначала пометьте кнопкой «не то» хотя бы одно лишнее срабатывание.";
+        return;
+      }
+      excludeBtn.disabled = true;
+      excludeNote.textContent = "…";
+      try {
+        const data = await post(`/${channel}/auto-answers/exclusions.json`, {
+          examples: document.getElementById("aa-examples").value,
+          antiExamples: anti.value,
+          requiredWords: document.getElementById("aa-required").value,
+          optionalWords: document.getElementById("aa-optional").value,
+        });
+        renderExclusions(data);
+      } catch (err) {
+        excludeNote.textContent = "Не удалось: " + err.message;
+      } finally {
+        excludeBtn.disabled = false;
+      }
+    });
+
+    function renderExclusions(data) {
+      const field = form.querySelector('[name="excludeWords"]');
+      const existing = field.value.split(",").map((s) => s.trim()).filter(Boolean);
+      for (const item of data.exclusions) {
+        if (!existing.includes(item.label)) existing.push(item.label);
+      }
+      field.value = existing.join(", ");
+
+      // Сколько сообщений закрывает каждое слово - это то, по чему модератор решает, какие
+      // оставить: закрывающее одно сообщение почти всегда подогнано под него одно и лишнее.
+      excludeNote.replaceChildren();
+      const detail = el("span", "text-neutral-400");
+      detail.textContent = data.exclusions.map((e) => `${e.label} (${e.covers})`).join(", ") || "нечего исключать";
+      excludeNote.appendChild(detail);
+      if (data.warning) {
+        excludeNote.appendChild(el("span", "text-amber-400", " ⚠ " + data.warning));
+      }
+      for (const item of data.uncovered.slice(0, 5)) {
+        const line = el("p", "text-[11px] text-neutral-600 mt-1");
+        line.textContent = `не закрыто: «${item.text.slice(0, 80)}» — ${item.reason}`;
+        excludeNote.appendChild(line);
       }
     }
   }
