@@ -1,9 +1,8 @@
 // /<channel>/auto-answers - the moderator's console for auto-answer topics.
 //
-// The workflow this page exists to serve, in the owner's own words: notice the chat asking the
-// same thing over and over, come here, write the question a few times plus one universal
-// answer, let the bot work out the keywords (or set them by hand), and watch it in test mode
-// before letting it speak.
+// The workflow this page exists to serve: notice the chat asking the same thing over and over,
+// come here, write the question a few times plus one universal answer, let the bot work out the
+// keywords (or set them by hand), and watch it in test mode before letting it speak.
 //
 // Four things follow from that and shape every route below:
 //

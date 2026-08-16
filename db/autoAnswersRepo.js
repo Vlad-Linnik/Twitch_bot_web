@@ -26,7 +26,8 @@
 // `mode` is ONE field with three values rather than an `enabled` flag plus a mode, because
 // "disabled but live" is not a state that means anything. "off" is also the archive: a topic
 // that is done stays in the list, inert, ready to switch back on when the question returns.
-// There is deliberately no expiry date - the owner asked to decide that himself.
+// There is deliberately no expiry date: "the question stopped being asked" is a judgement call,
+// not a timer, and a topic that auto-expired would go quiet without anyone noticing.
 const { ObjectId } = require("mongodb");
 const { connect } = require("./connection");
 
