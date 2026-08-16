@@ -253,7 +253,39 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
   });
 }
 
+/**
+ * How often each STEM has been said in this channel, all-time - used to rank the keyword
+ * suggestions when a moderator creates an auto-answer topic.
+ *
+ * Rarity is what makes a keyword discriminating: if the examples share both "фильтр" and
+ * "стрим", the one said 1 184 times is the topic and the one said 90 000 times is background.
+ * Reading it from the channel's OWN chat rather than from the handful of examples is the whole
+ * point - what is rare in one channel is ordinary in another.
+ *
+ * Reads only the epoch-sentinel all-time rows (see ../CLAUDE.md's "Words vs emotes"), so this
+ * is one indexed scan rather than a $group over every day. Stems are folded here rather than
+ * stored, since ChatWordStats holds surface words.
+ */
+async function getStemFrequency(channelLogin, stemFn) {
+  const { chatWordStats } = await ensureInitialized();
+  const rows = await chatWordStats
+    .find(
+      { channel: withHash(channelLogin), date: LIFETIME_BUCKET },
+      { projection: { _id: 0, word: 1, count: 1 } }
+    )
+    .toArray();
+
+  const out = new Map();
+  for (const row of rows) {
+    const key = stemFn(row.word);
+    if (!key) continue;
+    out.set(key, (out.get(key) || 0) + (row.count || 0));
+  }
+  return out;
+}
+
 module.exports = {
+  getStemFrequency,
   getChannelWordCloud,
   getChannelEmoteCloud,
   getTrackedEmoteCount,

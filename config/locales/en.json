@@ -1797,5 +1797,68 @@
     "deniedCount": "Denied:",
     "bannedBy": "Banned By",
     "bannedAt": "Banned at"
+  },
+  "autoAnswers": {
+    "title": "Auto-answers",
+    "subtitle": "One answer for the question that keeps coming back",
+    "intro": "Chat keeps asking the same thing? Create a topic: a few example questions and one universal answer. The bot suggests the keywords, you correct them. A new topic starts in test mode - it matches, but the answer is only ever shown here.",
+    "topics": "Topics",
+    "newTopic": "New topic",
+    "editTopic": "Edit topic",
+    "empty": "No topics yet. The easiest first one comes from Log Search: find a repeating question and copy a few of its wordings into the examples.",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirmDelete": "Delete this topic? Its hit history stays.",
+    "mode": {
+      "off": "Off",
+      "test": "Test",
+      "live": "Live"
+    },
+    "hitsHint": "Total matches / of those, sent to chat",
+    "sentShort": "to chat",
+    "field": {
+      "title": "Topic name",
+      "answer": "Answer",
+      "answerHint": "One universal answer for every wording. The broader it is, the less chance the bot answers the wrong question.",
+      "examples": "Example questions",
+      "examplesHint": "One per line, taken from real chat. Be sure to include the SHORTEST real wording - it is what decides how broad the rule becomes. Every extra example only widens the rule, never narrows it.",
+      "required": "Required words",
+      "requiredHint": "Comma-separated. All must be present or the topic stays quiet.",
+      "optional": "Preferred words",
+      "optionalHint": "Comma-separated. They never trigger a match - they only pick between topics when several fit.",
+      "exclude": "Excluding words",
+      "excludeHint": "Comma-separated. Any of them in the message and the topic stays quiet.",
+      "notQuestion": "\"Not a question\" words",
+      "notQuestionHint": "Comma-separated. They override the question detector outright.",
+      "requireQuestion": "Only answer questions",
+      "cooldown": "Cooldown, sec",
+      "mode": "Mode",
+      "antiExamples": "Anti-examples",
+      "antiExamplesHint": "Messages this topic must not fire on. Anything you marked \"wrong\" lands here."
+    },
+    "deriveButton": "Suggest keywords",
+    "replayButton": "Check against logs",
+    "feed": "Match log",
+    "feedHint": "Test topics land here and nowhere else. Live ones land here too, but their answer went to chat.",
+    "feedEmpty": "Nothing yet.",
+    "wasSent": "· sent to chat",
+    "notSent": {
+      "test_mode": "· test mode, not sent",
+      "cooldown": "· cooldown, not sent",
+      "human_answered": "· a human answered first"
+    },
+    "reject": "wrong",
+    "rejected": "marked",
+    "error": {
+      "title_required": "Give the topic a name.",
+      "title_too_long": "That name is too long.",
+      "answer_required": "Write the answer text.",
+      "answer_too_long": "The answer is longer than Twitch chat allows.",
+      "required_words_required": "At least one required word is needed - without it the topic would fire on everything.",
+      "not_found": "Topic not found.",
+      "bad_mode": "Unknown mode."
+    }
   }
 }
