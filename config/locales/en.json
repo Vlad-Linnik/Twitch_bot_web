@@ -1836,7 +1836,10 @@
       "cooldown": "Cooldown, sec",
       "mode": "Mode",
       "antiExamples": "Anti-examples",
-      "antiExamplesHint": "Messages this topic must not fire on. Anything you marked \"wrong\" lands here."
+      "antiExamplesHint": "Messages this topic must not fire on. Anything you marked \"wrong\" lands here.",
+      "requiredOrHint": "Inside one entry, \"|\" means OR: \"фильтр, где|взять|скачать\" reads as \"фильтр AND (где OR взять OR скачать)\". This is how you separate \"where do I get it\" from \"what is wrong with it\" — excluding words cannot express that line.",
+      "skipModerators": "Do not answer moderators and the broadcaster",
+      "skipModeratorsHint": "A moderator knows where the answer is — they wrote it. On real logs a sizeable share of the noise turned out to be moderators talking to the streamer, and words do not tell it apart from a genuine question."
     },
     "deriveButton": "Suggest keywords",
     "replayButton": "Check against logs",

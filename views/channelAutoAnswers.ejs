@@ -64,8 +64,9 @@
               <% } %>
             </div>
             <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
-              <% (topic.requiredWords || []).forEach(function (w) { %>
-                <span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200 border border-amber-800/60"><%= w %></span>
+              <% (topic.requiredWords || []).forEach(function (w, i) { %>
+                <% if (i) { %><span class="text-[11px] text-neutral-600">и</span><% } %>
+                <span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200 border border-amber-800/60"><%= String(w).split("|").join(" или ") %></span>
               <% }) %>
               <% (topic.optionalWords || []).slice(0, 6).forEach(function (w) { %>
                 <span class="text-[11px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400"><%= w %></span>
@@ -135,6 +136,7 @@
         <div>
           <label class="block text-sm text-neutral-300 mb-1"><%= t('autoAnswers.field.required') %></label>
           <p class="text-neutral-600 text-xs mb-1.5"><%= t('autoAnswers.field.requiredHint') %></p>
+          <p class="text-neutral-600 text-xs mb-1.5"><%= t('autoAnswers.field.requiredOrHint') %></p>
           <input name="requiredWords" id="aa-required" required value="<%= editing ? (editing.requiredWords || []).join(', ') : '' %>"
                  class="w-full rounded-md bg-neutral-900 border border-amber-900/60 px-3 py-2 text-sm text-amber-200 focus:outline-none focus:border-amber-600" />
         </div>
@@ -163,6 +165,11 @@
           <input type="checkbox" name="requireQuestion" <%= (!editing || editing.requireQuestion !== false) ? 'checked' : '' %>
                  class="rounded border-neutral-700 bg-neutral-900 text-purple-600 focus:ring-purple-500" />
           <%= t('autoAnswers.field.requireQuestion') %>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-neutral-300" title="<%= t('autoAnswers.field.skipModeratorsHint') %>">
+          <input type="checkbox" name="skipModerators" <%= (!editing || editing.skipModerators !== false) ? 'checked' : '' %>
+                 class="rounded border-neutral-700 bg-neutral-900 text-purple-600 focus:ring-purple-500" />
+          <%= t('autoAnswers.field.skipModerators') %>
         </label>
         <label class="flex items-center gap-2 text-sm text-neutral-300">
           <%= t('autoAnswers.field.cooldown') %>
