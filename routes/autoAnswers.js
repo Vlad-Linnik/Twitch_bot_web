@@ -54,7 +54,7 @@ function requireLevelJson(maxLevel) {
 
 const REPLAY_MAX_DAYS = 180;
 const REPLAY_DEFAULT_DAYS = 30;
-const REPLAY_MAX_RESULTS = 60;
+const REPLAY_MAX_RESULTS = 300;
 
 /**
  * Что этот канал знает про свои слова: частотность (ранжирование по редкости) и множество
@@ -352,10 +352,20 @@ router.post(
             examples: topic.examples || [],
             antiExamples: topic.antiExamples || [],
           });
-          conflictsRemaining = report.conflicts.map((c) => ({
-            text: c.text,
-            suggestedExclude: c.suggestedExclude.slice(0, 4).map((s) => s.label),
-          }));
+          // Слова берутся из deriveExclusions (жадное покрытие по ВСЕМ помеченным), а не из
+          // checkRule().suggestedExclude, который вываливает все слова одного антипримера
+          // подряд («точно, подсвечивает, довольно, часто»). Механизм подсказки в проекте
+          // должен быть один, иначе две кнопки на соседних экранах советуют разное.
+          const { emoteWords, wordFrequency } = await channelVocabulary(channel.channelLogin);
+          const derived = validation.suggestExclusions(topic.examples, topic.antiExamples, {
+            wordFrequency,
+            emoteWords,
+            requiredWords: topic.requiredWords,
+            optionalWords: topic.optionalWords,
+          });
+          conflictsRemaining = report.conflicts.length
+            ? { count: report.conflicts.length, suggested: derived.exclusions.slice(0, 5).map((e) => e.label) }
+            : null;
         }
       }
 
