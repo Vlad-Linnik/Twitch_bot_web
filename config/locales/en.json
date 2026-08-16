@@ -1839,7 +1839,11 @@
       "antiExamplesHint": "Messages this topic must not fire on. Anything you marked \"wrong\" lands here.",
       "requiredOrHint": "Inside one entry, \"|\" means OR: \"фильтр, где|взять|скачать\" reads as \"фильтр AND (где OR взять OR скачать)\". This is how you separate \"where do I get it\" from \"what is wrong with it\" — excluding words cannot express that line.",
       "skipModerators": "Do not answer moderators and the broadcaster",
-      "skipModeratorsHint": "A moderator knows where the answer is — they wrote it. On real logs a sizeable share of the noise turned out to be moderators talking to the streamer, and words do not tell it apart from a genuine question."
+      "skipModeratorsHint": "A moderator knows where the answer is — they wrote it. On real logs a sizeable share of the noise turned out to be moderators talking to the streamer, and words do not tell it apart from a genuine question.",
+      "silentOnThirdPartyMention": "Stay silent when the message is addressed to another viewer",
+      "silentOnThirdPartyMentionHint": "A message opening with another viewer's @nick is chat talking among itself, not a question to the channel. On the labelled sample the signal ran 13 to 1 in favour of silence. Mentioning the channel or the bot does not count.",
+      "questionThreshold": "Question-likeness threshold",
+      "questionThresholdHint": "How many points a message must score to count as a question. Default 2. Three roughly means \"a question mark or a request verb is required\": on the labelled sample it removed the last false answers at the cost of one genuine question written without a \"?\". Above five the topic goes almost completely silent."
     },
     "deriveButton": "Suggest keywords",
     "replayButton": "Check against logs",

@@ -31,8 +31,16 @@ const { verifyToken } = require("../middleware/csrf");
 const { stem } = require("../lib/russianStemmer");
 const matcher = require("../lib/autoAnswerMatch");
 const validation = require("../lib/autoAnswerValidation");
+const env = require("../config/env");
 
 const router = express.Router();
+
+// Чьи «@упоминания» тема считает своими. Сообщение, адресованное другому зрителю, - это
+// разговор чата между собой, и тема на него по умолчанию молчит; логин канала и логин бота
+// из этого правила выведены. Данные канала, не темы, поэтому подставляются здесь.
+function ownLogins(channel) {
+  return [channel.channelLogin, env.botLogin].filter(Boolean);
+}
 
 // Same local helper routes/statistics.js and routes/unbanBureau.js already define - a JSON
 // endpoint must answer 401/403 as JSON, not render an HTML error page into a fetch().
@@ -151,7 +159,7 @@ router.post(
         return res.redirect(`${back}?saved=mode`);
       }
 
-      const parsed = validation.parseTopic(req.body);
+      const parsed = validation.parseTopic(req.body, { ownLogins: ownLogins(channel) });
       if (!parsed.ok) return res.redirect(`${back}?error=${parsed.error}`);
 
       if (req.body.id) {
@@ -237,7 +245,7 @@ router.post(
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).json({ error: "unknown_channel" });
 
-      const parsed = validation.parseTopic(req.body);
+      const parsed = validation.parseTopic(req.body, { ownLogins: ownLogins(channel) });
       if (!parsed.ok) return res.status(400).json({ error: parsed.error });
 
       const rawDays = parseInt(req.body.days, 10);
@@ -246,7 +254,7 @@ router.post(
         : REPLAY_DEFAULT_DAYS;
       const since = new Date(Date.now() - days * 86400000);
 
-      const topic = matcher.toMatcherTopic(parsed.topic);
+      const topic = matcher.toMatcherTopic(parsed.topic, { ownLogins: ownLogins(channel) });
       const candidates = await statsRepo.scanRecentMessages(channel.channelLogin, {
         since,
         contains: parsed.topic.requiredWords,
@@ -286,7 +294,9 @@ router.post(
               spans: loose.spans,
               against: analysis.question.signals.filter((s) => s.weight <= 0).map((s) => s.label),
               score: analysis.question.score,
-              threshold: analysis.question.threshold,
+              // Порог темы, а не встроенный: строка «сумма 2/3» должна объяснять именно то
+              // правило, по которому бот промолчал.
+              threshold: parsed.topic.questionThreshold || analysis.question.threshold,
             });
           }
         }
@@ -347,7 +357,7 @@ router.post(
         const topic = await autoAnswersRepo.addAntiExample(channel.channelLogin, hit.topicId, hit.message);
         if (topic) {
           const report = matcher.checkRule({
-            topic: matcher.toMatcherTopic(topic),
+            topic: matcher.toMatcherTopic(topic, { ownLogins: ownLogins(channel) }),
             examples: topic.examples || [],
             antiExamples: topic.antiExamples || [],
           });

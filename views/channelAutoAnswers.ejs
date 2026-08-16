@@ -171,6 +171,17 @@
                  class="rounded border-neutral-700 bg-neutral-900 text-purple-600 focus:ring-purple-500" />
           <%= t('autoAnswers.field.skipModerators') %>
         </label>
+        <label class="flex items-center gap-2 text-sm text-neutral-300" title="<%= t('autoAnswers.field.silentOnThirdPartyMentionHint') %>">
+          <input type="checkbox" name="silentOnThirdPartyMention" <%= (!editing || editing.silentOnThirdPartyMention !== false) ? 'checked' : '' %>
+                 class="rounded border-neutral-700 bg-neutral-900 text-purple-600 focus:ring-purple-500" />
+          <%= t('autoAnswers.field.silentOnThirdPartyMention') %>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-neutral-300" title="<%= t('autoAnswers.field.questionThresholdHint') %>">
+          <%= t('autoAnswers.field.questionThreshold') %>
+          <input type="number" name="questionThreshold" min="<%= limits.MIN_QUESTION_THRESHOLD %>" max="<%= limits.MAX_QUESTION_THRESHOLD %>"
+                 value="<%= editing ? (editing.questionThreshold || limits.DEFAULT_QUESTION_THRESHOLD) : limits.DEFAULT_QUESTION_THRESHOLD %>"
+                 class="w-16 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </label>
         <label class="flex items-center gap-2 text-sm text-neutral-300">
           <%= t('autoAnswers.field.cooldown') %>
           <input type="number" name="cooldownSeconds" min="<%= limits.MIN_COOLDOWN_SECONDS %>" max="<%= limits.MAX_COOLDOWN_SECONDS %>"

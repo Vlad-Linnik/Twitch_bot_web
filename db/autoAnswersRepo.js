@@ -18,6 +18,9 @@
 //     antiExamples: [],         // messages it must NOT fire on (the «не то» button)
 //     requiredStems, optionalStems, excludeStems, notQuestionStems,
 //     requireQuestion: true,
+//     silentOnThirdPartyMention: true,  // молчать, если сообщение адресовано другому зрителю
+//                                       // (логины канала и бота таковыми не считаются)
+//     questionThreshold: 2,     // сколько баллов должно набрать сообщение, чтобы быть вопросом
 //     mode: 'off' | 'test' | 'live',
 //     cooldownSeconds,
 //     createdAt, updatedAt, createdBy: { userId, login }
