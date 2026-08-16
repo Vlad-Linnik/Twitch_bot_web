@@ -102,11 +102,19 @@
   const BTN_IDLE = { yes: "border-neutral-700 text-neutral-400 hover:border-green-700 hover:text-green-400", no: "border-neutral-700 text-neutral-400 hover:border-red-700 hover:text-red-400" };
   const BTN_ON = { yes: "border-green-700 bg-green-950/60 text-green-300", no: "border-red-800 bg-red-950/60 text-red-300" };
 
+  // Скрывать ли уже размеченные строки. Настройка ЗРИТЕЛЯ, а не темы, поэтому localStorage, а
+  // не Mongo - та же логика, что у настроек стола в Бюро амнистии.
+  const HIDE_KEY = "aaHideMarked";
+  const hideMarked = () => localStorage.getItem(HIDE_KEY) === "1";
+
   function paintRow(row) {
     const message = row.dataset.message;
     const verdict = verdictOf(message);
     row.classList.toggle("bg-green-950/20", verdict === "yes");
     row.classList.toggle("bg-red-950/20", verdict === "no");
+    // Разметив строку при включённом скрытии, модератор видит, как список тает - на сотне
+    // сообщений это единственный способ понять, сколько ещё осталось.
+    row.hidden = Boolean(verdict) && hideMarked();
     for (const verdictName of ["yes", "no"]) {
       const button = row.querySelector(`.aa-${verdictName}`);
       if (!button) continue;
@@ -115,9 +123,15 @@
     }
   }
 
+  /** Перекрасить, перепрятать и пересчитать разом - после любой смены вердикта. */
+  function refreshMarks(out) {
+    for (const row of out.querySelectorAll("[data-message]")) paintRow(row);
+    updateTally(out);
+  }
+
   function updateTally(out) {
     const rows = [...out.querySelectorAll("[data-message]")];
-    const counter = out.querySelector(".aa-tally");
+    const counter = out.querySelector(".aa-tally-text");
     if (!counter) return;
     let yes = 0;
     let no = 0;
@@ -126,7 +140,12 @@
       if (verdict === "yes") yes += 1;
       else if (verdict === "no") no += 1;
     }
-    counter.textContent = `размечено: ${yes} подходит · ${no} не подходит · осталось ${rows.length - yes - no}`;
+    const left = rows.length - yes - no;
+    counter.textContent = `размечено: ${yes} подходит · ${no} не подходит · осталось ${left}`;
+
+    // Со скрытыми строками пустой список выглядит как сбой, а не как «всё готово».
+    const done = out.querySelector(".aa-all-done");
+    if (done) done.hidden = !(rows.length > 0 && left === 0 && hideMarked());
   }
 
   // --- страница редактора -----------------------------------------------------------------
@@ -190,8 +209,7 @@
       // клик можно было бы только руками в текстовом поле.
       const current = verdictOf(row.dataset.message);
       setVerdict(row.dataset.message, current === verdict ? null : verdict);
-      paintRow(row);
-      updateTally(out);
+      refreshMarks(out);
       excludeNote.textContent = "";
     });
 
@@ -249,7 +267,29 @@
       document.createTextNode(` за ${data.days} дн. · в чат ушло бы ${data.wouldSend} (остальное съел бы кулдаун) · спрашивавших: ${data.askers}`)
     );
     out.appendChild(head);
-    out.appendChild(el("p", "aa-tally text-xs text-neutral-500 mb-2", ""));
+
+    const tally = el("div", "flex items-center justify-between gap-4 mb-2 flex-wrap");
+    tally.appendChild(el("span", "aa-tally-text text-xs text-neutral-500", ""));
+
+    const hideLabel = el("label", "flex items-center gap-1.5 text-xs text-neutral-400 cursor-pointer select-none");
+    const hideBox = document.createElement("input");
+    hideBox.type = "checkbox";
+    hideBox.className = "aa-hide rounded border-neutral-700 bg-neutral-900 text-purple-600 focus:ring-purple-500";
+    hideBox.checked = hideMarked();
+    hideLabel.append(hideBox, document.createTextNode("скрыть размеченные"));
+    tally.appendChild(hideLabel);
+
+    out.appendChild(tally);
+    // Скрыт при создании: строка появляется ниже, из updateTally, и без этого мелькнула бы
+    // «всё размечено» на списке, где не размечено ничего.
+    const allDone = el("p", "aa-all-done text-sm text-green-400 mt-2", "Всё размечено. Теперь «Вывести исключающие слова».");
+    allDone.hidden = true;
+    out.appendChild(allDone);
+
+    hideBox.addEventListener("change", () => {
+      localStorage.setItem(HIDE_KEY, hideBox.checked ? "1" : "0");
+      refreshMarks(out);
+    });
 
     for (const warning of data.warnings || []) {
       out.appendChild(el("p", "text-amber-400 text-xs mb-1", "⚠ " + warning));
