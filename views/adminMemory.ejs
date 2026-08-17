@@ -49,8 +49,8 @@
   }
   const ticks = tickIndices(series.length, 6);
 
-  // The danger band. 10% of 1833 MB is ~183 MB - not a threshold the kernel knows about, just the
-  // region where a single spike stops having anywhere to go on a machine with no swap.
+  // The danger band, as a share of the host's own RAM rather than a fixed byte figure - not a
+  // threshold the kernel knows about, just the region where a spike has nowhere left to go but swap.
   const DANGER_PCT = 10;
   const processes = (trends && trends.processes) || [];
   const maxProcessRss = Math.max(...processes.map((p) => p.rssBytes), 1);
