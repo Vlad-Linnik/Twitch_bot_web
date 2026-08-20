@@ -226,9 +226,10 @@
         <div id="ub-appeal-date"></div>
       </div>
 
-      <%# The fourth sheet: the prosecutor's and advocate's speeches on this case. Written by
-          Claude Code through the admin API (see routes/adminApi.js) and stored web-only - the
-          bot never sees them and a verdict is decided identically without them. Every string
+      <%# The fourth sheet: the prosecutor's and advocate's speeches on this case. Filled either
+          by the button below (routes/unbanBureau.js) or by hand through the admin API
+          (routes/adminApi.js), and stored web-only - the bot never sees them and a verdict is
+          decided identically without them. Every string
           inside is set from Mongo via textContent by renderOpinions(); nothing here is
           server-rendered per case. %>
       <div class="ub-paper ub-draggable" id="ub-experts-card">

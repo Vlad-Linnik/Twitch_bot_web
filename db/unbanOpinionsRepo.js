@@ -7,11 +7,15 @@
 // an opinion was ever written. Keeping it out of the shared db is the same call made for
 // UnbanBureauShifts: see ../CLAUDE.md's collections table for what does belong in the shared one.
 //
-// NOTHING IN THIS APP WRITES IT EITHER. The speeches come from Claude Code running two subagents
-// against a brief (GET /admin/api/unban-requests/:id/brief) and are PUT back through the
-// bearer-token admin API by a local driver. This site never calls Anthropic and never pays for a
-// token; it stores finished text and renders it. See lib/unbanOpinionsValidation.js for the shape
-// and why `final` is derived rather than submitted.
+// TWO THINGS WRITE IT, AND THE SHEET LOOKS THE SAME EITHER WAY. The desk's "заказать разбор"
+// button generates the speeches in-process (lib/unbanOpinionsGenerator.js, Sonnet 5, ~2 cents a
+// case); the other path is a person arguing the case by hand against a brief
+// (GET /admin/api/unban-requests/:id/brief) on a stronger model and PUTting the result back
+// through the bearer-token admin API. The by-hand path is the older of the two and runs its own,
+// fuller prompts (../../.claude/agents/amnesty-*-v4.md) that the button deliberately does not:
+// they ask for a register chosen per case and a longer speech than a paid turn is worth buying.
+// Whichever wrote it, the text arrives through lib/unbanOpinionsValidation.js - see it for the
+// shape and for why `final` is derived rather than submitted.
 const { connectWeb } = require("./connection");
 
 let collection;
