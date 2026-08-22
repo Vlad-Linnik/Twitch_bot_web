@@ -96,16 +96,22 @@
     spit: new Audio(SND + "paper-spit.wav"),
     speaker: new Audio(SND + "speaker.wav"),
     shoot: new Audio(SND + "shoot.wav"),
+    blast: new Audio(SND + "blast.wav"),
   };
   // No dedicated pickup/holster foley exists yet - reusing the stamp machine's clicks (its own
   // Audio objects, not new ones) is closer to a rifle bolt than arming the sniper in total silence.
+  // The grenade borrows the same two: pulling a pin is a click either way.
   sounds.sniperArm = sounds.stampDown;
   sounds.sniperDisarm = sounds.stampUp;
-  // Which slider governs which clip.
+  sounds.grenadeArm = sounds.stampDown;
+  sounds.grenadeDisarm = sounds.stampUp;
+  // Which slider governs which clip. Both weapons answer to "Shoot" - it is the weapon slider, and
+  // splitting it would mean a settings row for one sound effect.
   var SOUND_CHANNEL = {
     dragStart: "drag", dragStop: "drag", stampUp: "stamp", stampDown: "stamp",
     printer: "printer", spit: "spit", speaker: "speaker", shoot: "shoot",
     sniperArm: "shoot", sniperDisarm: "shoot",
+    blast: "shoot", grenadeArm: "shoot", grenadeDisarm: "shoot",
   };
 
   function play(name) {
@@ -1270,12 +1276,27 @@
   function renderSniper(shot) {
     if (!shot || !shot.id || announcedShots[shot.id]) return;
     announcedShots[shot.id] = true;
+    var grenade = shot.weapon === "grenade";
+
     if (shot.status === "done") {
-      toast(T.sniperHit.replace("{{target}}", "@" + shot.targetLogin));
-    } else if (shot.failureReason === "no_target") {
-      toast(T.sniperNoTarget);
+      if (!grenade) {
+        toast(T.sniperHit.replace("{{target}}", "@" + shot.targetLogin));
+        return;
+      }
+      // Names, not just a count: the moderator threw this at chat and the point is seeing who it
+      // caught. Only the first few are spelled out - a full blast is twenty logins and the toast is
+      // one line - and the count covers the rest.
+      var names = (shot.targetLogins || []).slice(0, 5).map(function (login) { return "@" + login; });
+      var total = shot.hitCount || (shot.targetLogins || []).length;
+      if (names.length < total) names.push("+" + (total - names.length));
+      toast(T.grenadeHit.replace("{{count}}", total).replace("{{targets}}", names.join(", ")));
+      return;
+    }
+
+    if (shot.failureReason === "no_target") {
+      toast(grenade ? T.grenadeNoTarget : T.sniperNoTarget);
     } else {
-      toast(T.sniperRejected);
+      toast(grenade ? T.grenadeRejected : T.sniperRejected);
     }
   }
 
@@ -1547,34 +1568,58 @@
   // Manual, exactly like the original: arm the rifle, then click a specific person on the street.
   // The click both kills that sprite locally and asks the bot to punish a real chatter.
 
-  var sniperArmed = false;
-  function setSniper(on) {
-    if (on === sniperArmed) return;
-    sniperArmed = on;
-    wrapper.classList.toggle("ub-sniper", on);
+  // Two weapons, never both in hand: arming one puts the other away. `armed` is null, "awp" or
+  // "grenade" - a single variable rather than a flag each, so "put the other one down" cannot be
+  // forgotten at a new call site.
+  var armed = null;
+  // `silent` is for the one case where the weapon leaves your hand as part of something else that
+  // is already being announced: a thrown grenade. Saying "put away" there would talk over the
+  // throw's own message with the less interesting half of what just happened.
+  function setWeapon(which, silent) {
+    if (which === armed) return;
+    // Reloading is not a state the moderator can arm out of, and the click that tried is worth an
+    // explanation rather than nothing happening.
+    if (which === "grenade" && grenadeRemainingMs() > 0) {
+      toast(T.grenadeCooldown.replace("{{time}}", formatRemaining(grenadeRemainingMs())));
+      return;
+    }
+    var previous = armed;
+    armed = which;
+    wrapper.classList.toggle("ub-sniper", which === "awp");
+    wrapper.classList.toggle("ub-grenade", which === "grenade");
+    $("ub-awp").classList.toggle("ub-armed", which === "awp");
+    $("ub-grenade").classList.toggle("ub-armed", which === "grenade");
     // There's no dedicated pickup/holster foley yet, so the stamp machine's own mechanical clicks
     // stand in — closer to a bolt-action sound than silence. Grouped under the "Shoot" slider since
     // it's the only weapon-related volume control on the settings panel.
-    play(on ? "sniperArm" : "sniperDisarm");
-    $("ub-awp").classList.toggle("ub-armed", on);
-    toast(on ? T.sniperArmed : T.sniperDisarmed);
+    if (which === "awp") { play("sniperArm"); if (!silent) toast(T.sniperArmed); }
+    else if (which === "grenade") { play("grenadeArm"); if (!silent) toast(T.grenadeArmed); }
+    else if (previous === "grenade") { if (!silent) { play("grenadeDisarm"); toast(T.grenadeDisarmed); } }
+    else { play("sniperDisarm"); if (!silent) toast(T.sniperDisarmed); }
   }
-  $("ub-awp").addEventListener("click", function () { setSniper(!sniperArmed); });
+  // Kept as a named wrapper: the Escape handler and the shift-lost path both mean "put it away"
+  // rather than "select nothing".
+  function disarm() { setWeapon(null); }
+
+  $("ub-awp").addEventListener("click", function () {
+    setWeapon(armed === "awp" ? null : "awp");
+  });
+  $("ub-grenade").addEventListener("click", function () {
+    setWeapon(armed === "grenade" ? null : "grenade");
+  });
   wrapper.addEventListener("contextmenu", function (event) {
-    if (!sniperArmed) return;
+    if (!armed) return;
     event.preventDefault();
-    setSniper(false);
+    disarm();
   });
 
-  street.addEventListener("click", function (event) {
-    if (!sniperArmed) return;
-    play("shoot");
-
-    var point = toStage(event);
+  // Drops one walker where the click landed. `radius` is how far the hit reaches: a bullet takes
+  // the one person under the crosshair, a blast takes everyone standing in it.
+  function killWalkersNear(point, radius, onlyOne) {
     for (var i = walkers.length - 1; i >= 0; i -= 1) {
       var w = walkers[i];
       if (w.dead || w.inBooth) continue;
-      if (Math.hypot(w.x - point.x, w.y + w.offsetY - point.y) >= 30) continue;
+      if (Math.hypot(w.x - point.x, w.y + w.offsetY - point.y) >= radius) continue;
       w.dead = true;
       w.el.classList.remove("ub-walker", "ub-idler");
       w.el.classList.add("ub-dead");
@@ -1585,17 +1630,105 @@
         node.style.opacity = "0";
         setTimeout(function () { node.remove(); }, 2000);
       }, 15000, w.el);
-      break;
+      if (onlyOne) return;
+    }
+  }
+
+  street.addEventListener("click", function (event) {
+    if (!armed) return;
+    var point = toStage(event);
+    var c = currentCase();
+
+    if (armed === "awp") {
+      play("shoot");
+      killWalkersNear(point, 30, true);
+      post("sniper.json", { id: c ? c._id : "" })
+        .then(function (result) {
+          if (result.data && result.data.ok) toast(T.sniperQueued);
+          else toast(result.status === 409 ? T.sniperNoTarget : T.failed);
+        })
+        .catch(function () { toast(T.failed); });
+      return;
     }
 
-    var c = currentCase();
-    post("sniper.json", { id: c ? c._id : "" })
+    play("blast");
+    var flash = el("div", "ub-blast");
+    flash.style.left = point.x + "px";
+    flash.style.top = (point.y) + "px";
+    street.appendChild(flash);
+    setTimeout(function () { flash.remove(); }, 700);
+    killWalkersNear(point, 95, false);
+
+    // Putting it away immediately is the point of a thrown weapon - there is nothing left in hand.
+    // Before the cooldown starts, so the "somebody else threw one" disarm below doesn't fire for
+    // our own throw and announce it twice.
+    setWeapon(null, true);
+    // One throw at a time: the button goes inert the moment it is used, before the server has
+    // answered, so a double-click can't spend two throws. The real cooldown length comes back with
+    // the response (or with the refusal) and replaces this holding value.
+    startGrenadeCooldown(5000);
+
+    post("grenade.json", { id: c ? c._id : "" })
       .then(function (result) {
-        if (result.data && result.data.ok) toast(T.sniperQueued);
-        else toast(result.status === 409 ? T.sniperNoTarget : T.failed);
+        var data = result.data || {};
+        if (data.ok) {
+          startGrenadeCooldown(data.cooldownMs || 0);
+          toast(T.grenadeQueued);
+        } else if (data.error === "grenade_cooldown") {
+          startGrenadeCooldown(data.retryAfterMs || 0);
+          toast(T.grenadeCooldown.replace("{{time}}", formatRemaining(data.retryAfterMs || 0)));
+        } else {
+          // Nothing was thrown, so nothing should be reloading.
+          startGrenadeCooldown(0);
+          toast(result.status === 409 ? T.grenadeNoTarget : T.failed);
+        }
       })
-      .catch(function () { toast(T.failed); });
+      .catch(function () { startGrenadeCooldown(0); toast(T.failed); });
   });
+
+  // --- the grenade's reload ------------------------------------------------
+  // Tracked as an absolute deadline on the page's OWN clock, fed by durations (never timestamps)
+  // from the server - the two clocks are not the same and a remaining-time number survives that.
+
+  var grenadeReadyAt = 0;
+  function grenadeRemainingMs() { return Math.max(0, grenadeReadyAt - Date.now()); }
+
+  function formatRemaining(ms) {
+    var total = Math.ceil(ms / 1000);
+    var minutes = Math.floor(total / 60);
+    var seconds = total % 60;
+    return minutes + ":" + String(seconds).padStart(2, "0");
+  }
+
+  function startGrenadeCooldown(ms) {
+    var next = Math.max(0, ms || 0);
+    // Zero means "not reloading". A throw the server refused for any other reason must clear the
+    // holding value below, not leave the page waiting out a cooldown nothing is serving.
+    if (!next) {
+      grenadeReadyAt = 0;
+      renderGrenadeCooldown();
+      return;
+    }
+    // Otherwise the deadline only ever moves OUT: live.json reports the channel's remaining time
+    // on every poll, so a page that has just thrown must not have its own wait shortened by a poll
+    // that was already in flight when it did.
+    grenadeReadyAt = Math.max(grenadeReadyAt, Date.now() + next);
+    renderGrenadeCooldown();
+  }
+
+  function renderGrenadeCooldown() {
+    var remaining = grenadeRemainingMs();
+    var timer = $("ub-grenade-timer");
+    $("ub-grenade").classList.toggle("ub-cooling", remaining > 0);
+    timer.classList.toggle("hidden", remaining <= 0);
+    if (remaining > 0) timer.textContent = formatRemaining(remaining);
+    // Someone else at another desk threw one while this page had it in hand.
+    if (remaining > 0 && armed === "grenade") disarm();
+  }
+
+  // A second is the resolution the label shows, so that is how often it is redrawn. Cheap enough to
+  // run unconditionally: it is two class toggles and a string when idle.
+  setInterval(renderGrenadeCooldown, 1000);
 
   // --- chat vote -----------------------------------------------------------
 
@@ -1795,7 +1928,7 @@
   $("ub-close-settings").addEventListener("click", function () { $("ub-settings-modal").classList.remove("ub-open"); });
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") return;
-    if (sniperArmed) { setSniper(false); return; }
+    if (armed) { disarm(); return; }
     $("ub-settings-modal").classList.remove("ub-open");
   });
 
@@ -1810,6 +1943,11 @@
       .then(function (payload) {
         if (!payload.ok) return;
         renderSniper(payload.sniper);
+        // Channel-wide, so this is also how a page that never threw anything learns the weapon is
+        // unavailable - including one opened after somebody else's throw.
+        if (typeof payload.grenadeRetryAfterMs === "number") {
+          startGrenadeCooldown(payload.grenadeRetryAfterMs);
+        }
         payload.states.forEach(function (state) {
           var c = cases.find(function (item) { return item._id === state.id; });
           if (!c) return;

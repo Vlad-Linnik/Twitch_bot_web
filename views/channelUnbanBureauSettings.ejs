@@ -85,6 +85,39 @@
       </div>
     </section>
 
+    <section>
+      <%# Same "no on/off box" reasoning as the rifle above - a moderator pulling the pin IS the
+          decision. The fourth field is what the rifle has no equivalent of: the grenade is
+          rate-limited per CHANNEL, and lib/unbanBureauValidation.js clamps this to a floor so the
+          weapon cannot be turned into a spam button by setting it to zero. %>
+      <h2 class="text-neutral-200 font-medium mb-1">💣 <%= t('channelSettings.unbanBureauGrenadeHeading') %></h2>
+      <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.unbanBureauGrenadeHint') %></p>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauGrenadeModeLabel') %></span>
+          <select name="unbanBureau.grenadeMode" class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm">
+            <option value="timeout" <%= ub.grenadeMode !== 'ban' ? 'selected' : '' %>><%= t('channelSettings.unbanBureauSniperModeTimeout') %></option>
+            <option value="ban" <%= ub.grenadeMode === 'ban' ? 'selected' : '' %>><%= t('channelSettings.unbanBureauSniperModeBan') %></option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauGrenadeSecLabel') %></span>
+          <input type="number" name="unbanBureau.grenadeTimeoutSec" value="<%= ub.grenadeTimeoutSec %>" min="1" max="3600"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauGrenadeReasonLabel') %></span>
+          <input type="text" name="unbanBureau.grenadeReason" value="<%= ub.grenadeReason || '' %>" maxlength="140"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+        <label class="block">
+          <span class="block text-neutral-400 text-sm mb-1"><%= t('channelSettings.unbanBureauGrenadeCooldownLabel') %></span>
+          <input type="number" name="unbanBureau.grenadeCooldownSec" value="<%= ub.grenadeCooldownSec %>" min="300" max="86400"
+                 class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-100 text-sm" />
+        </label>
+      </div>
+    </section>
+
     <%- include('partials/autosaveStatus') %>
   </form>
 </main>

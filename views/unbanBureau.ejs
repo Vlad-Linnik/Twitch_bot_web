@@ -57,6 +57,10 @@
       <div id="ub-date">—</div>
 
       <div id="ub-awp" title="<%= t('unbanBureau.sniperHeading') %>"></div>
+      <%# The second weapon. Same interaction as the rifle - arm it, then click the street - so it
+          sits next to it on the wall rather than anywhere in the UI layer. %>
+      <div id="ub-grenade" title="<%= t('unbanBureau.grenadeHeading') %>"></div>
+      <div id="ub-grenade-timer" class="hidden"></div>
       <div id="ub-stamp-toggle"></div>
     </div>
 
@@ -328,6 +332,18 @@
          sniperHit: t('unbanBureau.sniperHit'),
          sniperNoTarget: t('unbanBureau.sniperNoTarget'),
          sniperRejected: t('unbanBureau.sniperRejected'),
+         // These two, and backToSettings below, are read by the client but were never passed in -
+         // arming the rifle toasted `undefined`. Their grenade counterparts are here from the start.
+         sniperArmed: t('unbanBureau.sniperArmed'),
+         sniperDisarmed: t('unbanBureau.sniperDisarmed'),
+         backToSettings: t('channelSettings.backToSettings'),
+         grenadeArmed: t('unbanBureau.grenadeArmed'),
+         grenadeDisarmed: t('unbanBureau.grenadeDisarmed'),
+         grenadeQueued: t('unbanBureau.grenadeQueued'),
+         grenadeHit: t('unbanBureau.grenadeHit'),
+         grenadeNoTarget: t('unbanBureau.grenadeNoTarget'),
+         grenadeRejected: t('unbanBureau.grenadeRejected'),
+         grenadeCooldown: t('unbanBureau.grenadeCooldown'),
          failed: t('unbanBureau.failed'),
          alreadyDecided: t('unbanBureau.alreadyDecided'),
          voteAlreadyRunning: t('unbanBureau.voteAlreadyRunning'),

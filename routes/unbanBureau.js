@@ -23,6 +23,7 @@ const unbanDossierRepo = require("../db/unbanDossierRepo");
 const unbanBureauShiftRepo = require("../db/unbanBureauShiftRepo");
 const unbanOpinionsRepo = require("../db/unbanOpinionsRepo");
 const sniperShotsRepo = require("../db/sniperShotsRepo");
+const unbanBureauValidation = require("../lib/unbanBureauValidation");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
 const { parseEffectiveAt } = require("../lib/unbanDecisionValidation");
@@ -58,6 +59,10 @@ const SNIPER_MAX_PER_WINDOW = 6;
 // that a dropped poll doesn't lose the answer, short enough that reopening the page doesn't
 // re-announce a shot from earlier in the shift.
 const SNIPER_REPORT_WINDOW_MS = 2 * 60 * 1000;
+// Fallback for a channel whose stored config predates the grenade. Kept equal to
+// lib/unbanBureauValidation.js's DEFAULTS.grenadeCooldownSec; the floor there is what the value is
+// clamped to on save, and this only stands in until the channel saves its settings once.
+const GRENADE_DEFAULT_COOLDOWN_SEC = unbanBureauValidation.DEFAULTS.grenadeCooldownSec;
 
 const router = express.Router();
 
@@ -476,6 +481,60 @@ router.post(
   }
 );
 
+// Throws the grenade: same execute-only-by-bot contract as the rifle, but it takes EVERYONE who
+// spoke in the last 30 seconds instead of one drawn victim.
+//
+// Which is why this endpoint, unlike sniper.json, is rate-limited per CHANNEL rather than per
+// moderator. The rifle's ceiling is a per-moderator budget because one shot is one viewer; a
+// grenade is the whole of chat at once, so "six a minute each" would let a two-moderator desk keep
+// a channel permanently timed out. The per-moderator budget still applies on top - a grenade
+// spends a shot from it too.
+//
+// The cooldown is enforced here rather than bot-side deliberately: refusing at the moment of the
+// click is what lets the desk show the moderator a countdown instead of accepting a throw that
+// quietly does nothing two seconds later.
+router.post(
+  "/:channel/unban-bureau/grenade.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      if (!(await requireShiftJson(req, res))) return;
+
+      const recent = await sniperShotsRepo.countRecentByUser(req.user.userId, SNIPER_WINDOW_MS);
+      if (recent >= SNIPER_MAX_PER_WINDOW) {
+        return res.status(429).json({ error: "too_many_shots" });
+      }
+
+      const config = await channelConfigRepo.getConfig(channel.channelLogin);
+      const cooldownMs =
+        (config.unbanBureau?.grenadeCooldownSec || GRENADE_DEFAULT_COOLDOWN_SEC) * 1000;
+
+      const result = await sniperShotsRepo.requestGrenade(
+        channel,
+        req.user,
+        req.body.id || null,
+        cooldownMs
+      );
+      if (result.readyAt) {
+        return res.status(429).json({
+          error: "grenade_cooldown",
+          // Milliseconds rather than a timestamp: the page counts down against its own clock, which
+          // is not the server's, and a remaining-time number survives that gap.
+          retryAfterMs: Math.max(0, result.readyAt.getTime() - Date.now()),
+        });
+      }
+
+      res.json({ ok: true, shotId: String(result.shot._id), cooldownMs });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // Fills the desk's fourth sheet: runs the two-turn hearing and stores the result.
 //
 // THE ONLY ENDPOINT ON THIS SITE THAT SPENDS MONEY. Everything else here writes a document; this
@@ -566,12 +625,18 @@ router.get(
       if (!channel) return;
 
       const ids = String(req.query.ids || "").split(",").filter(Boolean).slice(0, 50);
-      const [states, shot] = await Promise.all([
+      const config = await channelConfigRepo.getConfig(channel.channelLogin);
+      const cooldownMs =
+        (config.unbanBureau?.grenadeCooldownSec || GRENADE_DEFAULT_COOLDOWN_SEC) * 1000;
+      const [states, shot, grenadeReadyAt] = await Promise.all([
         unbanRequestsRepo.getLiveState(channel.channelId, ids),
         // Channel-level, not per case: a shot is fired whenever the moderator feels like it and is
         // not tied to an appeal. See db/sniperShotsRepo.js's findLatestResolved for why this reads
         // SniperShots rather than the `sniper` sub-document this used to project.
         sniperShotsRepo.findLatestResolved(channel.channelId, SNIPER_REPORT_WINDOW_MS),
+        // So the desk can grey the grenade out for a moderator who has just opened the page, rather
+        // than only after they have thrown one and been refused.
+        sniperShotsRepo.grenadeReadyAt(channel.channelId, cooldownMs),
       ]);
       res.json({
         ok: true,
@@ -585,13 +650,22 @@ router.get(
         sniper: shot
           ? {
             id: String(shot._id),
+            // Absent on every row written before the grenade existed, and those are all rifle
+            // shots - see db/sniperShotsRepo.js.
+            weapon: shot.weapon === "grenade" ? "grenade" : "awp",
             status: shot.status,
             targetLogin: shot.targetLogin || null,
+            targetLogins: shot.targetLogins || null,
+            targetCount: shot.targetCount ?? null,
+            hitCount: shot.hitCount ?? null,
             mode: shot.mode || null,
             durationSec: shot.durationSec || null,
             failureReason: shot.failureReason || null,
           }
           : null,
+        grenadeRetryAfterMs: grenadeReadyAt
+          ? Math.max(0, grenadeReadyAt.getTime() - Date.now())
+          : 0,
       });
     } catch (err) {
       next(err);

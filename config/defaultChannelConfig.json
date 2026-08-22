@@ -40,7 +40,11 @@
     "voteDurationSec": 60,
     "sniperMode": "timeout",
     "sniperTimeoutSec": 60,
-    "sniperReason": "Шальная пуля Бюро амнистии"
+    "sniperReason": "Шальная пуля Бюро амнистии",
+    "grenadeMode": "timeout",
+    "grenadeTimeoutSec": 60,
+    "grenadeReason": "Осколки Бюро амнистии",
+    "grenadeCooldownSec": 600
   },
   "responses": {
     "busy": ["I am busy"],

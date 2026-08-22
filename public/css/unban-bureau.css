@@ -1258,6 +1258,81 @@ body.ub-playing footer {
   pointer-events: none;
 }
 
+/* --- the grenade ---------------------------------------------------------- */
+
+/* Hung directly under the rifle's panel and sharing its right edge, so the two read as one rack.
+   Small enough to be the sidearm of the pair rather than competing with it. */
+#ub-grenade {
+  position: absolute;
+  bottom: 132px;
+  right: 108px;
+  width: 58px;
+  height: 76px;
+  background-image: url("/img/games/unban-bureau/button-grenade.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: pointer;
+  z-index: 100;
+}
+#ub-grenade.ub-armed {
+  filter: drop-shadow(0 0 10px rgb(255 170 40 / 0.9)) brightness(1.2);
+}
+/* Reloading: greyed out and inert, with the remaining time painted under it. The desk polls
+   live.json for this, so it is correct for a page opened after someone else's throw too. */
+#ub-grenade.ub-cooling {
+  filter: grayscale(1) brightness(0.55);
+  cursor: not-allowed;
+}
+#ub-grenade-timer {
+  position: absolute;
+  bottom: 110px;
+  right: 96px;
+  width: 84px;
+  text-align: center;
+  font-size: 12px;
+  color: rgb(255 190 120 / 0.95);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.9);
+  pointer-events: none;
+  z-index: 101;
+}
+#ub-grenade-timer.hidden { display: none; }
+
+/* Aiming a grenade behaves exactly like aiming the rifle - the papers must not eat the click -
+   but the cursor is the throw arc rather than the scope. */
+#ub-wrapper.ub-grenade {
+  cursor: crosshair !important;
+}
+#ub-wrapper.ub-grenade .ub-paper,
+#ub-wrapper.ub-grenade #ub-stamp-machine {
+  pointer-events: none;
+}
+
+/* The blast itself: an expanding ring of light left where the grenade landed. Purely local
+   feedback - who is actually hit is decided by the bot, seconds later. */
+.ub-blast {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 244 200 / 0.95) 0%, rgb(255 150 40 / 0.75) 45%, rgb(120 40 10 / 0) 70%);
+  pointer-events: none;
+  z-index: 60;
+  animation: ub-blast-out 0.55s ease-out forwards;
+}
+@keyframes ub-blast-out {
+  from { transform: scale(0.3); opacity: 1; }
+  to { transform: scale(9); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ub-blast { animation: ub-blast-fade 0.55s linear forwards; }
+  @keyframes ub-blast-fade {
+    from { transform: scale(5); opacity: 0.9; }
+    to { transform: scale(5); opacity: 0; }
+  }
+}
+
 /* --- the street ----------------------------------------------------------- */
 
 #ub-street {
