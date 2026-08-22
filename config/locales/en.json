@@ -1622,6 +1622,11 @@
         "vector": "Vector",
         "photo": "Photo"
       },
+      "backdropScope": {
+        "hero": "Behind the throne only",
+        "page": "Whole page"
+      },
+      "backdropScopeHint": "Whole page pins the columns and wallpaper to the window, so the page scrolls inside the hall; the cornice stays above the throne either way.",
       "backdropPreset": {
         "hall": "Hall",
         "ceiling": "Ceiling",

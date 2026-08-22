@@ -5,12 +5,22 @@
 %>
 <%- include('partials/head', {
       title: identity.currentUserName + ' · ' + channel.channelLogin,
-      bodyClass: throne ? 'theme-throne' : ''
+      // theme-throne-wide is the page-scope marker: panels sit ON the backdrop there instead of
+      // below it, so they need to be more opaque than they do over plain plaster.
+      bodyClass: throne ? (theme.backdrop.scope === 'page' ? 'theme-throne theme-throne-wide' : 'theme-throne') : ''
     }) %>
 <%- include('partials/nav') %>
 <%# The curtain has to be the first thing in the body after the nav: it covers the page while
     it plays, and a later position would let the page paint above it for a frame. %>
 <% if (throne && theme.intro) { %><%- include('partials/throneIntro') %><% } %>
+<% if (throne) { %>
+  <%- include('partials/throneDefs') %>
+  <%# Page-wide hall: pinned to the viewport so the columns run the full height of the document
+      and the content scrolls between them, rather than ending where the hero does. %>
+  <% if (theme.backdrop.scope === 'page') { %>
+    <%- include('partials/throneHall', { theme, pieces: ['photo', 'columns'], fixed: true }) %>
+  <% } %>
+<% } %>
 
 <%
   // Data handed to the client as JSON rather than re-fetched on load: the server already paid for
@@ -230,9 +240,12 @@
           <span><%= t('userDashboard.heatmapCap') %></span>
           <span class="flex items-center gap-1 ml-auto">
             <%= t('userDashboard.heatmapLess') %>
-            <%# Same ramp renderHeatmap uses (user-dashboard.js `shade()`) - keep in sync. %>
-            <% ['#171717', '#3b1d52', '#5b2a80', '#7e3ab8', '#a855f7'].forEach(function(color) { %>
-              <span class="inline-block w-2.5 h-2.5 rounded-[2px]" style="background:<%= color %>"></span>
+            <%# The same tokens renderHeatmap's `shade()` reads (public/js/user-dashboard.js), not a
+                copy of the ramp: these swatches used to be five hardcoded hexes with a "keep in
+                sync" comment, and the first page theme immediately proved that comments do not
+                keep anything in sync - the calendar went gold while its own legend stayed purple. %>
+            <% ['--chart-heat-empty', '--chart-heat-1', '--chart-heat-2', '--chart-heat-3', '--chart-heat-4'].forEach(function(token) { %>
+              <span class="inline-block w-2.5 h-2.5 rounded-[2px]" style="background:var(<%= token %>)"></span>
             <% }) %>
             <%= t('userDashboard.heatmapMore') %>
           </span>

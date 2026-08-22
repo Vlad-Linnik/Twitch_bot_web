@@ -1335,7 +1335,42 @@ body.theme-throne nav.site-nav a:hover { color: #fff6df; }
   border-bottom: 3px solid var(--throne-accent);
 }
 
+.throne-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
 .throne-hall { position: absolute; inset: 0; z-index: -1; }
+
+/* Page-wide hall. Pinned to the viewport rather than stretched down the document: a column
+   sized to a 3000px page shows the reader nothing but its middle, while a fixed one keeps its
+   capital and base on screen and the content scrolls between the two. z-index 0 with the
+   content lifted to 1 - a negative z-index here would drop it behind the body's own gradient. */
+.throne-hall--fixed {
+  position: fixed;
+  /* Starts below the fixed nav rather than at the viewport top: a column's capital lives in its
+     first 7% of height, and behind a 3.5rem nav that is precisely the part nobody ever sees. */
+  top: 3.5rem;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+body.theme-throne main { position: relative; z-index: 1; }
+/* The hero draws its own cornice on top of the fixed layer, so it needs to sit above it. */
+body.theme-throne .throne-hero { z-index: 2; }
+
+/* At page scope the columns stand at the viewport edges while the hero is only as wide as the
+   content column - so the cornice has to break out of the hero to reach them, or the room has a
+   ceiling that stops short of its own walls. Percentages in `left` resolve against the hero,
+   which is centred, so this lands exactly on the viewport edges at any width. */
+.throne-hero[data-scope="page"] { overflow: visible; }
+.throne-hero[data-scope="page"] .throne-hall {
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+}
+/* At page scope the hero's hall holds nothing but the cornice - there is no photograph of its
+   own left to dim, and the scrim would only wash out the page-wide columns showing through
+   behind it, making them paler inside the hero than below it. */
+.throne-hero[data-scope="page"] .throne-hall::after { content: none; }
 /* Backdrops are photographs of real rooms, and real rooms are photographed in whatever light
    they had - the archival ones are outright greyscale. The sepia pass pulls every preset into
    the theme's gold before it is dimmed, so one palette holds across all of them and any file
@@ -1360,6 +1395,12 @@ body.theme-throne nav.site-nav a:hover { color: #fff6df; }
     radial-gradient(78% 68% at 50% 32%, rgb(214 202 189 / 0) 0%, rgb(195 183 173 / 0.62) 100%),
     linear-gradient(180deg, rgb(195 183 173 / 0) 45%, var(--throne-plaster) 100%);
 }
+/* The fade-to-plaster is how the HERO's hall ends where the stats begin. A hall that covers the
+   whole viewport has no such edge, and the same gradient would lay a plaster band across the
+   middle of the screen - so the page-wide layer keeps only the vignette. */
+.throne-hall--fixed::after {
+  background: radial-gradient(85% 75% at 50% 40%, rgb(214 202 189 / 0) 0%, rgb(195 183 173 / 0.35) 100%);
+}
 
 /* The three pieces of the drawn hall. Each is stretched only along an axis where
    stretching is invisible - bands horizontally, columns vertically - which is why
@@ -1375,6 +1416,25 @@ body.theme-throne nav.site-nav a:hover { color: #fff6df; }
 }
 .throne-hall__column--left { left: 0; }
 .throne-hall__column--right { right: 0; transform: scaleX(-1); }
+/* Wider and more present at page scope: there they ARE the frame of the page, not a detail
+   behind the throne. z-index lifts them over the layer's own vignette (a ::after paints after
+   its siblings), which otherwise washed them down to the colour of the wall behind them. */
+.throne-hall--fixed .throne-hall__column {
+  width: clamp(2.75rem, 8vw, 8.5rem);
+  opacity: 0.9;
+  z-index: 1;
+  filter: drop-shadow(0 0 18px rgb(43 33 24 / 0.28));
+}
+/* A darker edge behind each column, so the frame reads as a wall receding rather than as two
+   stickers on a flat background. */
+.throne-hall--fixed::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(93 76 59 / 0.34) 0%, rgb(93 76 59 / 0) 16%),
+    linear-gradient(270deg, rgb(93 76 59 / 0.34) 0%, rgb(93 76 59 / 0) 16%);
+}
 .throne-hall__cartouche {
   position: absolute;
   top: 3.5rem;
@@ -1489,6 +1549,11 @@ body.theme-throne nav.site-nav a:hover { color: #fff6df; }
    one-line override enough. */
 body.theme-throne main .bg-neutral-900,
 body.theme-throne main .bg-neutral-950 { background-color: rgb(214 202 189 / 0.55); }
+/* With a page-wide backdrop the panels sit ON the photograph rather than below it, and 55% of
+   plaster over a lit colonnade is a card you can read the wallpaper through. */
+body.theme-throne-wide main .bg-neutral-900,
+body.theme-throne-wide main .bg-neutral-950 { background-color: rgb(216 205 193 / 0.92); }
+body.theme-throne-wide .throne-hall--fixed .throne-hall__photo { opacity: 0.32; }
 body.theme-throne main .border-neutral-700,
 body.theme-throne main .border-neutral-800,
 body.theme-throne main .border-neutral-900 { border-color: var(--throne-edge); }

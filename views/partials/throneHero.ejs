@@ -22,78 +22,31 @@
   const asHeading = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   const medallionSrc = theme.medallionUrl || (profile && profile.avatarUrl) || null;
 %>
-<header class="throne-hero user-header" data-accent="<%= theme.accent.preset %>"
+<header class="throne-hero user-header" data-accent="<%= theme.accent.preset %>" data-scope="<%= theme.backdrop.scope %>"
         <% if (theme.accent.custom) { %>style="--throne-accent: <%= theme.accent.custom %>"<% } %>>
 
-  <div class="throne-hall" aria-hidden="true">
-    <% if (theme.backdrop.mode === "photo") { %>
-      <%# The photograph sits UNDER the drawn hall, never instead of it: the vector cornice and
-          columns are what keep the composition readable while a large image is still loading. %>
-      <img class="throne-hall__photo"
-           src="<%= theme.backdrop.uploadUrl || ('/img/themes/' + theme.backdrop.preset + '.webp') %>"
-           alt="" loading="eager" decoding="async" />
-    <% } %>
+  <%# At page scope the hall is drawn once for the whole viewport (views/userDashboard.ejs) and
+      the hero keeps only the cornice - the top of the wall belongs above the throne, and pinning
+      a second one to the viewport would park a gold bar under the nav at every scroll position.
+      At hero scope the hero draws the whole room itself. %>
+  <%- include('throneHall', {
+        theme,
+        pieces: theme.backdrop.scope === 'page' ? ['cornice'] : ['photo', 'cornice', 'columns'],
+        fixed: false
+      }) %>
 
-    <%# The hall is drawn as three independent pieces rather than as one wide picture: a single
-        SVG scaled to cover the hero crops its own edges away at wide aspect ratios, taking the
-        columns - the part that makes it read as a room - with them. Each piece is positioned by
-        CSS and stretched only along the axis where stretching is invisible. %>
-    <svg class="throne-hall__cornice" viewBox="0 0 1200 46" preserveAspectRatio="none" role="presentation">
-      <defs>
-        <linearGradient id="throne-gold" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--throne-gold-bright)" />
-          <stop offset="45%" stop-color="var(--throne-accent)" />
-          <stop offset="100%" stop-color="var(--throne-gold-deep)" />
-        </linearGradient>
-        <linearGradient id="throne-gold-flat" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="var(--throne-gold-deep)" />
-          <stop offset="50%" stop-color="var(--throne-accent)" />
-          <stop offset="100%" stop-color="var(--throne-gold-deep)" />
-        </linearGradient>
-        <%# One repeated bead, mirrored along the cornice - the same ornament the reference
-            photograph runs under its moulding. %>
-        <pattern id="throne-beads" width="24" height="12" patternUnits="userSpaceOnUse">
-          <circle cx="6" cy="6" r="3.4" fill="url(#throne-gold)" />
-          <rect x="14" y="3" width="4" height="6" rx="1.4" fill="var(--throne-gold-deep)" opacity="0.75" />
-        </pattern>
-      </defs>
-
-      <%# Three stacked mouldings across the top of the hall. Only horizontal bands live here,
-          so stretching them to the hero's width costs nothing visually. %>
-      <rect x="0" y="0" width="1200" height="26" fill="url(#throne-gold-flat)" opacity="0.9" />
-      <rect x="0" y="26" width="1200" height="12" fill="url(#throne-beads)" />
-      <rect x="0" y="38" width="1200" height="5" fill="var(--throne-gold-deep)" opacity="0.6" />
-    </svg>
-
-    <%# Two fluted columns framing the stage, one per side. A column is a vertical form, so the
-        vertical stretch that fits it to the hero's height is exactly what a taller column
-        looks like. %>
-    <% ["left", "right"].forEach(function(side) { %>
-      <svg class="throne-hall__column throne-hall__column--<%= side %>" viewBox="0 0 100 400"
-           preserveAspectRatio="none" role="presentation">
-        <rect x="16" y="26" width="68" height="350" fill="var(--throne-stone)" />
-        <% for (let f = 26; f <= 74; f += 12) { %>
-          <rect x="<%= f %>" y="30" width="3" height="342" fill="var(--throne-stone-shade)" opacity="0.8" />
-        <% } %>
-        <rect x="6" y="8" width="88" height="20" rx="3" fill="url(#throne-gold)" />
-        <rect x="10" y="374" width="80" height="14" rx="2" fill="url(#throne-gold-flat)" opacity="0.85" />
-      </svg>
-    <% }) %>
-
-    <%# Cartouche on the back wall: the shield-in-laurel motif the reference hall is built
-        around, sitting behind the throne as a halo. %>
-    <svg class="throne-hall__cartouche" viewBox="-90 -80 180 180" role="presentation">
-      <path d="M0 -58 C 46 -58 74 -30 74 6 C 74 44 40 66 0 78 C -40 66 -74 44 -74 6 C -74 -30 -46 -58 0 -58 Z"
-            fill="var(--throne-stone)" fill-opacity="0.4" stroke="url(#throne-gold)" stroke-width="4" />
-      <path d="M0 -40 C 30 -40 50 -22 50 4 C 50 30 26 48 0 56 C -26 48 -50 30 -50 4 C -50 -22 -30 -40 0 -40 Z"
-            fill="none" stroke="var(--throne-gold-deep)" stroke-width="1.5" opacity="0.7" />
-    </svg>
-  </div>
+  <%# The cartouche belongs to the hero at either scope: it is the halo behind the throne, not a
+      feature of the room. %>
+  <svg class="throne-hall__cartouche" viewBox="-90 -80 180 180" role="presentation" aria-hidden="true">
+    <path d="M0 -58 C 46 -58 74 -30 74 6 C 74 44 40 66 0 78 C -40 66 -74 44 -74 6 C -74 -30 -46 -58 0 -58 Z"
+          fill="var(--throne-stone)" fill-opacity="0.4" stroke="url(#throne-gold)" stroke-width="4" />
+    <path d="M0 -40 C 30 -40 50 -22 50 4 C 50 30 26 48 0 56 C -26 48 -50 30 -50 4 C -50 -22 -30 -40 0 -40 Z"
+          fill="none" stroke="var(--throne-gold-deep)" stroke-width="1.5" opacity="0.7" />
+  </svg>
 
   <div class="throne-stage">
     <svg class="throne-seat" viewBox="0 0 400 390" role="presentation" aria-hidden="true">
-      <%# The gradients live in the hall's <defs> above; a paint server is resolved by id across
-          the whole document, so both SVGs share one definition. %>
+      <%# Gradients come from partials/throneDefs.ejs, included once per page. %>
       <%# Dais: three steps, widest at the bottom. %>
       <rect x="50" y="352" width="300" height="22" rx="3" fill="url(#throne-gold-flat)" opacity="0.5" />
       <rect x="80" y="333" width="240" height="20" rx="3" fill="url(#throne-gold-flat)" opacity="0.68" />
