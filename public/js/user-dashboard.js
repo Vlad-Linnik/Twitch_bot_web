@@ -15,6 +15,32 @@
   if (!dataEl) return;
   const boot = JSON.parse(dataEl.textContent);
 
+  // Chart colours come from CSS custom properties rather than from constants in here, because
+  // a page theme (body.theme-throne, public/css/input.css) repaints the whole page and a chart
+  // in the site's purple on a themed background reads as an unstyled leftover. :root defines
+  // the defaults as the exact values this file used to hardcode, so an unthemed page is
+  // pixel-identical; the fallbacks below only matter if the stylesheet fails to load at all.
+  //
+  // Read once at boot: a theme cannot change under a live page, and getComputedStyle in the
+  // per-point draw loops would be a layout read per data point.
+  // Read off <body>, not <html>: a page theme sets its class on body (views/partials/head.ejs),
+  // and custom properties inherit down, so body sees the theme's overrides where :root only
+  // ever has the defaults.
+  const css = getComputedStyle(document.body);
+  const token = (name, fallback) => (css.getPropertyValue(name) || "").trim() || fallback;
+  const COLORS = {
+    line: token("--chart-line", "#a855f7"),
+    grid: token("--chart-grid", "#262626"),
+    axis: token("--chart-axis", "#737373"),
+    heat: [
+      token("--chart-heat-1", "#3b1d52"),
+      token("--chart-heat-2", "#5b2a80"),
+      token("--chart-heat-3", "#7e3ab8"),
+      token("--chart-heat-4", "#a855f7"),
+    ],
+    heatEmpty: token("--chart-heat-empty", "#171717"),
+  };
+
   const $ = (id) => document.getElementById(id);
   const svgNs = "http://www.w3.org/2000/svg";
   const el = (name, attrs) => {
@@ -92,7 +118,7 @@
           y1: y,
           x2: width,
           y2: y,
-          stroke: "#262626",
+          stroke: COLORS.grid,
           "stroke-width": "1",
           "vector-effect": "non-scaling-stroke",
         })
@@ -158,15 +184,15 @@
 
     const defs = el("defs", {});
     const grad = el("linearGradient", { id: gradientId, x1: "0", y1: "0", x2: "0", y2: "1" });
-    grad.appendChild(el("stop", { offset: "0%", "stop-color": "#a855f7", "stop-opacity": "0.5" }));
-    grad.appendChild(el("stop", { offset: "100%", "stop-color": "#a855f7", "stop-opacity": "0.03" }));
+    grad.appendChild(el("stop", { offset: "0%", "stop-color": COLORS.line, "stop-opacity": "0.5" }));
+    grad.appendChild(el("stop", { offset: "100%", "stop-color": COLORS.line, "stop-opacity": "0.03" }));
     defs.appendChild(grad);
     svg.appendChild(defs);
 
     const area = el("path", {
       d: buildPath(buckets, CHART_W, CHART_H),
       fill: `url(#${gradientId})`,
-      stroke: "#a855f7",
+      stroke: COLORS.line,
       "stroke-width": "1.5",
       "vector-effect": "non-scaling-stroke",
     });
@@ -320,7 +346,7 @@
         y: y.toFixed(1),
         width: barW.toFixed(1),
         height: barH.toFixed(1),
-        fill: "#a855f7",
+        fill: COLORS.line,
         "fill-opacity": "0.75",
       });
       const title = el("title", {});
@@ -374,16 +400,16 @@
 
     const max = Math.max(...[...counts.values()], 1);
     const shade = (count) => {
-      if (!count) return "#171717"; // neutral-900: a day with no messages
+      if (!count) return COLORS.heatEmpty; // a day with no messages
       const t = Math.sqrt(count) / Math.sqrt(max); // sqrt again - linear makes everything look dim
-      if (t > 0.75) return "#a855f7";
-      if (t > 0.5) return "#7e3ab8";
-      if (t > 0.25) return "#5b2a80";
-      return "#3b1d52";
+      if (t > 0.75) return COLORS.heat[3];
+      if (t > 0.5) return COLORS.heat[2];
+      if (t > 0.25) return COLORS.heat[1];
+      return COLORS.heat[0];
     };
 
     const label = (x, y, text, anchor) => {
-      const node = el("text", { x, y, fill: "#737373", "font-size": "10", "text-anchor": anchor });
+      const node = el("text", { x, y, fill: COLORS.axis, "font-size": "10", "text-anchor": anchor });
       node.textContent = text;
       svg.appendChild(node);
     };

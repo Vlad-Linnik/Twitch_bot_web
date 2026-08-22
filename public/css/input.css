@@ -1242,3 +1242,418 @@ html.js .save-fab.save-visible {
 @media (prefers-reduced-motion: reduce) {
   .ub-sniper-shown { animation: none; }
 }
+
+/* ===========================================================================
+   Throne theme - the per-user page skin on /<channel>/user/<name>
+   (views/partials/throneHero.ejs, db/pageThemesRepo.js). Everything here is
+   scoped under body.theme-throne, so a page without the theme is untouched.
+
+   Palette comes from a Beaux-Arts interior rather than from "black and gold":
+   warm plaster and lilac-grey stone carrying a gold ramp from dark bronze to a
+   pale highlight. That is why this skin is LIGHT while the rest of the site is
+   dark - the reference it is built from has no black in it.
+   ========================================================================== */
+
+/* Chart colours as tokens. The defaults are the site's own purple, so
+   public/js/user-dashboard.js can read them unconditionally: an unthemed page
+   gets exactly the values that used to be hardcoded there. */
+:root {
+  --chart-line: #a855f7;
+  --chart-grid: #262626;
+  --chart-axis: #737373;
+  --chart-heat-1: #3b1d52;
+  --chart-heat-2: #5b2a80;
+  --chart-heat-3: #7e3ab8;
+  --chart-heat-4: #a855f7;
+  --chart-heat-empty: #171717;
+}
+
+body.theme-throne {
+  --throne-plaster: #c3b7ad;
+  --throne-plaster-deep: #a2958c;
+  --throne-panel: #d6cabd;
+  --throne-stone: #8e8479;
+  --throne-stone-shade: #756c62;
+  /* The throne's back panel is darker than the columns on purpose: it is what the gold frame
+     and the portrait sit against, and at the columns' tone the whole chair washed out. */
+  --throne-back: #6d6257;
+  --throne-cushion: #6d4230;
+  --throne-ink: #2b2118;
+  --throne-ink-soft: #5d4c3b;
+  --throne-ink-faint: #7b6a58;
+  --throne-gold-deep: #6b4f28;
+  --throne-gold-bright: #f2e2b4;
+  --throne-accent: #c9a05c;
+  --throne-edge: rgb(107 79 40 / 0.45);
+
+  /* Colour and image are set separately on purpose: body's background propagates to the page
+     canvas, and a fixed-attachment IMAGE only paints the viewport - a solid colour underneath
+     is what keeps a long page from showing white below the fold. */
+  background-color: var(--throne-plaster);
+  background-image:
+    radial-gradient(120% 70% at 50% 0%, #d8cbbd 0%, var(--throne-plaster) 45%, var(--throne-plaster-deep) 100%);
+  background-attachment: fixed;
+  color: var(--throne-ink);
+
+  --chart-line: var(--throne-gold-deep);
+  --chart-grid: rgb(107 79 40 / 0.22);
+  --chart-axis: var(--throne-ink-faint);
+  --chart-heat-1: #e0d3c2;
+  --chart-heat-2: #cbaa74;
+  --chart-heat-3: #b08340;
+  --chart-heat-4: #6b4f28;
+  --chart-heat-empty: rgb(157 149 161 / 0.22);
+}
+
+/* Presets fix the whole palette; a custom colour (inline --throne-accent on the
+   hero) only ever reaches the accent, which is why no preset here defines the
+   ink or the background in terms of the accent. */
+body.theme-throne .throne-hero[data-accent="crimson"] { --throne-accent: #c0783e; --throne-gold-bright: #f3ddb6; }
+body.theme-throne .throne-hero[data-accent="pale"] { --throne-accent: #e2c98f; --throne-gold-deep: #8a6b39; }
+
+/* The fixed nav is the hall's dark cornice. Markup is byte-identical to every
+   other page (views/partials/nav.ejs) - only the paint changes, so the
+   cross-document view transition still treats it as the same element. */
+body.theme-throne nav.site-nav {
+  background: linear-gradient(180deg, #3a2b17 0%, #241a0e 100%);
+  border-bottom: 2px solid var(--throne-accent);
+}
+body.theme-throne nav.site-nav a { color: #e8d7ac; }
+body.theme-throne nav.site-nav a:hover { color: #fff6df; }
+
+/* --- hero ----------------------------------------------------------------- */
+
+.throne-hero {
+  position: relative;
+  isolation: isolate;
+  /* main's py-12 sets a 48px top padding that beats its own pt-14, while the fixed nav is
+     56px tall - so the hero is nudged DOWN by the difference. Starting any higher paints the
+     cornice, the first thing the eye lands on, behind an opaque nav. */
+  margin: calc(3.5rem - 3rem) -1.5rem 3rem;
+  padding: 3.25rem 1.5rem 1.75rem;
+  overflow: hidden;
+  border-bottom: 3px solid var(--throne-accent);
+}
+
+.throne-hall { position: absolute; inset: 0; z-index: -1; }
+/* Backdrops are photographs of real rooms, and real rooms are photographed in whatever light
+   they had - the archival ones are outright greyscale. The sepia pass pulls every preset into
+   the theme's gold before it is dimmed, so one palette holds across all of them and any file
+   the owner uploads. */
+.throne-hall__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+  filter: sepia(0.6) saturate(1.3) contrast(0.95);
+}
+/* Vignette plus a fade into the plaster at the bottom. Without it the name and the tiles sit on
+   whatever detail the photograph happens to have behind them, which is unreadable on some
+   presets and merely noisy on the rest. */
+.throne-hall::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(78% 68% at 50% 32%, rgb(214 202 189 / 0) 0%, rgb(195 183 173 / 0.62) 100%),
+    linear-gradient(180deg, rgb(195 183 173 / 0) 45%, var(--throne-plaster) 100%);
+}
+
+/* The three pieces of the drawn hall. Each is stretched only along an axis where
+   stretching is invisible - bands horizontally, columns vertically - which is why
+   they are separate elements instead of one picture scaled to cover. */
+.throne-hall__cornice { position: absolute; top: 0; left: 0; width: 100%; height: 2.75rem; }
+.throne-hall__column {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: clamp(2.5rem, 8vw, 6.5rem);
+  /* The columns frame the stage; at full strength they compete with the throne for it. */
+  opacity: 0.5;
+}
+.throne-hall__column--left { left: 0; }
+.throne-hall__column--right { right: 0; transform: scaleX(-1); }
+.throne-hall__cartouche {
+  position: absolute;
+  top: 3.5rem;
+  left: 50%;
+  translate: -50% 0;
+  width: min(20rem, 62vw);
+  opacity: 0.45;
+}
+
+.throne-stage {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  margin-inline: auto;
+  width: min(21rem, 72vw);
+}
+.throne-seat { width: 100%; height: auto; filter: drop-shadow(0 12px 18px rgb(43 33 24 / 0.35)); }
+
+/* The portrait sits on the throne's back panel. The numbers are the panel's own
+   centre in the SVG's coordinate system (400x390, centre near y=100), expressed as
+   percentages so the two stay locked together at any size. */
+.throne-medallion {
+  position: absolute;
+  top: 11.5%;
+  width: 29%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+.throne-medallion__laurel { position: absolute; inset: 0; width: 100%; height: 100%; }
+.throne-medallion__portrait {
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 3px solid var(--throne-gold-deep);
+  box-shadow: 0 0 0 4px rgb(242 226 180 / 0.35);
+}
+.throne-medallion__monogram {
+  display: grid;
+  place-items: center;
+  background: var(--throne-stone);
+  color: var(--throne-gold-bright);
+  font-size: clamp(1.5rem, 5vw, 2.5rem);
+  font-weight: 700;
+}
+
+.throne-plaque { text-align: center; margin-top: 1.25rem; }
+.throne-name {
+  font-size: clamp(2rem, 6vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--throne-ink);
+  text-shadow: 0 1px 0 rgb(242 226 180 / 0.6);
+}
+.throne-title {
+  margin-top: 0.35rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.2rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--throne-gold-deep);
+}
+.throne-motto {
+  margin-top: 0.5rem;
+  font-style: italic;
+  color: var(--throne-ink-soft);
+  max-width: 34rem;
+  margin-inline: auto;
+}
+
+.throne-trophies {
+  margin: 1.75rem auto 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  max-width: 46rem;
+}
+@media (min-width: 640px) {
+  .throne-trophies { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.throne-trophy {
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  border: 1px solid var(--throne-edge);
+  border-radius: 0.5rem;
+  background: linear-gradient(180deg, rgb(242 226 180 / 0.4), rgb(157 149 161 / 0.18));
+}
+.throne-trophy__label {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--throne-ink-faint);
+}
+.throne-trophy__value {
+  margin-top: 0.25rem;
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--throne-gold-deep);
+}
+.throne-trophy__of { font-size: 0.8rem; font-weight: 500; color: var(--throne-ink-faint); margin-left: 0.3rem; }
+.throne-trophy__empty { color: var(--throne-ink-faint); font-weight: 500; }
+.throne-trophy__word { font-size: 0.95rem; overflow-wrap: anywhere; }
+.throne-trophy__emote { height: 2rem; width: auto; display: inline-block; }
+
+/* --- the rest of the page ------------------------------------------------- */
+
+/* A skin repaints markup it does not own, so these override Tailwind utilities
+   already on the page rather than rewriting five sections' class attributes.
+   Tailwind v4 emits utilities inside @layer utilities; unlayered rules like
+   these win over any layer regardless of specificity, which is what makes a
+   one-line override enough. */
+body.theme-throne main .bg-neutral-900,
+body.theme-throne main .bg-neutral-950 { background-color: rgb(214 202 189 / 0.55); }
+body.theme-throne main .border-neutral-700,
+body.theme-throne main .border-neutral-800,
+body.theme-throne main .border-neutral-900 { border-color: var(--throne-edge); }
+body.theme-throne main .divide-neutral-900 > * + * { border-color: var(--throne-edge); }
+body.theme-throne main .text-neutral-100,
+body.theme-throne main .text-neutral-200,
+body.theme-throne main .text-neutral-300 { color: var(--throne-ink); }
+body.theme-throne main .text-neutral-400,
+body.theme-throne main .text-neutral-500 { color: var(--throne-ink-soft); }
+body.theme-throne main .text-neutral-600,
+body.theme-throne main .text-neutral-700 { color: var(--throne-ink-faint); }
+body.theme-throne main .shadow-lg { box-shadow: 0 10px 20px rgb(43 33 24 / 0.25); }
+
+/* Section headings get the same gilded rule the hall's mouldings use, so the
+   page reads as one room rather than as a hero with a normal page under it. */
+body.theme-throne main h2 {
+  color: var(--throne-gold-deep);
+  letter-spacing: 0.06em;
+}
+body.theme-throne main section {
+  border-top: 1px solid var(--throne-edge);
+  padding-top: 1.25rem;
+}
+/* The hero already closes with a gilded rule; a second one directly under it reads as a
+   mistake rather than as a moulding. */
+body.theme-throne main section:first-of-type { border-top: none; padding-top: 0; }
+
+/* Controls: the period toggle and the moderator log's inputs are the only
+   interactive chrome on the page, and purple on plaster is the one combination
+   that looks like a mistake rather than a choice. */
+/* Substring selectors rather than an exact class list: Tailwind's opacity variants mint
+   distinct class names (bg-purple-600/20, border-purple-600/30) and enumerating them here
+   would break the first time a shade changes in the markup. */
+body.theme-throne main [class*="bg-purple"] { background-color: rgb(107 79 40 / 0.16); }
+body.theme-throne main .bg-purple-600,
+body.theme-throne main .bg-purple-700 { background-color: var(--throne-gold-deep); }
+body.theme-throne main [class*="text-purple"] { color: var(--throne-gold-deep); }
+body.theme-throne main [class*="border-purple"] { border-color: var(--throne-edge); }
+body.theme-throne main [class*="accent-purple"] { accent-color: var(--throne-gold-deep); }
+
+/* The period toggle's active pill is bg-neutral-800 - nearly black, and the one control that
+   would still read as "unstyled leftover" on plaster. */
+body.theme-throne main .bg-neutral-800 { background-color: rgb(107 79 40 / 0.22); }
+body.theme-throne main [aria-pressed="true"] { color: var(--throne-gold-deep); font-weight: 600; }
+body.theme-throne main input:focus,
+body.theme-throne main select:focus { border-color: var(--throne-accent); }
+
+.throne-nicknames { margin-top: 0.6rem; font-size: 0.8rem; color: var(--throne-ink-faint); }
+.throne-nicknames > summary {
+  cursor: pointer;
+  list-style: none;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.throne-nicknames > ul {
+  margin: 0.4rem auto 0;
+  max-width: 18rem;
+  border: 1px solid var(--throne-edge);
+  border-radius: 0.4rem;
+  padding: 0.35rem 0;
+  background: rgb(242 226 180 / 0.35);
+}
+.throne-nicknames > ul > li { padding: 0.1rem 0.75rem; color: var(--throne-ink-soft); }
+
+/* --- arrival curtain ------------------------------------------------------
+   Two banks of cloud parting sideways over the whole viewport. Above the nav
+   (z-50) on purpose: the theme's promise is that the hall is revealed, and a
+   navigation bar sitting on top of the clouds gives the reveal away.
+
+   The 0.22s delay is not decoration. A cross-document view transition is still
+   playing when this document starts rendering, and two animations moving the
+   same pixels at once reads as a stutter; the delay lets the page slide in
+   under an intact curtain, which then parts.
+
+   Runs on every visit by design, so it also runs on every reload - which is why
+   public/js/throne-intro.js can cut it short and why nothing here waits on a
+   network request. */
+.throne-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* The two banks OVERLAP in the middle and feather their inner edges, instead of meeting at a
+   shared border. A butt joint between two copies of the same photograph is a hard vertical line
+   down the centre of the screen, and it is the first thing the eye finds. */
+.throne-intro__bank {
+  position: absolute;
+  top: -5%;
+  bottom: -5%;
+  width: 58%;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 76%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 76%, transparent 100%);
+  /* Gradient first, photograph second: the gradient is painted from the
+     stylesheet that is already blocking render, so the curtain is opaque in the
+     first frame whether or not the image has arrived. */
+  background-image:
+    radial-gradient(120% 90% at 70% 40%, rgb(255 252 243 / 0.42) 0%, rgb(232 224 206 / 0.34) 55%, rgb(186 172 150 / 0.4) 100%),
+    url("/img/themes/clouds.webp");
+  background-size: cover, 200% 100%;
+  animation: throne-part-left 1.4s cubic-bezier(0.6, 0, 0.3, 1) 0.22s both;
+}
+.throne-intro__bank--left { left: 0; background-position: center, left center; }
+.throne-intro__bank--right {
+  right: 0;
+  background-position: center, right center;
+  animation-name: throne-part-right;
+  /* The mask is mirrored, not the element: flipping the element with `scale` would also flip
+     the animated translate and send this bank off the wrong side of the screen. */
+  -webkit-mask-image: linear-gradient(270deg, #000 0%, #000 76%, transparent 100%);
+  mask-image: linear-gradient(270deg, #000 0%, #000 76%, transparent 100%);
+}
+/* Sits UNDER both banks (first in the markup) and fills the strip where their feathered edges
+   are each only half-opaque, so the curtain is solid even where it is blending. */
+.throne-intro__seam {
+  position: absolute;
+  top: -5%;
+  bottom: -5%;
+  left: 25%;
+  width: 50%;
+  background:
+    radial-gradient(60% 100% at 50% 50%, rgb(252 248 238 / 0.95) 0%, rgb(252 248 238 / 0) 78%),
+    linear-gradient(90deg, transparent 0%, #dfe9f5 22%, #eef4fb 50%, #dfe9f5 78%, transparent 100%);
+  animation: throne-seam 1.4s ease-out 0.22s both;
+}
+
+@keyframes throne-part-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-102%); }
+}
+@keyframes throne-part-right {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(102%); }
+}
+@keyframes throne-seam {
+  0% { opacity: 1; }
+  38% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* Cutting it short: shrink what is LEFT of the run rather than snapping to the
+   end, which is more abrupt than the animation being skipped. */
+.throne-intro--skipped .throne-intro__bank,
+.throne-intro--skipped .throne-intro__seam {
+  animation-duration: 0.2s;
+  animation-delay: 0s;
+}
+/* One frame with no animation at all, so a bfcache restore can replay it. */
+.throne-intro--reset .throne-intro__bank,
+.throne-intro--reset .throne-intro__seam { animation: none; }
+
+/* Vestibular safety: no sideways motion at all, just a short dissolve. Removing
+   the curtain outright would flash the page into gold with no transition, which
+   is its own kind of unpleasant. */
+@media (prefers-reduced-motion: reduce) {
+  .throne-intro__bank {
+    animation: throne-dissolve 0.2s linear 0s both;
+  }
+  .throne-intro__bank--right { animation-name: throne-dissolve; }
+  .throne-intro__seam { animation: throne-dissolve 0.2s linear 0s both; }
+  @keyframes throne-dissolve {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}

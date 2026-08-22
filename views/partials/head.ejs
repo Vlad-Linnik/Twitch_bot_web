@@ -113,4 +113,8 @@
       was costing a round-trip in front of every single slide. %>
   <link rel="stylesheet" href="<%= asset('/css/output.css') %>" />
 </head>
-<body class="bg-neutral-950 text-neutral-200 min-h-screen">
+<%# bodyClass is how a page opts into a whole-page skin (currently only the throne theme on
+    /<channel>/user/<name>). It has to live on <body> rather than on the page's <main>, because
+    the background and the fixed nav are painted outside <main> - and the class must be present
+    in the very first byte of markup, or the page paints dark and then flips. %>
+<body class="bg-neutral-950 text-neutral-200 min-h-screen<%= typeof bodyClass !== "undefined" && bodyClass ? " " + bodyClass : "" %>">

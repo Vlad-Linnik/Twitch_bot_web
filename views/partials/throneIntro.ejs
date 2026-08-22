@@ -1,0 +1,20 @@
+<%# The arrival curtain: two banks of cloud that part sideways to reveal the hall.
+    Rendered only when the theme has intro on (db/pageThemesRepo.js's `intro`).
+
+    Deliberately CSS-driven rather than script-driven. The overlay is opaque from the very first
+    byte of markup - a deferred script could not cover the page before it paints - and its own
+    animation is what clears it, so a browser with JavaScript off, or a failed script load, still
+    gets a page it can use. public/js/throne-intro.js only ADDS things: cutting the animation
+    short on the first user action, and replaying it when the page comes back out of the
+    back/forward cache.
+
+    Both halves carry a CSS fog gradient AND a photograph. The gradient paints immediately while
+    the photo is still arriving over the network, which matters here more than usual: this
+    overlay blocks the page for as long as it runs, so it must never be waiting on a download. %>
+<div class="throne-intro" id="throne-intro" role="presentation" aria-hidden="true">
+  <%# The seam comes first so it paints UNDER the two banks - it fills the strip where their
+      feathered inner edges overlap and neither is fully opaque on its own. %>
+  <div class="throne-intro__seam"></div>
+  <div class="throne-intro__bank throne-intro__bank--left"></div>
+  <div class="throne-intro__bank throne-intro__bank--right"></div>
+</div>

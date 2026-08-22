@@ -1,5 +1,16 @@
-<%- include('partials/head', { title: identity.currentUserName + ' · ' + channel.channelLogin }) %>
+<%
+  // A hidden profile shows the ordinary stub even when a theme exists - privacy outranks
+  // decoration, and the route has already skipped every query the hero would need.
+  const throne = theme.enabled && !profileHidden;
+%>
+<%- include('partials/head', {
+      title: identity.currentUserName + ' · ' + channel.channelLogin,
+      bodyClass: throne ? 'theme-throne' : ''
+    }) %>
 <%- include('partials/nav') %>
+<%# The curtain has to be the first thing in the body after the nav: it covers the page while
+    it plays, and a later position would let the page paint above it for a frame. %>
+<% if (throne && theme.intro) { %><%- include('partials/throneIntro') %><% } %>
 
 <%
   // Data handed to the client as JSON rather than re-fetched on load: the server already paid for
@@ -30,7 +41,12 @@
   <!-- Header: avatar, name, nickname-history dropdown. user-header pinned via
        view-transition-name (public/css/input.css) so a Top Chatters row or search hit
        (data-vt-name="user-header", public/js/page-transitions.js) morphs into it on arrival -
-       same technique as stats-header (see that partial). -->
+       same technique as stats-header (see that partial). The throne theme swaps this whole
+       block for its own hero, which carries the same .user-header class so the morph survives
+       the swap - the row unfolds into the hall instead of into a name and an avatar. -->
+  <% if (throne) { %>
+    <%- include('partials/throneHero', { theme, identity, profile, trophies, nicknames, t, locale }) %>
+  <% } else { %>
   <header class="user-header flex items-start gap-4 mb-10">
     <% if (profile && profile.avatarUrl) { %>
       <img src="<%= profile.avatarUrl %>" alt="" width="72" height="72"
@@ -87,6 +103,7 @@
       <% } %>
     </div>
   </header>
+  <% } %>
 
   <% if (profileHidden) { %>
     <section class="mb-10">
@@ -112,7 +129,7 @@
   <% if (activity || isOwner) { %>
   <section class="mb-10" data-component="activity">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.messageVolume') %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('activity', t('userDashboard.messageVolume')) %></h2>
       <div class="flex items-center gap-2">
         <%- include('partials/periodToggle', { periods, period, component: 'activity' }) %>
         <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'activity', hiddenState: !activity, t }) %><% } %>
@@ -141,7 +158,7 @@
   <% if (clouds || isOwner) { %>
   <section class="mb-10" data-component="clouds">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.clouds') %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('clouds', t('userDashboard.clouds')) %></h2>
       <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'clouds', hiddenState: !clouds, t }) %><% } %>
     </div>
     <div data-panel-body class="grid grid-cols-1 md:grid-cols-2 gap-6" <% if (!clouds) { %>hidden<% } %>>
@@ -169,7 +186,7 @@
   <% if (mentions || isOwner) { %>
   <section class="mb-10" data-component="mentions">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.mentions') %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('mentions', t('userDashboard.mentions')) %></h2>
       <div class="flex items-center gap-2">
         <%- include('partials/periodToggle', { periods, period, component: 'mentions' }) %>
         <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'mentions', hiddenState: !mentions, t }) %><% } %>
@@ -201,7 +218,7 @@
   <% if (heatmap || isOwner) { %>
   <section class="mb-10" data-component="heatmap">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.heatmap') %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('heatmap', t('userDashboard.heatmap')) %></h2>
       <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'heatmap', hiddenState: !heatmap, t }) %><% } %>
     </div>
     <div data-panel-body <% if (!heatmap) { %>hidden<% } %>>
@@ -230,7 +247,7 @@
     <section class="mb-10" id="mod-logs">
       <div class="flex items-center justify-between mb-3 gap-4">
         <h2 class="text-lg font-semibold text-neutral-100">
-          <%= t('userDashboard.modLogs') %>
+          <%= panelLabel('modLogs', t('userDashboard.modLogs')) %>
           <span class="ml-2 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('userDashboard.modOnly') %></span>
         </h2>
         <%- include('partials/periodToggle', { periods, period, component: 'logs' }) %>
@@ -260,6 +277,9 @@
   <%# NOT JSON.stringify() - this payload carries chat-derived strings (cloud words, nickname
       history, raw message bodies), so it must be escaped against a "</script>" breakout.
       See lib/safeJson.js. The hidden stub inlines no data and loads no dashboard scripts. %>
+  <% if (throne && theme.intro) { %>
+    <script src="<%= asset('/js/throne-intro.js') %>" defer></script>
+  <% } %>
   <script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>
   <script src="<%= asset('/js/cloud-layout.js') %>" defer></script>
   <script src="<%= asset('/js/user-dashboard.js') %>" defer></script>

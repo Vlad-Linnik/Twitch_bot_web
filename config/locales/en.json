@@ -1092,6 +1092,7 @@
   "userDashboard": {
     "nicknameHistory": "Previous nicknames",
     "rank": "Rank",
+    "firstSeen": "In the chronicle since",
     "messages": "messages",
     "noMessages": "No messages in this channel yet",
     "messageVolume": "Message volume",
@@ -1584,6 +1585,87 @@
       "formatHint": "Markdown is rendered to HTML; HTML is used as-is. Both are sanitized before publishing.",
       "save": "Publish",
       "cancel": "Cancel"
+    },
+    "tabPageThemes": "Page themes",
+    "pageThemes": {
+      "title": "User page themes",
+      "hint": "A theme replaces the default look of /<channel>/user/<name>. It belongs to the user, not the channel, so it applies on their page in every channel.",
+      "lookupLabel": "Username",
+      "lookupPlaceholder": "e.g. vlad_261",
+      "lookupButton": "Open editor",
+      "empty": "No themes created yet.",
+      "colUser": "User",
+      "colState": "State",
+      "colTitle": "Title",
+      "colStorage": "Files",
+      "colUpdated": "Updated",
+      "stateOn": "on",
+      "stateOff": "off",
+      "edit": "Edit",
+      "editTitle": "Page theme",
+      "editHint": "These settings apply to this user's page in every channel.",
+      "openPage": "open the page",
+      "fieldEnabled": "Enable the theme",
+      "fieldTitle": "Title",
+      "fieldMotto": "Motto",
+      "fieldAccent": "Palette",
+      "accentPreset": {
+        "brass": "Brass",
+        "crimson": "Red gold",
+        "pale": "Pale leaf"
+      },
+      "accentModePreset": "Accent from palette",
+      "accentModeCustom": "Custom accent",
+      "accentHint": "A custom colour only changes the accent - outlines, highlights and chart lines. Background and text always come from the palette, so the page stays readable.",
+      "fieldBackdrop": "Backdrop",
+      "backdropMode": {
+        "vector": "Vector",
+        "photo": "Photo"
+      },
+      "backdropPreset": {
+        "hall": "Hall",
+        "ceiling": "Ceiling",
+        "colonnade": "Colonnade"
+      },
+      "fieldBackdropFile": "Custom backdrop image",
+      "fieldMedallion": "Medallion portrait",
+      "medallionHint": "Left empty, the medallion shows the Twitch avatar.",
+      "removeFile": "remove file",
+      "storageUsed": "Files use:",
+      "fieldIntro": "Play the cloud intro on arrival",
+      "fieldTrophies": "Four tiles in the header",
+      "trophy": {
+        "rank": "Rank",
+        "messages": "Messages",
+        "mentions": "Mentions",
+        "firstSeen": "In the chronicle since",
+        "nicknames": "Past nicknames",
+        "topEmote": "Favourite emote"
+      },
+      "trophiesHint": "Left to right. Repeats are replaced with the defaults.",
+      "fieldPanelLabels": "Panel headings",
+      "panel": {
+        "activity": "Activity",
+        "clouds": "Clouds",
+        "mentions": "Mentions",
+        "heatmap": "Heatmap",
+        "modLogs": "Chat logs"
+      },
+      "panelLabelsHint": "Leave a box empty to keep the stock heading in that language.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete theme",
+      "deleteConfirm": "Delete this theme and its uploaded files?",
+      "uploadError": "File rejected: too large, or not an image.",
+      "imageError": "That image could not be processed.",
+      "quotaError": "This user's file storage limit would be exceeded.",
+      "flash": {
+        "saved": "Theme saved.",
+        "deleted": "Theme deleted."
+      },
+      "error": {
+        "unknownUser": "No such user in the chat chronicle."
+      }
     },
     "tabGameRuns": "Flagged runs",
     "gameRunsIntro": "Solo-game runs the anti-cheat wants a human to look at. Their scores are held off the leaderboard until you approve them - the run itself is kept intact either way.",

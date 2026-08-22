@@ -14,6 +14,9 @@ const wordStatsRepo = require("../db/wordStatsRepo");
 const searchRepo = require("../db/searchRepo");
 const userProfileService = require("../db/userProfileService");
 const userPreferencesRepo = require("../db/userPreferencesRepo");
+const pageThemesRepo = require("../db/pageThemesRepo");
+const { resolveTheme, resolvePanelLabel } = require("../lib/pageThemeValidation");
+const { buildTrophies } = require("../lib/pageThemeHero");
 const { withEmoteImages } = require("../twitch/emoteImages");
 const { computePermission } = require("../middleware/permissions");
 const { statsReadLimiter, searchLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
@@ -115,6 +118,9 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
     // The owner gets the same stub plus a link to /settings, where they can turn it off.
     // No stats are fetched at all - hiding in the view while inlining the data into the
     // bootstrap JSON would hide nothing.
+    // Privacy outranks the theme: a hidden profile renders the ordinary stub, not a throne room
+    // with the same name on it. The theme document is not even read here - there is nothing on
+    // this branch it could decorate.
     if (privacy.hideProfile) {
       return res.render("userDashboard", {
         channel,
@@ -123,6 +129,9 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
         period,
         periods: limits.PERIODS,
         profileHidden: true,
+        theme: resolveTheme(null),
+        trophies: [],
+        panelLabel: (panel, fallback) => fallback,
         isOwner,
         standing: null,
         activity: null,
@@ -135,7 +144,7 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       });
     }
 
-    const [standing, activity, heatmap, mentions, clouds, permission] = await Promise.all([
+    const [standing, activity, heatmap, mentions, clouds, permission, themeDoc] = await Promise.all([
       userStatsRepo.getLifetimeStanding(channel.channelLogin, identity.userId),
       // Two reads of the same index range on purpose: the chart needs period-shaped buckets
       // (getMessageVolume), the heatmap always needs the full day-bucketed window.
@@ -154,7 +163,13 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       // req.permissionLevel is unset here - compute it explicitly to decide whether to render
       // the moderator panel.
       computePermission(req.user?.userId ?? null, channel.channelLogin),
+      // Keyed by userId, not by channel - the same theme renders on this user's page in every
+      // channel (db/pageThemesRepo.js).
+      pageThemesRepo.getTheme(identity.userId),
     ]);
+
+    const theme = resolveTheme(themeDoc);
+    const nicknames = userStatsRepo.nicknameHistory(identity);
 
     res.render("userDashboard", {
       channel,
@@ -163,6 +178,13 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       period,
       periods: limits.PERIODS,
       profileHidden: false,
+      theme,
+      // Built here rather than in the view: which stat feeds which tile (and which tiles have
+      // no value because their panel is hidden) is a rule, and lib/ is where rules go.
+      trophies: theme.enabled ? buildTrophies(theme.trophies, { standing, mentions, clouds, identity, nicknames }) : [],
+      // Panel headings are per-locale overrides over the stock translation - the view passes
+      // its own t() result as the fallback, so an untouched panel is byte-identical to before.
+      panelLabel: (panel, fallback) => resolvePanelLabel(theme, panel, req.locale, fallback),
       isOwner,
       standing,
       activity,
@@ -172,7 +194,7 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       // withEmoteImages returns a new array (same contract as the statistics page). null when
       // hideWordCloud is on - nothing to join images into.
       clouds: clouds ? { ...clouds, emotes: await withEmoteImages(channel.channelLogin, clouds.emotes) } : null,
-      nicknames: userStatsRepo.nicknameHistory(identity),
+      nicknames,
       // Only decides whether the moderator panel is DRAWN. It is not the security boundary -
       // logs.json independently re-checks the tier on every request - but there is no point
       // rendering a panel whose every call could only 403.

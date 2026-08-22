@@ -32,6 +32,10 @@ const newsRepo = require("../db/newsRepo");
 const newsReactionsRepo = require("../db/newsReactionsRepo");
 const { saveNewsImage, deleteNewsImage } = require("../lib/newsImage");
 const newsValidation = require("../lib/newsValidation");
+const pageThemesRepo = require("../db/pageThemesRepo");
+const userStatsRepo = require("../db/userStatsRepo");
+const pageThemeValidation = require("../lib/pageThemeValidation");
+const { saveThemeImage, themeImageBytes, deleteThemeImage } = require("../lib/pageThemeAssets");
 
 const REJECT_REASON_MAX_LENGTH = 300;
 // The bot writes a fresh heartbeat doc every 30s (TwitchBot's index.js) - anything older than a
@@ -842,6 +846,215 @@ router.post("/admin/news/:id/delete", settingsWriteLimiter, requireAdmin, verify
       });
     }
     res.redirect("/admin/news?flash=deleted");
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Per-user page themes (the skin on /<channel>/user/<name>) ----------------------------
+// Tier-0 only. A theme is keyed by userId and applies on that user's page in every channel,
+// which is why this lives under /admin rather than under /:channel - a channel-scoped URL
+// would promise a channel-scoped effect it doesn't have.
+//
+// The editor is admin-only by design for now. Everything downstream (the storage quota in
+// lib/pageThemeValidation.js, the per-user asset paths) is already written for a world where
+// channel owners can edit their own, so opening it later is a permission change, not a rewrite.
+const THEME_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+const themeImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: THEME_IMAGE_MAX_BYTES },
+  fileFilter: (req, file, cb) => cb(null, file.mimetype.startsWith("image/")),
+});
+
+// Same wrapper contract as uploadNewsImage above: a rejected upload becomes a flag on the
+// request and a re-rendered form, never a raw 500.
+function uploadThemeImages(req, res, next) {
+  themeImageUpload.fields([
+    { name: "backdropFile", maxCount: 1 },
+    { name: "medallionFile", maxCount: 1 },
+  ])(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      req.themeImageUploadError = true;
+      return next();
+    }
+    if (err) return next(err);
+    next();
+  });
+}
+
+async function renderThemeForm(req, res, { userId, theme, error, status = 200 }) {
+  const [profiles, channels] = await Promise.all([
+    profileCacheRepo.getOrFetchProfiles([userId]),
+    channelsRepo.listAll(),
+  ]);
+  return res.status(status).render("adminPageThemeForm", {
+    tab: "page-themes",
+    userId,
+    theme,
+    profile: profiles.get(String(userId)) || null,
+    // A theme has no channel of its own, so the "open the page" link just needs SOME channel
+    // whose page would render it - the first one the site knows about will do.
+    previewChannel: channels[0]?.channelLogin || null,
+    constants: pageThemeValidation,
+    locales: SUPPORTED_LOCALES,
+    error,
+  });
+}
+
+router.get("/admin/page-themes", requireAdmin, async (req, res, next) => {
+  try {
+    const themes = await pageThemesRepo.listThemes();
+    // Names are resolved here rather than stored on the theme doc, so a user who renames is
+    // never listed under a stale nickname.
+    const profiles = await profileCacheRepo.getOrFetchProfiles(themes.map((theme) => theme.userId));
+    res.render("adminPageThemes", {
+      tab: "page-themes",
+      rows: themes.map((theme) => ({ theme, profile: profiles.get(String(theme.userId)) || null })),
+      flash: req.query.flash || null,
+      error: req.query.error || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Declared before the /:userId form below, or "lookup" would be read as a user id.
+router.get("/admin/page-themes/lookup", requireAdmin, async (req, res, next) => {
+  try {
+    const login = (req.query.login || "").toString().trim().toLowerCase().replace(/^@/, "");
+    if (!login) return res.redirect("/admin/page-themes");
+    // UserIdentities (the shared db) is the resolver, so a theme can only ever be attached to
+    // someone the bot has actually seen in chat - the same identity source the profile page
+    // itself resolves through.
+    const identity = await userStatsRepo.findUserByName(login);
+    if (!identity) return res.redirect("/admin/page-themes?error=unknownUser");
+    res.redirect(`/admin/page-themes/${identity.userId}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/admin/page-themes/:userId", requireAdmin, async (req, res, next) => {
+  try {
+    const doc = await pageThemesRepo.getTheme(req.params.userId);
+    await renderThemeForm(req, res, {
+      userId: String(req.params.userId),
+      theme: pageThemeValidation.resolveTheme(doc),
+      error: null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post(
+  "/admin/page-themes/:userId",
+  settingsWriteLimiter,
+  requireAdmin,
+  uploadThemeImages,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const userId = String(req.params.userId);
+      const existing = await pageThemesRepo.getTheme(userId);
+      const theme = pageThemeValidation.parseSubmittedTheme(req.body, existing);
+
+      if (req.themeImageUploadError) {
+        return renderThemeForm(req, res, { userId, theme, error: res.locals.t("admin.pageThemes.uploadError"), status: 400 });
+      }
+
+      // Explicit removals run before uploads so "remove" plus "replace" in one submission ends
+      // up as a replace, not as a removal of the file that was just written.
+      const supersededUrls = [];
+      if (req.body["backdrop.removeUpload"] === "1" && theme.backdrop.uploadUrl) {
+        supersededUrls.push(theme.backdrop.uploadUrl);
+        theme.backdrop.uploadUrl = null;
+      }
+      if (req.body["medallion.remove"] === "1" && theme.medallionUrl) {
+        supersededUrls.push(theme.medallionUrl);
+        theme.medallionUrl = null;
+      }
+
+      const uploads = [
+        { kind: "backdrop", file: req.files?.backdropFile?.[0], currentUrl: theme.backdrop.uploadUrl },
+        { kind: "medallion", file: req.files?.medallionFile?.[0], currentUrl: theme.medallionUrl },
+      ].filter((upload) => upload.file);
+
+      // The quota is measured against what is actually on disk, not against the theme doc's
+      // stored counter: the two can disagree if a file was removed by hand, and the disk is
+      // the thing that fills up.
+      let storedBytes = 0;
+      for (const url of [theme.backdrop.uploadUrl, theme.medallionUrl]) {
+        storedBytes += await themeImageBytes(url);
+      }
+
+      for (const upload of uploads) {
+        const replacedBytes = await themeImageBytes(upload.currentUrl);
+        let saved;
+        try {
+          saved = await saveThemeImage(upload.file.buffer, upload.kind);
+        } catch {
+          // sharp throws on anything that isn't decodable image data - that IS the validation.
+          return renderThemeForm(req, res, { userId, theme, error: res.locals.t("admin.pageThemes.imageError"), status: 400 });
+        }
+
+        if (
+          !pageThemeValidation.withinStorageQuota({
+            storageBytes: storedBytes,
+            incomingBytes: saved.bytes,
+            replacedBytes,
+            isAdmin: req.permissionLevel === 0,
+          })
+        ) {
+          await deleteThemeImage(saved.url);
+          return renderThemeForm(req, res, { userId, theme, error: res.locals.t("admin.pageThemes.quotaError"), status: 400 });
+        }
+
+        storedBytes += saved.bytes - replacedBytes;
+        if (upload.currentUrl) supersededUrls.push(upload.currentUrl);
+        if (upload.kind === "backdrop") {
+          theme.backdrop.uploadUrl = saved.url;
+        } else {
+          theme.medallionUrl = saved.url;
+        }
+      }
+
+      theme.storageBytes = storedBytes;
+      await pageThemesRepo.saveTheme(userId, theme, req.user.userId);
+
+      // Old files are unlinked only after the document write succeeds: a stale file on disk is
+      // harmless, while a deleted file whose URL is still stored renders as a broken image.
+      for (const url of supersededUrls) await deleteThemeImage(url);
+
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "pageTheme.save",
+        target: userId,
+        details: theme.enabled ? theme.theme : "disabled",
+      });
+
+      res.redirect("/admin/page-themes?flash=saved");
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post("/admin/page-themes/:userId/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const existing = await pageThemesRepo.getTheme(req.params.userId);
+    if (existing) {
+      await pageThemesRepo.deleteTheme(req.params.userId);
+      await deleteThemeImage(existing.backdrop?.uploadUrl);
+      await deleteThemeImage(existing.medallionUrl);
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "pageTheme.delete",
+        target: String(req.params.userId),
+      });
+    }
+    res.redirect("/admin/page-themes?flash=deleted");
   } catch (err) {
     next(err);
   }

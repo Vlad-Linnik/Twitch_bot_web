@@ -1,0 +1,87 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.pageThemes.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-8"><%= t('admin.title') %></h1>
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.pageThemes.title') %></h2>
+  <p class="text-neutral-500 text-sm mb-6"><%= t('admin.pageThemes.hint') %></p>
+
+  <% if (flash) { %>
+    <div class="mb-6 rounded-md border border-emerald-800 bg-emerald-950/40 text-emerald-300 text-sm px-4 py-3">
+      <%= t('admin.pageThemes.flash.' + flash) %>
+    </div>
+  <% } %>
+  <% if (error) { %>
+    <div class="mb-6 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3">
+      <%= t('admin.pageThemes.error.' + error) %>
+    </div>
+  <% } %>
+
+  <%# Lookup is a GET form: the route resolves the login through UserIdentities and redirects to
+      the editor, so the editor's URL is always the canonical /admin/page-themes/<userId>. %>
+  <form method="get" action="/admin/page-themes/lookup" class="flex flex-wrap items-end gap-3 mb-10">
+    <div class="grow max-w-xs">
+      <label for="theme-login" class="block text-xs text-neutral-500 mb-1"><%= t('admin.pageThemes.lookupLabel') %></label>
+      <input type="text" id="theme-login" name="login" autocomplete="off" required
+             placeholder="<%= t('admin.pageThemes.lookupPlaceholder') %>"
+             class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+    </div>
+    <button type="submit"
+            class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-sm font-medium text-white transition-colors">
+      <%= t('admin.pageThemes.lookupButton') %>
+    </button>
+  </form>
+
+  <% if (rows.length === 0) { %>
+    <p class="text-sm text-neutral-600"><%= t('admin.pageThemes.empty') %></p>
+  <% } else { %>
+    <div class="overflow-x-auto rounded-lg border border-neutral-800">
+      <table class="w-full text-sm">
+        <thead class="text-xs uppercase tracking-wide text-neutral-500 bg-neutral-900/60">
+          <tr>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.pageThemes.colUser') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.pageThemes.colState') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.pageThemes.colTitle') %></th>
+            <th class="text-right font-medium px-4 py-2"><%= t('admin.pageThemes.colStorage') %></th>
+            <th class="text-right font-medium px-4 py-2"><%= t('admin.pageThemes.colUpdated') %></th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-900">
+          <% rows.forEach(function(row) { %>
+            <tr>
+              <td class="px-4 py-2">
+                <a href="/admin/page-themes/<%= row.theme.userId %>" class="text-neutral-200 hover:text-purple-400 transition-colors">
+                  <%= (row.profile && (row.profile.displayName || row.profile.login)) || row.theme.userId %>
+                </a>
+              </td>
+              <td class="px-4 py-2">
+                <% if (row.theme.enabled) { %>
+                  <span class="text-emerald-400"><%= t('admin.pageThemes.stateOn') %></span>
+                <% } else { %>
+                  <span class="text-neutral-600"><%= t('admin.pageThemes.stateOff') %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-2 text-neutral-400 truncate max-w-xs"><%= row.theme.title || '—' %></td>
+              <td class="px-4 py-2 text-right text-neutral-500 tabular-nums">
+                <%= Math.round((row.theme.storageBytes || 0) / 1024).toLocaleString(locale) %> KB
+              </td>
+              <td class="px-4 py-2 text-right text-neutral-500 tabular-nums">
+                <%= row.theme.updatedAt ? new Date(row.theme.updatedAt).toLocaleDateString(locale) : '—' %>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <a href="/admin/page-themes/<%= row.theme.userId %>" class="text-xs text-neutral-500 hover:text-neutral-200 transition-colors">
+                  <%= t('admin.pageThemes.edit') %>
+                </a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>
