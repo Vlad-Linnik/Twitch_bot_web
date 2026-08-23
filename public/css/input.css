@@ -1244,14 +1244,25 @@ html.js .save-fab.save-visible {
 }
 
 /* ===========================================================================
-   Throne theme - the per-user page skin on /<channel>/user/<name>
-   (views/partials/throneHero.ejs, db/pageThemesRepo.js). Everything here is
-   scoped under body.theme-throne, so a page without the theme is untouched.
+   Throne-room themes - the per-user page skins on /<channel>/user/<name>
+   (views/partials/throne*.ejs, db/pageThemesRepo.js).
 
-   Palette comes from a Beaux-Arts interior rather than from "black and gold":
-   warm plaster and lilac-grey stone carrying a gold ramp from dark bronze to a
-   pale highlight. That is why this skin is LIGHT while the rest of the site is
-   dark - the reference it is built from has no black in it.
+   Two skins, ONE room. `throne` is the gilded Beaux-Arts hall the feature was
+   built as; `rose` is the same architecture cut from pink materials. They share
+   every partial, every class and every custom property - a skin supplies values
+   and nothing else. That is why every structural and override rule below is
+   scoped to `body.theme-hall`, the marker each skin carries alongside its own
+   name, while `body.theme-throne` / `body.theme-rose` contain only a palette.
+
+   So the `--throne-*` prefix names the FAMILY, not a colour: in the rose skin
+   `--throne-plaster` is pink and `--throne-gold-deep` is a berry. The two ends
+   of the metal ramp keep their gold names because that is the role they play -
+   the dark end of the gilding and its highlight - not the hue they hold.
+
+   Both palettes come from an interior rather than from "black and gold": the
+   throne skin from a Beaux-Arts hall, the rose skin from a soft-pink flat-lay.
+   That is why both are LIGHT while the rest of the site is dark - neither
+   reference has any black in it.
    ========================================================================== */
 
 /* Chart colours as tokens. The defaults are the site's own purple, so
@@ -1268,32 +1279,70 @@ html.js .save-fab.save-visible {
   --chart-heat-empty: #171717;
 }
 
+/* --- palettes -------------------------------------------------------------
+   A skin sets the whole token list; a preset overrides part or all of it.
+   Presets live on <body> rather than on the hero because the page's own
+   background is painted there, and because the gilding they tint also reaches
+   the headings, the vitrine and the form controls further down the page - a
+   preset scoped to the hero repaints half a room and leaves the rest on the
+   base palette.
+
+   A custom accent stays hero-scoped (an inline style in partials/throneHero.ejs)
+   and deliberately so: it is the one colour a user picks freely, and confined to
+   the gilding it cannot land on body text or a focus ring. */
+
 body.theme-throne {
+  /* Materials. */
   --throne-plaster: #c3b7ad;
   --throne-plaster-deep: #a2958c;
+  --throne-canvas-top: #d8cbbd;
   --throne-panel: #d6cabd;
+  /* Panels standing ON a page-wide backdrop rather than below it - warmer, and
+     used at a much higher alpha; see body.theme-hall-wide. */
+  --throne-panel-wide: #d8cdc1;
   --throne-stone: #8e8479;
   --throne-stone-shade: #756c62;
+  /* The cool grey the tiles and the vitrine are shaded down into. It is not the
+     stone: the stone is warm, and shading a gilded tile with a warm grey makes
+     it look dirty rather than recessed. */
+  --throne-shade: #9d95a1;
   /* The throne's back panel is darker than the columns on purpose: it is what the gold frame
      and the portrait sit against, and at the columns' tone the whole chair washed out. */
   --throne-back: #6d6257;
   --throne-cushion: #6d4230;
+
+  /* Ink. */
   --throne-ink: #2b2118;
   --throne-ink-soft: #5d4c3b;
   --throne-ink-faint: #7b6a58;
+
+  /* The metal ramp: dark end, highlight, and the accent that sits between them. */
   --throne-gold-deep: #6b4f28;
   --throne-gold-bright: #f2e2b4;
   --throne-accent: #c9a05c;
   --throne-edge: rgb(107 79 40 / 0.45);
+  --throne-tile-wide-top: #f0e7d6;
+  --throne-tile-wide-bottom: #dbcfbf;
 
-  /* Colour and image are set separately on purpose: body's background propagates to the page
-     canvas, and a fixed-attachment IMAGE only paints the viewport - a solid colour underneath
-     is what keeps a long page from showing white below the fold. */
-  background-color: var(--throne-plaster);
-  background-image:
-    radial-gradient(120% 70% at 50% 0%, #d8cbbd 0%, var(--throne-plaster) 45%, var(--throne-plaster-deep) 100%);
-  background-attachment: fixed;
-  color: var(--throne-ink);
+  /* The fixed nav, repainted as the hall's dark cornice. */
+  --throne-nav-top: #3a2b17;
+  --throne-nav-bottom: #241a0e;
+  --throne-nav-link: #e8d7ac;
+  --throne-nav-link-hover: #fff6df;
+
+  /* Backdrops are photographs of real rooms, and real rooms are photographed in whatever light
+     they had - the archival ones are outright greyscale. This pass pulls every preset into the
+     skin's own metal before it is dimmed, so one palette holds across all of them and across any
+     file the owner uploads. */
+  --throne-photo-filter: sepia(0.6) saturate(1.3) contrast(0.95);
+
+  /* The arrival curtain (see below): three fog stops plus the seam between the banks. */
+  --throne-fog-1: rgb(255 252 243 / 0.42);
+  --throne-fog-2: rgb(232 224 206 / 0.34);
+  --throne-fog-3: rgb(186 172 150 / 0.4);
+  --throne-seam-core: rgb(252 248 238 / 0.95);
+  --throne-seam-edge: #dfe9f5;
+  --throne-seam-mid: #eef4fb;
 
   --chart-line: var(--throne-gold-deep);
   --chart-grid: rgb(107 79 40 / 0.22);
@@ -1305,21 +1354,245 @@ body.theme-throne {
   --chart-heat-empty: rgb(157 149 161 / 0.22);
 }
 
-/* Presets fix the whole palette; a custom colour (inline --throne-accent on the
-   hero) only ever reaches the accent, which is why no preset here defines the
-   ink or the background in terms of the accent. */
-body.theme-throne .throne-hero[data-accent="crimson"] { --throne-accent: #c0783e; --throne-gold-bright: #f3ddb6; }
-body.theme-throne .throne-hero[data-accent="pale"] { --throne-accent: #e2c98f; --throne-gold-deep: #8a6b39; }
+/* The gilded hall's two alternates. They move the metal only - the plaster, the
+   stone and the ink are what make the room readable, and a preset that changed
+   them would be a second skin rather than a variation on this one. */
+body.theme-throne.palette-crimson { --throne-accent: #c0783e; --throne-gold-bright: #f3ddb6; }
+body.theme-throne.palette-pale { --throne-accent: #e2c98f; --throne-gold-deep: #8a6b39; }
+
+/* --- palette: the rose hall -----------------------------------------------
+   The same room in pink materials: a baby-pink wall wash, cream columns, berry
+   ink, a rose-gold ramp and a strawberry cushion. The three presets after it are
+   whole palettes rather than accents, because "pink" spans a far wider range than
+   "gold" does - dusty, powder and fuchsia are not variations on one another, they
+   are different rooms in the same architecture. */
+body.theme-rose {
+  --throne-plaster: #f2c8d4;
+  --throne-plaster-deep: #e0a6b9;
+  --throne-canvas-top: #fce0e7;
+  --throne-panel: #fbe3e8;
+  --throne-panel-wide: #fdeef2;
+  /* Mid-tone, and DARKER than the wall rather than lighter. Two constraints meet on
+     this token: the columns have to read as a different material from the plaster
+     behind them, and the medallion's fallback monogram sets --throne-gold-bright
+     text directly on it - on a cream stone that text disappears. */
+  --throne-stone: #b06a80;
+  --throne-stone-shade: #8f4f66;
+  --throne-shade: #cba9b5;
+  --throne-back: #d894a9;
+  --throne-cushion: #e4536e;
+
+  --throne-ink: #5a1730;
+  --throne-ink-soft: #8a4157;
+  --throne-ink-faint: #ab6d80;
+
+  --throne-gold-deep: #9c3f5c;
+  --throne-gold-bright: #ffe7ec;
+  --throne-accent: #e58aa4;
+  --throne-edge: rgb(156 63 92 / 0.42);
+  --throne-tile-wide-top: #fdeaee;
+  --throne-tile-wide-bottom: #f6d5dd;
+
+  --throne-nav-top: #6b1f39;
+  --throne-nav-bottom: #48122a;
+  --throne-nav-link: #f8cfda;
+  --throne-nav-link-hover: #fff2f6;
+
+  /* grayscale() first, then sepia(): sepia over an already-neutral image lands on
+     one known hue whatever the source was, so the rotation after it is a fixed
+     distance rather than a guess per photograph. The shipped backdrops are gilded
+     halls, and rotating each one's own warm cast would leave every preset a
+     slightly different pink. */
+  --throne-photo-filter: grayscale(1) sepia(1) hue-rotate(-52deg) saturate(2.6) brightness(1.1);
+
+  --throne-fog-1: rgb(255 247 250 / 0.5);
+  --throne-fog-2: rgb(250 218 228 / 0.44);
+  --throne-fog-3: rgb(230 168 190 / 0.5);
+  --throne-seam-core: rgb(255 248 251 / 0.95);
+  --throne-seam-edge: #f7d8e2;
+  --throne-seam-mid: #fdeef4;
+
+  --chart-line: var(--throne-gold-deep);
+  --chart-grid: rgb(156 63 92 / 0.2);
+  --chart-axis: var(--throne-ink-faint);
+  --chart-heat-1: #f8dee4;
+  --chart-heat-2: #efb2c3;
+  --chart-heat-3: #dc7c9b;
+  --chart-heat-4: #9c3f5c;
+  --chart-heat-empty: rgb(203 169 181 / 0.25);
+}
+
+/* Dusty rose: the same room in overcast light. Muted far enough that the gilding
+   reads as tarnished rose-gold rather than as paint. */
+body.theme-rose.palette-dusty {
+  --throne-plaster: #d9bfc2;
+  --throne-plaster-deep: #bfa0a6;
+  --throne-canvas-top: #e8d4d5;
+  --throne-panel: #ead6d4;
+  --throne-panel-wide: #eddcda;
+  --throne-stone: #966f78;
+  --throne-stone-shade: #7a565f;
+  --throne-shade: #a89099;
+  --throne-back: #8f6771;
+  --throne-cushion: #7d4553;
+
+  --throne-ink: #3a2129;
+  --throne-ink-soft: #6a4a55;
+  --throne-ink-faint: #8b6a75;
+
+  --throne-gold-deep: #7d4553;
+  --throne-gold-bright: #f7dfe1;
+  --throne-accent: #c98a9b;
+  --throne-edge: rgb(125 69 83 / 0.45);
+  --throne-tile-wide-top: #f2e2e2;
+  --throne-tile-wide-bottom: #ddc9c8;
+
+  --throne-nav-top: #3d222b;
+  --throne-nav-bottom: #26141a;
+  --throne-nav-link: #e6c9cf;
+  --throne-nav-link-hover: #fff1f4;
+
+  --throne-photo-filter: grayscale(1) sepia(1) hue-rotate(-45deg) saturate(1.5) brightness(1.02);
+
+  --throne-fog-1: rgb(252 246 247 / 0.45);
+  --throne-fog-2: rgb(234 214 212 / 0.38);
+  --throne-fog-3: rgb(191 160 166 / 0.45);
+  --throne-seam-core: rgb(253 248 249 / 0.95);
+  --throne-seam-edge: #e9dadd;
+  --throne-seam-mid: #f7eff0;
+
+  --chart-grid: rgb(125 69 83 / 0.22);
+  --chart-heat-1: #e6d3d4;
+  --chart-heat-2: #cfa9b1;
+  --chart-heat-3: #ac7383;
+  --chart-heat-4: #7d4553;
+  --chart-heat-empty: rgb(168 144 153 / 0.22);
+}
+
+/* Powder and pearl: the palest of the four. The metal is pushed DARKER here than
+   in the base palette rather than lighter - on a near-white wall the highlight end
+   of the ramp has nothing left to be brighter than, and the tile figures are the
+   first thing to disappear. */
+body.theme-rose.palette-powder {
+  --throne-plaster: #f2e3e6;
+  --throne-plaster-deep: #ddc8cd;
+  --throne-canvas-top: #fbf3f5;
+  --throne-panel: #fbf1f2;
+  --throne-panel-wide: #fdf7f8;
+  --throne-stone: #9d7683;
+  --throne-stone-shade: #7f5d69;
+  --throne-shade: #c3b2b8;
+  --throne-back: #c2a5ad;
+  --throne-cushion: #a8737f;
+
+  --throne-ink: #4a3138;
+  --throne-ink-soft: #7b5c66;
+  --throne-ink-faint: #9b7d87;
+
+  --throne-gold-deep: #8f5f6c;
+  --throne-gold-bright: #fff0f2;
+  --throne-accent: #d9a7b3;
+  --throne-edge: rgb(143 95 108 / 0.4);
+  --throne-tile-wide-top: #fdf5f6;
+  --throne-tile-wide-bottom: #f0e2e5;
+
+  --throne-nav-top: #4a2f37;
+  --throne-nav-bottom: #311d24;
+  --throne-nav-link: #efd9de;
+  --throne-nav-link-hover: #fff6f8;
+
+  --throne-photo-filter: grayscale(1) sepia(1) hue-rotate(-48deg) saturate(1.3) brightness(1.16);
+
+  --throne-fog-1: rgb(255 252 253 / 0.55);
+  --throne-fog-2: rgb(245 233 236 / 0.45);
+  --throne-fog-3: rgb(221 200 205 / 0.5);
+  --throne-seam-core: rgb(255 252 253 / 0.95);
+  --throne-seam-edge: #f0e4e7;
+  --throne-seam-mid: #fbf5f6;
+
+  --chart-grid: rgb(143 95 108 / 0.2);
+  --chart-heat-1: #f3e6e9;
+  --chart-heat-2: #e0c3cb;
+  --chart-heat-3: #c294a3;
+  --chart-heat-4: #8f5f6c;
+  --chart-heat-empty: rgb(195 178 184 / 0.25);
+}
+
+/* Fuchsia and raspberry: the loud one. Its backdrop filter carries a much stronger
+   rotation and saturation than the others because at this intensity a photograph
+   left near the base pink reads as a washed-out mistake behind a saturated room
+   rather than as the wall behind it. */
+body.theme-rose.palette-fuchsia {
+  --throne-plaster: #e8b9cd;
+  --throne-plaster-deep: #cd8ca8;
+  --throne-canvas-top: #f7d3e2;
+  --throne-panel: #f7d7e4;
+  --throne-panel-wide: #fbe4ee;
+  --throne-stone: #a84f7a;
+  --throne-stone-shade: #85305c;
+  --throne-shade: #b482a0;
+  --throne-back: #a83566;
+  --throne-cushion: #8e1e4d;
+
+  --throne-ink: #3d1327;
+  --throne-ink-soft: #702046;
+  --throne-ink-faint: #96476b;
+
+  --throne-gold-deep: #8e1e4d;
+  --throne-gold-bright: #ffd6ea;
+  --throne-accent: #ef5da8;
+  --throne-edge: rgb(142 30 77 / 0.45);
+  --throne-tile-wide-top: #fce0ee;
+  --throne-tile-wide-bottom: #efc2d8;
+
+  --throne-nav-top: #5c0f34;
+  --throne-nav-bottom: #3a0620;
+  --throne-nav-link: #ffc9e2;
+  --throne-nav-link-hover: #ffeef7;
+
+  --throne-photo-filter: grayscale(1) sepia(1) hue-rotate(-60deg) saturate(3.4) brightness(1.02);
+
+  --throne-fog-1: rgb(255 245 250 / 0.5);
+  --throne-fog-2: rgb(248 208 228 / 0.44);
+  --throne-fog-3: rgb(205 140 168 / 0.5);
+  --throne-seam-core: rgb(255 246 251 / 0.95);
+  --throne-seam-edge: #f5cfe1;
+  --throne-seam-mid: #fde9f3;
+
+  --chart-grid: rgb(142 30 77 / 0.22);
+  --chart-heat-1: #f9d6e6;
+  --chart-heat-2: #ec9dc3;
+  --chart-heat-3: #cf5b91;
+  --chart-heat-4: #8e1e4d;
+  --chart-heat-empty: rgb(180 130 160 / 0.25);
+}
+
+/* --- the room -------------------------------------------------------------
+   From here down nothing names a colour: every rule reads a token, which is what
+   makes a new skin a block of custom properties and nothing else. Where a value
+   used to be an alpha of a token, it is now a color-mix against `transparent` -
+   the same result, but it follows the palette. */
+
+body.theme-hall {
+  /* Colour and image are set separately on purpose: body's background propagates to the page
+     canvas, and a fixed-attachment IMAGE only paints the viewport - a solid colour underneath
+     is what keeps a long page from showing white below the fold. */
+  background-color: var(--throne-plaster);
+  background-image:
+    radial-gradient(120% 70% at 50% 0%, var(--throne-canvas-top) 0%, var(--throne-plaster) 45%, var(--throne-plaster-deep) 100%);
+  background-attachment: fixed;
+  color: var(--throne-ink);
+}
 
 /* The fixed nav is the hall's dark cornice. Markup is byte-identical to every
    other page (views/partials/nav.ejs) - only the paint changes, so the
    cross-document view transition still treats it as the same element. */
-body.theme-throne nav.site-nav {
-  background: linear-gradient(180deg, #3a2b17 0%, #241a0e 100%);
+body.theme-hall nav.site-nav {
+  background: linear-gradient(180deg, var(--throne-nav-top) 0%, var(--throne-nav-bottom) 100%);
   border-bottom: 2px solid var(--throne-accent);
 }
-body.theme-throne nav.site-nav a { color: #e8d7ac; }
-body.theme-throne nav.site-nav a:hover { color: #fff6df; }
+body.theme-hall nav.site-nav a { color: var(--throne-nav-link); }
+body.theme-hall nav.site-nav a:hover { color: var(--throne-nav-link-hover); }
 
 /* --- hero ----------------------------------------------------------------- */
 
@@ -1354,9 +1627,9 @@ body.theme-throne nav.site-nav a:hover { color: #fff6df; }
   z-index: 0;
   pointer-events: none;
 }
-body.theme-throne main { position: relative; z-index: 1; }
+body.theme-hall main { position: relative; z-index: 1; }
 /* The hero draws its own cornice on top of the fixed layer, so it needs to sit above it. */
-body.theme-throne .throne-hero { z-index: 2; }
+body.theme-hall .throne-hero { z-index: 2; }
 
 /* At page scope the columns stand at the viewport edges while the hero is only as wide as the
    content column - so the cornice has to break out of the hero to reach them, or the room has a
@@ -1371,10 +1644,6 @@ body.theme-throne .throne-hero { z-index: 2; }
    own left to dim, and the scrim would only wash out the page-wide columns showing through
    behind it, making them paler inside the hero than below it. */
 .throne-hero[data-scope="page"] .throne-hall::after { content: none; }
-/* Backdrops are photographs of real rooms, and real rooms are photographed in whatever light
-   they had - the archival ones are outright greyscale. The sepia pass pulls every preset into
-   the theme's gold before it is dimmed, so one palette holds across all of them and any file
-   the owner uploads. */
 .throne-hall__photo {
   position: absolute;
   inset: 0;
@@ -1382,7 +1651,7 @@ body.theme-throne .throne-hero { z-index: 2; }
   height: 100%;
   object-fit: cover;
   opacity: 0.45;
-  filter: sepia(0.6) saturate(1.3) contrast(0.95);
+  filter: var(--throne-photo-filter);
 }
 /* Vignette plus a fade into the plaster at the bottom. Without it the name and the tiles sit on
    whatever detail the photograph happens to have behind them, which is unreadable on some
@@ -1392,14 +1661,14 @@ body.theme-throne .throne-hero { z-index: 2; }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(78% 68% at 50% 32%, rgb(214 202 189 / 0) 0%, rgb(195 183 173 / 0.62) 100%),
-    linear-gradient(180deg, rgb(195 183 173 / 0) 45%, var(--throne-plaster) 100%);
+    radial-gradient(78% 68% at 50% 32%, transparent 0%, color-mix(in srgb, var(--throne-plaster) 62%, transparent) 100%),
+    linear-gradient(180deg, transparent 45%, var(--throne-plaster) 100%);
 }
 /* The fade-to-plaster is how the HERO's hall ends where the stats begin. A hall that covers the
    whole viewport has no such edge, and the same gradient would lay a plaster band across the
    middle of the screen - so the page-wide layer keeps only the vignette. */
 .throne-hall--fixed::after {
-  background: radial-gradient(85% 75% at 50% 40%, rgb(214 202 189 / 0) 0%, rgb(195 183 173 / 0.35) 100%);
+  background: radial-gradient(85% 75% at 50% 40%, transparent 0%, color-mix(in srgb, var(--throne-plaster) 35%, transparent) 100%);
 }
 
 /* The three pieces of the drawn hall. Each is stretched only along an axis where
@@ -1423,7 +1692,7 @@ body.theme-throne .throne-hero { z-index: 2; }
   width: clamp(2.75rem, 8vw, 8.5rem);
   opacity: 0.9;
   z-index: 1;
-  filter: drop-shadow(0 0 18px rgb(43 33 24 / 0.28));
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--throne-ink) 28%, transparent));
 }
 /* A darker edge behind each column, so the frame reads as a wall receding rather than as two
    stickers on a flat background. */
@@ -1432,8 +1701,8 @@ body.theme-throne .throne-hero { z-index: 2; }
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgb(93 76 59 / 0.34) 0%, rgb(93 76 59 / 0) 16%),
-    linear-gradient(270deg, rgb(93 76 59 / 0.34) 0%, rgb(93 76 59 / 0) 16%);
+    linear-gradient(90deg, color-mix(in srgb, var(--throne-ink-soft) 34%, transparent) 0%, transparent 16%),
+    linear-gradient(270deg, color-mix(in srgb, var(--throne-ink-soft) 34%, transparent) 0%, transparent 16%);
 }
 .throne-hall__cartouche {
   position: absolute;
@@ -1451,7 +1720,11 @@ body.theme-throne .throne-hero { z-index: 2; }
   margin-inline: auto;
   width: min(21rem, 72vw);
 }
-.throne-seat { width: 100%; height: auto; filter: drop-shadow(0 12px 18px rgb(43 33 24 / 0.35)); }
+.throne-seat {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 12px 18px color-mix(in srgb, var(--throne-ink) 35%, transparent));
+}
 
 /* The portrait sits on the throne's back panel. The numbers are the panel's own
    centre in the SVG's coordinate system (400x390, centre near y=100), expressed as
@@ -1471,7 +1744,7 @@ body.theme-throne .throne-hero { z-index: 2; }
   border-radius: 9999px;
   object-fit: cover;
   border: 3px solid var(--throne-gold-deep);
-  box-shadow: 0 0 0 4px rgb(242 226 180 / 0.35);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--throne-gold-bright) 35%, transparent);
 }
 .throne-medallion__monogram {
   display: grid;
@@ -1488,7 +1761,7 @@ body.theme-throne .throne-hero { z-index: 2; }
   font-weight: 800;
   line-height: 1.05;
   color: var(--throne-ink);
-  text-shadow: 0 1px 0 rgb(242 226 180 / 0.6);
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--throne-gold-bright) 60%, transparent);
 }
 .throne-title {
   margin-top: 0.35rem;
@@ -1520,7 +1793,11 @@ body.theme-throne .throne-hero { z-index: 2; }
   text-align: center;
   border: 1px solid var(--throne-edge);
   border-radius: 0.5rem;
-  background: linear-gradient(180deg, rgb(242 226 180 / 0.4), rgb(157 149 161 / 0.18));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--throne-gold-bright) 40%, transparent),
+    color-mix(in srgb, var(--throne-shade) 18%, transparent)
+  );
 }
 .throne-trophy__label {
   font-size: 0.7rem;
@@ -1549,44 +1826,48 @@ body.theme-throne .throne-hero { z-index: 2; }
    Tailwind v4 emits utilities inside @layer utilities; unlayered rules like
    these win over any layer regardless of specificity, which is what makes a
    one-line override enough. */
-body.theme-throne main .bg-neutral-900,
-body.theme-throne main .bg-neutral-950 { background-color: rgb(214 202 189 / 0.55); }
+body.theme-hall main .bg-neutral-900,
+body.theme-hall main .bg-neutral-950 { background-color: color-mix(in srgb, var(--throne-panel) 55%, transparent); }
 /* With a page-wide backdrop the panels sit ON the photograph rather than below it, and 55% of
    plaster over a lit colonnade is a card you can read the wallpaper through. */
-body.theme-throne-wide main .bg-neutral-900,
-body.theme-throne-wide main .bg-neutral-950 { background-color: rgb(216 205 193 / 0.92); }
-body.theme-throne-wide .throne-hall--fixed .throne-hall__photo { opacity: 0.32; }
+body.theme-hall-wide main .bg-neutral-900,
+body.theme-hall-wide main .bg-neutral-950 { background-color: color-mix(in srgb, var(--throne-panel-wide) 92%, transparent); }
+body.theme-hall-wide .throne-hall--fixed .throne-hall__photo { opacity: 0.32; }
 /* The tiles sit directly on the backdrop at page scope, where their translucent gradient left
    the numbers reading over whatever the photograph happened to have behind them. */
-body.theme-throne-wide .throne-trophy {
-  background: linear-gradient(180deg, rgb(240 231 214 / 0.92), rgb(219 207 191 / 0.88));
+body.theme-hall-wide .throne-trophy {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--throne-tile-wide-top) 92%, transparent),
+    color-mix(in srgb, var(--throne-tile-wide-bottom) 88%, transparent)
+  );
 }
-body.theme-throne main .border-neutral-700,
-body.theme-throne main .border-neutral-800,
-body.theme-throne main .border-neutral-900 { border-color: var(--throne-edge); }
-body.theme-throne main .divide-neutral-900 > * + * { border-color: var(--throne-edge); }
-body.theme-throne main .text-neutral-100,
-body.theme-throne main .text-neutral-200,
-body.theme-throne main .text-neutral-300 { color: var(--throne-ink); }
-body.theme-throne main .text-neutral-400,
-body.theme-throne main .text-neutral-500 { color: var(--throne-ink-soft); }
-body.theme-throne main .text-neutral-600,
-body.theme-throne main .text-neutral-700 { color: var(--throne-ink-faint); }
-body.theme-throne main .shadow-lg { box-shadow: 0 10px 20px rgb(43 33 24 / 0.25); }
+body.theme-hall main .border-neutral-700,
+body.theme-hall main .border-neutral-800,
+body.theme-hall main .border-neutral-900 { border-color: var(--throne-edge); }
+body.theme-hall main .divide-neutral-900 > * + * { border-color: var(--throne-edge); }
+body.theme-hall main .text-neutral-100,
+body.theme-hall main .text-neutral-200,
+body.theme-hall main .text-neutral-300 { color: var(--throne-ink); }
+body.theme-hall main .text-neutral-400,
+body.theme-hall main .text-neutral-500 { color: var(--throne-ink-soft); }
+body.theme-hall main .text-neutral-600,
+body.theme-hall main .text-neutral-700 { color: var(--throne-ink-faint); }
+body.theme-hall main .shadow-lg { box-shadow: 0 10px 20px color-mix(in srgb, var(--throne-ink) 25%, transparent); }
 
 /* Section headings get the same gilded rule the hall's mouldings use, so the
    page reads as one room rather than as a hero with a normal page under it. */
-body.theme-throne main h2 {
+body.theme-hall main h2 {
   color: var(--throne-gold-deep);
   letter-spacing: 0.06em;
 }
-body.theme-throne main section {
+body.theme-hall main section {
   border-top: 1px solid var(--throne-edge);
   padding-top: 1.25rem;
 }
 /* The hero already closes with a gilded rule; a second one directly under it reads as a
    mistake rather than as a moulding. */
-body.theme-throne main section:first-of-type { border-top: none; padding-top: 0; }
+body.theme-hall main section:first-of-type { border-top: none; padding-top: 0; }
 
 /* Controls: the period toggle and the moderator log's inputs are the only
    interactive chrome on the page, and purple on plaster is the one combination
@@ -1594,19 +1875,19 @@ body.theme-throne main section:first-of-type { border-top: none; padding-top: 0;
 /* Substring selectors rather than an exact class list: Tailwind's opacity variants mint
    distinct class names (bg-purple-600/20, border-purple-600/30) and enumerating them here
    would break the first time a shade changes in the markup. */
-body.theme-throne main [class*="bg-purple"] { background-color: rgb(107 79 40 / 0.16); }
-body.theme-throne main .bg-purple-600,
-body.theme-throne main .bg-purple-700 { background-color: var(--throne-gold-deep); }
-body.theme-throne main [class*="text-purple"] { color: var(--throne-gold-deep); }
-body.theme-throne main [class*="border-purple"] { border-color: var(--throne-edge); }
-body.theme-throne main [class*="accent-purple"] { accent-color: var(--throne-gold-deep); }
+body.theme-hall main [class*="bg-purple"] { background-color: color-mix(in srgb, var(--throne-gold-deep) 16%, transparent); }
+body.theme-hall main .bg-purple-600,
+body.theme-hall main .bg-purple-700 { background-color: var(--throne-gold-deep); }
+body.theme-hall main [class*="text-purple"] { color: var(--throne-gold-deep); }
+body.theme-hall main [class*="border-purple"] { border-color: var(--throne-edge); }
+body.theme-hall main [class*="accent-purple"] { accent-color: var(--throne-gold-deep); }
 
 /* The period toggle's active pill is bg-neutral-800 - nearly black, and the one control that
    would still read as "unstyled leftover" on plaster. */
-body.theme-throne main .bg-neutral-800 { background-color: rgb(107 79 40 / 0.22); }
-body.theme-throne main [aria-pressed="true"] { color: var(--throne-gold-deep); font-weight: 600; }
-body.theme-throne main input:focus,
-body.theme-throne main select:focus { border-color: var(--throne-accent); }
+body.theme-hall main .bg-neutral-800 { background-color: color-mix(in srgb, var(--throne-gold-deep) 22%, transparent); }
+body.theme-hall main [aria-pressed="true"] { color: var(--throne-gold-deep); font-weight: 600; }
+body.theme-hall main input:focus,
+body.theme-hall main select:focus { border-color: var(--throne-accent); }
 
 .throne-nicknames { margin-top: 0.6rem; font-size: 0.8rem; color: var(--throne-ink-faint); }
 .throne-nicknames > summary {
@@ -1623,7 +1904,7 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
   border: 1px solid var(--throne-edge);
   border-radius: 0.4rem;
   padding: 0.35rem 0;
-  background: rgb(242 226 180 / 0.35);
+  background: color-mix(in srgb, var(--throne-gold-bright) 35%, transparent);
 }
 .throne-nicknames > ul > li { padding: 0.1rem 0.75rem; color: var(--throne-ink-soft); }
 
@@ -1659,9 +1940,12 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
   mask-image: linear-gradient(90deg, #000 0%, #000 76%, transparent 100%);
   /* Gradient first, photograph second: the gradient is painted from the
      stylesheet that is already blocking render, so the curtain is opaque in the
-     first frame whether or not the image has arrived. */
+     first frame whether or not the image has arrived. It is also what tints the
+     one shared cloud photograph into each skin - the file is white and blue, and
+     recolouring it with a filter would recolour the gradient lying on top of it
+     in the same layer. */
   background-image:
-    radial-gradient(120% 90% at 70% 40%, rgb(255 252 243 / 0.42) 0%, rgb(232 224 206 / 0.34) 55%, rgb(186 172 150 / 0.4) 100%),
+    radial-gradient(120% 90% at 70% 40%, var(--throne-fog-1) 0%, var(--throne-fog-2) 55%, var(--throne-fog-3) 100%),
     url("/img/themes/clouds.webp");
   background-size: cover, 200% 100%;
   animation: throne-part-left 1.4s cubic-bezier(0.6, 0, 0.3, 1) 0.22s both;
@@ -1685,8 +1969,8 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
   left: 25%;
   width: 50%;
   background:
-    radial-gradient(60% 100% at 50% 50%, rgb(252 248 238 / 0.95) 0%, rgb(252 248 238 / 0) 78%),
-    linear-gradient(90deg, transparent 0%, #dfe9f5 22%, #eef4fb 50%, #dfe9f5 78%, transparent 100%);
+    radial-gradient(60% 100% at 50% 50%, var(--throne-seam-core) 0%, transparent 78%),
+    linear-gradient(90deg, transparent 0%, var(--throne-seam-edge) 22%, var(--throne-seam-mid) 50%, var(--throne-seam-edge) 78%, transparent 100%);
   animation: throne-seam 1.4s ease-out 0.22s both;
 }
 
@@ -1716,8 +2000,8 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
 .throne-intro--reset .throne-intro__seam { animation: none; }
 
 /* Vestibular safety: no sideways motion at all, just a short dissolve. Removing
-   the curtain outright would flash the page into gold with no transition, which
-   is its own kind of unpleasant. */
+   the curtain outright would flash the page into the hall with no transition,
+   which is its own kind of unpleasant. */
 @media (prefers-reduced-motion: reduce) {
   .throne-intro__bank {
     animation: throne-dissolve 0.2s linear 0s both;
@@ -1732,7 +2016,7 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
 
 /* --- Steam display case ---------------------------------------------------
    Sits between the throne and the statistics. The slot border is Steam's own
-   rarity colour (--slot-rarity, set per tile); the gold is ours, so a case of
+   rarity colour (--slot-rarity, set per tile); the gilding is ours, so a case of
    Common items still reads as part of the hall rather than as a grey grid. */
 .throne-vitrine { margin: 0 0 2.5rem; }
 .throne-vitrine__heading {
@@ -1754,11 +2038,21 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
   max-width: 100%;
   border: 1px solid var(--throne-edge);
   border-radius: 0.6rem;
-  background: linear-gradient(180deg, rgb(242 226 180 / 0.42), rgb(157 149 161 / 0.2));
-  box-shadow: inset 0 1px 0 rgb(242 226 180 / 0.5), 0 6px 14px rgb(43 33 24 / 0.18);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--throne-gold-bright) 42%, transparent),
+    color-mix(in srgb, var(--throne-shade) 20%, transparent)
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--throne-gold-bright) 50%, transparent),
+    0 6px 14px color-mix(in srgb, var(--throne-ink) 18%, transparent);
 }
-body.theme-throne-wide .throne-vitrine__case {
-  background: linear-gradient(180deg, rgb(240 231 214 / 0.92), rgb(219 207 191 / 0.88));
+body.theme-hall-wide .throne-vitrine__case {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--throne-tile-wide-top) 92%, transparent),
+    color-mix(in srgb, var(--throne-tile-wide-bottom) 88%, transparent)
+  );
 }
 .throne-vitrine__slot {
   --slot-rarity: var(--throne-gold-deep);
@@ -1774,8 +2068,8 @@ body.theme-throne-wide .throne-vitrine__case {
   object-fit: contain;
   border: 2px solid var(--slot-rarity);
   border-radius: 0.35rem;
-  background: rgb(43 33 24 / 0.14);
-  box-shadow: 0 0 0 1px rgb(107 79 40 / 0.35);
+  background: color-mix(in srgb, var(--throne-ink) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--throne-gold-deep) 35%, transparent);
 }
 /* Names are long ("Claddish Voyager's Treads") and there can be a dozen of them, so the caption
    is a hover/again-on-focus affordance rather than a permanent second line of text under every

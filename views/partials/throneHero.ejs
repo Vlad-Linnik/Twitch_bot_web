@@ -22,7 +22,11 @@
   const asHeading = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   const medallionSrc = theme.medallionUrl || (profile && profile.avatarUrl) || null;
 %>
-<header class="throne-hero user-header" data-accent="<%= theme.accent.preset %>" data-scope="<%= theme.backdrop.scope %>"
+<%# The palette preset is a class on <body> (views/userDashboard.ejs) - it repaints the whole
+    page, not just this block. What stays here is the CUSTOM accent, and only that: it is the one
+    colour a user picks freely, so confining it to the hero's gilding keeps it off body text and
+    focus rings whatever value is chosen. normalizeHexColor has already reduced it to #rrggbb. %>
+<header class="throne-hero user-header" data-scope="<%= theme.backdrop.scope %>"
         <% if (theme.accent.custom) { %>style="--throne-accent: <%= theme.accent.custom %>"<% } %>>
 
   <%# At page scope the hall is drawn once for the whole viewport (views/userDashboard.ejs) and

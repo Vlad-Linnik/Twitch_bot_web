@@ -1,19 +1,32 @@
 <%
   // A hidden profile shows the ordinary stub even when a theme exists - privacy outranks
   // decoration, and the route has already skipped every query the hero would need.
-  const throne = theme.enabled && !profileHidden;
+  const skin = theme.enabled && !profileHidden;
+
+  // Three separate markers rather than one class per combination (public/css/input.css):
+  //   theme-hall       - every skin carries it, and every structural rule is scoped to it
+  //   theme-<name>     - which room's materials to use
+  //   palette-<preset> - which variant of them; it has to reach <body> because the page's own
+  //                      background is painted there, not inside the hero
+  // theme-hall-wide is the page-scope marker: panels sit ON the backdrop there instead of below
+  // it, so they need to be more opaque than they do over plain plaster.
+  // Both names come from fixed lists in lib/pageThemeValidation.js, so neither can be anything
+  // a user typed.
+  const bodyClass = skin
+    ? ['theme-hall', 'theme-' + theme.theme, 'palette-' + theme.accent.preset]
+        .concat(theme.backdrop.scope === 'page' ? ['theme-hall-wide'] : [])
+        .join(' ')
+    : '';
 %>
 <%- include('partials/head', {
       title: identity.currentUserName + ' · ' + channel.channelLogin,
-      // theme-throne-wide is the page-scope marker: panels sit ON the backdrop there instead of
-      // below it, so they need to be more opaque than they do over plain plaster.
-      bodyClass: throne ? (theme.backdrop.scope === 'page' ? 'theme-throne theme-throne-wide' : 'theme-throne') : ''
+      bodyClass
     }) %>
 <%- include('partials/nav') %>
 <%# The curtain has to be the first thing in the body after the nav: it covers the page while
     it plays, and a later position would let the page paint above it for a frame. %>
-<% if (throne && theme.intro) { %><%- include('partials/throneIntro') %><% } %>
-<% if (throne) { %>
+<% if (skin && theme.intro) { %><%- include('partials/throneIntro') %><% } %>
+<% if (skin) { %>
   <%- include('partials/throneDefs') %>
   <%# Page-wide hall: pinned to the viewport so the room runs the full height of the document
       and the content scrolls inside it, rather than ending where the hero does. Photo and drawn
@@ -59,7 +72,7 @@
        same technique as stats-header (see that partial). The throne theme swaps this whole
        block for its own hero, which carries the same .user-header class so the morph survives
        the swap - the row unfolds into the hall instead of into a name and an avatar. -->
-  <% if (throne) { %>
+  <% if (skin) { %>
     <%- include('partials/throneHero', { theme, identity, profile, trophies, nicknames, t, locale }) %>
   <% } else { %>
   <header class="user-header flex items-start gap-4 mb-10">
@@ -123,7 +136,7 @@
   <%# The Steam case sits between the throne and the statistics: it is part of the showcase, not
       part of the analytics. Hidden profiles never reach here (the branch below renders the stub
       instead), so privacy needs no separate check. %>
-  <% if (throne && theme.steam.items.length > 0) { %>
+  <% if (skin && theme.steam.items.length > 0) { %>
     <%- include('partials/throneShowcase', { theme, t }) %>
   <% } %>
 
@@ -302,7 +315,7 @@
   <%# NOT JSON.stringify() - this payload carries chat-derived strings (cloud words, nickname
       history, raw message bodies), so it must be escaped against a "</script>" breakout.
       See lib/safeJson.js. The hidden stub inlines no data and loads no dashboard scripts. %>
-  <% if (throne && theme.intro) { %>
+  <% if (skin && theme.intro) { %>
     <script src="<%= asset('/js/throne-intro.js') %>" defer></script>
   <% } %>
   <script id="dashboard-data" type="application/json"><%- safeJson(bootstrap) %></script>

@@ -32,7 +32,6 @@
 
   <form method="post" action="/admin/page-themes/<%= userId %>" enctype="multipart/form-data" class="space-y-8">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-    <input type="hidden" name="theme" value="<%= theme.theme %>" />
 
     <label class="flex items-center gap-2 text-sm text-neutral-200 cursor-pointer">
       <input type="checkbox" name="enabled" value="1" class="accent-purple-600" <%= theme.enabled ? 'checked' : '' %> />
@@ -56,18 +55,44 @@
       </div>
     </div>
 
-    <%# Palette. The preset always travels with the save - it supplies background and ink even
-        when a custom accent is set, which is what keeps the page readable whatever colour is
-        picked (see lib/pageThemeValidation.js's parseSubmittedTheme). %>
+    <%# Skin and palette. The skin decides which room is drawn; the palette decides what it is
+        built from. They are separate controls because the palette lists are NOT shared - every
+        preset belongs to exactly one skin (lib/pageThemeValidation.js's ACCENT_PRESETS).
+
+        The preset always travels with the save - it supplies background and ink even when a
+        custom accent is set, which is what keeps the page readable whatever colour is picked. %>
+    <fieldset>
+      <legend class="text-xs text-neutral-500 mb-2"><%= t('admin.pageThemes.fieldTheme') %></legend>
+      <select name="theme" id="theme-skin"
+              class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600">
+        <% constants.THEMES.forEach(function(name) { %>
+          <option value="<%= name %>" <%= theme.theme === name ? 'selected' : '' %>>
+            <%= t('admin.pageThemes.themeName.' + name) %>
+          </option>
+        <% }) %>
+      </select>
+    </fieldset>
+
     <fieldset>
       <legend class="text-xs text-neutral-500 mb-2"><%= t('admin.pageThemes.fieldAccent') %></legend>
       <div class="flex flex-wrap items-center gap-4">
-        <select name="accent.preset"
+        <%# Every skin's palettes are rendered, and the ones that do not belong to the selected
+            skin are disabled rather than omitted: public/js/page-theme-form.js swaps which group
+            is live as the skin changes, without a round-trip. With the script absent the groups
+            stay as the server drew them, and a save under a freshly-switched skin falls back to
+            that skin's first palette - never to a preset from the other room. %>
+        <select name="accent.preset" id="theme-accent-preset"
                 class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600">
-          <% constants.ACCENT_PRESETS.forEach(function(preset) { %>
-            <option value="<%= preset %>" <%= theme.accent.preset === preset ? 'selected' : '' %>>
-              <%= t('admin.pageThemes.accentPreset.' + preset) %>
-            </option>
+          <% constants.THEMES.forEach(function(name) { %>
+            <optgroup label="<%= t('admin.pageThemes.themeName.' + name) %>" data-theme="<%= name %>"
+                      <%= theme.theme === name ? '' : 'disabled hidden' %>>
+              <% constants.ACCENT_PRESETS[name].forEach(function(preset) { %>
+                <option value="<%= preset %>"
+                        <%= theme.theme === name && theme.accent.preset === preset ? 'selected' : '' %>>
+                  <%= t('admin.pageThemes.accentPreset.' + preset) %>
+                </option>
+              <% }) %>
+            </optgroup>
           <% }) %>
         </select>
         <label class="flex items-center gap-1.5 text-sm text-neutral-300 cursor-pointer">
@@ -222,6 +247,7 @@
   </form>
 
   <script src="<%= asset('/js/confirm-delete.js') %>" defer></script>
+  <script src="<%= asset('/js/page-theme-form.js') %>" defer></script>
 </main>
 
 <%- include('partials/foot') %>

@@ -1610,15 +1610,24 @@
       "fieldEnabled": "Enable the theme",
       "fieldTitle": "Title",
       "fieldMotto": "Motto",
+      "fieldTheme": "Skin",
+      "themeName": {
+        "throne": "Throne hall",
+        "rose": "Rose hall"
+      },
       "fieldAccent": "Palette",
       "accentPreset": {
         "brass": "Brass",
         "crimson": "Red gold",
-        "pale": "Pale leaf"
+        "pale": "Pale leaf",
+        "bubblegum": "Bubblegum and strawberry",
+        "dusty": "Dusty rose",
+        "powder": "Powder and pearl",
+        "fuchsia": "Fuchsia and raspberry"
       },
       "accentModePreset": "Accent from palette",
       "accentModeCustom": "Custom accent",
-      "accentHint": "A custom colour only changes the accent - outlines, highlights and chart lines. Background and text always come from the palette, so the page stays readable.",
+      "accentHint": "The palette sets the whole room - background, text, gilding and chart colours; each skin has its own set. A custom colour only changes the gilding in the header - frames, highlights and the throne's outlines - and never the background or the text, so the page stays readable.",
       "fieldBackdrop": "Backdrop",
       "backdropMode": {
         "vector": "Vector",
