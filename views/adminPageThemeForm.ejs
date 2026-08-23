@@ -176,27 +176,6 @@
       <p class="text-xs text-neutral-600 mt-2"><%= t('admin.pageThemes.trophiesHint') %></p>
     </fieldset>
 
-    <%# Panel headings replace a translated UI string, so they are per-locale - unlike the title
-        and motto above, which name a person and stay single-language. %>
-    <fieldset>
-      <legend class="text-xs text-neutral-500 mb-2"><%= t('admin.pageThemes.fieldPanelLabels') %></legend>
-      <div class="space-y-2">
-        <% constants.PANELS.forEach(function(panel) { %>
-          <div class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] items-center gap-2">
-            <span class="text-xs text-neutral-500"><%= t('admin.pageThemes.panel.' + panel) %></span>
-            <% locales.forEach(function(loc) { %>
-              <input type="text" name="panelLabels.<%= panel %>.<%= loc %>"
-                     maxlength="<%= constants.MAX_PANEL_LABEL_LENGTH %>"
-                     value="<%= (theme.panelLabels[panel] && theme.panelLabels[panel][loc]) || '' %>"
-                     placeholder="<%= loc %>"
-                     class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
-            <% }) %>
-          </div>
-        <% }) %>
-      </div>
-      <p class="text-xs text-neutral-600 mt-2"><%= t('admin.pageThemes.panelLabelsHint') %></p>
-    </fieldset>
-
     <div class="flex items-center gap-3 pt-2">
       <button type="submit"
               class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-sm font-medium text-white transition-colors">

@@ -15,10 +15,15 @@
 <% if (throne && theme.intro) { %><%- include('partials/throneIntro') %><% } %>
 <% if (throne) { %>
   <%- include('partials/throneDefs') %>
-  <%# Page-wide hall: pinned to the viewport so the columns run the full height of the document
-      and the content scrolls between them, rather than ending where the hero does. %>
+  <%# Page-wide hall: pinned to the viewport so the room runs the full height of the document
+      and the content scrolls inside it, rather than ending where the hero does. Photo and drawn
+      columns are alternatives, never layers - see the note in partials/throneHero.ejs. %>
   <% if (theme.backdrop.scope === 'page') { %>
-    <%- include('partials/throneHall', { theme, pieces: ['photo', 'columns'], fixed: true }) %>
+    <%- include('partials/throneHall', {
+          theme,
+          pieces: theme.backdrop.mode === 'photo' ? ['photo'] : ['columns'],
+          fixed: true
+        }) %>
   <% } %>
 <% } %>
 
@@ -139,7 +144,7 @@
   <% if (activity || isOwner) { %>
   <section class="mb-10" data-component="activity">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('activity', t('userDashboard.messageVolume')) %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.messageVolume') %></h2>
       <div class="flex items-center gap-2">
         <%- include('partials/periodToggle', { periods, period, component: 'activity' }) %>
         <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'activity', hiddenState: !activity, t }) %><% } %>
@@ -168,7 +173,7 @@
   <% if (clouds || isOwner) { %>
   <section class="mb-10" data-component="clouds">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('clouds', t('userDashboard.clouds')) %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.clouds') %></h2>
       <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'clouds', hiddenState: !clouds, t }) %><% } %>
     </div>
     <div data-panel-body class="grid grid-cols-1 md:grid-cols-2 gap-6" <% if (!clouds) { %>hidden<% } %>>
@@ -196,7 +201,7 @@
   <% if (mentions || isOwner) { %>
   <section class="mb-10" data-component="mentions">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('mentions', t('userDashboard.mentions')) %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.mentions') %></h2>
       <div class="flex items-center gap-2">
         <%- include('partials/periodToggle', { periods, period, component: 'mentions' }) %>
         <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'mentions', hiddenState: !mentions, t }) %><% } %>
@@ -228,7 +233,7 @@
   <% if (heatmap || isOwner) { %>
   <section class="mb-10" data-component="heatmap">
     <div class="flex items-center justify-between mb-3 gap-4">
-      <h2 class="text-lg font-semibold text-neutral-100"><%= panelLabel('heatmap', t('userDashboard.heatmap')) %></h2>
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('userDashboard.heatmap') %></h2>
       <% if (isOwner) { %><%- include('partials/panelToggle', { panel: 'heatmap', hiddenState: !heatmap, t }) %><% } %>
     </div>
     <div data-panel-body <% if (!heatmap) { %>hidden<% } %>>
@@ -260,7 +265,7 @@
     <section class="mb-10" id="mod-logs">
       <div class="flex items-center justify-between mb-3 gap-4">
         <h2 class="text-lg font-semibold text-neutral-100">
-          <%= panelLabel('modLogs', t('userDashboard.modLogs')) %>
+          <%= t('userDashboard.modLogs') %>
           <span class="ml-2 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400 border border-purple-600/30"><%= t('userDashboard.modOnly') %></span>
         </h2>
         <%- include('partials/periodToggle', { periods, period, component: 'logs' }) %>

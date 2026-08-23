@@ -1538,7 +1538,9 @@ body.theme-throne .throne-hero { z-index: 2; }
 .throne-trophy__of { font-size: 0.8rem; font-weight: 500; color: var(--throne-ink-faint); margin-left: 0.3rem; }
 .throne-trophy__empty { color: var(--throne-ink-faint); font-weight: 500; }
 .throne-trophy__word { font-size: 0.95rem; overflow-wrap: anywhere; }
-.throne-trophy__emote { height: 2rem; width: auto; display: inline-block; }
+/* Sized to match the cap height of the numbers in the neighbouring tiles, so one emote tile in
+   a row of figures doesn't read as a smaller, quieter row member. */
+.throne-trophy__emote { height: 2.25rem; width: auto; display: inline-block; vertical-align: middle; }
 
 /* --- the rest of the page ------------------------------------------------- */
 
@@ -1554,6 +1556,11 @@ body.theme-throne main .bg-neutral-950 { background-color: rgb(214 202 189 / 0.5
 body.theme-throne-wide main .bg-neutral-900,
 body.theme-throne-wide main .bg-neutral-950 { background-color: rgb(216 205 193 / 0.92); }
 body.theme-throne-wide .throne-hall--fixed .throne-hall__photo { opacity: 0.32; }
+/* The tiles sit directly on the backdrop at page scope, where their translucent gradient left
+   the numbers reading over whatever the photograph happened to have behind them. */
+body.theme-throne-wide .throne-trophy {
+  background: linear-gradient(180deg, rgb(240 231 214 / 0.92), rgb(219 207 191 / 0.88));
+}
 body.theme-throne main .border-neutral-700,
 body.theme-throne main .border-neutral-800,
 body.theme-throne main .border-neutral-900 { border-color: var(--throne-edge); }

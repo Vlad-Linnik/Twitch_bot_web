@@ -15,7 +15,7 @@ const searchRepo = require("../db/searchRepo");
 const userProfileService = require("../db/userProfileService");
 const userPreferencesRepo = require("../db/userPreferencesRepo");
 const pageThemesRepo = require("../db/pageThemesRepo");
-const { resolveTheme, resolvePanelLabel } = require("../lib/pageThemeValidation");
+const { resolveTheme } = require("../lib/pageThemeValidation");
 const { buildTrophies } = require("../lib/pageThemeHero");
 const { withEmoteImages } = require("../twitch/emoteImages");
 const { computePermission } = require("../middleware/permissions");
@@ -131,7 +131,6 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
         profileHidden: true,
         theme: resolveTheme(null),
         trophies: [],
-        panelLabel: (panel, fallback) => fallback,
         isOwner,
         standing: null,
         activity: null,
@@ -171,6 +170,43 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
     const theme = resolveTheme(themeDoc);
     const nicknames = userStatsRepo.nicknameHistory(identity);
 
+    // Emote images are joined once and shared by the clouds panel and the hero's top-emote tile.
+    // The tile used to be handed the raw `clouds` while only the render call got the joined copy,
+    // which is why it fell back to printing the emote's NAME instead of showing the emote.
+    const cloudsWithImages = clouds
+      ? { ...clouds, emotes: await withEmoteImages(channel.channelLogin, clouds.emotes) }
+      : null;
+
+    // The hero is a trophy case, not a dashboard: it carries no period switch and does not
+    // re-fetch when the panels below it change theirs. So its tiles are ALL-TIME, even while the
+    // page around them is showing a week - a number that silently tracks a control somewhere else
+    // on the page is worse than a number that never moves. Rank and message count already are
+    // (getLifetimeStanding); mentions and the top emote need their own all-time read, which is
+    // skipped when the page's period is already "all", when the tile isn't on the hero at all, or
+    // when the underlying panel is privacy-hidden.
+    let trophies = [];
+    if (theme.enabled) {
+      const wantsAllTime = period !== "all";
+      const heroMentions =
+        wantsAllTime && theme.trophies.includes("mentions") && !privacy.hideMentions
+          ? await userStatsRepo.getMentionStats(channel.channelLogin, identity, "all")
+          : mentions;
+      let heroClouds = cloudsWithImages;
+      if (wantsAllTime && theme.trophies.includes("topEmote") && !privacy.hideWordCloud) {
+        const allTime = await wordStatsRepo.getUserClouds(channel.channelLogin, identity.userId, "all");
+        heroClouds = { ...allTime, emotes: await withEmoteImages(channel.channelLogin, allTime.emotes) };
+      }
+      // Built here rather than in the view: which stat feeds which tile (and which tiles have no
+      // value because their panel is hidden) is a rule, and lib/ is where rules go.
+      trophies = buildTrophies(theme.trophies, {
+        standing,
+        mentions: heroMentions,
+        clouds: heroClouds,
+        identity,
+        nicknames,
+      });
+    }
+
     res.render("userDashboard", {
       channel,
       identity,
@@ -179,12 +215,7 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       periods: limits.PERIODS,
       profileHidden: false,
       theme,
-      // Built here rather than in the view: which stat feeds which tile (and which tiles have
-      // no value because their panel is hidden) is a rule, and lib/ is where rules go.
-      trophies: theme.enabled ? buildTrophies(theme.trophies, { standing, mentions, clouds, identity, nicknames }) : [],
-      // Panel headings are per-locale overrides over the stock translation - the view passes
-      // its own t() result as the fallback, so an untouched panel is byte-identical to before.
-      panelLabel: (panel, fallback) => resolvePanelLabel(theme, panel, req.locale, fallback),
+      trophies,
       isOwner,
       standing,
       activity,
@@ -193,7 +224,7 @@ router.get("/:channel/user/:username", requireLogin, async (req, res, next) => {
       // Spread, don't mutate: getUserClouds results are cached inside wordStatsRepo, and
       // withEmoteImages returns a new array (same contract as the statistics page). null when
       // hideWordCloud is on - nothing to join images into.
-      clouds: clouds ? { ...clouds, emotes: await withEmoteImages(channel.channelLogin, clouds.emotes) } : null,
+      clouds: cloudsWithImages,
       nicknames,
       // Only decides whether the moderator panel is DRAWN. It is not the security boundary -
       // logs.json independently re-checks the tier on every request - but there is no point

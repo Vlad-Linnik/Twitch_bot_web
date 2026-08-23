@@ -28,10 +28,17 @@
   <%# At page scope the hall is drawn once for the whole viewport (views/userDashboard.ejs) and
       the hero keeps only the cornice - the top of the wall belongs above the throne, and pinning
       a second one to the viewport would park a gold bar under the nav at every scroll position.
-      At hero scope the hero draws the whole room itself. %>
+      At hero scope the hero draws the whole room itself.
+
+      The drawn columns appear in VECTOR mode only. A backdrop photograph is already a room, with
+      its own columns in its own perspective; standing flat grey shafts in front of it doesn't add
+      a room, it puts a cardboard cutout over a real one. The cornice stays in both modes - it is
+      a gilded edge along the top rather than a piece of architecture in perspective. %>
   <%- include('throneHall', {
         theme,
-        pieces: theme.backdrop.scope === 'page' ? ['cornice'] : ['photo', 'cornice', 'columns'],
+        pieces: theme.backdrop.scope === 'page'
+          ? ['cornice']
+          : (theme.backdrop.mode === 'photo' ? ['photo', 'cornice'] : ['cornice', 'columns']),
         fixed: false
       }) %>
 

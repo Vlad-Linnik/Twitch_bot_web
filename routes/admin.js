@@ -897,7 +897,6 @@ async function renderThemeForm(req, res, { userId, theme, error, status = 200 })
     // whose page would render it - the first one the site knows about will do.
     previewChannel: channels[0]?.channelLogin || null,
     constants: pageThemeValidation,
-    locales: SUPPORTED_LOCALES,
     error,
   });
 }

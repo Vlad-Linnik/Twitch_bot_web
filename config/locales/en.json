@@ -1648,15 +1648,6 @@
         "topEmote": "Favourite emote"
       },
       "trophiesHint": "Left to right. Repeats are replaced with the defaults.",
-      "fieldPanelLabels": "Panel headings",
-      "panel": {
-        "activity": "Activity",
-        "clouds": "Clouds",
-        "mentions": "Mentions",
-        "heatmap": "Heatmap",
-        "modLogs": "Chat logs"
-      },
-      "panelLabelsHint": "Leave a box empty to keep the stock heading in that language.",
       "save": "Save",
       "cancel": "Cancel",
       "delete": "Delete theme",
