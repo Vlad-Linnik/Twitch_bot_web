@@ -120,6 +120,13 @@
   </header>
   <% } %>
 
+  <%# The Steam case sits between the throne and the statistics: it is part of the showcase, not
+      part of the analytics. Hidden profiles never reach here (the branch below renders the stub
+      instead), so privacy needs no separate check. %>
+  <% if (throne && theme.steam.items.length > 0) { %>
+    <%- include('partials/throneShowcase', { theme, t }) %>
+  <% } %>
+
   <% if (profileHidden) { %>
     <section class="mb-10">
       <div class="rounded-lg border border-neutral-800 bg-neutral-900 px-6 py-12 text-center">

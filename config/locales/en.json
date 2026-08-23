@@ -1092,6 +1092,8 @@
   "userDashboard": {
     "nicknameHistory": "Previous nicknames",
     "rank": "Rank",
+    "steamShowcase": "Steam showcase",
+    "steamProfileLink": "Steam profile",
     "firstSeen": "In the chronicle since",
     "messages": "messages",
     "noMessages": "No messages in this channel yet",
@@ -1637,6 +1639,11 @@
       "medallionHint": "Left empty, the medallion shows the Twitch avatar.",
       "removeFile": "remove file",
       "storageUsed": "Files use:",
+      "fieldSteam": "Steam item showcase",
+      "steamHint": "A Steam profile URL. Items are read from that profile's Item Showcase when the URL changes or when the box below is ticked; the profile must be public. Clearing the field removes the case.",
+      "steamSynced": "Synced:",
+      "steamResync": "re-sync the case on save",
+      "steamError": "Could not read the Steam showcase: the profile is private, unreachable, or has no Item Showcase. The previous case has been kept.",
       "fieldIntro": "Play the cloud intro on arrival",
       "fieldTrophies": "Four tiles in the header",
       "trophy": {

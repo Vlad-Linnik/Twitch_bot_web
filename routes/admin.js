@@ -35,7 +35,8 @@ const newsValidation = require("../lib/newsValidation");
 const pageThemesRepo = require("../db/pageThemesRepo");
 const userStatsRepo = require("../db/userStatsRepo");
 const pageThemeValidation = require("../lib/pageThemeValidation");
-const { saveThemeImage, themeImageBytes, deleteThemeImage } = require("../lib/pageThemeAssets");
+const { saveThemeImage, saveRemoteImage, themeImageBytes, deleteThemeImage } = require("../lib/pageThemeAssets");
+const steamShowcase = require("../lib/steamShowcase");
 
 const REJECT_REASON_MAX_LENGTH = 300;
 // The bot writes a fresh heartbeat doc every 30s (TwitchBot's index.js) - anything older than a
@@ -901,6 +902,41 @@ async function renderThemeForm(req, res, { userId, theme, error, status = 200 })
   });
 }
 
+// Pulls the Steam profile's item showcase and re-hosts its artwork. Returns the stored shape, or
+// throws - the caller turns a failure into a form error and KEEPS the previous case, because a
+// private profile or a Steam outage should not silently empty a display the page already had.
+//
+// Artwork is deduplicated by source URL before download: a showcase can legitimately be nine
+// copies of one item, which is one file on disk and one request, not nine of each.
+async function syncSteamShowcase(profileUrl, previousItems) {
+  const { items } = await steamShowcase.fetchShowcase(profileUrl);
+
+  // A profile that is private, renamed away, or simply has no Item Showcase still answers with
+  // HTTP 200 and a normal-looking page - Steam does not 404 for any of them. So "parsed nothing"
+  // is the failure signal, and it has to be raised BEFORE anything is downloaded or unlinked, or
+  // a temporarily private profile silently empties a case that was working a minute ago.
+  if (items.length === 0) throw new Error("no showcase items on that profile");
+
+  const stored = new Map();
+  const out = [];
+  for (const item of items) {
+    if (!steamShowcase.isAllowedImageUrl(item.imageUrl)) continue;
+    if (!stored.has(item.imageUrl)) {
+      const saved = await saveRemoteImage(item.imageUrl, "showcase");
+      stored.set(item.imageUrl, saved.url);
+    }
+    out.push({ image: stored.get(item.imageUrl), name: item.name, borderColor: item.borderColor });
+  }
+
+  // Only unlink the old artwork once the new set is safely on disk - the same ordering the news
+  // and backdrop replace paths use.
+  for (const old of previousItems || []) {
+    if (![...stored.values()].includes(old.image)) await deleteThemeImage(old.image);
+  }
+
+  return { items: out, syncedAt: new Date() };
+}
+
 router.get("/admin/page-themes", requireAdmin, async (req, res, next) => {
   try {
     const themes = await pageThemesRepo.listThemes();
@@ -1019,6 +1055,35 @@ router.post(
         }
       }
 
+      // The Steam case re-syncs when the profile URL changes or when "refresh" is ticked; an
+      // unchanged URL costs no request. A failure keeps whatever was on display and reports
+      // itself, rather than replacing a working case with an empty one.
+      const previousSteam = pageThemeValidation.resolveTheme(existing).steam;
+      const urlChanged = theme.steam.profileUrl !== previousSteam.profileUrl;
+      if (!theme.steam.profileUrl) {
+        for (const item of previousSteam.items) await deleteThemeImage(item.image);
+        theme.steam = { profileUrl: null, syncedAt: null, items: [] };
+      } else if (urlChanged || req.body["steam.resync"] === "1") {
+        try {
+          const synced = await syncSteamShowcase(theme.steam.profileUrl, previousSteam.items);
+          theme.steam = { profileUrl: theme.steam.profileUrl, ...synced };
+        } catch (err) {
+          console.error("[pageThemes] steam showcase sync failed:", err.message);
+          // The whole Steam block reverts, URL included - not just the items. The URL is also
+          // what the live page's "Steam profile" link points at, so keeping the rejected one
+          // would publish a broken link next to a case it doesn't describe. Everything else on
+          // the form still saves; only the case is left exactly as it was.
+          theme.steam = previousSteam;
+          await pageThemesRepo.saveTheme(userId, theme, req.user.userId);
+          return renderThemeForm(req, res, {
+            userId,
+            theme,
+            error: res.locals.t("admin.pageThemes.steamError"),
+            status: 400,
+          });
+        }
+      }
+
       theme.storageBytes = storedBytes;
       await pageThemesRepo.saveTheme(userId, theme, req.user.userId);
 
@@ -1047,6 +1112,8 @@ router.post("/admin/page-themes/:userId/delete", settingsWriteLimiter, requireAd
       await pageThemesRepo.deleteTheme(req.params.userId);
       await deleteThemeImage(existing.backdrop?.uploadUrl);
       await deleteThemeImage(existing.medallionUrl);
+      // Showcase artwork is re-hosted by us too, so it leaks the same way if it isn't unlinked.
+      for (const item of existing.steam?.items || []) await deleteThemeImage(item.image);
       await adminActionLogsRepo.logAction({
         admin: req.user,
         action: "pageTheme.delete",

@@ -1729,3 +1729,76 @@ body.theme-throne main select:focus { border-color: var(--throne-accent); }
     100% { opacity: 0; }
   }
 }
+
+/* --- Steam display case ---------------------------------------------------
+   Sits between the throne and the statistics. The slot border is Steam's own
+   rarity colour (--slot-rarity, set per tile); the gold is ours, so a case of
+   Common items still reads as part of the hall rather than as a grey grid. */
+.throne-vitrine { margin: 0 0 2.5rem; }
+.throne-vitrine__heading {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--throne-ink-faint);
+  margin-bottom: 0.85rem;
+}
+.throne-vitrine__case {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem 1.25rem;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--throne-edge);
+  border-radius: 0.6rem;
+  background: linear-gradient(180deg, rgb(242 226 180 / 0.42), rgb(157 149 161 / 0.2));
+  box-shadow: inset 0 1px 0 rgb(242 226 180 / 0.5), 0 6px 14px rgb(43 33 24 / 0.18);
+}
+body.theme-throne-wide .throne-vitrine__case {
+  background: linear-gradient(180deg, rgb(240 231 214 / 0.92), rgb(219 207 191 / 0.88));
+}
+.throne-vitrine__slot {
+  --slot-rarity: var(--throne-gold-deep);
+  margin: 0;
+  width: 4.25rem;
+  text-align: center;
+}
+.throne-vitrine__slot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 2px solid var(--slot-rarity);
+  border-radius: 0.35rem;
+  background: rgb(43 33 24 / 0.14);
+  box-shadow: 0 0 0 1px rgb(107 79 40 / 0.35);
+}
+/* Names are long ("Claddish Voyager's Treads") and there can be a dozen of them, so the caption
+   is a hover/again-on-focus affordance rather than a permanent second line of text under every
+   tile - the alt and title carry it for anyone not using a pointer. */
+.throne-vitrine__slot figcaption {
+  margin-top: 0.3rem;
+  font-size: 0.6rem;
+  line-height: 1.2;
+  color: var(--throne-ink-faint);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.throne-vitrine__link { text-align: center; margin-top: 0.6rem; font-size: 0.75rem; }
+.throne-vitrine__link a {
+  color: var(--throne-gold-deep);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.throne-vitrine__uniform {
+  text-align: center;
+  margin-top: 0.55rem;
+  font-size: 0.78rem;
+  color: var(--throne-ink-soft);
+}

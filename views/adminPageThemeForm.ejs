@@ -152,6 +152,32 @@
       </p>
     </fieldset>
 
+    <%# The Steam display case. Only the profile URL is edited here - the items behind it are
+        pulled from the profile when this URL changes or when the re-sync box is ticked. %>
+    <fieldset>
+      <legend class="text-xs text-neutral-500 mb-2"><%= t('admin.pageThemes.fieldSteam') %></legend>
+      <input type="url" name="steam.profileUrl" value="<%= theme.steam.profileUrl || '' %>"
+             placeholder="https://steamcommunity.com/id/..." autocomplete="off" spellcheck="false"
+             class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+      <p class="text-xs text-neutral-600 mt-2"><%= t('admin.pageThemes.steamHint') %></p>
+      <% if (theme.steam.items.length > 0) { %>
+        <div class="flex items-center gap-2 mt-3 flex-wrap">
+          <% theme.steam.items.forEach(function(item) { %>
+            <img src="<%= item.image %>" alt="<%= item.name || '' %>" title="<%= item.name || '' %>"
+                 class="w-10 h-10 rounded border" style="border-color: <%= item.borderColor || '#404040' %>" />
+          <% }) %>
+        </div>
+        <p class="text-xs text-neutral-600 mt-2">
+          <%= t('admin.pageThemes.steamSynced') %>
+          <%= theme.steam.syncedAt ? new Date(theme.steam.syncedAt).toLocaleString(locale) : '—' %>
+        </p>
+        <label class="flex items-center gap-1.5 text-xs text-neutral-400 mt-2 cursor-pointer">
+          <input type="checkbox" name="steam.resync" value="1" class="accent-purple-600" />
+          <%= t('admin.pageThemes.steamResync') %>
+        </label>
+      <% } %>
+    </fieldset>
+
     <label class="flex items-center gap-2 text-sm text-neutral-200 cursor-pointer">
       <input type="checkbox" name="intro" value="1" class="accent-purple-600" <%= theme.intro ? 'checked' : '' %> />
       <%= t('admin.pageThemes.fieldIntro') %>

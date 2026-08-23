@@ -1,0 +1,46 @@
+<%# The Steam display case: a gilded vitrine holding whatever the user put in their Steam
+    profile's Item Showcase. Expects: theme, t.
+
+    The artwork is served from our own /uploads/themes/ rather than from Steam's CDN - the site's
+    CSP allows images from 'self' and two named hosts, and the sync (routes/admin.js) re-hosts
+    each tile so the case does not depend on a third party staying reachable, or on that host
+    being added to every page's policy.
+
+    Rendered only when the sync actually produced items: an empty vitrine is worse than no
+    vitrine, and a profile can legitimately have no showcase at all. %>
+<%
+  // A showcase is often several copies of one item, and nine identical truncated captions under
+  // nine identical tiles is noise, not information. When every slot names the same thing, the
+  // name is printed once under the case instead.
+  const names = theme.steam.items.map((item) => item.name).filter(Boolean);
+  const uniformName =
+    names.length === theme.steam.items.length && new Set(names).size === 1 ? names[0] : null;
+%>
+<section class="throne-vitrine" aria-labelledby="throne-vitrine-heading">
+  <h2 id="throne-vitrine-heading" class="throne-vitrine__heading"><%= t('userDashboard.steamShowcase') %></h2>
+
+  <div class="throne-vitrine__case">
+    <% theme.steam.items.forEach(function(item) { %>
+      <%# Steam's own rarity colour, validated back to #rrggbb on read (sanitizeShowcaseItems) -
+          it comes from scraped markup, so it is never trusted straight into a style attribute. %>
+      <figure class="throne-vitrine__slot"<% if (item.borderColor) { %> style="--slot-rarity: <%= item.borderColor %>"<% } %>>
+        <img src="<%= item.image %>" alt="<%= item.name || '' %>" width="64" height="64" loading="lazy" decoding="async" />
+        <% if (item.name && !uniformName) { %><figcaption><%= item.name %></figcaption><% } %>
+      </figure>
+    <% }) %>
+  </div>
+
+  <% if (uniformName) { %>
+    <p class="throne-vitrine__uniform"><%= uniformName %> &times;<%= theme.steam.items.length %></p>
+  <% } %>
+
+  <% if (theme.steam.profileUrl) { %>
+    <p class="throne-vitrine__link">
+      <%# Outbound to a third-party profile: nofollow/noopener, and the destination is the
+          canonical URL the validator rebuilt, not the raw string that was typed in. %>
+      <a href="<%= theme.steam.profileUrl %>" rel="noopener noreferrer nofollow" target="_blank">
+        <%= t('userDashboard.steamProfileLink') %>
+      </a>
+    </p>
+  <% } %>
+</section>
