@@ -1,0 +1,22 @@
+<%# Paint servers for the gilded hall. See partials/throneDefs.ejs for why they are defined once
+    per document rather than inside whichever SVG happens to be first.
+
+    The ids are shared vocabulary, not private names: every skin defines `throne-gold` and
+    `throne-gold-flat`, because every skin has a metal ramp and a flat version of it. Only one
+    skin renders per page, so the two definitions never meet. %>
+<linearGradient id="throne-gold" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0%" stop-color="var(--throne-gold-bright)" />
+  <stop offset="45%" stop-color="var(--throne-accent)" />
+  <stop offset="100%" stop-color="var(--throne-gold-deep)" />
+</linearGradient>
+<linearGradient id="throne-gold-flat" x1="0" y1="0" x2="1" y2="0">
+  <stop offset="0%" stop-color="var(--throne-gold-deep)" />
+  <stop offset="50%" stop-color="var(--throne-accent)" />
+  <stop offset="100%" stop-color="var(--throne-gold-deep)" />
+</linearGradient>
+<%# One repeated bead, running the length of the cornice - the ornament the reference
+    photograph carries under its moulding. %>
+<pattern id="throne-beads" width="24" height="12" patternUnits="userSpaceOnUse">
+  <circle cx="6" cy="6" r="3.4" fill="url(#throne-gold)" />
+  <rect x="14" y="3" width="4" height="6" rx="1.4" fill="var(--throne-gold-deep)" opacity="0.75" />
+</pattern>

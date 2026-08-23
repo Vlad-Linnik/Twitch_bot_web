@@ -1,0 +1,35 @@
+<%# The ring around the portrait: a flower crown, where the gilded hall has a laurel wreath.
+
+    The inner circle is kept at r=63 and 5 units wide to match the gilded hall's, because that is
+    what the portrait's own border sits against - the crown is the part that changes, not the
+    frame the photograph is mounted in. %>
+<%
+  const R = 79;
+  // Offset by half a step so no bloom sits at twelve o'clock: that spot belongs to the bow.
+  const STEP = 30;
+  const START = -90 + STEP / 2;
+  const at = (deg, radius) => ({
+    x: Math.round((100 + radius * Math.cos((deg * Math.PI) / 180)) * 10) / 10,
+    y: Math.round((100 + radius * Math.sin((deg * Math.PI) / 180)) * 10) / 10,
+  });
+%>
+<svg class="throne-medallion__laurel" viewBox="0 0 200 200" role="presentation" aria-hidden="true">
+  <circle cx="100" cy="100" r="<%= R %>" fill="none"
+          stroke="var(--throne-gold-deep)" stroke-width="1.6" opacity="0.55" />
+
+  <% for (let i = 0; i < 12; i++) {
+       const deg = START + i * STEP;
+       const bloom = at(deg, R);
+       const leaf = at(deg + STEP / 2, R);
+  %>
+    <%# The leaf is rotated to the tangent (the radius angle plus a quarter turn) so the crown
+        turns with the ring instead of every leaf pointing out of it like a sunburst. %>
+    <use href="#rose-leaf-art"
+         transform="translate(<%= leaf.x %> <%= leaf.y %>) rotate(<%= deg + STEP / 2 + 90 %>) scale(0.95)" />
+    <use href="#rose-bloom-art"
+         transform="translate(<%= bloom.x %> <%= bloom.y %>) scale(<%= i % 2 ? 0.95 : 1.25 %>)" />
+  <% } %>
+
+  <use href="#rose-bow-art" transform="translate(100 19) scale(0.9)" />
+  <circle cx="100" cy="100" r="63" fill="none" stroke="url(#throne-gold)" stroke-width="5" />
+</svg>

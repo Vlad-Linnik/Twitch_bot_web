@@ -25,12 +25,12 @@
 <%- include('partials/nav') %>
 <%# The curtain has to be the first thing in the body after the nav: it covers the page while
     it plays, and a later position would let the page paint above it for a frame. %>
-<% if (skin && theme.intro) { %><%- include('partials/throneIntro') %><% } %>
+<% if (skin && theme.intro) { %><%- include('partials/throneIntro', { theme }) %><% } %>
 <% if (skin) { %>
-  <%- include('partials/throneDefs') %>
-  <%# Page-wide hall: pinned to the viewport so the room runs the full height of the document
-      and the content scrolls inside it, rather than ending where the hero does. Photo and drawn
-      columns are alternatives, never layers - see the note in partials/throneHero.ejs. %>
+  <%- include('partials/throneDefs', { theme }) %>
+  <%# Page-wide room: pinned to the viewport so it runs the full height of the document and the
+      content scrolls inside it, rather than ending where the hero does. Photo and drawn side
+      ornaments are alternatives, never layers - see the note in partials/throneHero.ejs. %>
   <% if (theme.backdrop.scope === 'page') { %>
     <%- include('partials/throneHall', {
           theme,

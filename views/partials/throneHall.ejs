@@ -1,45 +1,35 @@
-<%# The room itself: wallpaper, cornice and the two flanking columns.
+<%# The room itself: wallpaper, the top edge and the two side ornaments.
 
     Expects: theme, pieces (array of "photo" | "cornice" | "columns"), fixed (boolean).
 
-    Drawn as separate pieces rather than as one wide picture because a single SVG scaled to
-    cover crops its own edges away at wide aspect ratios - and the edges are exactly where the
-    columns are. Each piece is stretched only along the axis where stretching is invisible:
-    bands horizontally, columns vertically.
+    This partial owns the LAYERS - what is drawn, in what order, pinned or not. What each layer
+    looks like belongs to the skin (views/partials/skins/<name>/), because a room made of gilded
+    stone and a room made of roses share their structure and nothing else.
 
-    `fixed` is what makes the hall page-wide: the layer is pinned to the viewport, so the page
-    scrolls INSIDE the room and the columns keep their capitals and bases on screen instead of
-    being one enormous shaft the reader only ever sees the middle of.
+    Drawn as separate pieces rather than as one wide picture because a single SVG scaled to cover
+    crops its own edges away at wide aspect ratios - and the edges are exactly where the side
+    ornaments are. How each piece copes with being fitted to its box is the skin's problem and is
+    explained in its own file; the gilded hall stretches, the rose bower crops.
 
-    Gradients come from partials/throneDefs.ejs, which the page includes once. %>
+    `fixed` is what makes the room page-wide: the layer is pinned to the viewport, so the page
+    scrolls INSIDE it and the ornaments keep their tops and bottoms on screen instead of being one
+    enormous shaft the reader only ever sees the middle of. %>
 <div class="throne-hall<%= fixed ? ' throne-hall--fixed' : '' %>" aria-hidden="true">
   <% if (pieces.includes("photo") && theme.backdrop.mode === "photo") { %>
-    <%# The photograph sits UNDER the drawn hall, never instead of it: the cornice and columns
-        are what keep the composition readable while a large backdrop is still downloading. %>
+    <%# The photograph sits UNDER the drawn room, never instead of it: the top edge and the side
+        ornaments are what keep the composition readable while a large backdrop is downloading. %>
     <img class="throne-hall__photo"
          src="<%= theme.backdrop.uploadUrl || ('/img/themes/' + theme.backdrop.preset + '.webp') %>"
          alt="" loading="eager" decoding="async" />
   <% } %>
 
   <% if (pieces.includes("cornice")) { %>
-    <svg class="throne-hall__cornice" viewBox="0 0 1200 46" preserveAspectRatio="none" role="presentation">
-      <rect x="0" y="0" width="1200" height="26" fill="url(#throne-gold-flat)" opacity="0.9" />
-      <rect x="0" y="26" width="1200" height="12" fill="url(#throne-beads)" />
-      <rect x="0" y="38" width="1200" height="5" fill="var(--throne-gold-deep)" opacity="0.6" />
-    </svg>
+    <%- include('skins/' + theme.theme + '/cornice') %>
   <% } %>
 
   <% if (pieces.includes("columns")) { %>
     <% ["left", "right"].forEach(function(side) { %>
-      <svg class="throne-hall__column throne-hall__column--<%= side %>" viewBox="0 0 100 400"
-           preserveAspectRatio="none" role="presentation">
-        <rect x="16" y="26" width="68" height="350" fill="var(--throne-stone)" />
-        <% for (let f = 26; f <= 74; f += 12) { %>
-          <rect x="<%= f %>" y="30" width="3" height="342" fill="var(--throne-stone-shade)" opacity="0.8" />
-        <% } %>
-        <rect x="6" y="8" width="88" height="20" rx="3" fill="url(#throne-gold)" />
-        <rect x="10" y="374" width="80" height="14" rx="2" fill="url(#throne-gold-flat)" opacity="0.85" />
-      </svg>
+      <%- include('skins/' + theme.theme + '/columns', { side }) %>
     <% }) %>
   <% } %>
 </div>

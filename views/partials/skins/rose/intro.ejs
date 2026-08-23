@@ -1,0 +1,38 @@
+<%# The rose bower's arrival curtain: two silk drapes that draw apart, where the gilded hall has
+    banks of cloud.
+
+    No photograph at all, unlike the gilded hall's. Cloud needed a picture because a gradient
+    cannot fake the texture; silk is exactly the thing a repeating gradient DOES describe well -
+    parallel folds catching light - so this curtain has nothing to download and is opaque from the
+    stylesheet alone, which is the property the whole overlay depends on.
+
+    The banks keep the shared .throne-intro__bank class: parting sideways, the skip-on-first-input
+    behaviour and the bfcache replay in public/js/throne-intro.js all belong to the curtain as a
+    concept, not to what it is made of. Only the material and the inner edge are this skin's.
+
+    There is no seam element here. The cloud banks feather their inner edges into each other and
+    need something opaque filling the overlap; a drape has a real hem, and the two simply meet. %>
+<div class="throne-intro__bank throne-intro__bank--left rose-drape">
+  <%# The hem: scallops with a hanging pearl in each, a fixed-size strip that is cropped rather
+      than stretched down a tall viewport - a stretched scallop is not a scallop. %>
+  <svg class="rose-drape__hem" viewBox="0 0 30 1200" preserveAspectRatio="xMinYMin slice" role="presentation">
+    <% for (let i = 0; i < 30; i++) { const y = i * 40; %>
+      <path d="M0 <%= y %> L14 <%= y %> A 15 20 0 0 1 14 <%= y + 40 %> L0 <%= y + 40 %> Z"
+            fill="var(--throne-accent)" opacity="0.55" />
+      <path d="M14 <%= y %> A 15 20 0 0 1 14 <%= y + 40 %>" fill="none"
+            stroke="var(--throne-gold-bright)" stroke-width="2" opacity="0.75" />
+      <circle cx="26" cy="<%= y + 20 %>" r="3" fill="var(--throne-gold-bright)" opacity="0.8" />
+    <% } %>
+  </svg>
+</div>
+<div class="throne-intro__bank throne-intro__bank--right rose-drape">
+  <svg class="rose-drape__hem" viewBox="0 0 30 1200" preserveAspectRatio="xMinYMin slice" role="presentation">
+    <% for (let i = 0; i < 30; i++) { const y = i * 40; %>
+      <path d="M0 <%= y %> L14 <%= y %> A 15 20 0 0 1 14 <%= y + 40 %> L0 <%= y + 40 %> Z"
+            fill="var(--throne-accent)" opacity="0.55" />
+      <path d="M14 <%= y %> A 15 20 0 0 1 14 <%= y + 40 %>" fill="none"
+            stroke="var(--throne-gold-bright)" stroke-width="2" opacity="0.75" />
+      <circle cx="26" cy="<%= y + 20 %>" r="3" fill="var(--throne-gold-bright)" opacity="0.8" />
+    <% } %>
+  </svg>
+</div>

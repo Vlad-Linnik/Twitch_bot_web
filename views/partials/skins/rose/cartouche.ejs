@@ -1,0 +1,34 @@
+<%# The halo behind the seat: a wreath of roses, where the gilded hall has a shield.
+
+    A ring and NOT a heart, even though a heart is the obvious rose-bower shape - the seat's own
+    back is already a heart, and a second one at nearly the same size behind it does not read as a
+    halo, it reads as a printing error. The wreath is wider than the seat's back on purpose so it
+    shows as a ring around it rather than hiding behind it. %>
+<%
+  const R = 66;
+  const COUNT = 22;
+  const at = (deg, radius) => ({
+    x: Math.round(radius * Math.cos((deg * Math.PI) / 180) * 10) / 10,
+    y: Math.round(radius * Math.sin((deg * Math.PI) / 180) * 10) / 10,
+  });
+%>
+<svg class="throne-hall__cartouche" viewBox="-90 -80 180 180" role="presentation" aria-hidden="true">
+  <%# The same translucent disc the gilded shield carries: it lifts the centrepiece off the wall,
+      and without it the wreath floats with nothing inside it. %>
+  <circle cx="0" cy="10" r="<%= R - 4 %>" fill="var(--throne-stone)" fill-opacity="0.28" />
+  <circle cx="0" cy="10" r="<%= R %>" fill="none" stroke="var(--throne-gold-deep)"
+          stroke-width="1.6" opacity="0.5" />
+
+  <% for (let i = 0; i < COUNT; i++) {
+       const deg = (360 / COUNT) * i;
+       const bloom = at(deg, R);
+       const leaf = at(deg + 180 / COUNT, R);
+  %>
+    <%# Leaves are turned to the local tangent (radius angle plus a quarter turn) so the wreath
+        curls with the ring instead of bristling outwards like a sunburst. %>
+    <use href="#rose-leaf-art"
+         transform="translate(<%= leaf.x %> <%= leaf.y + 10 %>) rotate(<%= Math.round(deg + 180 / COUNT + 90) %>) scale(0.9)" />
+    <use href="#rose-bloom-art"
+         transform="translate(<%= bloom.x %> <%= bloom.y + 10 %>) scale(<%= i % 3 === 0 ? 1.1 : 0.8 %>)" />
+  <% } %>
+</svg>

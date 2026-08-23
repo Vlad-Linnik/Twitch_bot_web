@@ -1,0 +1,12 @@
+<%# The two fluted columns that frame the stage. Expects: side ("left" | "right").
+
+    Stretched vertically only, which a shaft and its flutes survive without reading as distorted. %>
+<svg class="throne-hall__column throne-hall__column--<%= side %>" viewBox="0 0 100 400"
+     preserveAspectRatio="none" role="presentation">
+  <rect x="16" y="26" width="68" height="350" fill="var(--throne-stone)" />
+  <% for (let f = 26; f <= 74; f += 12) { %>
+    <rect x="<%= f %>" y="30" width="3" height="342" fill="var(--throne-stone-shade)" opacity="0.8" />
+  <% } %>
+  <rect x="6" y="8" width="88" height="20" rx="3" fill="url(#throne-gold)" />
+  <rect x="10" y="374" width="80" height="14" rx="2" fill="url(#throne-gold-flat)" opacity="0.85" />
+</svg>

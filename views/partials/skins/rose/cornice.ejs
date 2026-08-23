@@ -1,0 +1,34 @@
+<%# The rose bower's top edge: a garland of ribbon swags with a bloom at every junction.
+
+    preserveAspectRatio is "slice", NOT "none" as the gilded hall uses. That skin's cornice is
+    bands and a bead pattern, which survive being stretched horizontally; a flower does not - a
+    stretched rose is an ellipse, and at phone width it would be a smear. Slicing instead keeps
+    the ornament at one scale and crops the ends off, which a repeating garland hides completely.
+
+    The viewBox is far wider than any viewport so the HEIGHT is what binds the scale at every
+    realistic width: 46 units of viewBox always land on the element's 2.75rem, and the surplus
+    length is simply cropped. %>
+<svg class="throne-hall__cornice" viewBox="0 0 3000 46" preserveAspectRatio="xMidYMid slice" role="presentation">
+  <%# The rail the garland hangs from. %>
+  <rect x="0" y="0" width="3000" height="4.5" fill="url(#throne-gold-flat)" opacity="0.85" />
+  <rect x="0" y="5.5" width="3000" height="1.6" fill="var(--throne-gold-deep)" opacity="0.45" />
+
+  <% const UNIT = 150; %>
+  <% for (let i = 0; i <= 3000 / UNIT; i++) { const x = i * UNIT; %>
+    <%# Two swags per bay, the lower one dimmer, so the garland has depth instead of reading as
+        one wire. A quadratic dips to roughly a quarter of the way between its ends. %>
+    <path d="M<%= x %> 10 Q <%= x + UNIT / 2 %> 40 <%= x + UNIT %> 10"
+          fill="none" stroke="var(--throne-accent)" stroke-width="2.6" stroke-linecap="round" />
+    <path d="M<%= x %> 14 Q <%= x + UNIT / 2 %> 44 <%= x + UNIT %> 14"
+          fill="none" stroke="var(--throne-gold-deep)" stroke-width="1.6" stroke-linecap="round" opacity="0.5" />
+
+    <%# A pearl and a bud hanging at the low point of each bay. %>
+    <use href="#rose-bud-art" transform="translate(<%= x + UNIT / 2 %> 30) scale(0.72)" />
+    <circle cx="<%= x + UNIT / 2 %>" cy="41" r="2.1" fill="var(--throne-gold-bright)" opacity="0.85" />
+
+    <%# The bloom sits ON the junction, with a leaf thrown out to each side. %>
+    <use href="#rose-leaf-art" transform="translate(<%= x + 7 %> 15) rotate(28)" />
+    <use href="#rose-leaf-art" transform="translate(<%= x - 7 %> 15) rotate(152) scale(-1 1)" />
+    <use href="#rose-bloom-art" transform="translate(<%= x %> 13) scale(1.15)" />
+  <% } %>
+</svg>

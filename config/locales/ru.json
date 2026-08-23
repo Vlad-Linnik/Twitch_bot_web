@@ -1641,7 +1641,10 @@
       "backdropPreset": {
         "hall": "Зал",
         "ceiling": "Потолок",
-        "colonnade": "Колоннада"
+        "colonnade": "Колоннада",
+        "blossom": "Цветущая ветка",
+        "peonies": "Пионы",
+        "garden": "Цветник"
       },
       "fieldBackdropFile": "Своё изображение фона",
       "fieldMedallion": "Портрет в медальоне",

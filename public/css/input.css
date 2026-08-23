@@ -1292,6 +1292,16 @@ html.js .save-fab.save-visible {
    the gilding it cannot land on body text or a focus ring. */
 
 body.theme-throne {
+  /* Geometry, not colour: where this skin's centrepiece carries the portrait, and how present
+     its side ornaments are. A palette preset never touches these - a variation on the materials
+     of a room does not move its furniture. The throne's arched back panel centres near y=100 in
+     the 400x390 seat, which these percentages resolve to. */
+  --stage-portrait-top: 11.5%;
+  --stage-portrait-width: 29%;
+  --hall-side-opacity: 0.5;
+  --hall-side-opacity-wide: 0.9;
+  --hall-halo-opacity: 0.45;
+
   /* Materials. */
   --throne-plaster: #c3b7ad;
   --throne-plaster-deep: #a2958c;
@@ -1367,6 +1377,16 @@ body.theme-throne.palette-pale { --throne-accent: #e2c98f; --throne-gold-deep: #
    "gold" does - dusty, powder and fuchsia are not variations on one another, they
    are different rooms in the same architecture. */
 body.theme-rose {
+  /* The heart-shaped back sits lower than the throne's arched panel, so the portrait moves down
+     with it. The vines are carried at a higher opacity than the gilded columns: a column is a
+     solid shaft that only needs to be hinted at, while a vine is line art with gaps in it and
+     disappears at the same strength. */
+  --stage-portrait-top: 15%;
+  --stage-portrait-width: 29%;
+  --hall-side-opacity: 0.72;
+  --hall-side-opacity-wide: 0.95;
+  --hall-halo-opacity: 0.5;
+
   --throne-plaster: #f2c8d4;
   --throne-plaster-deep: #e0a6b9;
   --throne-canvas-top: #fce0e7;
@@ -1680,8 +1700,10 @@ body.theme-hall .throne-hero { z-index: 2; }
   top: 0;
   height: 100%;
   width: clamp(2.5rem, 8vw, 6.5rem);
-  /* The columns frame the stage; at full strength they compete with the throne for it. */
-  opacity: 0.5;
+  /* The side ornaments frame the stage; at full strength they compete with the centrepiece for
+     it. How far they can be dimmed before they vanish depends on how solid they are, so the
+     figure is a skin token rather than a constant. */
+  opacity: var(--hall-side-opacity);
 }
 .throne-hall__column--left { left: 0; }
 .throne-hall__column--right { right: 0; transform: scaleX(-1); }
@@ -1690,7 +1712,7 @@ body.theme-hall .throne-hero { z-index: 2; }
    its siblings), which otherwise washed them down to the colour of the wall behind them. */
 .throne-hall--fixed .throne-hall__column {
   width: clamp(2.75rem, 8vw, 8.5rem);
-  opacity: 0.9;
+  opacity: var(--hall-side-opacity-wide);
   z-index: 1;
   filter: drop-shadow(0 0 18px color-mix(in srgb, var(--throne-ink) 28%, transparent));
 }
@@ -1710,7 +1732,7 @@ body.theme-hall .throne-hero { z-index: 2; }
   left: 50%;
   translate: -50% 0;
   width: min(20rem, 62vw);
-  opacity: 0.45;
+  opacity: var(--hall-halo-opacity);
 }
 
 .throne-stage {
@@ -1726,13 +1748,13 @@ body.theme-hall .throne-hero { z-index: 2; }
   filter: drop-shadow(0 12px 18px color-mix(in srgb, var(--throne-ink) 35%, transparent));
 }
 
-/* The portrait sits on the throne's back panel. The numbers are the panel's own
-   centre in the SVG's coordinate system (400x390, centre near y=100), expressed as
-   percentages so the two stay locked together at any size. */
+/* The portrait sits on the centrepiece's back. Expressed as percentages of the stage so the two
+   stay locked together at any size, and read from skin tokens because each skin's centrepiece
+   puts its frame somewhere else (see --stage-portrait-top). */
 .throne-medallion {
   position: absolute;
-  top: 11.5%;
-  width: 29%;
+  top: var(--stage-portrait-top);
+  width: var(--stage-portrait-width);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -2012,6 +2034,63 @@ body.theme-hall main select:focus { border-color: var(--throne-accent); }
     0% { opacity: 1; }
     100% { opacity: 0; }
   }
+}
+
+/* --- arrival curtain: the rose bower's drapes ------------------------------
+   The gilded hall's banks are cloud, and cloud needs a photograph - a gradient cannot fake it.
+   Silk is the opposite case: parallel folds catching light is exactly what a repeating gradient
+   describes, so this curtain downloads nothing at all and is opaque from the stylesheet alone,
+   which is the property the whole overlay rests on.
+
+   Scoped to body.theme-rose (two classes plus an element) so it outranks .throne-intro__bank--right,
+   which sets a mask of its own for the cloud banks. */
+body.theme-rose .throne-intro__bank {
+  /* Drapes have a real hem, so there is nothing to feather - and nothing to fill behind the
+     overlap either, which is why this skin renders no seam element. */
+  -webkit-mask-image: none;
+  mask-image: none;
+  /* Just past half each, so the two meet with a small overlap rather than leaving a hairline of
+     page showing between them on a fractional-pixel viewport width. */
+  width: 51%;
+  /* Folds in white and black rather than in palette colours: this is light and shade on fabric,
+     which is hue-neutral, and it then reads correctly over all four rose palettes. Sized in px,
+     not percentages - a fold is a physical width and should not get wider on a wider screen. */
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.3) 0px,
+      rgb(255 255 255 / 0.02) 26px,
+      rgb(0 0 0 / 0.1) 48px,
+      rgb(255 255 255 / 0.3) 74px
+    ),
+    linear-gradient(
+      180deg,
+      var(--throne-gold-deep) 0%,
+      var(--throne-accent) 26%,
+      var(--throne-plaster) 100%
+    );
+  background-size: auto, auto;
+  /* The shadow under the pelmet, where the fabric is gathered. */
+  box-shadow: inset 0 16px 26px -10px rgb(0 0 0 / 0.35);
+}
+
+/* The hem: scallops with a pearl in each, on the INNER edge of each drape. Fixed width in px to
+   match the SVG's own user units, so the scallops keep their size at any viewport height - the
+   partial slices the strip rather than stretching it. */
+.rose-drape__hem {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 100%;
+}
+/* Mirrored for the right-hand drape so both hems bulge towards the middle. Only the hem is
+   flipped, never the drape: the element itself carries the animated translate, and scaling it
+   would send it off the wrong side of the screen - the same trap the cloud banks' mask hit. */
+.throne-intro__bank--right .rose-drape__hem {
+  right: auto;
+  left: 0;
+  transform: scaleX(-1);
 }
 
 /* --- Steam display case ---------------------------------------------------

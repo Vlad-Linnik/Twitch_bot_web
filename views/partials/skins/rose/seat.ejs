@@ -1,0 +1,79 @@
+<%# The rose bower's centrepiece, where the gilded hall has a throne: a garden seat with a
+    heart-shaped back grown over with roses.
+
+    It keeps the throne's job and its coordinate system (400x390, the portrait laid over the back)
+    so the hero's layout is unchanged - only the furniture is different. Where the portrait lands
+    on it is NOT the same, though: the heart's centre sits lower than the throne's arched panel,
+    so the position lives in --stage-portrait-top, set per skin in public/css/input.css. %>
+<%
+  // The back. The point runs down BEHIND the cushion rather than stopping above it - a heart
+  // floating clear of the seat reads as a cut-out prop instead of as a chair back.
+  const HEART = "M200 82 C 200 30, 112 24, 112 96 C 112 155, 200 205, 200 252"
+              + " C 200 205, 288 155, 288 96 C 288 24, 200 30, 200 82 Z";
+  // Blooms climbing both lobes. Listed for the left side and mirrored about x=200, so the two
+  // halves cannot drift apart as the arrangement is tweaked.
+  // Stops short of the notch: the portrait's own flower crown sits there, and two rings of
+  // blooms at the same radius read as one crowded smear rather than as a crown on a chair.
+  const CLIMB = [
+    { x: 116, y: 92, s: 1.5 },
+    { x: 122, y: 63, s: 1.15 },
+    { x: 140, y: 42, s: 1.7 },
+    { x: 165, y: 30, s: 1.1 },
+  ];
+%>
+<svg class="throne-seat" viewBox="0 0 400 390" role="presentation" aria-hidden="true">
+  <%# Base: two soft tiers instead of the throne's cut stone steps. %>
+  <rect x="92" y="356" width="216" height="20" rx="10" fill="url(#throne-gold-flat)" opacity="0.5" />
+  <rect x="120" y="338" width="160" height="20" rx="9" fill="url(#throne-gold-flat)" opacity="0.68" />
+
+  <%# Cabriole legs - a curve rather than the throne's square posts. %>
+  <path d="M148 284 C 128 306, 130 330, 146 346" fill="none"
+        stroke="url(#throne-gold-flat)" stroke-width="12" stroke-linecap="round" />
+  <path d="M252 284 C 272 306, 270 330, 254 346" fill="none"
+        stroke="url(#throne-gold-flat)" stroke-width="12" stroke-linecap="round" />
+
+  <%# The back, drawn before the seat so its point passes behind the cushion. %>
+  <path d="<%= HEART %>" fill="var(--throne-back)" stroke="url(#throne-gold)"
+        stroke-width="7" stroke-linejoin="round" />
+  <path d="<%= HEART %>" fill="none" stroke="var(--throne-gold-deep)" stroke-width="2"
+        opacity="0.55" transform="translate(200 118) scale(0.86) translate(-200 -118)" />
+
+  <%# Armrests: a vine curling out of each side of the seat and back on itself. %>
+  <path d="M112 248 C 86 245, 72 259, 77 275 C 81 288, 97 290, 103 279" fill="none"
+        stroke="url(#throne-gold)" stroke-width="7" stroke-linecap="round" />
+  <path d="M288 248 C 314 245, 328 259, 323 275 C 319 288, 303 290, 297 279" fill="none"
+        stroke="url(#throne-gold)" stroke-width="7" stroke-linecap="round" />
+  <use href="#rose-leaf-art" transform="translate(84 262) rotate(112) scale(1.5)" />
+  <use href="#rose-leaf-art" transform="translate(316 262) rotate(68) scale(-1.5 1.5)" />
+  <use href="#rose-bloom-art" transform="translate(78 250) scale(1.5)" />
+  <use href="#rose-bloom-art" transform="translate(322 250) scale(1.5)" />
+
+  <%# The cushion, with tufting and a scalloped skirt. %>
+  <rect x="108" y="244" width="184" height="44" rx="16" fill="var(--throne-cushion)" />
+  <rect x="108" y="244" width="184" height="44" rx="16" fill="none"
+        stroke="url(#throne-gold)" stroke-width="4" />
+  <% for (const cx of [152, 200, 248]) { %>
+    <circle cx="<%= cx %>" cy="266" r="3.4" fill="var(--throne-gold-deep)" opacity="0.45" />
+  <% } %>
+  <path d="M114 288 q 12 16 24 0 q 12 16 24 0 q 12 16 24 0 q 12 16 24 0 q 12 16 24 0 q 12 16 24 0 q 12 16 24 0"
+        fill="var(--throne-cushion)" opacity="0.85" />
+
+  <%# Roses up both lobes of the heart, with a leaf set between each pair. %>
+  <% for (const b of CLIMB) { %>
+    <% for (const side of [-1, 1]) { const x = 200 + side * (b.x - 200); %>
+      <use href="#rose-leaf-art"
+           transform="translate(<%= x %> <%= b.y + 13 %>) rotate(<%= side > 0 ? 62 : 118 %>) scale(<%= side > 0 ? 1.1 : -1.1 %> 1.1)" />
+      <use href="#rose-bloom-art" transform="translate(<%= x %> <%= b.y %>) scale(<%= b.s %>)" />
+    <% } %>
+  <% } %>
+  <use href="#rose-bud-art" transform="translate(103 118) rotate(-28) scale(1.3)" />
+  <use href="#rose-bud-art" transform="translate(297 118) rotate(28) scale(1.3)" />
+
+  <%# The bow ties the skirt, and a few petals have fallen to the base. %>
+  <use href="#rose-bow-art" transform="translate(200 290) scale(1.5)" />
+  <% for (const p of [{ x: 128, y: 332, r: -24 }, { x: 268, y: 328, r: 18 }, { x: 296, y: 350, r: -12 }]) { %>
+    <ellipse cx="<%= p.x %>" cy="<%= p.y %>" rx="7" ry="4.6"
+             transform="rotate(<%= p.r %> <%= p.x %> <%= p.y %>)"
+             fill="var(--throne-accent)" opacity="0.65" />
+  <% } %>
+</svg>

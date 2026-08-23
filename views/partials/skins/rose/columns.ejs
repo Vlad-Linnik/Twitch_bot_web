@@ -1,0 +1,37 @@
+<%# What stands where the gilded hall has columns: a rose climbing the edge of the room.
+    Expects: side ("left" | "right").
+
+    Same reasoning as this skin's cornice - "slice" rather than "none", because a vertically
+    stretched flower is an ellipse. Here the viewBox is far TALLER than the element, so the WIDTH
+    is what binds the scale: the vine always spans the column's full width at its natural
+    proportions, and the surplus height is cropped off the bottom. The vine repeats every 200
+    units, so where the crop falls is invisible.
+
+    The right-hand copy is mirrored by CSS (transform: scaleX(-1) on the shared column class),
+    which is why nothing here branches on `side` beyond the class name - two vines growing the
+    same way up both edges would read as wallpaper rather than as a frame. %>
+<svg class="throne-hall__column throne-hall__column--<%= side %>" viewBox="0 0 100 2400"
+     preserveAspectRatio="xMidYMin slice" role="presentation">
+  <% const SEG = 200; %>
+  <% for (let i = 0; i < 12; i++) { const y = i * SEG; %>
+    <%# The stem: two quadratics into an S, swinging between x=34 and x=66. A single cubic pulls
+        far too weakly at this aspect ratio and comes out almost straight. %>
+    <path d="M50 <%= y %> Q 18 <%= y + 50 %> 50 <%= y + 100 %> Q 82 <%= y + 150 %> 50 <%= y + 200 %>"
+          fill="none" stroke="var(--throne-stone)" stroke-width="3.2" stroke-linecap="round" />
+    <%# A thorn or two, so the stem reads as a rose cane and not as a cable. %>
+    <path d="M40 <%= y + 26 %> l -4 -3 M60 <%= y + 126 %> l 4 -3"
+          fill="none" stroke="var(--throne-stone)" stroke-width="1.8" stroke-linecap="round" opacity="0.8" />
+
+    <use href="#rose-leaf-art" transform="translate(44 <%= y + 20 %>) rotate(-38) scale(1.25)" />
+    <use href="#rose-leaf-art" transform="translate(56 <%= y + 74 %>) rotate(150) scale(-1.25 1.25)" />
+    <use href="#rose-leaf-art" transform="translate(56 <%= y + 122 %>) rotate(34) scale(1.25)" />
+    <use href="#rose-leaf-art" transform="translate(44 <%= y + 176 %>) rotate(-146) scale(-1.25 1.25)" />
+
+    <%# Two blooms and a bud per repeat, set on alternating sides of the stem so the eye reads a
+        climb rather than a stack. %>
+    <use href="#rose-bud-art" transform="translate(64 <%= y + 32 %>) rotate(24) scale(1.15)" />
+    <use href="#rose-bloom-art" transform="translate(30 <%= y + 56 %>) scale(1.55)" />
+    <use href="#rose-bloom-art" transform="translate(70 <%= y + 152 %>) scale(1.35)" />
+    <use href="#rose-bud-art" transform="translate(36 <%= y + 186 %>) rotate(-20) scale(1)" />
+  <% } %>
+</svg>

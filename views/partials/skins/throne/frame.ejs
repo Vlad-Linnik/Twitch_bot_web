@@ -1,0 +1,11 @@
+<%# The ring around the portrait: a laurel wreath. 26 copies of one leaf rotated around the
+    centre - drawing it as a loop keeps the ring even and the markup short. %>
+<svg class="throne-medallion__laurel" viewBox="0 0 200 200" role="presentation" aria-hidden="true">
+  <circle cx="100" cy="100" r="78" fill="none" stroke="var(--throne-gold-deep)" stroke-width="2" opacity="0.8" />
+  <% for (let i = 0; i < 26; i++) { %>
+    <ellipse cx="100" cy="22" rx="6.5" ry="12"
+             transform="rotate(<%= (360 / 26) * i %> 100 100) rotate(<%= i % 2 ? 18 : -18 %> 100 22)"
+             fill="url(#throne-gold)" opacity="<%= i % 2 ? 0.85 : 1 %>" />
+  <% } %>
+  <circle cx="100" cy="100" r="63" fill="none" stroke="url(#throne-gold)" stroke-width="5" />
+</svg>

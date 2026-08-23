@@ -1,0 +1,68 @@
+<%# Paint servers and reusable ornaments for the rose bower.
+
+    The gradient ids are the shared vocabulary every skin defines (`throne-gold`,
+    `throne-gold-flat` - the metal ramp and its flat version). Everything else here is this
+    skin's own: three drawn ornaments that the garland, the vines, the wreath, the seat and the
+    portrait ring all <use>, so one bloom is described once and every flower in the room is the
+    same flower. %>
+<linearGradient id="throne-gold" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0%" stop-color="var(--throne-gold-bright)" />
+  <stop offset="45%" stop-color="var(--throne-accent)" />
+  <stop offset="100%" stop-color="var(--throne-gold-deep)" />
+</linearGradient>
+<linearGradient id="throne-gold-flat" x1="0" y1="0" x2="1" y2="0">
+  <stop offset="0%" stop-color="var(--throne-gold-deep)" />
+  <stop offset="50%" stop-color="var(--throne-accent)" />
+  <stop offset="100%" stop-color="var(--throne-gold-deep)" />
+</linearGradient>
+
+<%# One bloom, seen from above, drawn at radius 10 around its own origin so a <use> only has to
+    translate and scale. Petals are flat fills rather than a gradient: a gradient resolves against
+    each petal's own bounding box, which would light all fifteen of them identically and flatten
+    the flower instead of rounding it. The ring-by-ring colour walk up the metal ramp is what
+    gives it a lit centre. %>
+<g id="rose-bloom-art">
+  <% for (let i = 0; i < 6; i++) { %>
+    <ellipse cx="0" cy="-6.4" rx="4.4" ry="5"
+             transform="rotate(<%= 60 * i %>)" fill="var(--throne-accent)" />
+  <% } %>
+  <% for (let i = 0; i < 5; i++) { %>
+    <ellipse cx="0" cy="-3.6" rx="3.1" ry="3.6"
+             transform="rotate(<%= 72 * i + 36 %>)" fill="var(--throne-gold-bright)" opacity="0.92" />
+  <% } %>
+  <circle r="2.1" fill="var(--throne-gold-deep)" opacity="0.75" />
+  <circle r="0.9" fill="var(--throne-gold-bright)" />
+</g>
+
+<%# A leaf, growing to the right from its own origin, about 13 long. The midrib is a second path
+    rather than a stroke on the first: a stroked outline would also trace the stem-end, which
+    reads as a hard seam where the leaf meets the vine. %>
+<g id="rose-leaf-art">
+  <path d="M0 0 C 4.5 -4.6, 10.5 -3.4, 13 0.6 C 10.5 5, 4.5 4.4, 0 0 Z" fill="url(#throne-gold-flat)" opacity="0.55" />
+  <path d="M1.2 0.1 C 5 0.2, 8.6 0.4, 11.6 0.7" fill="none"
+        stroke="var(--throne-gold-deep)" stroke-width="0.7" opacity="0.5" stroke-linecap="round" />
+</g>
+
+<%# A closed bud on a short calyx - the punctuation between blooms, so a garland is not fifteen
+    identical circles in a row. %>
+<g id="rose-bud-art">
+  <path d="M0 -7 C 3.6 -7, 5 -3.4, 5 -0.6 C 5 3.4, 2.6 6, 0 6 C -2.6 6, -5 3.4, -5 -0.6 C -5 -3.4, -3.6 -7, 0 -7 Z"
+        fill="var(--throne-accent)" />
+  <path d="M0 -5.4 C 2 -5.4, 2.8 -2.6, 2.8 -0.4 C 2.8 2.4, 1.6 4.4, 0 4.4 Z"
+        fill="var(--throne-gold-bright)" opacity="0.75" />
+  <path d="M-4.6 1.4 C -6.6 4, -6 7, -4.2 8.6 M4.6 1.4 C 6.6 4, 6 7, 4.2 8.6"
+        fill="none" stroke="url(#throne-gold-flat)" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />
+</g>
+
+<%# A ribbon bow, drawn around its own origin with the knot at (0,0) and the tails hanging below.
+    Used at the top of the portrait ring, on the seat's skirt and at the notch of the heart. %>
+<g id="rose-bow-art">
+  <path d="M-1.5 2 C -7 11, -11 19, -8.5 25 C -6.5 21, -4 14, -1 6 Z"
+        fill="var(--throne-accent)" opacity="0.9" />
+  <path d="M1.5 2 C 7 11, 11 19, 8.5 25 C 6.5 21, 4 14, 1 6 Z"
+        fill="var(--throne-accent)" opacity="0.9" />
+  <path d="M0 0 C -13 -11, -24 -5.5, -20.5 2.5 C -17.5 9, -5.5 7.5, 0 0 Z" fill="url(#throne-gold-flat)" />
+  <path d="M0 0 C 13 -11, 24 -5.5, 20.5 2.5 C 17.5 9, 5.5 7.5, 0 0 Z" fill="url(#throne-gold-flat)" />
+  <circle r="3.6" fill="var(--throne-gold-bright)" />
+  <circle r="1.6" fill="var(--throne-gold-deep)" opacity="0.6" />
+</g>

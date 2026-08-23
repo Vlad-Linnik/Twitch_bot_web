@@ -1,19 +1,22 @@
-// Keeps the palette picker in step with the skin picker on /admin/page-themes/:userId.
+// Keeps the skin-scoped pickers in step with the skin picker on /admin/page-themes/:userId.
 //
-// The two lists are not interchangeable: every palette preset belongs to exactly one skin
-// (lib/pageThemeValidation.js's ACCENT_PRESETS), so a form still offering the gilded hall's
-// palettes after the rose room has been chosen offers four values the server will reject back
-// to a default. The template renders every skin's group and disables the ones that do not
-// apply; this only moves which group is live.
+// Two selects are scoped to a skin - the palette and the shipped wallpaper - and neither list is
+// interchangeable: every preset belongs to exactly one skin (lib/pageThemeValidation.js's
+// ACCENT_PRESETS and BACKDROP_PRESETS), so a form still offering the gilded hall's after the rose
+// bower has been chosen offers values the server will reject back to a default. The template
+// renders every skin's group and disables the ones that do not apply; this only moves which group
+// is live. Any select marked [data-skin-scoped] joins in, so a third such list needs no change
+// here.
 //
 // Progressive enhancement, not a requirement: without it the groups stay as the server drew
 // them and a save under a freshly-switched skin falls back to that skin's first palette.
 (function () {
   const skinSelect = document.getElementById("theme-skin");
+  const scoped = document.querySelectorAll("select[data-skin-scoped]");
   const presetSelect = document.getElementById("theme-accent-preset");
   const customInput = document.querySelector('input[name="accent.custom"]');
   const presetMode = document.querySelector('input[name="accent.mode"][value="preset"]');
-  if (!skinSelect || !presetSelect) return;
+  if (!skinSelect || !scoped.length) return;
 
   // The colour well starts on the CURRENT palette's accent instead of a hardcoded one. The
   // server deliberately does not know any hex values (lib/pageThemeValidation.js's header), so
@@ -31,10 +34,9 @@
     return value;
   }
 
-  function syncPresets() {
-    const skin = skinSelect.value;
+  function syncOne(select, skin) {
     let firstOfSkin = null;
-    const groups = presetSelect.querySelectorAll("optgroup");
+    const groups = select.querySelectorAll("optgroup");
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
       const belongs = group.getAttribute("data-theme") === skin;
@@ -45,19 +47,23 @@
       if (belongs && !firstOfSkin) firstOfSkin = group.querySelector("option");
     }
 
-    // After a swap the still-selected preset belongs to the other room, and a disabled option
-    // submits nothing at all - so move to the new skin's first palette rather than leaving the
+    // After a swap the still-selected value belongs to the other room, and a disabled option
+    // submits nothing at all - so move to the new skin's first entry rather than leaving the
     // field in a state that only looks chosen.
-    const selected = presetSelect.options[presetSelect.selectedIndex];
+    const selected = select.options[select.selectedIndex];
     const selectedGroup = selected && selected.parentElement;
     const stillValid = selectedGroup && selectedGroup.getAttribute("data-theme") === skin;
     if (!stillValid && firstOfSkin) firstOfSkin.selected = true;
   }
 
+  function syncPresets() {
+    for (let i = 0; i < scoped.length; i++) syncOne(scoped[i], skinSelect.value);
+  }
+
   // Only while the form is on "accent from palette": once a custom colour has been chosen, the
   // well holds the user's own value and nothing here may overwrite it.
   function syncCustomWell() {
-    if (!customInput || !presetMode || !presetMode.checked) return;
+    if (!customInput || !presetSelect || !presetMode || !presetMode.checked) return;
     const accent = paletteAccent(skinSelect.value, presetSelect.value);
     if (/^#[0-9a-f]{6}$/i.test(accent)) customInput.value = accent.toLowerCase();
   }
@@ -66,7 +72,7 @@
     syncPresets();
     syncCustomWell();
   });
-  presetSelect.addEventListener("change", syncCustomWell);
+  if (presetSelect) presetSelect.addEventListener("change", syncCustomWell);
   syncPresets();
   syncCustomWell();
 })();

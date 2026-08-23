@@ -1641,7 +1641,10 @@
       "backdropPreset": {
         "hall": "Hall",
         "ceiling": "Ceiling",
-        "colonnade": "Colonnade"
+        "colonnade": "Colonnade",
+        "blossom": "Blossom",
+        "peonies": "Peonies",
+        "garden": "Flower bed"
       },
       "fieldBackdropFile": "Custom backdrop image",
       "fieldMedallion": "Medallion portrait",

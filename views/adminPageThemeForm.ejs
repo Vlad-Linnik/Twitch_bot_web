@@ -81,7 +81,7 @@
             is live as the skin changes, without a round-trip. With the script absent the groups
             stay as the server drew them, and a save under a freshly-switched skin falls back to
             that skin's first palette - never to a preset from the other room. %>
-        <select name="accent.preset" id="theme-accent-preset"
+        <select name="accent.preset" id="theme-accent-preset" data-skin-scoped
                 class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600">
           <% constants.THEMES.forEach(function(name) { %>
             <optgroup label="<%= t('admin.pageThemes.themeName.' + name) %>" data-theme="<%= name %>"
@@ -119,12 +119,20 @@
             <%= t('admin.pageThemes.backdropMode.' + mode) %>
           </label>
         <% }) %>
-        <select name="backdrop.preset"
+        <%# Grouped by skin for the same reason the palette is: the shipped wallpapers belong to
+            one room each. public/js/page-theme-form.js swaps the live group with the skin. %>
+        <select name="backdrop.preset" id="theme-backdrop-preset" data-skin-scoped
                 class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600">
-          <% constants.BACKDROP_PRESETS.forEach(function(preset) { %>
-            <option value="<%= preset %>" <%= theme.backdrop.preset === preset ? 'selected' : '' %>>
-              <%= t('admin.pageThemes.backdropPreset.' + preset) %>
-            </option>
+          <% constants.THEMES.forEach(function(name) { %>
+            <optgroup label="<%= t('admin.pageThemes.themeName.' + name) %>" data-theme="<%= name %>"
+                      <%= theme.theme === name ? '' : 'disabled hidden' %>>
+              <% constants.BACKDROP_PRESETS[name].forEach(function(preset) { %>
+                <option value="<%= preset %>"
+                        <%= theme.theme === name && theme.backdrop.preset === preset ? 'selected' : '' %>>
+                  <%= t('admin.pageThemes.backdropPreset.' + preset) %>
+                </option>
+              <% }) %>
+            </optgroup>
           <% }) %>
         </select>
         <select name="backdrop.scope"
