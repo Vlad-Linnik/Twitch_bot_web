@@ -25,6 +25,7 @@ const { isKnownBotName } = require("../config/knownBots");
 const router = express.Router();
 
 const TOP_CHATTERS = 10;
+const TOP_MENTIONS = 10;
 const MOD_ACTIONS_PER_PAGE = 25;
 
 // Compact duration for the mod-actions table (replaces the old free-text reason column):
@@ -54,7 +55,24 @@ async function withMyChatterRow(rows, channelLogin, userId, period) {
   if (!me) return { rows: flagged, myRow: null };
 
   const profile = await profileCacheRepo.getOrFetchProfile(me.userId).catch(() => null);
-  return { rows: flagged, myRow: { ...me, color: profile?.chatColor ?? null } };
+  return {
+    rows: flagged,
+    myRow: { ...me, color: profile?.chatColor ?? null, avatarUrl: profile?.avatarUrl ?? null },
+  };
+}
+
+// Avatar + chat color for a leaderboard row, in ONE batched profile read (getOrFetchProfiles:
+// one $in against the cache, one Helix call for whatever is stale) rather than a lookup per row.
+// Fail-soft throughout: a row with no id (a mentioned login that resolves to no identity) or an
+// unresolvable profile keeps its place and renders as a monogram, because a board with a hole in
+// it is worse than a board with a missing picture.
+async function withRowProfiles(rows) {
+  const ids = rows.map((row) => row.userId).filter(Boolean);
+  const profiles = ids.length ? await profileCacheRepo.getOrFetchProfiles(ids).catch(() => new Map()) : new Map();
+  return rows.map((row) => {
+    const profile = row.userId ? profiles.get(String(row.userId)) : null;
+    return { ...row, color: profile?.chatColor ?? null, avatarUrl: profile?.avatarUrl ?? null };
+  });
 }
 
 // Same rationale as routes/userDashboard.js: requireLevel() renders an HTML error page, which is
@@ -162,10 +180,13 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
 
     const period = limits.resolvePeriod(req.query.period, { max: limits.MAX_CLOUD_PERIOD });
 
-    const [totals, leaderboard, wordCloud, emoteCloud, trackedEmoteCount, broadcaster, permission, sessions] =
+    const [totals, leaderboard, mentionBoard, wordCloud, emoteCloud, trackedEmoteCount, broadcaster, permission, sessions] =
       await Promise.all([
         statsRepo.getChannelTotals(channel.channelLogin),
         statsRepo.getLeaderboard(channel.channelLogin, TOP_CHATTERS),
+        // All-time on first paint, like Top Chatters next to it - the toggle re-fetches via
+        // stats.json?component=mentions.
+        userStatsRepo.getChannelTopMentions(channel.channelLogin, "all", TOP_MENTIONS),
         wordStatsRepo.getChannelWordCloud(channel.channelLogin, period),
         wordStatsRepo.getChannelEmoteCloud(channel.channelLogin, period, limits.EMOTE_CLOUD_SIZE),
         wordStatsRepo.getTrackedEmoteCount(channel.channelLogin),
@@ -191,20 +212,15 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       endedAt: s.endedAt,
     }));
 
-    // Twitch chat color per top chatter - TOP_CHATTERS lookups against the local profile cache
-    // (each one only hits Helix when its entry is missing/stale). Fail-soft: no color, no problem.
-    const profiles = await Promise.all(
-      leaderboard.map((u) => profileCacheRepo.getOrFetchProfile(u.userId).catch(() => null))
-    );
-    const topChattersWithColor = leaderboard.map((u, i) => ({ ...u, color: profiles[i]?.chatColor ?? null }));
     const { rows: topChatters, myRow: topChattersMyRow } = await withMyChatterRow(
-      topChattersWithColor,
+      await withRowProfiles(leaderboard),
       channel.channelLogin,
       req.user?.userId,
       "all"
     );
 
     const emotes = await withEmoteImages(channel.channelLogin, emoteCloud.emotes);
+    const topMentions = await withRowProfiles(mentionBoard.mentions);
 
     res.render("statisticsChat", {
       channel,
@@ -215,6 +231,8 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       // The server always renders the all-time board (getLeaderboard IS period=all); the toggle
       // starts there and only a change re-fetches via stats.json?component=topchatters.
       topChattersPeriod: "all",
+      topMentions,
+      topMentionsPeriod: "all",
       trackedEmoteCount,
       period,
       periods: limits.PERIODS,
@@ -403,13 +421,17 @@ router.get("/:channel/stats.json", statsReadLimiter, async (req, res, next) => {
       }
       case "topchatters": {
         const chatters = await statsRepo.getTopChatters(channel.channelLogin, period, TOP_CHATTERS);
-        // Same per-chatter color join the initial page render does - cache-backed, fail-soft.
-        const profiles = await Promise.all(
-          chatters.map((u) => profileCacheRepo.getOrFetchProfile(u.userId).catch(() => null))
-        );
-        const chattersWithColor = chatters.map((u, i) => ({ ...u, color: profiles[i]?.chatColor ?? null }));
-        const { rows, myRow } = await withMyChatterRow(chattersWithColor, channel.channelLogin, req.user?.userId, period);
+        // Same avatar/color join the initial page render does - cache-backed, fail-soft.
+        const decorated = await withRowProfiles(chatters);
+        const { rows, myRow } = await withMyChatterRow(decorated, channel.channelLogin, req.user?.userId, period);
         return res.json({ period, chatters: rows, myRow });
+      }
+      case "mentions": {
+        // Not capped to MAX_CLOUD_PERIOD: this is not a cloud. UserMentionStats is ~84k rows
+        // against ChatWordStats' ~2.2M, and its widest range measures in single-digit ms.
+        const mentionPeriod = limits.resolvePeriod(req.query.period);
+        const board = await userStatsRepo.getChannelTopMentions(channel.channelLogin, mentionPeriod, TOP_MENTIONS);
+        return res.json({ period: board.period, mentions: await withRowProfiles(board.mentions) });
       }
       default:
         return res.status(400).json({ error: "unknown_component" });

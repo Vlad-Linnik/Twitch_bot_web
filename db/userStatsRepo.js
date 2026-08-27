@@ -10,6 +10,7 @@ const { connect } = require("./connection");
 const { dayBucket, LIFETIME_BUCKET } = require("../lib/textStats");
 const limits = require("../config/statsLimits");
 const { createCache } = require("../lib/queryCache");
+const { isKnownBotName } = require("../config/knownBots");
 
 // A user page's standing/heatmap/volume/mentions are the same for every viewer of that profile
 // (privacy flags are checked by the route before these run, not baked into the query) - cached
@@ -304,6 +305,121 @@ async function getMentionStats(channelLogin, identity, requestedPeriod) {
   });
 }
 
+// Over-fetch factor: rows are dropped (bots) and merged (aliases) after the read, so asking the
+// index for exactly `limit` would leave the board short. See getChannelTopMentions below.
+const MENTION_FETCH_FACTOR = 4;
+
+/**
+ * The channel's most-mentioned people, for the board next to Top Chatters on
+ * /<channel>/statistics/chat.
+ *
+ * Same collection as getMentionStats above, read the other way round: that one asks "how often
+ * was THIS user mentioned", this one asks "who does this channel talk about". Both directions
+ * are covered by UserMentionStats' {channel, date, count, mentionedLogin} index - `all` reads
+ * the precomputed epoch-sentinel row as a top-N index scan, a range $groups the (small: ~12k
+ * distinct logins) day rows.
+ *
+ * Two things happen after the read, and both are why MENTION_FETCH_FACTOR over-fetches rather
+ * than asking for exactly `limit`:
+ *
+ *   - Known bots are dropped. "@bot !command" is addressing a machine, not talking about a
+ *     person, and a channel's bot out-ranks most of its regulars on volume alone - measured on
+ *     the current data it lands inside the top 10 of every channel tracked.
+ *   - Aliases are merged. Mentions are keyed by the login AS TYPED (see getMentionStats), so a
+ *     renamed user's mentions are split across their handles; UserIdentities' nickname history
+ *     is what puts them back together. The merge only sees the rows fetched here, so someone
+ *     whose every alias falls below the fetch window is still under-counted - the over-fetch
+ *     makes that unlikely rather than impossible. Exactness would cost a second pass per row.
+ *
+ * A login that resolves to no identity is kept, with `userId: null` - the channel talks about
+ * people who have never typed in it (other streamers, absent friends), and dropping them would
+ * misrepresent the board. The caller renders those without a profile link.
+ */
+async function getChannelTopMentions(channelLogin, requestedPeriod, requestedLimit) {
+  const channel = withHash(channelLogin);
+  const period = limits.resolvePeriod(requestedPeriod);
+  const limit = limits.clampLimit(requestedLimit, limits.DEFAULT_LEADERBOARD, limits.MAX_LEADERBOARD);
+
+  const key = `topmentions:${channel}:${period}:${limit}`;
+  return withCache(key, async () => {
+    const { userMentionStats, userIdentities } = await ensureInitialized();
+    const start = limits.periodStart(period);
+    const fetchSize = limit * MENTION_FETCH_FACTOR;
+
+    let rows;
+    if (start === null) {
+      rows = await userMentionStats
+        .find({ channel, date: LIFETIME_BUCKET }, { projection: { _id: 0, mentionedLogin: 1, count: 1 } })
+        .sort({ count: -1 })
+        .limit(fetchSize)
+        .toArray();
+    } else {
+      // $gte start excludes the epoch row (1970 < any real window), so the all-time total can
+      // never be double-counted into a range.
+      rows = await userMentionStats
+        .aggregate(
+          [
+            { $match: { channel, date: { $gte: start } } },
+            { $group: { _id: "$mentionedLogin", count: { $sum: "$count" } } },
+            { $sort: { count: -1 } },
+            { $limit: fetchSize },
+            { $project: { _id: 0, mentionedLogin: "$_id", count: 1 } },
+          ],
+          { allowDiskUse: false } // fail loudly rather than silently spilling to disk on the VPS
+        )
+        .toArray();
+    }
+
+    rows = rows.filter((row) => !isKnownBotName(row.mentionedLogin));
+    if (rows.length === 0) return { period, mentions: [] };
+
+    // login -> identity, in one query. UserIdentities is indexed on userId only, so this is a
+    // collection scan (~20k docs, ~60ms) - the same scan findUserByName does on every profile
+    // page view, and here it runs once per cache window rather than per request.
+    const logins = rows.map((row) => row.mentionedLogin);
+    const identities = await userIdentities
+      .find(
+        { $or: [{ currentUserName: { $in: logins } }, { "nicknames.name": { $in: logins } }] },
+        { projection: { _id: 0, userId: 1, currentUserName: 1, "nicknames.name": 1 } }
+      )
+      .toArray();
+
+    const identityByLogin = new Map();
+    for (const doc of identities) {
+      for (const alias of [doc.currentUserName, ...(doc.nicknames || []).map((n) => n.name)]) {
+        if (alias) identityByLogin.set(String(alias).toLowerCase(), doc);
+      }
+    }
+
+    const merged = new Map();
+    for (const row of rows) {
+      const identity = identityByLogin.get(row.mentionedLogin);
+      // Unresolved logins key on the typed login, so two different unknowns never collapse.
+      const mergeKey = identity ? `id:${identity.userId}` : `login:${row.mentionedLogin}`;
+      const existing = merged.get(mergeKey);
+      if (existing) {
+        existing.count += row.count;
+        continue;
+      }
+      merged.set(mergeKey, {
+        userId: identity ? String(identity.userId) : null,
+        // The CURRENT handle for a resolved user (the old one would link to a stale name), the
+        // typed login otherwise.
+        userName: identity ? identity.currentUserName : row.mentionedLogin,
+        count: row.count,
+      });
+    }
+
+    // Re-sorted after the merge: two aliases summing past the row above them changes the order.
+    const mentions = [...merged.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit)
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+
+    return { period, mentions };
+  });
+}
+
 /**
  * Prefix suggestions for the "Find a user" typeahead on /statistics/chat.
  *
@@ -353,4 +469,5 @@ module.exports = {
   getMessageVolume,
   getLifetimeStanding,
   getMentionStats,
+  getChannelTopMentions,
 };

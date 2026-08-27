@@ -123,6 +123,7 @@
           <% const medal = u.rank === 1 ? '👑' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : null; %>
           <li class="flex items-center gap-3 px-4 py-2.5<%= u.isMe ? ' bg-purple-500/10' : '' %>">
             <span class="w-6 shrink-0 text-center <%= medal ? 'text-base' : 'text-xs text-neutral-600 tabular-nums' %>"><%= medal || u.rank %></span>
+            <%- include('partials/chatterAvatar', { url: u.avatarUrl, name: u.userName }) %>
             <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(u.userName) %>" data-vt-name="user-header"
                class="hover:underline truncate flex-1 min-w-0 <%= u.rank <= 3 ? 'font-medium' : '' %> <%= u.color ? '' : (u.isMe ? 'text-purple-300' : 'text-neutral-200') %>"
                <% if (u.color) { %>style="color: <%= u.color %>"<% } %>><%= u.userName %></a>
@@ -139,6 +140,7 @@
         <% if (topChattersMyRow) { %>
           <li id="top-chatters-me-row" class="flex items-center gap-3 px-4 py-2.5 bg-purple-500/10">
             <span class="w-6 shrink-0 text-center text-xs text-neutral-600 tabular-nums"><%= topChattersMyRow.rank %></span>
+            <%- include('partials/chatterAvatar', { url: topChattersMyRow.avatarUrl, name: topChattersMyRow.userName }) %>
             <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(topChattersMyRow.userName) %>" data-vt-name="user-header"
                class="hover:underline truncate flex-1 min-w-0 <%= topChattersMyRow.color ? '' : 'text-purple-300' %>"
                <% if (topChattersMyRow.color) { %>style="color: <%= topChattersMyRow.color %>"<% } %>><%= topChattersMyRow.userName %></a>
@@ -148,17 +150,52 @@
       </ol>
     </section>
 
-    <!-- Emote cloud: real emote images (7TV / Twitch global), sized by usage, period-switchable -->
-    <section data-component="emotes">
+    <!-- Most mentioned people: who the channel TALKS ABOUT, as opposed to who talks (Top Chatters
+         to the left). Sourced from UserMentionStats - @-mentions only, bots excluded, a renamed
+         user's handles summed. A row the identity index couldn't resolve (someone mentioned who
+         has never typed here) has no avatar and no profile link. -->
+    <section data-component="mentions">
       <div class="flex items-center justify-between mb-3 gap-4">
-        <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.topEmotes') %></h2>
-        <%- include('partials/periodToggle', { periods, period, component: 'emotes' }) %>
+        <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.topMentions') %></h2>
+        <%- include('partials/periodToggle', { periods, period: topMentionsPeriod, component: 'mentions' }) %>
       </div>
-      <div id="emote-cloud"
-           class="relative overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 min-h-64"></div>
-      <p id="emote-cloud-empty" class="text-xs text-neutral-600 mt-2" hidden><%= t('channelDashboard.noTrackedEmotes') %></p>
+      <ol id="top-mentions"
+          data-empty-text="<%= t('channelDashboard.noMentions') %>"
+          class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+        <% topMentions.forEach(function(u) { %>
+          <li class="flex items-center gap-3 px-4 py-2.5">
+            <span class="w-6 shrink-0 text-center text-xs text-neutral-600 tabular-nums"><%= u.rank %></span>
+            <%- include('partials/chatterAvatar', { url: u.avatarUrl, name: u.userName }) %>
+            <% if (u.userId) { %>
+              <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(u.userName) %>" data-vt-name="user-header"
+                 class="hover:underline truncate flex-1 min-w-0 <%= u.color ? '' : 'text-neutral-200' %>"
+                 <% if (u.color) { %>style="color: <%= u.color %>"<% } %>><%= u.userName %></a>
+            <% } else { %>
+              <span class="truncate flex-1 min-w-0 text-neutral-400"><%= u.userName %></span>
+            <% } %>
+            <span class="text-neutral-500 text-sm tabular-nums shrink-0"><%= u.count.toLocaleString() %></span>
+          </li>
+        <% }) %>
+        <% if (topMentions.length === 0) { %>
+          <li class="px-4 py-6 text-center text-neutral-600 text-sm"><%= t('channelDashboard.noMentions') %></li>
+        <% } %>
+      </ol>
     </section>
+
   </div>
+
+  <!-- Emote cloud: real emote images (7TV / Twitch global), sized by usage, period-switchable.
+       Full page width, like the word cloud above it: CloudLayout's spiral fills the box it is
+       given, so a half-width box wastes the room a cloud needs to spread out. -->
+  <section class="mb-12" data-component="emotes">
+    <div class="flex items-center justify-between mb-3 gap-4">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.topEmotes') %></h2>
+      <%- include('partials/periodToggle', { periods, period, component: 'emotes' }) %>
+    </div>
+    <div id="emote-cloud"
+         class="relative overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 min-h-64"></div>
+    <p id="emote-cloud-empty" class="text-xs text-neutral-600 mt-2" hidden><%= t('channelDashboard.noTrackedEmotes') %></p>
+  </section>
 
   <!-- Find a user: Top Chatters only links the top 10, so this is the only way to reach an
        arbitrary profile without typing the URL by hand. Suggestions cover partial/mistyped

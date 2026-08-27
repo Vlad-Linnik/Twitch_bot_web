@@ -18,7 +18,13 @@
   const base = `/${encodeURIComponent(boot.channel)}`;
   // Top chatters is server-rendered all-time on first paint (see routes/statistics.js), so its
   // toggle starts at "all" regardless of the page-level cloud period.
-  const periods = { wordcloud: boot.period, emotes: boot.period, search: boot.period, topchatters: "all" };
+  const periods = {
+    wordcloud: boot.period,
+    emotes: boot.period,
+    search: boot.period,
+    topchatters: "all",
+    mentions: "all",
+  };
 
   // ---------------------------------------------------------------------------------------
   // Word cloud - sqrt scaling, so AREA rather than height tracks frequency (a word used 50x more
@@ -103,6 +109,31 @@
   }
 
   // ---------------------------------------------------------------------------------------
+  // Row avatar - the DOM twin of views/partials/chatterAvatar.ejs, used by both boards. Keep the
+  // two in step: a period switch must be indistinguishable from a fresh page load, and the 24px
+  // monogram fallback is what keeps the two side-by-side boards aligned when a picture is missing.
+  // ---------------------------------------------------------------------------------------
+  function rowAvatar(url, name) {
+    if (url) {
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      img.width = 24;
+      img.height = 24;
+      img.loading = "lazy";
+      img.className = "w-6 h-6 rounded-full ring-1 ring-neutral-800 shrink-0";
+      return img;
+    }
+    const span = document.createElement("span");
+    span.setAttribute("aria-hidden", "true");
+    span.className =
+      "w-6 h-6 rounded-full grid place-items-center bg-neutral-800 text-neutral-400 " +
+      "text-[10px] font-semibold ring-1 ring-neutral-800 shrink-0";
+    span.textContent = (name || "?").charAt(0).toUpperCase();
+    return span;
+  }
+
+  // ---------------------------------------------------------------------------------------
   // Top chatters - rebuilt on period change, mirroring the exact markup statisticsChat.ejs
   // renders on first paint (same classes) so a toggled list is indistinguishable from a fresh
   // page load. Names come from chat - textContent only, never innerHTML.
@@ -146,7 +177,7 @@
       count.className = "text-neutral-500 text-sm tabular-nums shrink-0";
       count.textContent = Number(u.messageCount).toLocaleString();
 
-      li.append(rank, name, count);
+      li.append(rank, rowAvatar(u.avatarUrl, u.userName), name, count);
       node.appendChild(li);
     });
 
@@ -173,9 +204,59 @@
       count.className = "text-neutral-500 text-sm tabular-nums shrink-0";
       count.textContent = Number(u.messageCount).toLocaleString();
 
-      li.append(rank, name, count);
+      li.append(rank, rowAvatar(u.avatarUrl, u.userName), name, count);
       node.appendChild(li);
     }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Most mentioned people - same rebuild-on-period-change contract as Top Chatters above, same
+  // markup as statisticsChat.ejs renders on first paint. Logins come from chat text, so name and
+  // monogram go in as textContent; a row with no userId (a mentioned login that resolves to no
+  // identity) gets no link, matching the server's render.
+  // ---------------------------------------------------------------------------------------
+  function renderTopMentions(payload) {
+    const node = $("top-mentions");
+    if (!node) return;
+    node.textContent = "";
+
+    const mentions = payload.mentions || [];
+    if (mentions.length === 0) {
+      const li = document.createElement("li");
+      li.className = "px-4 py-6 text-center text-neutral-600 text-sm";
+      li.textContent = node.dataset.emptyText || "";
+      node.appendChild(li);
+      return;
+    }
+
+    mentions.forEach((u) => {
+      const li = document.createElement("li");
+      // py-2.5 + a 24px avatar makes this row exactly as tall as a Top Chatters row, so the two
+      // boards side by side stay line-for-line aligned.
+      li.className = "flex items-center gap-3 px-4 py-2.5";
+
+      const rank = document.createElement("span");
+      rank.className = "w-6 shrink-0 text-center text-xs text-neutral-600 tabular-nums";
+      rank.textContent = String(u.rank);
+
+      const name = document.createElement(u.userId ? "a" : "span");
+      if (u.userId) {
+        name.href = `${base}/user/${encodeURIComponent(u.userName)}`;
+        name.dataset.vtName = "user-header";
+      }
+      name.className = u.userId
+        ? "hover:underline truncate flex-1 min-w-0" + (u.color ? "" : " text-neutral-200")
+        : "truncate flex-1 min-w-0 text-neutral-400";
+      if (u.userId && u.color) name.style.color = u.color;
+      name.textContent = u.userName;
+
+      const count = document.createElement("span");
+      count.className = "text-neutral-500 text-sm tabular-nums shrink-0";
+      count.textContent = Number(u.count).toLocaleString();
+
+      li.append(rank, rowAvatar(u.avatarUrl, u.userName), name, count);
+      node.appendChild(li);
+    });
   }
 
   // ---------------------------------------------------------------------------------------
@@ -194,6 +275,7 @@
     if (component === "wordcloud") renderCloud($("channel-word-cloud"), data.words);
     if (component === "emotes") renderEmoteCloud(data);
     if (component === "topchatters") renderTopChatters(data);
+    if (component === "mentions") renderTopMentions(data);
   }
 
   document.querySelectorAll("[data-period-toggle]").forEach((group) => {
