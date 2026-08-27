@@ -81,19 +81,12 @@
 
   const COLUMN_PX = 2; // terrain resolution; also the width of the steepest wall we can represent
 
-  // Steepest ground a runner can be asked to climb, as a rise/run gradient. A one-bucket spike in
-  // the message line is a vertical tower several times taller than any survivable jump, so left
-  // as drawn it is not an obstacle but a gate: whoever bounced over it was home in six seconds
-  // and everyone else ground against it until the ray arrived - which is exactly the "one runner
-  // leads and there is no race" problem. Slope-limiting the ground along the direction of travel
-  // keeps every peak at its own height but builds a ramp up to it on the approach side, so a
-  // spike costs the whole field a slow climb instead of deciding the race. Kept below MU_STATIC's
-  // hold angle on purpose, so a runner that stops half-way up a ramp stays there instead of
-  // sliding back down. This shapes only what the physics stands on; the chart is drawn untouched.
-  const MAX_GROUND_GRADIENT = 1.0;
   const BALL_R_BASE = 15;
   const BALL_R_MIN = 12;
-  const BALL_R_MAX = 26;
+  // Capped well below what the width scaling alone would give. A big disc resting on a steep face
+  // sits its own radius away from the line along the normal, which reads as the runner hovering
+  // beside the chart rather than standing on it.
+  const BALL_R_MAX = 20;
   const RACERS = 5;
 
   const GRAVITY_BASE = 1600; // px/s^2
@@ -102,12 +95,22 @@
   // springy runner skips over exactly the slopes it should be grinding up.
   const RESTITUTION = 0.18;
 
-  // Grip (static) is deliberately far higher than rolling resistance (kinetic). That gap is the
-  // whole "cling to the slope and inch up it" behaviour: an impulse carries a runner part-way up
-  // a face, and grip parks it there instead of letting it slide back, so the next impulse starts
-  // from where the last one ended. MU_STATIC 1.6 holds any slope up to about 58 degrees.
-  const MU_STATIC = 1.6;
-  const ROLL_MU = 0.60;
+  // These CLING rather than obey a friction cone: below STATIC_EPS along the surface a runner
+  // latches wherever it is, at any angle, a sheer face included. That is not a friction model and
+  // is not pretending to be one - it is the snail, and it is what makes this terrain climbable at
+  // all. Under real Coulomb friction a runner slid back down anything past its hold angle, so a
+  // one-bucket message spike (a sheer wall around 139px tall, against a jump that clears 78px)
+  // was not an obstacle but a gate: whoever bounced over it was home in six seconds while the
+  // rest ground against it until the ray arrived. Clinging means an impulse's gain is KEPT, so
+  // the next one starts where the last ended and a spike costs the whole field a slow climb.
+  //
+  // The first fix for that gate was slope-limiting the ground into ramps. It worked and looked
+  // wrong: raising the floor beside a peak left runners visibly hovering next to the chart rather
+  // than standing on it. Climbing the real line is the version that also reads correctly.
+  const ROLL_MU = 0.29;
+
+  // Contact tolerance, in pixels. Not a tuning knob - see resolveGround().
+  const CONTACT_SKIN = 1.5;
   const STATIC_EPS_BASE = 22; // speed below which grip is allowed to latch a runner in place
 
   const MAX_SPEED_BASE = 380;
@@ -118,7 +121,7 @@
   // lurching, and a tall jump lets one runner clear half the map in a single hop and settle the
   // race before it has started - the pace should come from grinding forward, not from leaping.
   //
-  // The push range is deliberately NARROW (99..126 rather than something like 70..155 at the
+  // The push range is deliberately NARROW (114..143 rather than something like 80..177 at the
   // same average). Both tune to the same race length, but the wide range spreads the field out:
   // measured over 12 races each, the wide one had the leader home anywhere between 20s and 29s,
   // the narrow one between 18s and 24s, with correspondingly fewer runners left behind for the
@@ -131,8 +134,8 @@
   const IMPULSE_MIN_S = 0.25;
   const IMPULSE_MAX_S = 0.7;
   const JUMP_CHANCE = 0.22;
-  const PUSH_MIN_BASE = 99;
-  const PUSH_MAX_BASE = 126;
+  const PUSH_MIN_BASE = 114;
+  const PUSH_MAX_BASE = 143;
   const JUMP_MIN_BASE = 95;
   const JUMP_MAX_BASE = 165;
 
@@ -377,13 +380,6 @@
       }
     }
 
-    // Slope limit, applied left to right: bounding how far the ground may DROP per column going
-    // right is the same as bounding how far it may RISE per column going left, which is the
-    // direction everyone runs. Only ever raises the ground, so the floor still sits at or above
-    // both curves and no hole can open under a runner.
-    const maxRise = MAX_GROUND_GRADIENT * COLUMN_PX;
-    for (let i = 1; i < columns; i++) ys[i] = Math.min(ys[i], ys[i - 1] + maxRise);
-
     const points = new Array(columns);
     for (let i = 0; i < columns; i++) points[i] = { x: i * COLUMN_PX, y: ys[i] };
     return { points, width, height };
@@ -404,13 +400,19 @@
   function resolveGround(ball, terrain) {
     const points = terrain.points;
     const r = P.ballR;
+    // Touching counts, not just overlapping. Collision resolution leaves a runner exactly tangent
+    // to the surface, and a runner tangent to a SHEER face is not penetrating anything - so with
+    // an overlap-only test it reported no contact at all, the cling never engaged, and it slid
+    // straight back down every wall it had just climbed. Measured before this skin existed: all
+    // five spent the whole race pinned at the foot of the same message spike.
+    const reach = r + CONTACT_SKIN;
     let contact = null;
 
     for (let pass = 0; pass < 3; pass++) {
-      const from = Math.max(0, Math.floor((ball.x - r) / COLUMN_PX) - 1);
-      const to = Math.min(points.length - 2, Math.ceil((ball.x + r) / COLUMN_PX) + 1);
+      const from = Math.max(0, Math.floor((ball.x - reach) / COLUMN_PX) - 1);
+      const to = Math.min(points.length - 2, Math.ceil((ball.x + reach) / COLUMN_PX) + 1);
 
-      let deepest = null;
+      let nearest = null;
       for (let i = from; i <= to; i++) {
         const a = points[i];
         const b = points[i + 1];
@@ -424,30 +426,35 @@
         const dx = ball.x - cx;
         const dy = ball.y - cy;
         const distSq = dx * dx + dy * dy;
-        if (distSq >= r * r) continue;
-        const depth = r - Math.sqrt(distSq);
-        if (!deepest || depth > deepest.depth) deepest = { depth, dx, dy, dist: r - depth };
+        if (distSq >= reach * reach) continue;
+        const dist = Math.sqrt(distSq);
+        if (!nearest || dist < nearest.dist) nearest = { dist, dx, dy };
       }
-      if (!deepest) break;
+      if (!nearest) break;
 
       // Dead centre on the surface (dist 0) has no usable direction - push straight up, which is
       // the only sane guess and cannot happen twice in a row once the runner has been moved.
       let nx = 0;
       let ny = -1;
-      if (deepest.dist > 0.0001) {
-        nx = deepest.dx / deepest.dist;
-        ny = deepest.dy / deepest.dist;
+      if (nearest.dist > 0.0001) {
+        nx = nearest.dx / nearest.dist;
+        ny = nearest.dy / nearest.dist;
       }
+      contact = { nx, ny };
 
-      ball.x += nx * deepest.depth;
-      ball.y += ny * deepest.depth;
+      // Inside the skin but not inside the surface: there is nothing to push out of, and the
+      // contact is already recorded, so the passes are done.
+      if (nearest.dist >= r) break;
+
+      const depth = r - nearest.dist;
+      ball.x += nx * depth;
+      ball.y += ny * depth;
 
       const vn = ball.vx * nx + ball.vy * ny;
       if (vn < 0) {
         ball.vx -= (1 + RESTITUTION) * vn * nx;
         ball.vy -= (1 + RESTITUTION) * vn * ny;
       }
-      contact = { nx, ny };
     }
 
     return contact;
@@ -487,8 +494,12 @@
     if (contact) {
       const nx = contact.nx;
       const ny = contact.ny;
-      // Only a surface actually facing upward counts as ground to jump from; the flank of a
-      // spike does not.
+      // Touching anything at all is what "forward" is measured against; only a surface actually
+      // facing upward is something you could jump off. The flank of a spike is the first and not
+      // the second.
+      ball.nx = nx;
+      ball.ny = ny;
+      ball.contactFor = COYOTE_S;
       if (ny < -0.3) ball.groundedFor = COYOTE_S;
 
       const tx = -ny;
@@ -496,35 +507,80 @@
       let vt = ball.vx * tx + ball.vy * ty;
       const vn = ball.vx * nx + ball.vy * ny;
 
-      const normalLoad = P.gravity * Math.abs(ny);
-      const slide = Math.abs(nx) - MU_STATIC * Math.abs(ny);
-      if (Math.abs(vt) < P.staticEps && slide <= 0) {
-        vt = 0; // grip holds it where the last impulse left it
+      if (Math.abs(vt) < P.staticEps && gravityAlongForward(ball, tx, ty) <= 0) {
+        // The cling, and it only ever holds a runner against sliding BACKWARD. Clinging in both
+        // directions was tried and is far worse than it sounds: it also cancels every descent, so
+        // gravity stops contributing anything at all and the whole race is reduced to the sum of
+        // its pushes - measured, not one runner in sixty reached the finish before the ray.
+        vt = 0;
       } else {
-        const drop = ROLL_MU * normalLoad * dt;
+        const drop = ROLL_MU * P.gravity * Math.abs(ny) * dt;
         vt = Math.abs(vt) <= drop ? 0 : vt - Math.sign(vt) * drop;
       }
 
       ball.vx = vn * nx + vt * tx;
       ball.vy = vn * ny + vt * ty;
-    } else if (ball.groundedFor > 0) {
-      ball.groundedFor -= dt;
+    } else {
+      if (ball.groundedFor > 0) ball.groundedFor -= dt;
+      if (ball.contactFor > 0) ball.contactFor -= dt;
     }
 
     // Rolling without slipping, for the avatar's spin. Purely cosmetic.
     ball.angle += (ball.vx / P.ballR) * dt;
   }
 
+  const groundYAt = (x) => {
+    const i = Math.max(0, Math.min(terrain.points.length - 1, Math.round(x / COLUMN_PX)));
+    return terrain.points[i].y;
+  };
+
+  /**
+   * "Onward" for a runner: the direction of the track itself one ball-radius further along, not
+   * the tangent of whatever surface it happens to be touching.
+   *
+   * Reading it off the contact normal was tried and fails in the exact case it exists for. The
+   * collision picks the NEAREST piece of ground, and a runner standing at the foot of a message
+   * spike is nearest to the flat ground under its feet, not to the wall in front of it - so
+   * "forward" came out horizontal, the push went straight into the wall, and that runner stood
+   * there for the entire race while the ones that happened to touch the wall first climbed it.
+   * Looking ahead along the track sees the wall either way.
+   *
+   * On flat ground this is leftward, on a descent it points down the slope, and against a sheer
+   * face it points almost straight up it - which is what turns a push into a climb, so a runner
+   * scales a spike hugging the drawn line. Off the ground it degrades to plain leftward.
+   */
+  function forwardDirection(ball) {
+    if (!(ball.contactFor > 0)) return { tx: -1, ty: 0 };
+    const ahead = P.ballR;
+    const dx = -ahead;
+    const dy = groundYAt(ball.x - ahead) - groundYAt(ball.x);
+    const len = Math.hypot(dx, dy) || 1;
+    return { tx: dx / len, ty: dy / len };
+  }
+
+  /**
+   * Gravity's component along the runner's FORWARD direction on the surface it is touching.
+   * Negative means the slope is working against it, which is the only case the cling holds.
+   */
+  function gravityAlongForward(ball, tx, ty) {
+    const dir = forwardDirection(ball);
+    const sign = dir.tx * tx + dir.ty * ty >= 0 ? 1 : -1;
+    return P.gravity * ty * sign;
+  }
+
   function fireImpulse(ball) {
-    const grounded = ball.groundedFor > 0;
-    if (grounded && Math.random() < JUMP_CHANCE) {
+    if (ball.groundedFor > 0 && Math.random() < JUMP_CHANCE) {
       ball.vy -= rand(P.jumpMin, P.jumpMax);
       ball.groundedFor = 0;
+      ball.contactFor = 0;
       playSound("jump");
       return;
     }
     // Always leftward. Nobody in this race wants to go back up their own stream.
-    ball.vx -= rand(P.pushMin, P.pushMax);
+    const dir = forwardDirection(ball);
+    const push = rand(P.pushMin, P.pushMax);
+    ball.vx += dir.tx * push;
+    ball.vy += dir.ty * push;
   }
 
   // -----------------------------------------------------------------------------------------
@@ -834,9 +890,13 @@
         vy: 0,
         angle: 0,
         groundedFor: 0,
+        contactFor: 0,
+        nx: 0,
+        ny: -1,
         nextImpulse: 0,
         stuckTimer: 0,
         stuckX: startX,
+        stuckY: startY,
         state: "running",
       });
     });
@@ -915,14 +975,24 @@
 
         ball.stuckTimer += step;
         if (ball.stuckTimer >= STUCK_WINDOW_S) {
-          if (Math.abs(ball.x - ball.stuckX) < P.stuckDx) {
-            ball.vx -= P.stuckPush;
-            ball.vy -= P.stuckJump;
+          // Progress is measured in BOTH axes, not just along the track. A runner part-way up a
+          // spike is barely moving in x by design, so an x-only test called it stuck every two
+          // seconds and "rescued" it with a hop that broke its cling and dropped it back to the
+          // bottom - the anti-stuck rule was undoing the climb it was there to protect.
+          const moved = Math.hypot(ball.x - ball.stuckX, ball.y - ball.stuckY);
+          if (moved < P.stuckDx) {
+            // Along the same forward direction as a normal push, plus a hop: shoving a wedged
+            // runner sideways into whatever wedged it just repeats the wedge.
+            const dir = forwardDirection(ball);
+            ball.vx += dir.tx * P.stuckPush;
+            ball.vy += dir.ty * P.stuckPush - P.stuckJump;
             ball.groundedFor = 0;
+            ball.contactFor = 0;
             playSound("jump");
           }
           ball.stuckTimer = 0;
           ball.stuckX = ball.x;
+          ball.stuckY = ball.y;
         }
 
         stepBall(ball, terrain, step);
