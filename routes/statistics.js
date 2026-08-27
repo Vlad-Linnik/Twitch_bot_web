@@ -28,6 +28,13 @@ const TOP_CHATTERS = 10;
 const TOP_MENTIONS = 10;
 const MOD_ACTIONS_PER_PAGE = 25;
 
+// Stream race (public/js/stream-race.js) - how many names each of the two boards contributes to
+// the pool the client draws its five racers from, and the fewest racers worth starting a race
+// with. A two-horse race still reads as a race; demanding a full five would leave the button
+// permanently absent on any channel quieter than this one.
+const RACE_POOL_PER_BOARD = 10;
+const RACE_MIN_PARTICIPANTS = 2;
+
 // Compact duration for the mod-actions table (replaces the old free-text reason column):
 // the two most significant units of d/h/m/s, e.g. "1h 30m". Language-neutral on purpose -
 // unit letters read the same in both locales, so no per-locale formatting here.
@@ -73,6 +80,49 @@ async function withRowProfiles(rows) {
     const profile = row.userId ? profiles.get(String(row.userId)) : null;
     return { ...row, color: profile?.chatColor ?? null, avatarUrl: profile?.avatarUrl ?? null };
   });
+}
+
+/**
+ * Racers for the stream race on /<channel>/statistics/chat.
+ *
+ * Today's top chatters UNIONED with today's most-mentioned people, rather than either board on
+ * its own: the race is a bit of channel theatre, and drawing only from message counts would run
+ * the same five loudest regulars every time. Someone the channel talks ABOUT earns a lane even
+ * if they never type.
+ *
+ * "Today" is `day`, which on this site means the bucket from local NOON (config/statsLimits.js's
+ * periodStart, mirroring the bot's dayBucket), not a rolling 24h window - the same "today" every
+ * other board on this page shows.
+ *
+ * Deduped on userId where the identity index resolved one and on the lowercased login otherwise,
+ * because getChannelTopMentions legitimately returns `userId: null` for a mentioned login that
+ * has never typed here. Those rows keep their lane and race as a monogram.
+ *
+ * Only ever called for permission <= 1 - an ordinary visitor's page load must not pay for two
+ * aggregations feeding a button they will never be shown.
+ */
+async function buildRacePool(channelLogin) {
+  const [chatters, mentionBoard] = await Promise.all([
+    statsRepo.getTopChatters(channelLogin, "day", RACE_POOL_PER_BOARD),
+    userStatsRepo.getChannelTopMentions(channelLogin, "day", RACE_POOL_PER_BOARD),
+  ]);
+
+  const byKey = new Map();
+  for (const row of [...chatters, ...mentionBoard.mentions]) {
+    if (!row.userName) continue;
+    const key = row.userId ? `id:${row.userId}` : `login:${String(row.userName).toLowerCase()}`;
+    if (!byKey.has(key)) byKey.set(key, { userId: row.userId ?? null, userName: row.userName });
+  }
+  if (byKey.size === 0) return [];
+
+  const withProfiles = await withRowProfiles([...byKey.values()]);
+  // Only what a racer needs to be drawn - no counts or ranks, since the race deliberately keeps
+  // no standings of its own.
+  return withProfiles.map((row) => ({
+    userName: row.userName,
+    avatarUrl: row.avatarUrl,
+    color: row.color,
+  }));
 }
 
 // Same rationale as routes/userDashboard.js: requireLevel() renders an HTML error page, which is
@@ -219,6 +269,14 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       "all"
     );
 
+    // The race needs BOTH a track and runners, and the button is either there and works or is not
+    // rendered at all - there is no disabled state and no "not enough participants" message. So
+    // the pool is resolved here, server-side, before the page is built. Owner/admin only, both
+    // because that is who the feature is for and because it keeps the two extra aggregations off
+    // every public page load.
+    const racePool = permission <= 1 ? await buildRacePool(channel.channelLogin) : [];
+    const canRace = sessions.length > 0 && racePool.length >= RACE_MIN_PARTICIPANTS;
+
     const emotes = await withEmoteImages(channel.channelLogin, emoteCloud.emotes);
     const topMentions = await withRowProfiles(mentionBoard.mentions);
 
@@ -242,6 +300,9 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       tab: "chat",
       sessions: sessionList,
       streamChart,
+      canRace,
+      // Inlined only when the button exists, so the markup never carries a pool nobody can use.
+      racePool: canRace ? racePool : [],
     });
   } catch (err) {
     next(err);

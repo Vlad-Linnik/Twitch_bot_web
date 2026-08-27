@@ -14,6 +14,12 @@
       viewers: t('statistics.streamChart.viewers'),
       messages: t('statistics.streamChart.messages'),
     },
+    canRace,
+    racePool,
+    raceLabels: {
+      destroyed: t('statistics.streamRace.destroyed'),
+      secondsSuffix: t('statistics.streamRace.secondsSuffix'),
+    },
   };
 %>
 
@@ -33,6 +39,14 @@
     <div class="flex items-center justify-between mb-3 gap-4 flex-wrap">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.streamChart.title') %></h2>
       <div class="flex items-center gap-3">
+        <%# Owner/admin only, and only when there is both a track and a field to run on it -
+            routes/statistics.js decides, see buildRacePool(). %>
+        <% if (canRace) { %>
+          <button type="button" id="stream-race-btn"
+                  class="text-xs font-medium px-2.5 py-1 rounded-md border border-purple-700/60 bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 transition-colors">
+            &#127937; <%= t('statistics.streamRace.start') %>
+          </button>
+        <% } %>
         <span id="stream-live-badge" hidden
               class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
           <%= t('statistics.streamChart.live') %>
@@ -69,6 +83,13 @@
                aria-label="<%= t('statistics.streamChart.title') %>"></svg>
           <div id="stream-chart-tooltip"
                class="hidden absolute pointer-events-none z-10 rounded-md border border-neutral-700 bg-neutral-950/95 px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"></div>
+          <%# Race arena - exactly overlays the plot, so the chart underneath IS the track.
+              Runners and the sweeping ray are created by public/js/stream-race.js. %>
+          <% if (canRace) { %>
+            <div id="stream-race-arena" hidden
+                 class="absolute inset-0 z-20 overflow-hidden pointer-events-none"
+                 role="img" aria-label="<%= t('statistics.streamRace.arena') %>"></div>
+          <% } %>
         </div>
         <%# Right axis = messages, its own scale (labels tinted to match the blue message line). %>
         <div id="stream-chart-yaxis-right"
@@ -251,10 +272,35 @@
 
 </main>
 
+<% if (canRace) { %>
+  <%# Race results - a full-page modal, dismissed only by the X or "Got it" (no click-outside),
+      so the standings can't be lost to a stray click on the page behind them. %>
+  <div id="stream-race-results" hidden class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-md rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+      <div class="flex items-center justify-between gap-4 px-5 py-3 border-b border-neutral-800">
+        <p class="text-base font-semibold text-neutral-100"><%= t('statistics.streamRace.resultsTitle') %></p>
+        <button type="button" id="stream-race-results-close" aria-label="<%= t('statistics.streamRace.close') %>"
+                class="text-neutral-500 hover:text-neutral-200 transition-colors text-lg leading-none px-1">&times;</button>
+      </div>
+      <ol id="stream-race-results-list" class="divide-y divide-neutral-800/70"></ol>
+      <div class="flex items-center gap-2 px-5 py-4 border-t border-neutral-800">
+        <button type="button" id="stream-race-again"
+                class="px-4 py-2 rounded-lg border border-purple-700/60 bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 text-sm font-medium transition-colors"><%= t('statistics.streamRace.again') %></button>
+        <button type="button" id="stream-race-ok"
+                class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('statistics.streamRace.gotIt') %></button>
+      </div>
+    </div>
+  </div>
+<% } %>
+
 <%# Chat-derived strings - must not go through a bare JSON.stringify(). See lib/safeJson.js. %>
 <script id="stats-chat-data" type="application/json"><%- safeJson(bootstrap) %></script>
 <script src="<%= asset('/js/cloud-layout.js') %>" defer></script>
 <script src="<%= asset('/js/statistics-chat.js') %>" defer></script>
 <script src="<%= asset('/js/stream-chart.js') %>" defer></script>
+<% if (canRace) { %>
+  <%# Owner/admin only - not shipped to anyone who has no button to press it with. %>
+  <script src="<%= asset('/js/stream-race.js') %>" defer></script>
+<% } %>
 
 <%- include('partials/foot') %>

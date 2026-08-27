@@ -757,6 +757,16 @@
       "selectStream": "Select stream",
       "loading": "Loading…",
       "noSessions": "No stream data collected yet — check back after the channel's next stream."
+    },
+    "streamRace": {
+      "start": "Race",
+      "arena": "Race across the stream chart",
+      "resultsTitle": "Race results",
+      "again": "Race again",
+      "gotIt": "Got it",
+      "close": "Close",
+      "destroyed": "destroyed",
+      "secondsSuffix": "s"
     }
   },
   "news": {

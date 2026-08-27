@@ -450,6 +450,10 @@
     svg.appendChild(
       el("path", {
         d: buildSmoothPath(viewerScreen),
+        // Tagged so public/js/stream-race.js can find this exact curve and sample its
+        // profile as the race's terrain - the race reads the RENDERED path rather than
+        // re-deriving one from the data, so the track always matches what is on screen.
+        "data-series": "viewers",
         fill: "none", stroke: VIEWER_COLOR, "stroke-width": "2",
         "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke",
       })
@@ -457,6 +461,10 @@
     svg.appendChild(
       el("path", {
         d: buildSmoothPath(messageScreen),
+        // Tagged so public/js/stream-race.js can find this exact curve and sample its
+        // profile as the race's terrain - the race reads the RENDERED path rather than
+        // re-deriving one from the data, so the track always matches what is on screen.
+        "data-series": "messages",
         fill: "none", stroke: MESSAGE_COLOR, "stroke-width": "2",
         "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke",
       })
