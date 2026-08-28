@@ -382,49 +382,9 @@ async function getUserNames(userIds) {
   return new Map(docs.map((doc) => [doc.userId, doc.currentUserName]));
 }
 
-/**
- * Chat messages for the auto-answer rule replay ("а что бы бот наделал за последний месяц").
- *
- * Lives here rather than in db/autoAnswersRepo.js because every read of `messages` goes
- * through this module - that is what keeps the `#`-prefix rule in one place.
- *
- * `contains` is a COARSE PREFILTER, not the rule. Matching is done in Node by the shared
- * matcher (stemming, compounds, typos, keyboard layout - none of which Mongo can express), but
- * shipping a month of a busy channel's chat to Node to throw 99.99% of it away is the
- * difference between a 300ms button and a 20-second one. The filter is an unanchored
- * substring of a required word, so it keeps every inflection ("фильтром") and compound
- * ("лутфильтр") the real matcher would want. What it cannot keep is a typo inside those first
- * characters or a message typed in the wrong keyboard layout - the replay therefore slightly
- * UNDER-reports, which is the safe direction for a preview whose job is to reveal false
- * positives.
- *
- * @param {string} channelLogin
- * @param {{since: Date, contains?: string[], limit?: number}} opts
- */
-async function scanRecentMessages(channelLogin, { since, contains = [], limit = 20000 }) {
-  const { messages } = await ensureInitialized();
-  const query = { channel: withHash(channelLogin), timestamp: { $gte: since } };
-
-  const probes = contains
-    .map((word) => String(word || "").trim().toLowerCase().slice(0, 4))
-    .filter((word) => word.length >= 3);
-  if (probes.length) {
-    query.$and = probes.map((word) => ({
-      message: { $regex: word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" },
-    }));
-  }
-
-  return messages
-    .find(query, { projection: { _id: 0, message: 1, userName: 1, timestamp: 1 } })
-    .sort({ timestamp: -1 })
-    .limit(Math.min(Math.max(Number(limit) || 1, 1), 20000))
-    .toArray();
-}
-
 module.exports = {
   getLeaderboard,
   getTopChatters,
-  scanRecentMessages,
   getUserRank,
   getChannelTotals,
   getRecentModActions,

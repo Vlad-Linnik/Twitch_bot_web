@@ -26,7 +26,6 @@ router.use("/", require("./adminApi"));
 // mount.
 router.use("/", require("./customCommands"));
 router.use("/", require("./counters"));
-router.use("/", require("./autoAnswers"));
 router.use("/", require("./longBans"));
 router.use("/", require("./unbanBureau"));
 router.use("/", require("./news"));
