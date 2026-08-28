@@ -1,0 +1,68 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.ai.tabFilter') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <p class="text-neutral-500 text-sm mb-6"><%= t('admin.ai.filterHint') %></p>
+
+  <form method="post" action="/admin/ai/filter" class="mb-8 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-4">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.colText') %></label>
+        <input type="text" name="text" required maxlength="300"
+               class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.colAnswer') %></label>
+        <input type="text" name="answer" required maxlength="500"
+               class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      </div>
+    </div>
+    <button type="submit" class="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('admin.ai.add') %></button>
+  </form>
+
+  <% if (!entries.length) { %>
+    <p class="text-neutral-600 text-sm"><%= t('admin.ai.filterEmpty') %></p>
+  <% } else { %>
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colText') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colAnswer') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colHits') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colSource') %></th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% entries.forEach(function (e) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+                <td class="px-4 py-2 text-neutral-200"><%= e.text %></td>
+                <td class="px-4 py-2 text-neutral-400"><%= e.answer %></td>
+                <td class="px-4 py-2 text-neutral-400 tabular-nums"><%= e.hits || 0 %></td>
+                <td class="px-4 py-2 text-neutral-500"><%= t('admin.ai.source.' + (e.source || 'admin')) %></td>
+                <td class="px-4 py-2 text-right">
+                  <form method="post" action="/admin/ai/filter/delete">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <input type="hidden" name="text" value="<%= e.text %>" />
+                    <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.delete') %></button>
+                  </form>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

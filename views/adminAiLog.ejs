@@ -1,0 +1,69 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.ai.tabLog') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <p class="text-neutral-500 text-sm mb-6">
+    <%= t('admin.ai.logHint') %>
+    <span class="text-neutral-300"><%= today.requests %></span> · $<span class="text-neutral-300"><%= (today.costUsd || 0).toFixed(3) %></span>
+  </p>
+
+  <form method="get" action="/admin/ai/log" class="mb-6">
+    <select name="channel" onchange="this.form.submit()"
+            class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+      <option value=""><%= t('admin.ai.allChannels') %></option>
+      <% channels.forEach(function (c) { %>
+        <option value="#<%= c.channelLogin %>" <%= selected === '#' + c.channelLogin ? 'selected' : '' %>><%= c.channelLogin %></option>
+      <% }); %>
+    </select>
+  </form>
+
+  <% if (!rows.length) { %>
+    <p class="text-neutral-600 text-sm"><%= t('admin.ai.logEmpty') %></p>
+  <% } else { %>
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colTime') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colChannel') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colUser') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colQuestion') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colReply') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colSource') %></th>
+              <th class="text-right font-medium px-3 py-2"><%= t('admin.ai.colCost') %></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% rows.forEach(function (r) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 align-top">
+                <td class="px-3 py-2 text-neutral-500 whitespace-nowrap tabular-nums"><%= new Date(r.createdAt).toLocaleString(locale) %></td>
+                <td class="px-3 py-2 text-neutral-500"><%= r.channel %></td>
+                <td class="px-3 py-2 text-neutral-300"><%= r.login %></td>
+                <td class="px-3 py-2 text-neutral-400 max-w-xs"><%= r.question %></td>
+                <td class="px-3 py-2 text-neutral-200 max-w-md">
+                  <%= r.answer %>
+                  <% if (r.sent === false) { %>
+                    <span class="ml-1 text-xs text-amber-500"><%= t('admin.ai.notSent') %></span>
+                  <% } %>
+                </td>
+                <td class="px-3 py-2 text-neutral-500 whitespace-nowrap"><%= t('admin.ai.sourceKind.' + (r.source || 'model')) %></td>
+                <td class="px-3 py-2 text-right text-neutral-500 tabular-nums whitespace-nowrap">
+                  <%= r.costUsd != null ? '$' + r.costUsd.toFixed(4) : '—' %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

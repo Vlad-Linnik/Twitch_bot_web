@@ -1,45 +1,58 @@
-<%# Sub-page switcher for /admin{,/settings-log,/actions,/statistics,/games,/news,/game-runs,/disk-usage,/memory}.
-    Expects: tab ("overview"|"settings-log"|"actions"|"statistics"|"games"|"news"|"game-runs"|"disk-usage"|"memory").
-    Same look as statsTabs.ejs. %>
-<nav class="flex gap-1 mb-10 border-b border-neutral-800">
-  <a href="/admin" data-transition="backward"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'overview' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabOverview') %>
-  </a>
-  <a href="/admin/visits"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'statistics' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabStatistics') %>
-  </a>
-  <a href="/admin/games"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'games' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabGames') %>
-  </a>
-  <a href="/admin/news"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'news' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabNews') %>
-  </a>
-  <a href="/admin/page-themes"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'page-themes' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabPageThemes') %>
-  </a>
-  <a href="/admin/game-runs"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'game-runs' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabGameRuns') %>
-  </a>
-  <a href="/admin/disk-usage"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'disk-usage' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabDiskUsage') %>
-  </a>
-  <a href="/admin/memory"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'memory' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabMemory') %>
-  </a>
-  <a href="/admin/settings-log"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'settings-log' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabSettingsLog') %>
-  </a>
-  <a href="/admin/actions"
-     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab === 'actions' ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
-    <%= t('admin.tabActions') %>
-  </a>
+<%# Sub-page switcher for every /admin page.
+    Expects: tab (the page's own slug, e.g. "overview" | "games" | "ai" | ...).
+
+    Grouped, not one flat row: at eleven entries the single underlined row had stopped being
+    scannable - finding a page meant reading the whole line. The groups are the three things the
+    panel actually administers, and the pill styling (rather than statsTabs.ejs's bottom-border
+    underline) is what makes a multi-row nav readable - an underline only lines up with the
+    container border on the last row. %>
+<%
+  const adminTabGroups = [
+    {
+      label: null,
+      tabs: [{ slug: "overview", href: "/admin", key: "admin.tabOverview", backward: true }],
+    },
+    {
+      label: "admin.groupSite",
+      tabs: [
+        { slug: "statistics", href: "/admin/visits", key: "admin.tabStatistics" },
+        { slug: "games", href: "/admin/games", key: "admin.tabGames" },
+        { slug: "game-runs", href: "/admin/game-runs", key: "admin.tabGameRuns" },
+        { slug: "news", href: "/admin/news", key: "admin.tabNews" },
+        { slug: "page-themes", href: "/admin/page-themes", key: "admin.tabPageThemes" },
+      ],
+    },
+    {
+      label: "admin.groupBot",
+      tabs: [
+        { slug: "ai", href: "/admin/ai", key: "admin.tabAi" },
+        { slug: "settings-log", href: "/admin/settings-log", key: "admin.tabSettingsLog" },
+      ],
+    },
+    {
+      label: "admin.groupServer",
+      tabs: [
+        { slug: "disk-usage", href: "/admin/disk-usage", key: "admin.tabDiskUsage" },
+        { slug: "memory", href: "/admin/memory", key: "admin.tabMemory" },
+        { slug: "actions", href: "/admin/actions", key: "admin.tabActions" },
+      ],
+    },
+  ];
+%>
+<nav class="mb-10 pb-5 border-b border-neutral-800 flex flex-wrap items-start gap-x-8 gap-y-4">
+  <% adminTabGroups.forEach(function (group) { %>
+    <div class="min-w-0">
+      <div class="px-2 mb-1.5 h-3 text-[10px] font-medium uppercase tracking-wider text-neutral-600">
+        <% if (group.label) { %><%= t(group.label) %><% } %>
+      </div>
+      <div class="flex flex-wrap gap-1">
+        <% group.tabs.forEach(function (item) { %>
+          <a href="<%= item.href %>"<% if (item.backward) { %> data-transition="backward"<% } %>
+             class="px-3 py-1.5 rounded-md text-sm font-medium border transition-colors <%= tab === item.slug ? 'border-purple-700 bg-purple-600/15 text-purple-200' : 'border-transparent text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900' %>">
+            <%= t(item.key) %>
+          </a>
+        <% }); %>
+      </div>
+    </div>
+  <% }); %>
 </nav>

@@ -1,0 +1,52 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.ai.tabChannels') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <p class="text-neutral-500 text-sm mb-4"><%= t('admin.ai.channelsHint') %></p>
+
+  <div class="rounded-lg border border-neutral-800 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-neutral-900 text-neutral-400">
+          <tr>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colChannel') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colAiEnabled') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colCheatsheet') %></th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-800">
+          <% rows.forEach(function (row) { %>
+            <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
+              <td class="px-4 py-2 text-neutral-200">
+                <%= row.channelLogin %>
+                <% if (!row.enabled) { %>
+                  <span class="ml-2 text-xs text-neutral-600"><%= t('admin.ai.botDisabled') %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-2">
+                <% if (row.ai.enabled) { %>
+                  <span class="text-green-400"><%= t('admin.ai.on') %></span>
+                <% } else { %>
+                  <span class="text-neutral-500"><%= t('admin.ai.off') %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-2 text-neutral-500 max-w-md truncate"><%= row.ai.cheatsheet || '—' %></td>
+              <td class="px-4 py-2 text-right">
+                <a href="/admin/ai/channels/<%= row.channelLogin %>" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.edit') %></a>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<%- include('partials/foot') %>

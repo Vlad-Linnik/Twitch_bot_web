@@ -182,12 +182,6 @@
             <div class="flex items-center justify-between gap-4 mb-1">
               <span class="text-sm font-medium text-neutral-200">❓ <%= t('channelSettings.commandName.question') %></span>
               <div class="flex items-center gap-4">
-                <label class="flex items-center gap-1.5 text-xs text-neutral-500">
-                  <%= t('channelSettings.colCooldown') %>
-                  <input type="number" min="0" max="86400" step="1" name="commands.question.cooldownSeconds"
-                         value="<%= Math.round(config.commands.question.cooldownMs / 1000) %>"
-                         class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-                </label>
                 <input type="hidden" name="commands.question.present" value="1" />
                 <label class="toggle-switch">
                   <input type="checkbox" name="commands.question.enabled" <%= config.commands.question.enabled ? 'checked' : '' %> class="sr-only" />
@@ -207,12 +201,6 @@
             <div class="flex items-center justify-between gap-4 mb-1">
               <span class="text-sm font-medium text-neutral-200">💬 <%= t('channelSettings.commandName.directmsg') %></span>
               <div class="flex items-center gap-4">
-                <label class="flex items-center gap-1.5 text-xs text-neutral-500">
-                  <%= t('channelSettings.colCooldown') %>
-                  <input type="number" min="0" max="86400" step="1" name="commands.directmsg.cooldownSeconds"
-                         value="<%= Math.round(config.commands.directmsg.cooldownMs / 1000) %>"
-                         class="w-20 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-                </label>
                 <input type="hidden" name="commands.directmsg.present" value="1" />
                 <label class="toggle-switch">
                   <input type="checkbox" name="commands.directmsg.enabled" <%= config.commands.directmsg.enabled ? 'checked' : '' %> class="sr-only" />

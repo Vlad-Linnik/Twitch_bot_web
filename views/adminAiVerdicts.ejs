@@ -1,0 +1,94 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.ai.tabVerdicts') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <p class="text-neutral-500 text-sm mb-4"><%= t('admin.ai.verdictsHint') %></p>
+
+  <div class="mb-8 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 flex flex-wrap items-center gap-6 text-sm">
+    <span class="<%= config.punishMode === 'enforce' ? 'text-red-400' : 'text-neutral-400' %>">
+      <%= t('admin.ai.currentMode') %>: <%= t('admin.ai.punish' + (config.punishMode === 'enforce' ? 'Enforce' : 'Observe')) %>
+    </span>
+    <span class="text-neutral-500">
+      <%= t('admin.ai.tallyAgree') %>: <span class="text-green-400 tabular-nums"><%= tally.agree %></span>
+    </span>
+    <span class="text-neutral-500">
+      <%= t('admin.ai.tallyDisagree') %>: <span class="text-red-400 tabular-nums"><%= tally.disagree %></span>
+    </span>
+    <span class="text-neutral-500">
+      <%= t('admin.ai.tallyUnreviewed') %>: <span class="text-neutral-300 tabular-nums"><%= tally.unreviewed %></span>
+    </span>
+  </div>
+
+  <% if (!rows.length) { %>
+    <p class="text-neutral-600 text-sm"><%= t('admin.ai.verdictsEmpty') %></p>
+  <% } else { %>
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colTime') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colChannel') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colUser') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colQuestion') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colReason') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colApplied') %></th>
+              <th class="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% rows.forEach(function (r) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 align-top">
+                <td class="px-3 py-2 text-neutral-500 whitespace-nowrap tabular-nums"><%= new Date(r.createdAt).toLocaleString() %></td>
+                <td class="px-3 py-2 text-neutral-500"><%= r.channel %></td>
+                <td class="px-3 py-2 text-neutral-300">
+                  <%= r.login %>
+                  <% if (r.protectedUser) { %>
+                    <span class="ml-1 text-xs text-neutral-600"><%= t('admin.ai.protectedUser') %></span>
+                  <% } %>
+                </td>
+                <td class="px-3 py-2 text-neutral-400 max-w-sm"><%= r.question %></td>
+                <td class="px-3 py-2 text-amber-300"><%= r.reason || '—' %></td>
+                <td class="px-3 py-2">
+                  <% if (r.punished) { %>
+                    <span class="text-red-400"><%= t('admin.ai.appliedYes') %></span>
+                  <% } else { %>
+                    <span class="text-neutral-500"><%= t('admin.ai.appliedNo') %></span>
+                  <% } %>
+                </td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <% if (r.review) { %>
+                    <span class="<%= r.review === 'agree' ? 'text-green-400' : 'text-red-400' %> text-xs">
+                      <%= t('admin.ai.' + (r.review === 'agree' ? 'agree' : 'disagree')) %>
+                    </span>
+                  <% } else { %>
+                    <span class="inline-flex gap-2">
+                      <form method="post" action="/admin/ai/verdicts/<%= r._id %>/review">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                        <input type="hidden" name="review" value="agree" />
+                        <button type="submit" class="text-green-400 hover:text-green-300 text-xs"><%= t('admin.ai.agree') %></button>
+                      </form>
+                      <form method="post" action="/admin/ai/verdicts/<%= r._id %>/review">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                        <input type="hidden" name="review" value="disagree" />
+                        <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.disagree') %></button>
+                      </form>
+                    </span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

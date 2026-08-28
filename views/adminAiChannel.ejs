@@ -1,0 +1,94 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + channel.channelLogin }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-3xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= channel.channelLogin %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.ai.channelSubtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <a href="/admin/ai/channels" class="inline-block mb-6 text-sm text-purple-400 hover:text-purple-300">← <%= t('admin.ai.tabChannels') %></a>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('admin.ai.saved') %>
+    </div>
+  <% } %>
+
+  <form method="post" action="/admin/ai/channels/<%= channel.channelLogin %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <section class="mb-12">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+        <div class="px-4 py-4 flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.aiEnabled') %></span>
+            <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.aiEnabledHint') %></p>
+          </div>
+          <label class="toggle-switch shrink-0">
+            <input type="checkbox" name="aiEnabled" <%= config.ai && config.ai.enabled ? 'checked' : '' %> class="sr-only" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.tone') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.toneHint') %></p>
+          <textarea name="aiTone" rows="3" maxlength="<%= validation.MAX_TONE_LEN %>"
+                    class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.ai ? config.ai.tone : '' %></textarea>
+        </div>
+
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.cheatsheet') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.cheatsheetHint') %></p>
+          <textarea name="aiCheatsheet" rows="6" maxlength="<%= validation.MAX_CHEATSHEET_LEN %>"
+                    class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.ai ? config.ai.cheatsheet : '' %></textarea>
+        </div>
+      </div>
+    </section>
+
+    <%# The fine numbers that moved off the channel owner's own settings page. The owner still
+        owns the toggles and the phrase lists; these are the knobs that only matter once you are
+        tuning behaviour rather than choosing it. %>
+    <section class="mb-12">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.cooldownsHeading') %></h2>
+      <p class="text-neutral-500 text-sm mb-4"><%= t('admin.ai.cooldownsHint') %></p>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+        <% if (config.commands.question) { %>
+          <div class="px-4 py-3 flex items-center justify-between gap-4">
+            <label class="text-sm text-neutral-300"><%= t('admin.ai.questionCooldown') %></label>
+            <input type="number" min="0" max="86400" name="commands.question.cooldownSeconds"
+                   value="<%= Math.round(config.commands.question.cooldownMs / 1000) %>"
+                   class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+          </div>
+        <% } %>
+        <% if (config.commands.directmsg) { %>
+          <div class="px-4 py-3 flex items-center justify-between gap-4">
+            <label class="text-sm text-neutral-300"><%= t('admin.ai.directmsgCooldown') %></label>
+            <input type="number" min="0" max="86400" name="commands.directmsg.cooldownSeconds"
+                   value="<%= Math.round(config.commands.directmsg.cooldownMs / 1000) %>"
+                   class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+          </div>
+        <% } %>
+        <% if (config.commands.insult) { %>
+          <div class="px-4 py-3 flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <label class="text-sm text-neutral-300"><%= t('admin.ai.insultCumulative') %></label>
+              <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.insultCumulativeHint') %></p>
+            </div>
+            <input type="number" min="0" max="86400" name="commands.insult.cumulativeDelaySeconds"
+                   value="<%= Math.round((config.commands.insult.cumulativeDelayMs || 0) / 1000) %>"
+                   class="w-24 shrink-0 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+      <%= t('admin.ai.save') %>
+    </button>
+  </form>
+</main>
+
+<%- include('partials/foot') %>

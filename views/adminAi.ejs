@@ -1,0 +1,173 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabAi') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('admin.ai.saved') %>
+    </div>
+  <% } %>
+
+  <% if (!keyPresent) { %>
+    <div class="mb-8 rounded-md border border-amber-800 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+      <%= t('admin.ai.keyMissing') %>
+    </div>
+  <% } %>
+
+  <%# --- today's spend ------------------------------------------------- %>
+  <section class="mb-12">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.ai.todayHeading') %></h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.todayRequests') %></div>
+        <div class="text-xl font-semibold tabular-nums <%= today.requests >= config.dailyRequestLimit ? 'text-amber-400' : 'text-neutral-100' %>">
+          <%= today.requests %> / <%= config.dailyRequestLimit %>
+        </div>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.todayCost') %></div>
+        <div class="text-xl font-semibold tabular-nums text-neutral-100">$<%= (today.costUsd || 0).toFixed(3) %></div>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.filterSize') %></div>
+        <div class="text-xl font-semibold tabular-nums text-neutral-100"><%= filterCount %></div>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
+        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.ignoredSize') %></div>
+        <div class="text-xl font-semibold tabular-nums text-neutral-100"><%= ignoredCount %></div>
+      </div>
+    </div>
+    <% if (today.requests >= config.dailyRequestLimit) { %>
+      <p class="mt-3 text-sm text-amber-400"><%= t('admin.ai.limitReached') %></p>
+    <% } %>
+  </section>
+
+  <form method="post" action="/admin/ai">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <%# --- master switch ----------------------------------------------- %>
+    <section class="mb-12">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-4 flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.masterSwitch') %></span>
+          <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.masterSwitchHint') %></p>
+        </div>
+        <label class="toggle-switch shrink-0">
+          <input type="checkbox" name="enabled" <%= config.enabled ? 'checked' : '' %> class="sr-only" />
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+    </section>
+
+    <%# --- model and budget -------------------------------------------- %>
+    <section class="mb-12">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.ai.budgetHeading') %></h2>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.model') %></label>
+          <select name="model" class="w-full sm:w-72 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+            <% validation.MODELS.forEach(function (m) { %>
+              <option value="<%= m %>" <%= config.model === m ? 'selected' : '' %>><%= m %></option>
+            <% }); %>
+          </select>
+        </div>
+
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.dailyLimit') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.dailyLimitHint') %></p>
+          <input type="number" name="dailyRequestLimit" value="<%= config.dailyRequestLimit %>"
+                 min="<%= validation.BOUNDS.dailyRequestLimit.min %>" max="<%= validation.BOUNDS.dailyRequestLimit.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.cooldown') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.cooldownHint') %></p>
+          <input type="number" name="cooldownSeconds" value="<%= Math.round(config.cooldownMs / 1000) %>"
+                 min="<%= validation.BOUNDS.cooldownSeconds.min %>" max="<%= validation.BOUNDS.cooldownSeconds.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.requestTimeout') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.requestTimeoutHint') %></p>
+          <input type="number" name="requestTimeoutSeconds" value="<%= Math.round(config.requestTimeoutMs / 1000) %>"
+                 min="<%= validation.BOUNDS.requestTimeoutSeconds.min %>" max="<%= validation.BOUNDS.requestTimeoutSeconds.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+      </div>
+    </section>
+
+    <%# --- memory ------------------------------------------------------- %>
+    <section class="mb-12">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.ai.memoryHeading') %></h2>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.memoryPairs') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.memoryPairsHint') %></p>
+          <input type="number" name="memoryPairs" value="<%= config.memoryPairs %>"
+                 min="<%= validation.BOUNDS.memoryPairs.min %>" max="<%= validation.BOUNDS.memoryPairs.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.memoryTtl') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.memoryTtlHint') %></p>
+          <input type="number" name="memoryTtlDays" value="<%= config.memoryTtlDays %>"
+                 min="<%= validation.BOUNDS.memoryTtlDays.min %>" max="<%= validation.BOUNDS.memoryTtlDays.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+      </div>
+    </section>
+
+    <%# --- punishments --------------------------------------------------- %>
+    <section class="mb-12">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.punishHeading') %></h2>
+      <p class="text-neutral-500 text-sm mb-4"><%= t('admin.ai.punishHint') %></p>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-2"><%= t('admin.ai.punishMode') %></label>
+          <label class="flex items-center gap-2 text-sm text-neutral-300 mb-1">
+            <input type="radio" name="punishMode" value="observe" <%= config.punishMode === 'observe' ? 'checked' : '' %> />
+            <%= t('admin.ai.punishObserve') %>
+          </label>
+          <label class="flex items-center gap-2 text-sm text-neutral-300">
+            <input type="radio" name="punishMode" value="enforce" <%= config.punishMode === 'enforce' ? 'checked' : '' %> />
+            <%= t('admin.ai.punishEnforce') %>
+          </label>
+          <p class="text-neutral-600 text-xs mt-2">
+            <%= t('admin.ai.tallySoFar') %>
+            <span class="text-green-400"><%= tally.agree %></span> /
+            <span class="text-red-400"><%= tally.disagree %></span> /
+            <span class="text-neutral-500"><%= tally.unreviewed %></span>
+          </p>
+        </div>
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.timeoutSeconds') %></label>
+          <input type="number" name="timeoutSeconds" value="<%= config.timeoutSeconds %>"
+                 min="<%= validation.BOUNDS.timeoutSeconds.min %>" max="<%= validation.BOUNDS.timeoutSeconds.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+      </div>
+    </section>
+
+    <%# --- persona ------------------------------------------------------- %>
+    <section class="mb-12">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.persona') %></h2>
+      <p class="text-neutral-500 text-sm mb-4"><%= t('admin.ai.personaHint') %></p>
+      <textarea name="persona" rows="6" maxlength="<%= validation.MAX_PERSONA_LEN %>"
+                class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.persona %></textarea>
+    </section>
+
+    <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+      <%= t('admin.ai.save') %>
+    </button>
+  </form>
+</main>
+
+<%- include('partials/foot') %>

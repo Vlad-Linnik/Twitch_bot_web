@@ -65,4 +65,32 @@ async function saveConfig(channelLogin, config, updatedBy) {
   return getConfig(login);
 }
 
-module.exports = { getConfig, saveConfig };
+// The AI mention-reply block is deliberately NOT part of saveConfig above. That function is the
+// channel owner's write path; this one is the admin panel's, and the two must not be able to
+// overwrite each other. Because saveConfig $sets an explicit field list that never mentions `ai`,
+// an owner saving their settings leaves this block untouched, and vice versa - so a stale copy
+// read into one form can never clobber what the other form just wrote.
+//
+// Dotted $set keys rather than a whole-object $set for the same reason at one level down: a new
+// per-channel AI field added later must not be wiped by a form that predates it.
+async function saveAiConfig(channelLogin, ai, updatedBy) {
+  const col = await ensureInitialized();
+  const login = channelLogin.toLowerCase();
+  await col.updateOne(
+    { channelLogin: login },
+    {
+      $set: {
+        "ai.enabled": Boolean(ai.enabled),
+        "ai.tone": String(ai.tone ?? ""),
+        "ai.cheatsheet": String(ai.cheatsheet ?? ""),
+        updatedAt: new Date(),
+        updatedBy: String(updatedBy),
+      },
+      $setOnInsert: { channelLogin: login },
+    },
+    { upsert: true }
+  );
+  return getConfig(login);
+}
+
+module.exports = { getConfig, saveConfig, saveAiConfig };

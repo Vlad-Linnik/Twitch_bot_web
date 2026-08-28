@@ -46,6 +46,11 @@
     "grenadeReason": "Осколки Бюро амнистии",
     "grenadeCooldownSec": 600
   },
+  "ai": {
+    "enabled": false,
+    "tone": "",
+    "cheatsheet": ""
+  },
   "responses": {
     "busy": ["I am busy"],
     "yesNo": ["Yes", "No", "Can't say", "eeeh", "Maybe", "50/50", "Probably yes"],
