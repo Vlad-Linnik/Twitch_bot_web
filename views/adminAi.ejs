@@ -203,16 +203,27 @@
       <%# Единственное, что правка этого текста ломает молча: без блока про remember/forget модель
           перестаёт заполнять поля, ошибки при этом нет. Об этом надо сказать прямо. %>
       <p class="text-amber-500/80 text-xs mb-3"><%= t('admin.ai.systemPromptWarning') %></p>
-      <textarea id="systemPrompt" name="systemPrompt" rows="16" maxlength="<%= validation.MAX_SYSTEM_PROMPT_LEN %>"
-                placeholder="<%= t('admin.ai.systemPromptPlaceholder') %>"
-                class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-purple-500"><%= config.systemPrompt %></textarea>
+      <%# В поле ВСЕГДА лежит текст, который сейчас работает: свой, если он сохранён, иначе
+          встроенный из кода бота. Так правила можно править по одной строке, а не только
+          заменять целиком. Пустым поле не остаётся никогда — пустое поле не подсказывает, что
+          вообще уходит в модель.
+
+          Обратная сторона: сохранённая копия перестаёт следовать за кодом. Поэтому при
+          сохранении текст, дословно совпавший со встроенным, пишется как пустой — тогда канал
+          снова следует за кодом, и правка правил в коде до него доедет. См. parseGlobalConfig. %>
+      <p class="text-xs mb-2 <%= config.systemPrompt ? 'text-purple-400' : 'text-neutral-600' %>">
+        <%= config.systemPrompt ? t('admin.ai.systemPromptCustom') : t('admin.ai.systemPromptBuiltinInUse') %>
+      </p>
+      <textarea id="systemPrompt" name="systemPrompt" rows="20" maxlength="<%= validation.MAX_SYSTEM_PROMPT_LEN %>"
+                class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-purple-500"><%= config.systemPrompt || config.builtinSystemPrompt %></textarea>
       <% if (config.builtinSystemPrompt) { %>
         <%# Текст приходит из кода бота, а не из копии в этом репозитории - см. aiConfigRepo.
-            Кнопка только подставляет его в поле: сохранение остаётся отдельным осознанным шагом. %>
+            Кнопка только возвращает его в поле: сохранение остаётся отдельным шагом.
+            nonce обязателен - CSP сайта не разрешает inline-скрипты без него (см. app.js). %>
         <button type="button" id="fillBuiltinPrompt"
                 class="mt-2 text-xs text-purple-400 hover:text-purple-300"><%= t('admin.ai.systemPromptFillBuiltin') %></button>
         <script type="application/json" id="builtinPromptData"><%- safeJson(config.builtinSystemPrompt) %></script>
-        <script>
+        <script nonce="<%= cspNonce %>">
           document.getElementById('fillBuiltinPrompt').addEventListener('click', function () {
             document.getElementById('systemPrompt').value =
               JSON.parse(document.getElementById('builtinPromptData').textContent);
