@@ -1368,7 +1368,7 @@
       "channelMemoryEnabled": "The bot remembers on its own",
       "channelMemoryEnabledHint": "Let the bot add facts about the channel to its memory while it answers. Switching this off erases nothing: the list is still read, it just stops growing.",
       "channelMemoryMax": "Facts kept per channel",
-      "channelMemoryMaxHint": "How many facts the bot keeps for a channel. Not a spend setting: only the facts picked out for the question are sent. Over the ceiling the bot's least recently used rows are evicted; the hand-written ones stay.",
+      "channelMemoryMaxHint": "How many facts the bot keeps for a channel. Counts its own rows only - hand-written ones are neither counted nor evicted. Not a spend setting: only the facts picked out for the question are sent. Over the ceiling the bot's least recently used rows go first. Zero means the bot never remembers.",
       "channelMemoryRecall": "Facts sent with one call",
       "channelMemoryRecallHint": "How many question-matching facts ride along with one billed call - this is the spend. Hand-written facts go on top of this number: they are always sent.",
       "channelMemoryLink": "See what the bot has remembered",
@@ -1461,6 +1461,7 @@
         "filter": "filter",
         "cache": "cache",
         "cacheSimilar": "cache (same question, reworded)",
+        "budget": "daily limit reached",
         "error": "error"
       },
       "verdictsHint": "What the model proposed to punish. Mark agree/disagree - it is the only basis for switching to enforce.",
