@@ -54,7 +54,13 @@
   <% } %>
 
   <% if (!entries.length) { %>
-    <p class="text-neutral-600 text-sm"><%= t('admin.ai.memoryEmpty') %></p>
+    <%# Пустой список читается по-разному: бот ещё ничего не узнал — или на канале вообще
+        выключены ИИ-ответы, и узнавать было неоткуда. Второе иначе выглядит как пропажа. %>
+    <% if (!channelAiEnabled) { %>
+      <p class="text-sm text-amber-500"><%= t('admin.ai.memoryChannelAiOff') %></p>
+    <% } else { %>
+      <p class="text-neutral-600 text-sm"><%= t('admin.ai.memoryEmpty') %></p>
+    <% } %>
   <% } else { %>
     <div class="rounded-lg border border-neutral-800 overflow-hidden">
       <div class="overflow-x-auto">

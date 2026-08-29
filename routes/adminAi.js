@@ -30,6 +30,18 @@ const requireAdmin = requireLevel(0);
 
 const LOG_PAGE_SIZE = 100;
 
+// Какой канал открывать, когда в адресе он не указан. НЕ первый по алфавиту: каналы
+// сортируются по логину, и первым легко оказывается тот, на котором ИИ вообще не включён -
+// страница тогда честно сообщает «бот ничего не запомнил», но про не тот канал, и выглядит это
+// как потерянные данные. Берём первый канал с включёнными ИИ-ответами: именно его данные тут и
+// курируют. Если таких нет, поведение прежнее.
+async function defaultChannel(channels) {
+  if (!channels.length) return null;
+  const configs = await Promise.all(channels.map((c) => channelConfigRepo.getConfig(c.channelLogin)));
+  const withAi = channels.find((c, i) => configs[i].ai && configs[i].ai.enabled);
+  return (withAi || channels[0]).channelLogin;
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -224,7 +236,7 @@ router.post("/admin/ai/filter/delete", settingsWriteLimiter, requireAdmin, verif
 router.get("/admin/ai/cache", requireAdmin, async (req, res, next) => {
   try {
     const channels = await channelsRepo.listAll();
-    const selected = req.query.channel || (channels[0] && channels[0].channelLogin) || null;
+    const selected = req.query.channel || (await defaultChannel(channels));
     const entries = selected ? await aiCacheRepo.listForChannel(selected) : [];
     res.render("adminAiCache", { tab: "ai", aiTab: "cache", channels, selected, entries });
   } catch (err) {
@@ -264,11 +276,15 @@ router.post("/admin/ai/cache/clear", settingsWriteLimiter, requireAdmin, verifyT
 router.get("/admin/ai/memory", requireAdmin, async (req, res, next) => {
   try {
     const channels = await channelsRepo.listAll();
-    const selected = req.query.channel || (channels[0] && channels[0].channelLogin) || null;
-    const [entries, config] = await Promise.all([
+    const selected = req.query.channel || (await defaultChannel(channels));
+    const [entries, config, channelConfig] = await Promise.all([
       selected ? aiMemoryRepo.listForChannel(selected) : Promise.resolve([]),
       aiConfigRepo.getConfig(),
+      selected ? channelConfigRepo.getConfig(selected) : Promise.resolve({}),
     ]);
+    // Пустой список значит разное: «бот пока ничего не запомнил» и «на этом канале ИИ выключен,
+    // и запоминать было неоткуда». Второе выглядит как пропажа данных, если об этом не сказать.
+    const channelAiEnabled = Boolean(channelConfig.ai && channelConfig.ai.enabled);
     res.render("adminAiMemory", {
       tab: "ai",
       aiTab: "memory",
@@ -276,6 +292,7 @@ router.get("/admin/ai/memory", requireAdmin, async (req, res, next) => {
       selected,
       entries,
       config,
+      channelAiEnabled,
       maxFactLen: aiMemoryRepo.MAX_FACT_LEN,
     });
   } catch (err) {

@@ -1360,6 +1360,7 @@
       "addFactPlaceholder": "For example: the stream usually starts at 19:00",
       "addFactButton": "Add",
       "memoryEmpty": "The bot has not remembered anything about this channel yet.",
+      "memoryChannelAiOff": "AI replies are off for this channel - the bot answers nothing here, so there is nothing for it to remember. Turn them on under the Channels tab.",
       "colFact": "Fact",
       "colFactSource": "Written by",
       "colLearnedFrom": "Learnt from",
