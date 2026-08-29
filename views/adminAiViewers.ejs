@@ -69,11 +69,23 @@
       <p class="text-neutral-600 text-sm"><%= t('admin.ai.viewerMemoryEmpty') %></p>
     <% } %>
   <% } else { %>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <p class="text-neutral-500 text-sm">
+        <%= t('admin.ai.viewersCount') %> <%= groups.length %> ·
+        <%= t('admin.ai.viewerFactsCount') %> <%= groups.reduce(function (n, g) { return n + g.facts.length; }, 0) %>
+      </p>
+      <%# Поиск по нику, а не по тексту факта: страница отвечает на вопрос «что бот знает про
+          этого человека», и группа должна находиться по тому, чем она подписана. %>
+      <input type="search" id="viewerFilter" autocomplete="off"
+             placeholder="<%= t('admin.ai.viewerFilterPlaceholder') %>"
+             class="w-56 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-1.5 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+    </div>
+    <p id="viewerFilterEmpty" class="hidden text-neutral-600 text-sm"><%= t('admin.ai.viewerFilterEmpty') %></p>
     <%# Сгруппировано по адресату, потому что разбирают тут человека, а не отдельную строку:
         вопрос звучит как «что бот вообще насобирал про этого зрителя». %>
     <div class="space-y-4">
       <% groups.forEach(function (g) { %>
-        <section class="rounded-lg border border-neutral-800 overflow-hidden">
+        <section class="rounded-lg border border-neutral-800 overflow-hidden" data-login="<%= (g.login || g.userId).toLowerCase() %>">
           <header class="flex items-center justify-between gap-4 bg-neutral-900 px-4 py-3">
             <div class="min-w-0">
               <a href="/<%= selected %>/user/<%= g.login %>" class="text-neutral-100 text-sm font-medium hover:text-purple-300"><%= g.login || g.userId %></a>
@@ -152,5 +164,24 @@
     </div>
   <% } %>
 </main>
+
+<script nonce="<%= cspNonce %>">
+  (function () {
+    var input = document.getElementById('viewerFilter');
+    if (!input) return;
+    var groups = [].slice.call(document.querySelectorAll('section[data-login]'));
+    var empty = document.getElementById('viewerFilterEmpty');
+    input.addEventListener('input', function () {
+      var q = input.value.trim().toLowerCase();
+      var shown = 0;
+      groups.forEach(function (g) {
+        var hit = !q || g.dataset.login.indexOf(q) !== -1;
+        g.classList.toggle('hidden', !hit);
+        if (hit) shown += 1;
+      });
+      empty.classList.toggle('hidden', shown > 0);
+    });
+  })();
+</script>
 
 <%- include('partials/foot') %>

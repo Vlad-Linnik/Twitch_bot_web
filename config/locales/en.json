@@ -1408,7 +1408,7 @@
       "ignoredSize": "Ignored viewers",
       "limitReached": "Daily limit reached. Until midnight the bot falls back to its scripted replies.",
       "masterSwitch": "AI replies enabled",
-      "masterSwitchHint": "Master switch. Off stops replies on every channel at once.",
+      "masterSwitchHint": "The master switch. Off stops replies on every channel at once. The bot only answers while the channel is live: off air a mention falls through to the scripted replies, exactly as it does with the feature switched off.",
       "budgetHeading": "Model and budget",
       "model": "Model",
       "dailyLimit": "Requests per day",
@@ -1515,7 +1515,11 @@
       "userMemoryEnabledHint": "Let the bot write down facts about people in chat. A viewer can tell it about themselves, or anyone else in the same exchange can - who said it is always shown on the row. Switching this off keeps what is stored: the lists are still read.",
       "userMemoryMax": "Facts per viewer",
       "userMemoryMaxHint": "How many facts the bot holds about one person. Here that number IS the spend: only the memory of people in the exchange is sent, so no second number is needed as it is for the channel. Counts the bot's own rows only - hand-written ones are never evicted. On overflow, facts from less authoritative authors go first, and among equals the least recently used. Zero means the bot learns nothing about viewers.",
-      "userMemoryLink": "See what the bot has learnt about viewers"
+      "userMemoryLink": "See what the bot has learnt about viewers",
+      "viewersCount": "Viewers:",
+      "viewerFactsCount": "facts:",
+      "viewerFilterPlaceholder": "Find a viewer by login",
+      "viewerFilterEmpty": "No such login in the list."
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",
