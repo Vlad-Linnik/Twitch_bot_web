@@ -62,25 +62,25 @@
                     <span class="text-neutral-500"><%= t('admin.ai.appliedNo') %></span>
                   <% } %>
                 </td>
+                <%# Обе кнопки показываются всегда, и уже поставленная отметка - тоже кнопка.
+                    Раньше отметка заменялась текстом, то есть промах мышью был необратим: снять
+                    его можно было только в базе. По этому же счёту принимается решение переводить
+                    наказания из observe в enforce, так что случайный клик портит ровно ту
+                    величину, ради которой вкладка существует. %>
                 <td class="px-3 py-2 text-right whitespace-nowrap">
-                  <% if (r.review) { %>
-                    <span class="<%= r.review === 'agree' ? 'text-green-400' : 'text-red-400' %> text-xs">
-                      <%= t('admin.ai.' + (r.review === 'agree' ? 'agree' : 'disagree')) %>
-                    </span>
-                  <% } else { %>
-                    <span class="inline-flex gap-2">
+                  <span class="inline-flex gap-2">
+                    <% ['agree', 'disagree'].forEach(function (choice) { %>
+                      <% const active = r.review === choice; %>
                       <form method="post" action="/admin/ai/verdicts/<%= r._id %>/review">
                         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                        <input type="hidden" name="review" value="agree" />
-                        <button type="submit" class="text-green-400 hover:text-green-300 text-xs"><%= t('admin.ai.agree') %></button>
+                        <input type="hidden" name="review" value="<%= choice %>" />
+                        <button type="submit" title="<%= active ? t('admin.ai.reviewChange') : '' %>"
+                                class="text-xs <%= active
+                                  ? (choice === 'agree' ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold')
+                                  : 'text-neutral-600 hover:text-neutral-300' %>"><%= active ? '✓ ' : '' %><%= t('admin.ai.' + choice) %></button>
                       </form>
-                      <form method="post" action="/admin/ai/verdicts/<%= r._id %>/review">
-                        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                        <input type="hidden" name="review" value="disagree" />
-                        <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.disagree') %></button>
-                      </form>
-                    </span>
-                  <% } %>
+                    <% }); %>
+                  </span>
                 </td>
               </tr>
             <% }); %>

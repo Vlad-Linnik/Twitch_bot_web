@@ -12,7 +12,10 @@
   <% if (!config.channelMemoryEnabled) { %>
     <p class="mb-6 text-sm text-amber-500"><%= t('admin.ai.memoryWritesOff') %></p>
   <% } else { %>
-    <p class="text-neutral-600 text-xs mb-6"><%= t('admin.ai.memoryCountHint') %> <%= config.channelMemoryMax %></p>
+    <p class="text-neutral-600 text-xs mb-6">
+      <%= t('admin.ai.memoryCountHint') %> <%= config.channelMemoryMax %>.
+      <%= t('admin.ai.memoryRecallHint') %> <%= config.channelMemoryRecall %>.
+    </p>
   <% } %>
 
   <div class="flex flex-wrap items-end gap-3 mb-6">

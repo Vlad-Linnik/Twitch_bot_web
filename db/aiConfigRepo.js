@@ -41,9 +41,12 @@ const DEFAULT_AI_CONFIG = {
   // Whether the bot may add to a channel's memory on its own. Off leaves the memory in place and
   // still read - it only stops new rows being written from chat.
   channelMemoryEnabled: true,
-  // How many remembered facts a channel may hold. Every one of them is re-sent on every billed
-  // call for that channel, so this is an input-token setting as much as a tidiness one.
-  channelMemoryMax: 25,
+  // How many remembered facts a channel may HOLD, and how many of them ride along with one
+  // question. Two numbers rather than one because the bot no longer sends the whole memory: it
+  // picks the facts whose words match what was asked (TwitchBot/shared/memoryRecall.js), so the
+  // store can grow without the bill growing with it. Only the second number is spend.
+  channelMemoryMax: 200,
+  channelMemoryRecall: 10,
   persona: "",
   updatedAt: null,
   updatedBy: null,

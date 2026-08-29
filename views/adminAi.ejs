@@ -141,6 +141,15 @@
           <input type="number" name="channelMemoryMax" value="<%= config.channelMemoryMax %>"
                  min="<%= validation.BOUNDS.channelMemoryMax.min %>" max="<%= validation.BOUNDS.channelMemoryMax.max %>"
                  class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+        </div>
+        <%# Второе число - то самое, которое стоит денег: сколько фактов уезжает в один запрос.
+            Первое ограничивает только размер списка, который админ потом разгребает. %>
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.channelMemoryRecall') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.channelMemoryRecallHint') %></p>
+          <input type="number" name="channelMemoryRecall" value="<%= config.channelMemoryRecall %>"
+                 min="<%= validation.BOUNDS.channelMemoryRecall.min %>" max="<%= validation.BOUNDS.channelMemoryRecall.max %>"
+                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
           <p class="text-neutral-600 text-xs mt-2">
             <a href="/admin/ai/memory" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.channelMemoryLink') %></a>
           </p>

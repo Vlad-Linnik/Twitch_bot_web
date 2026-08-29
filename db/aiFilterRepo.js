@@ -33,15 +33,25 @@ async function count() {
 }
 
 // source: "ai" (the model added it after answering) or "admin" (added by hand).
+//
+// An empty answer is refused rather than stored. The bot serves a filter row without calling the
+// model, so a blank one is a row that counts a hit and then falls through to the model anyway -
+// invisible in the panel, which shows only that the entry exists and is being hit. The form marks
+// both fields required; this is the server-side half of the same rule.
+//
+// `source` is $set, not $setOnInsert: correcting a row the model wrote makes it an admin row, and
+// leaving it attributed to the bot would mean the "added by" column stops answering the only
+// question it is there for - whose text is this.
 async function upsert({ text, answer, source }) {
   const col = await ensureInitialized();
   const key = aiTextKey(text);
-  if (!key) return null;
+  const reply = String(answer ?? "").trim();
+  if (!key || !reply) return null;
   await col.updateOne(
     { text: key },
     {
-      $set: { answer: String(answer ?? "") },
-      $setOnInsert: { text: key, source: source || "admin", hits: 0, lastHitAt: null, createdAt: new Date() },
+      $set: { answer: reply, source: source || "admin" },
+      $setOnInsert: { text: key, hits: 0, lastHitAt: null, createdAt: new Date() },
     },
     { upsert: true }
   );

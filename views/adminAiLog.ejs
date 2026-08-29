@@ -54,6 +54,9 @@
                   <% } %>
                   <%# What this call did to the channel memory. Shown here rather than only on the
                       memory page so a fact can be traced back to the exchange that produced it. %>
+                  <% if (r.similarTo) { %>
+                    <p class="text-xs text-sky-400 mt-1"><%= t('admin.ai.similarTo') %>: <%= r.similarTo %></p>
+                  <% } %>
                   <% if (r.remembered) { %>
                     <p class="text-xs text-purple-400 mt-1"><%= t('admin.ai.memoryAdded') %>: <%= r.remembered %></p>
                   <% } %>
