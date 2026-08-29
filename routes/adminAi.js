@@ -1,6 +1,6 @@
 // Tier-0 admin pages for the AI mention replies: the global settings, the per-channel fine
-// settings that moved off the channel owner's own page, and the five tables the feature keeps -
-// filter, answer cache, channel memory, call journal, ignore list.
+// settings that moved off the channel owner's own page, and the six tables the feature keeps -
+// filter, answer cache, channel memory, viewer memory, call journal, ignore list.
 //
 // WHY THIS IS ADMIN-ONLY. The channel owner keeps what is theirs: the banned-word list, the reply
 // phrases, and the on/off switches for both. Everything here either spends the project's API
@@ -19,6 +19,8 @@ const aiCacheRepo = require("../db/aiCacheRepo");
 const aiLogRepo = require("../db/aiLogRepo");
 const aiIgnoreRepo = require("../db/aiIgnoreRepo");
 const aiMemoryRepo = require("../db/aiMemoryRepo");
+const aiUserMemoryRepo = require("../db/aiUserMemoryRepo");
+const userStatsRepo = require("../db/userStatsRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { diffConfig } = require("../lib/settingsDiff");
@@ -369,6 +371,141 @@ router.post("/admin/ai/memory/clear", settingsWriteLimiter, requireAdmin, verify
       details: { removed },
     });
     res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(req.body.channel || "")}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- viewer memory ------------------------------------------------------------------------------
+
+// Что бот знает про отдельных зрителей. Отдельная страница, а не колонка на странице памяти
+// канала: разбирают тут не факт, а человека - «что бот вообще про него насобирал» - и строки
+// поэтому сгруппированы по адресату.
+//
+// Смотреть сюда может только админ, как и в память канала: строку про зрителя мог продиктовать
+// кто угодно из чата, и владельцу канала это не список фактов, а список чужих слов о его зрителях.
+router.get("/admin/ai/viewers", requireAdmin, async (req, res, next) => {
+  try {
+    const channels = await channelsRepo.listAll();
+    const selected = req.query.channel || (await defaultChannel(channels));
+    const [groups, config, channelConfig] = await Promise.all([
+      selected ? aiUserMemoryRepo.listForChannel(selected) : Promise.resolve([]),
+      aiConfigRepo.getConfig(),
+      selected ? channelConfigRepo.getConfig(selected) : Promise.resolve({}),
+    ]);
+    const channelAiEnabled = Boolean(channelConfig.ai && channelConfig.ai.enabled);
+    res.render("adminAiViewers", {
+      tab: "ai",
+      aiTab: "viewers",
+      channels,
+      selected,
+      groups,
+      config,
+      channelAiEnabled,
+      editError: req.query.error || null,
+      maxFactLen: aiUserMemoryRepo.MAX_FACT_LEN,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Добавление руками требует ника, а строка живёт под user-id: ники на Twitch меняются. Ник
+// разрешается через UserIdentities - если бот этого человека ни разу не видел, записывать факт
+// не на кого, и об этом надо сказать, а не молча ничего не сделать.
+router.post("/admin/ai/viewers", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const identity = await userStatsRepo.findUserByName(req.body.login);
+    if (!identity) {
+      return res.redirect(
+        `/admin/ai/viewers?channel=${encodeURIComponent(channel)}&error=unknownUser`
+      );
+    }
+    const subject = { userId: identity.userId, login: identity.currentUserName };
+    const key = await aiUserMemoryRepo.addManual(channel, subject, req.body.fact, req.user.login || req.user.userId);
+    if (key) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.userMemory.add",
+        target: channel + "/" + subject.login,
+        details: { fact: String(req.body.fact || "").slice(0, aiUserMemoryRepo.MAX_FACT_LEN) },
+      });
+    }
+    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/viewers/edit", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const result = await aiUserMemoryRepo.updateFact(
+      channel,
+      req.body.userId,
+      req.body.key,
+      req.body.fact,
+      req.user.login || req.user.userId
+    );
+    if (result.ok) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.userMemory.edit",
+        target: channel + "/" + String(req.body.userId || ""),
+        details: { before: String(req.body.key || ""), after: String(req.body.fact || "").slice(0, aiUserMemoryRepo.MAX_FACT_LEN) },
+      });
+    }
+    const failed = result.ok ? "" : "&error=" + encodeURIComponent(result.reason || "failed");
+    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}${failed}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/viewers/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    await aiUserMemoryRepo.remove(channel, req.body.userId, req.body.key);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "ai.userMemory.delete",
+      target: channel + "/" + String(req.body.userId || ""),
+      details: { key: String(req.body.key || "") },
+    });
+    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/viewers/clear-user", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const removed = await aiUserMemoryRepo.clearUser(channel, req.body.userId);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "ai.userMemory.clearUser",
+      target: channel + "/" + String(req.body.userId || ""),
+      details: { removed },
+    });
+    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/viewers/clear", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const removed = await aiUserMemoryRepo.clearChannel(channel);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "ai.userMemory.clear",
+      target: channel,
+      details: { removed },
+    });
+    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
   } catch (err) {
     next(err);
   }

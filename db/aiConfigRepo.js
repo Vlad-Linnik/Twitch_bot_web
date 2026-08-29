@@ -47,6 +47,13 @@ const DEFAULT_AI_CONFIG = {
   // store can grow without the bill growing with it. Only the second number is spend.
   channelMemoryMax: 200,
   channelMemoryRecall: 10,
+  // Whether the bot may add to what it knows about individual viewers, and how many facts it may
+  // hold about one of them. ONE number here, not two: only the people in the current exchange are
+  // read back (the asker, plus anyone they named), so a per-person ceiling already bounds what one
+  // call carries. The channel memory needed a second number because its store is shared by
+  // everyone and grows past what any single question can use.
+  userMemoryEnabled: true,
+  userMemoryMax: 10,
   persona: "",
   // Правила целиком, если их переписали здесь. Пусто - работают встроенные из кода бота
   // (games/aiReply.js): настройка, которую не заполняли, не может означать «без правил».
