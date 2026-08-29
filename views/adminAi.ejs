@@ -196,6 +196,33 @@
                 class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.persona %></textarea>
     </section>
 
+    <%# --- правила целиком ----------------------------------------------- %>
+    <section class="mb-12">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.systemPrompt') %></h2>
+      <p class="text-neutral-500 text-sm mb-2"><%= t('admin.ai.systemPromptHint') %></p>
+      <%# Единственное, что правка этого текста ломает молча: без блока про remember/forget модель
+          перестаёт заполнять поля, ошибки при этом нет. Об этом надо сказать прямо. %>
+      <p class="text-amber-500/80 text-xs mb-3"><%= t('admin.ai.systemPromptWarning') %></p>
+      <textarea id="systemPrompt" name="systemPrompt" rows="16" maxlength="<%= validation.MAX_SYSTEM_PROMPT_LEN %>"
+                placeholder="<%= t('admin.ai.systemPromptPlaceholder') %>"
+                class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-purple-500"><%= config.systemPrompt %></textarea>
+      <% if (config.builtinSystemPrompt) { %>
+        <%# Текст приходит из кода бота, а не из копии в этом репозитории - см. aiConfigRepo.
+            Кнопка только подставляет его в поле: сохранение остаётся отдельным осознанным шагом. %>
+        <button type="button" id="fillBuiltinPrompt"
+                class="mt-2 text-xs text-purple-400 hover:text-purple-300"><%= t('admin.ai.systemPromptFillBuiltin') %></button>
+        <script type="application/json" id="builtinPromptData"><%- safeJson(config.builtinSystemPrompt) %></script>
+        <script>
+          document.getElementById('fillBuiltinPrompt').addEventListener('click', function () {
+            document.getElementById('systemPrompt').value =
+              JSON.parse(document.getElementById('builtinPromptData').textContent);
+          });
+        </script>
+      <% } else { %>
+        <p class="mt-2 text-xs text-neutral-600"><%= t('admin.ai.systemPromptBuiltinUnknown') %></p>
+      <% } %>
+    </section>
+
     <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
       <%= t('admin.ai.save') %>
     </button>
