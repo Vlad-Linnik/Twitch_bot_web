@@ -38,6 +38,12 @@ const DEFAULT_AI_CONFIG = {
   requestTimeoutMs: 8000,
   memoryPairs: 5,
   memoryTtlDays: 30,
+  // Whether the bot may add to a channel's memory on its own. Off leaves the memory in place and
+  // still read - it only stops new rows being written from chat.
+  channelMemoryEnabled: true,
+  // How many remembered facts a channel may hold. Every one of them is re-sent on every billed
+  // call for that channel, so this is an input-token setting as much as a tidiness one.
+  channelMemoryMax: 25,
   persona: "",
   updatedAt: null,
   updatedBy: null,

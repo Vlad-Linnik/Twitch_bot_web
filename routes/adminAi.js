@@ -1,6 +1,6 @@
 // Tier-0 admin pages for the AI mention replies: the global settings, the per-channel fine
-// settings that moved off the channel owner's own page, and the four tables the feature keeps -
-// filter, answer cache, call journal, ignore list.
+// settings that moved off the channel owner's own page, and the five tables the feature keeps -
+// filter, answer cache, channel memory, call journal, ignore list.
 //
 // WHY THIS IS ADMIN-ONLY. The channel owner keeps what is theirs: the banned-word list, the reply
 // phrases, and the on/off switches for both. Everything here either spends the project's API
@@ -18,6 +18,7 @@ const aiFilterRepo = require("../db/aiFilterRepo");
 const aiCacheRepo = require("../db/aiCacheRepo");
 const aiLogRepo = require("../db/aiLogRepo");
 const aiIgnoreRepo = require("../db/aiIgnoreRepo");
+const aiMemoryRepo = require("../db/aiMemoryRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { diffConfig } = require("../lib/settingsDiff");
@@ -250,6 +251,81 @@ router.post("/admin/ai/cache/clear", settingsWriteLimiter, requireAdmin, verifyT
       details: { removed },
     });
     res.redirect(`/admin/ai/cache?channel=${encodeURIComponent(req.body.channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- channel memory -----------------------------------------------------------------------------
+
+// The facts the bot wrote for itself, curated the same way the answer cache is: one channel at a
+// time, one row at a time. Adding by hand is here too - the memory is one list whichever side
+// filled a row, and a fact typed here is simply a row the bot's rotation will never evict.
+router.get("/admin/ai/memory", requireAdmin, async (req, res, next) => {
+  try {
+    const channels = await channelsRepo.listAll();
+    const selected = req.query.channel || (channels[0] && channels[0].channelLogin) || null;
+    const [entries, config] = await Promise.all([
+      selected ? aiMemoryRepo.listForChannel(selected) : Promise.resolve([]),
+      aiConfigRepo.getConfig(),
+    ]);
+    res.render("adminAiMemory", {
+      tab: "ai",
+      aiTab: "memory",
+      channels,
+      selected,
+      entries,
+      config,
+      maxFactLen: aiMemoryRepo.MAX_FACT_LEN,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/memory", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const key = await aiMemoryRepo.addManual(channel, req.body.fact, req.user.login || req.user.userId);
+    if (key) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.memory.add",
+        target: channel,
+        details: { fact: String(req.body.fact || "").slice(0, aiMemoryRepo.MAX_FACT_LEN) },
+      });
+    }
+    res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/memory/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    await aiMemoryRepo.remove(req.body.channel, req.body.key);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "ai.memory.delete",
+      target: String(req.body.channel || ""),
+      details: { key: String(req.body.key || "") },
+    });
+    res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(req.body.channel || "")}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/memory/clear", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const removed = await aiMemoryRepo.clearChannel(req.body.channel);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "ai.memory.clear",
+      target: String(req.body.channel || ""),
+      details: { removed },
+    });
+    res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(req.body.channel || "")}`);
   } catch (err) {
     next(err);
   }

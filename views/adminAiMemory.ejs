@@ -1,0 +1,113 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.ai.tabMemory') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+  <%- include('partials/aiTabs', { aiTab }) %>
+
+  <p class="text-neutral-500 text-sm mb-2"><%= t('admin.ai.memoryPageHint') %></p>
+  <% if (!config.channelMemoryEnabled) { %>
+    <p class="mb-6 text-sm text-amber-500"><%= t('admin.ai.memoryWritesOff') %></p>
+  <% } else { %>
+    <p class="text-neutral-600 text-xs mb-6"><%= t('admin.ai.memoryCountHint') %> <%= config.channelMemoryMax %></p>
+  <% } %>
+
+  <div class="flex flex-wrap items-end gap-3 mb-6">
+    <form method="get" action="/admin/ai/memory">
+      <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.colChannel') %></label>
+      <select name="channel" onchange="this.form.submit()"
+              class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+        <% channels.forEach(function (c) { %>
+          <option value="<%= c.channelLogin %>" <%= selected === c.channelLogin ? 'selected' : '' %>><%= c.channelLogin %></option>
+        <% }); %>
+      </select>
+    </form>
+    <% if (selected && entries.length) { %>
+      <form method="post" action="/admin/ai/memory/clear">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="channel" value="<%= selected %>" />
+        <button type="submit" class="px-3 py-2 rounded-md border border-neutral-800 text-neutral-400 hover:text-neutral-200 text-sm transition-colors"><%= t('admin.ai.clearMemory') %></button>
+      </form>
+    <% } %>
+  </div>
+
+  <% if (selected) { %>
+    <form method="post" action="/admin/ai/memory" class="mb-8 flex flex-wrap items-end gap-3">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="channel" value="<%= selected %>" />
+      <div class="flex-1 min-w-64">
+        <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.addFact') %></label>
+        <input type="text" name="fact" maxlength="<%= maxFactLen %>" required
+               placeholder="<%= t('admin.ai.addFactPlaceholder') %>"
+               class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+      </div>
+      <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+        <%= t('admin.ai.addFactButton') %>
+      </button>
+    </form>
+  <% } %>
+
+  <% if (!entries.length) { %>
+    <p class="text-neutral-600 text-sm"><%= t('admin.ai.memoryEmpty') %></p>
+  <% } else { %>
+    <div class="rounded-lg border border-neutral-800 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-neutral-900 text-neutral-400">
+            <tr>
+              <th class="text-left font-medium px-3 py-2 w-10">#</th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colFact') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colFactSource') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colLearnedFrom') %></th>
+              <th class="text-left font-medium px-3 py-2"><%= t('admin.ai.colTime') %></th>
+              <th class="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-800">
+            <% entries.forEach(function (e, i) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 align-top">
+                <td class="px-3 py-2 text-neutral-600 tabular-nums"><%= i + 1 %></td>
+                <td class="px-3 py-2 text-neutral-200 max-w-md"><%= e.fact %></td>
+                <td class="px-3 py-2 whitespace-nowrap">
+                  <% if (e.source === 'admin') { %>
+                    <span class="text-purple-400 text-xs"><%= t('admin.ai.factSourceAdmin') %></span>
+                  <% } else { %>
+                    <span class="text-neutral-500 text-xs"><%= t('admin.ai.factSourceAi') %></span>
+                  <% } %>
+                </td>
+                <%# The message the fact was learnt from. Anyone in chat can produce one, so seeing
+                    who said what is the whole point of the column. %>
+                <td class="px-3 py-2 text-neutral-500 max-w-xs">
+                  <% if (e.authorLogin) { %>
+                    <span class="text-neutral-400"><%= e.authorLogin %></span>
+                    <% if (e.sourceMessage) { %>
+                      <p class="text-neutral-600 text-xs mt-0.5"><%= e.sourceMessage %></p>
+                    <% } %>
+                  <% } else { %>
+                    —
+                  <% } %>
+                </td>
+                <td class="px-3 py-2 text-neutral-500 whitespace-nowrap tabular-nums">
+                  <%= new Date(e.createdAt).toLocaleDateString(locale) %>
+                </td>
+                <td class="px-3 py-2 text-right">
+                  <form method="post" action="/admin/ai/memory/delete">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <input type="hidden" name="channel" value="<%= selected %>" />
+                    <input type="hidden" name="key" value="<%= e.key %>" />
+                    <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.delete') %></button>
+                  </form>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

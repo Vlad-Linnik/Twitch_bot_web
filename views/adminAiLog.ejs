@@ -52,6 +52,14 @@
                   <% if (r.sent === false) { %>
                     <span class="ml-1 text-xs text-amber-500"><%= t('admin.ai.notSent') %></span>
                   <% } %>
+                  <%# What this call did to the channel memory. Shown here rather than only on the
+                      memory page so a fact can be traced back to the exchange that produced it. %>
+                  <% if (r.remembered) { %>
+                    <p class="text-xs text-purple-400 mt-1"><%= t('admin.ai.memoryAdded') %>: <%= r.remembered %></p>
+                  <% } %>
+                  <% if (r.forgot) { %>
+                    <p class="text-xs text-neutral-500 mt-1"><%= t('admin.ai.memoryForgot') %>: <%= r.forgot %></p>
+                  <% } %>
                 </td>
                 <td class="px-3 py-2 text-neutral-500 whitespace-nowrap"><%= t('admin.ai.sourceKind.' + (r.source || 'model')) %></td>
                 <td class="px-3 py-2 text-right text-neutral-500 tabular-nums whitespace-nowrap">
