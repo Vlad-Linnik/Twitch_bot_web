@@ -1366,6 +1366,18 @@
       "colLearnedFrom": "Learnt from",
       "factSourceAdmin": "by hand",
       "factSourceAi": "the bot",
+      "factSave": "Save",
+      "factRole": {
+        "broadcaster": "from the streamer",
+        "moderator": "from a moderator",
+        "vip": "from a VIP",
+        "viewer": "from a viewer"
+      },
+      "factEditError": {
+        "duplicate": "That fact is already stored - the edit was cancelled rather than making two identical rows.",
+        "empty": "An empty fact cannot be saved. Use Delete to remove it.",
+        "failed": "The edit could not be saved."
+      },
       "channelMemoryEnabled": "The bot remembers on its own",
       "channelMemoryEnabledHint": "Let the bot add facts about the channel to its memory while it answers. Switching this off erases nothing: the list is still read, it just stops growing.",
       "channelMemoryMax": "Facts kept per channel",

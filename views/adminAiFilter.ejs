@@ -10,8 +10,21 @@
 
   <p class="text-neutral-500 text-sm mb-6"><%= t('admin.ai.filterHint') %></p>
 
+  <%# Заготовки теперь по каналам: пишет их модель, и в общей таблице придуманный ею ответ
+      выдавался бы во всех чатах бота сразу. %>
+  <form method="get" action="/admin/ai/filter" class="mb-6">
+    <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.colChannel') %></label>
+    <select name="channel" onchange="this.form.submit()"
+            class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+      <% channels.forEach(function (c) { %>
+        <option value="<%= c.channelLogin %>" <%= selected === c.channelLogin ? 'selected' : '' %>><%= c.channelLogin %></option>
+      <% }); %>
+    </select>
+  </form>
+
   <form method="post" action="/admin/ai/filter" class="mb-8 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-4">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="hidden" name="channel" value="<%= selected %>" />
     <div class="grid sm:grid-cols-2 gap-3 mb-3">
       <div>
         <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.colText') %></label>
@@ -52,6 +65,7 @@
                 <td class="px-4 py-2 text-right">
                   <form method="post" action="/admin/ai/filter/delete">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <input type="hidden" name="channel" value="<%= selected %>" />
                     <input type="hidden" name="text" value="<%= e.text %>" />
                     <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.delete') %></button>
                   </form>

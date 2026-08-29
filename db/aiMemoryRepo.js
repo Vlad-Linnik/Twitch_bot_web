@@ -65,6 +65,41 @@ async function addManual(channelLogin, fact, addedBy) {
   return key;
 }
 
+// Правка факта. Ключ пересчитывается из нового текста - он и есть защита от дублей, и оставить
+// его от старого текста значило бы, что два разных факта считаются одним.
+//
+// Отредактированная строка становится admin-строкой: человек её переписал, значит ручается за
+// неё, а такие не вытесняются ротацией и всегда уходят в запрос. Кто её надиктовал изначально,
+// сохраняется в authorLogin/sourceMessage - это провенанс, а не авторство текста.
+//
+// Возвращает { ok } либо { ok:false, reason:'duplicate'|'empty' }: столкновение ключей - не сбой,
+// а обычный исход, когда факт правят к тому, что уже записано.
+async function updateFact(channelLogin, key, fact, editedBy) {
+  const col = await ensureInitialized();
+  const channel = withHash(channelLogin);
+  const text = String(fact ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_FACT_LEN);
+  const nextKey = aiTextKey(text);
+  if (!nextKey) return { ok: false, reason: "empty" };
+
+  if (nextKey !== String(key)) {
+    const clash = await col.findOne({ channel, key: nextKey });
+    if (clash) return { ok: false, reason: "duplicate" };
+  }
+  const res = await col.updateOne(
+    { channel, key: String(key) },
+    {
+      $set: {
+        fact: text,
+        key: nextKey,
+        source: "admin",
+        editedBy: String(editedBy || ""),
+        updatedAt: new Date(),
+      },
+    }
+  );
+  return { ok: res.matchedCount > 0 };
+}
+
 async function remove(channelLogin, key) {
   const col = await ensureInitialized();
   await col.deleteOne({ channel: withHash(channelLogin), key: String(key) });
@@ -76,4 +111,4 @@ async function clearChannel(channelLogin) {
   return res.deletedCount || 0;
 }
 
-module.exports = { MAX_FACT_LEN, listForChannel, countForChannel, addManual, remove, clearChannel };
+module.exports = { MAX_FACT_LEN, listForChannel, countForChannel, addManual, updateFact, remove, clearChannel };

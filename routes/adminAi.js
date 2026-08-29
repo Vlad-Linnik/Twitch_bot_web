@@ -198,8 +198,12 @@ router.post(
 
 router.get("/admin/ai/filter", requireAdmin, async (req, res, next) => {
   try {
-    const entries = await aiFilterRepo.list();
-    res.render("adminAiFilter", { tab: "ai", aiTab: "filter", entries });
+    // Тот же выбор канала по умолчанию, что у кэша и памяти: первый с включёнными ИИ-ответами,
+    // а не первый по алфавиту.
+    const channels = await channelsRepo.listAll();
+    const selected = req.query.channel || (await defaultChannel(channels));
+    const entries = selected ? await aiFilterRepo.listForChannel(selected) : [];
+    res.render("adminAiFilter", { tab: "ai", aiTab: "filter", channels, selected, entries });
   } catch (err) {
     next(err);
   }
@@ -207,11 +211,12 @@ router.get("/admin/ai/filter", requireAdmin, async (req, res, next) => {
 
 router.post("/admin/ai/filter", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
   try {
-    const key = await aiFilterRepo.upsert({ text: req.body.text, answer: req.body.answer, source: "admin" });
+    const channel = String(req.body.channel || "");
+    const key = await aiFilterRepo.upsert({ channelLogin: channel, text: req.body.text, answer: req.body.answer, source: "admin" });
     if (key) {
-      await adminActionLogsRepo.logAction({ admin: req.user, action: "ai.filter.upsert", target: key });
+      await adminActionLogsRepo.logAction({ admin: req.user, action: "ai.filter.upsert", target: channel + "/" + key });
     }
-    res.redirect("/admin/ai/filter");
+    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
   } catch (err) {
     next(err);
   }
@@ -219,13 +224,14 @@ router.post("/admin/ai/filter", settingsWriteLimiter, requireAdmin, verifyToken,
 
 router.post("/admin/ai/filter/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
   try {
-    await aiFilterRepo.remove(req.body.text);
+    const channel = String(req.body.channel || "");
+    await aiFilterRepo.remove(channel, req.body.text);
     await adminActionLogsRepo.logAction({
       admin: req.user,
       action: "ai.filter.delete",
-      target: String(req.body.text || ""),
+      target: channel + "/" + String(req.body.text || ""),
     });
-    res.redirect("/admin/ai/filter");
+    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
   } catch (err) {
     next(err);
   }
@@ -293,6 +299,7 @@ router.get("/admin/ai/memory", requireAdmin, async (req, res, next) => {
       entries,
       config,
       channelAiEnabled,
+      editError: req.query.error || null,
       maxFactLen: aiMemoryRepo.MAX_FACT_LEN,
     });
   } catch (err) {
@@ -313,6 +320,25 @@ router.post("/admin/ai/memory", settingsWriteLimiter, requireAdmin, verifyToken,
       });
     }
     res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/memory/edit", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const result = await aiMemoryRepo.updateFact(channel, req.body.key, req.body.fact, req.user.login || req.user.userId);
+    if (result.ok) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.memory.edit",
+        target: channel,
+        details: { before: String(req.body.key || ""), after: String(req.body.fact || "").slice(0, aiMemoryRepo.MAX_FACT_LEN) },
+      });
+    }
+    const failed = result.ok ? "" : "&error=" + encodeURIComponent(result.reason || "failed");
+    res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(channel)}${failed}`);
   } catch (err) {
     next(err);
   }

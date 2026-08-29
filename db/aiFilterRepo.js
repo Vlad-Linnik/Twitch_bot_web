@@ -2,9 +2,14 @@
 // the model is ever contacted. Rows are added both by the model itself (when it decides a message
 // did not deserve the call it just cost) and by hand from the admin panel.
 //
-// GLOBAL, not per channel: "hi", "ku" and a lone emote mean the same thing everywhere, and making
-// each channel relearn them would mean paying for that lesson once per channel. The answer cache
-// (aiCacheRepo) is the opposite case and is deliberately per channel.
+// ПО КАНАЛАМ. Раньше таблица была общей на все каналы - «привет» значит одно и то же везде, и
+// заново учить этому каждый канал казалось расточительным. Отказались вот почему: строки сюда
+// пишет сама модель (вердикт filter), и в общей таблице придуманная ею заготовка начинала
+// выдаваться во всех чатах бота сразу, навсегда и без чьего-либо просмотра. На проде так появился
+// ответ, которому в чужом канале делать нечего.
+//
+// Экономия, ради которой всё затевалось, оказалась мнимой: за месяцы работы в таблице накопилось
+// девять строк, то есть «переучивание» стоит девять вызовов на канал. Утечка стоит дороже.
 //
 // hits/lastHitAt exist so the list stays prunable. Without them a table that only ever grows is
 // impossible to review a month later - there is no way to tell a live entry from a dead one.
@@ -17,19 +22,26 @@ async function ensureInitialized() {
   if (collection) return collection;
   const db = await connect();
   collection = db.collection("AiFilter");
-  await collection.createIndex({ text: 1 }, { unique: true });
-  await collection.createIndex({ hits: -1 });
+  await collection.createIndex({ channel: 1, text: 1 }, { unique: true });
+  await collection.createIndex({ channel: 1, hits: -1 });
   return collection;
 }
 
-async function list({ limit = 500 } = {}) {
+const withHash = (login) => (login.startsWith("#") ? login.toLowerCase() : `#${login.toLowerCase()}`);
+
+async function listForChannel(channelLogin, { limit = 500 } = {}) {
   const col = await ensureInitialized();
-  return col.find({}).sort({ hits: -1, _id: -1 }).limit(limit).toArray();
+  return col.find({ channel: withHash(channelLogin) }).sort({ hits: -1, _id: -1 }).limit(limit).toArray();
 }
 
 async function count() {
   const col = await ensureInitialized();
   return col.countDocuments({});
+}
+
+async function countForChannel(channelLogin) {
+  const col = await ensureInitialized();
+  return col.countDocuments({ channel: withHash(channelLogin) });
 }
 
 // source: "ai" (the model added it after answering) or "admin" (added by hand).
@@ -42,25 +54,26 @@ async function count() {
 // `source` is $set, not $setOnInsert: correcting a row the model wrote makes it an admin row, and
 // leaving it attributed to the bot would mean the "added by" column stops answering the only
 // question it is there for - whose text is this.
-async function upsert({ text, answer, source }) {
+async function upsert({ channelLogin, text, answer, source }) {
   const col = await ensureInitialized();
   const key = aiTextKey(text);
   const reply = String(answer ?? "").trim();
-  if (!key || !reply) return null;
+  const channel = String(channelLogin || "").trim();
+  if (!key || !reply || !channel) return null;
   await col.updateOne(
-    { text: key },
+    { channel: withHash(channel), text: key },
     {
       $set: { answer: reply, source: source || "admin" },
-      $setOnInsert: { text: key, hits: 0, lastHitAt: null, createdAt: new Date() },
+      $setOnInsert: { channel: withHash(channel), text: key, hits: 0, lastHitAt: null, createdAt: new Date() },
     },
     { upsert: true }
   );
   return key;
 }
 
-async function remove(text) {
+async function remove(channelLogin, text) {
   const col = await ensureInitialized();
-  await col.deleteOne({ text: aiTextKey(text) });
+  await col.deleteOne({ channel: withHash(channelLogin), text: aiTextKey(text) });
 }
 
-module.exports = { list, count, upsert, remove };
+module.exports = { listForChannel, count, countForChannel, upsert, remove };

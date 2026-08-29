@@ -8,6 +8,12 @@
   <%- include('partials/adminTabs', { tab }) %>
   <%- include('partials/aiTabs', { aiTab }) %>
 
+  <%# Правка отклоняется штатно (например, факт уже записан) — сообщение должно быть видно
+      независимо от того, пуст список или нет. %>
+  <% if (editError) { %>
+    <p class="mb-4 text-sm text-red-400"><%= t('admin.ai.factEditError.' + editError) %></p>
+  <% } %>
+
   <p class="text-neutral-500 text-sm mb-2"><%= t('admin.ai.memoryPageHint') %></p>
   <% if (!config.channelMemoryEnabled) { %>
     <p class="mb-6 text-sm text-amber-500"><%= t('admin.ai.memoryWritesOff') %></p>
@@ -79,12 +85,25 @@
             <% entries.forEach(function (e, i) { %>
               <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 align-top">
                 <td class="px-3 py-2 text-neutral-600 tabular-nums"><%= i + 1 %></td>
-                <td class="px-3 py-2 text-neutral-200 max-w-md"><%= e.fact %></td>
+                <%# Текст правится на месте: факт живёт долго и уходит в каждый подходящий запрос,
+                    так что «удалить и написать заново» — лишний шаг там, где нужна одна правка. %>
+                <td class="px-3 py-2 text-neutral-200 max-w-md">
+                  <form method="post" action="/admin/ai/memory/edit" class="flex gap-2 items-start">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <input type="hidden" name="channel" value="<%= selected %>" />
+                    <input type="hidden" name="key" value="<%= e.key %>" />
+                    <input type="text" name="fact" value="<%= e.fact %>" maxlength="<%= maxFactLen %>"
+                           class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+                    <button type="submit" class="text-purple-400 hover:text-purple-300 text-xs whitespace-nowrap mt-1"><%= t('admin.ai.factSave') %></button>
+                  </form>
+                </td>
+                <%# Чей это факт. Учить бота может кто угодно, но вес слова разный: он решает, кого
+                    модель послушает при противоречии и кто вылетит первым при переполнении. %>
                 <td class="px-3 py-2 whitespace-nowrap">
                   <% if (e.source === 'admin') { %>
                     <span class="text-purple-400 text-xs"><%= t('admin.ai.factSourceAdmin') %></span>
                   <% } else { %>
-                    <span class="text-neutral-500 text-xs"><%= t('admin.ai.factSourceAi') %></span>
+                    <span class="text-neutral-500 text-xs"><%= t('admin.ai.factRole.' + (e.authorRole || 'viewer')) %></span>
                   <% } %>
                 </td>
                 <%# The message the fact was learnt from. Anyone in chat can produce one, so seeing
