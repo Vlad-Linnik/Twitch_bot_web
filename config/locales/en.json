@@ -1460,6 +1460,7 @@
         "model": "model",
         "filter": "filter",
         "cache": "cache",
+        "cacheSimilar": "cache (same question, reworded)",
         "error": "error"
       },
       "verdictsHint": "What the model proposed to punish. Mark agree/disagree - it is the only basis for switching to enforce.",
