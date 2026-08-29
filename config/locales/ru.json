@@ -1477,6 +1477,10 @@
       "colQuestion": "Вопрос",
       "colReply": "Ответ",
       "colCost": "Стоимость",
+      "tokensIn": "вход:",
+      "tokensOut": "выход:",
+      "tokensCacheRead": "из кэша:",
+      "tokensCacheWrite": "в кэш:",
       "notSent": "(не отправлен)",
       "sourceKind": {
         "model": "модель",

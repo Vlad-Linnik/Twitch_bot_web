@@ -8,9 +8,17 @@
   <%- include('partials/adminTabs', { tab }) %>
   <%- include('partials/aiTabs', { aiTab }) %>
 
-  <p class="text-neutral-500 text-sm mb-6">
+  <p class="text-neutral-500 text-sm mb-1">
     <%= t('admin.ai.logHint') %>
     <span class="text-neutral-300"><%= today.requests %></span> · $<span class="text-neutral-300"><%= (today.costUsd || 0).toFixed(3) %></span>
+  </p>
+  <%# Разбивка по токенам нужна, чтобы цифру расхода можно было проверить: вход в ответе API —
+      это только некэшированный остаток, а префикс с правилами приезжает отдельными полями и по другой цене. %>
+  <p class="text-neutral-600 text-xs mb-6 tabular-nums">
+    <%= t('admin.ai.tokensIn') %> <%= (today.inputTokens || 0).toLocaleString(locale) %> ·
+    <%= t('admin.ai.tokensOut') %> <%= (today.outputTokens || 0).toLocaleString(locale) %> ·
+    <%= t('admin.ai.tokensCacheRead') %> <%= (today.cacheReadTokens || 0).toLocaleString(locale) %> ·
+    <%= t('admin.ai.tokensCacheWrite') %> <%= (today.cacheWriteTokens || 0).toLocaleString(locale) %>
   </p>
 
   <form method="get" action="/admin/ai/log" class="mb-6">

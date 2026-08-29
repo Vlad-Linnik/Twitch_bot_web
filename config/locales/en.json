@@ -1477,6 +1477,10 @@
       "colQuestion": "Question",
       "colReply": "Reply",
       "colCost": "Cost",
+      "tokensIn": "in:",
+      "tokensOut": "out:",
+      "tokensCacheRead": "cache read:",
+      "tokensCacheWrite": "cache write:",
       "notSent": "(not sent)",
       "sourceKind": {
         "model": "model",

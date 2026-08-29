@@ -67,12 +67,17 @@ async function spendSince(since) {
           requests: { $sum: 1 },
           inputTokens: { $sum: "$inputTokens" },
           outputTokens: { $sum: "$outputTokens" },
+          // Кэш - отдельные величины, а не часть inputTokens: API отдаёт во `input_tokens` только
+          // некэшированный остаток. Без этих двух сумм по панели не видно ни размера префикса,
+          // ни того, попадает ли он в кэш, - а от второго цена отличается в 12 раз.
+          cacheReadTokens: { $sum: "$cacheReadTokens" },
+          cacheWriteTokens: { $sum: "$cacheWriteTokens" },
           costUsd: { $sum: "$costUsd" },
         },
       },
     ])
     .toArray();
-  return row || { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  return row || { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
 }
 
 // The observe-mode review: "would you have done the same?". The answer is the only honest basis
