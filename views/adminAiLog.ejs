@@ -71,6 +71,20 @@
                   <% if (r.forgot) { %>
                     <p class="text-xs text-neutral-500 mt-1"><%= t('admin.ai.memoryForgot') %>: <%= r.forgot %></p>
                   <% } %>
+                  <%# Шкала отношения: чем была, чем стала, и во что вылился вердикт. Без этих строк
+                      по журналу нельзя решить, стоит ли переводить режим в боевой, - не видно, кому
+                      досталось бы предупреждение, а кому мут и на сколько. Строки, записанные до
+                      появления полей, не показывают ничего: у них ответа на этот вопрос нет. %>
+                  <% if (typeof r.rapportAfter === 'number' && r.rapportAfter !== r.rapportBefore) { %>
+                    <p class="text-xs mt-1 <%= r.rapportAfter > r.rapportBefore ? 'text-emerald-500' : 'text-amber-500' %>">
+                      <%= t('admin.ai.logRapport') %>: <%= r.rapportBefore %> &rarr; <%= r.rapportAfter %>
+                    </p>
+                  <% } %>
+                  <% if (r.punishAction === 'warn') { %>
+                    <p class="text-xs text-amber-500 mt-1"><%= t('admin.ai.logPunishWarn') %></p>
+                  <% } else if (r.punishAction === 'timeout' && r.timeoutSeconds) { %>
+                    <p class="text-xs text-red-400 mt-1"><%= t('admin.ai.logPunishTimeout') %> <%= Math.round(r.timeoutSeconds / 60) %> <%= t('admin.ai.minutesShort') %></p>
+                  <% } %>
                 </td>
                 <td class="px-3 py-2 text-neutral-500 whitespace-nowrap">
                   <%= t('admin.ai.sourceKind.' + (r.source || 'model')) %>

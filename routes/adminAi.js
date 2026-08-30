@@ -20,6 +20,7 @@ const aiLogRepo = require("../db/aiLogRepo");
 const aiIgnoreRepo = require("../db/aiIgnoreRepo");
 const aiMemoryRepo = require("../db/aiMemoryRepo");
 const aiUserMemoryRepo = require("../db/aiUserMemoryRepo");
+const aiRapportRepo = require("../db/aiRapportRepo");
 const userStatsRepo = require("../db/userStatsRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -555,6 +556,111 @@ router.post("/admin/ai/viewers/clear", settingsWriteLimiter, requireAdmin, verif
       details: { removed },
     });
     res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- отношение к зрителям -----------------------------------------------------------------------
+
+// Страница отвечает на один вопрос: что будет этому человеку за следующее нарушение. Само число
+// шкалы без этого ответа мало о чём говорит, поэтому колонка «что будет» считается в репозитории
+// копией правил бота (lib/rapport.js) и показывается рядом со счётом.
+router.get("/admin/ai/rapport", requireAdmin, async (req, res, next) => {
+  try {
+    const channels = await channelsRepo.listAll();
+    const selected = req.query.channel || (await defaultChannel(channels));
+    const config = await aiConfigRepo.getConfig();
+    const [rows, channelConfig] = await Promise.all([
+      selected ? aiRapportRepo.listForChannel(selected, config) : Promise.resolve([]),
+      selected ? channelConfigRepo.getConfig(selected) : Promise.resolve({}),
+    ]);
+    res.render("adminAiRapport", {
+      tab: "ai",
+      aiTab: "rapport",
+      channels,
+      selected,
+      rows,
+      config,
+      channelAiEnabled: Boolean(channelConfig.ai && channelConfig.ai.enabled),
+      // Общий пул виден и здесь, но значит другое, чем на странице памяти: по нему счёт засевается
+      // ОДИН раз, при первом появлении человека на канале, а дальше строка живёт своей жизнью.
+      memoryShare: Boolean(channelConfig.ai && channelConfig.ai.memoryShare),
+      editError: req.query.error || null,
+      minScore: aiRapportRepo.MIN_SCORE,
+      maxScore: aiRapportRepo.MAX_SCORE,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Правится и существующая строка (по userId), и ещё не заведённая (по нику): выставить отношение
+// наперёд - обычное желание, а строка появляется только у того, кто дожил до платного вызова. Ник
+// разрешается через UserIdentities, как и на странице памяти: писать не на кого, если бот этого
+// человека ни разу не видел, и об этом надо сказать, а не молча ничего не сделать.
+router.post("/admin/ai/rapport/set", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    let userId = String(req.body.userId || "");
+    let login = String(req.body.login || "");
+    if (!userId) {
+      const identity = await userStatsRepo.findUserByName(login);
+      if (!identity) {
+        return res.redirect(
+          `/admin/ai/rapport?channel=${encodeURIComponent(channel)}&error=unknownUser`
+        );
+      }
+      userId = identity.userId;
+      login = identity.currentUserName;
+    }
+    const score = await aiRapportRepo.setScore(channel, userId, login, req.body.score, req.user.login || req.user.userId);
+    if (score !== null) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.rapport.set",
+        target: channel + "/" + (login || userId),
+        details: { score },
+      });
+    }
+    res.redirect(`/admin/ai/rapport?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Удаление, а не обнуление: ноль - это осознанное «отношусь нейтрально», а отсутствие строки
+// означает, что человека здесь ещё не было, и при включённом пуле следующий его вопрос засеет счёт
+// заново из соседнего канала. Две разные кнопки нужны именно потому, что это два разных решения.
+router.post("/admin/ai/rapport/forget", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const removed = await aiRapportRepo.remove(channel, req.body.userId);
+    if (removed) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.rapport.forget",
+        target: channel + "/" + String(req.body.login || req.body.userId || ""),
+        details: {},
+      });
+    }
+    res.redirect(`/admin/ai/rapport?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/ai/rapport/clear", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const removed = await aiRapportRepo.clearChannel(channel);
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "ai.rapport.clear",
+      target: channel,
+      details: { removed },
+    });
+    res.redirect(`/admin/ai/rapport?channel=${encodeURIComponent(channel)}`);
   } catch (err) {
     next(err);
   }
