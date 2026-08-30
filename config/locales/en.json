@@ -1483,6 +1483,7 @@
       "tokensCacheWrite": "cache write:",
       "notSent": "(not sent)",
       "sourceKind": {
+        "emote": "emote",
         "model": "model",
         "filter": "filter",
         "cache": "cache",

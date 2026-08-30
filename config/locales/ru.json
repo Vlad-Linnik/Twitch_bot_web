@@ -1483,6 +1483,7 @@
       "tokensCacheWrite": "в кэш:",
       "notSent": "(не отправлен)",
       "sourceKind": {
+        "emote": "смайлик",
         "model": "модель",
         "filter": "фильтр",
         "cache": "кэш",
