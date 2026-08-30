@@ -1497,6 +1497,11 @@
         "budget": "daily limit reached",
         "error": "error"
       },
+      "cacheFate": {
+        "stored": "answer cached",
+        "temporary": "not cached: temporary",
+        "volatile": "not cached: tied to the moment"
+      },
       "verdictsHint": "What the model proposed to punish. Mark agree/disagree - it is the only basis for switching to enforce.",
       "currentMode": "Mode",
       "tallyAgree": "Agree",

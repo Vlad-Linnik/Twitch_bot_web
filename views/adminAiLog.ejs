@@ -72,7 +72,18 @@
                     <p class="text-xs text-neutral-500 mt-1"><%= t('admin.ai.memoryForgot') %>: <%= r.forgot %></p>
                   <% } %>
                 </td>
-                <td class="px-3 py-2 text-neutral-500 whitespace-nowrap"><%= t('admin.ai.sourceKind.' + (r.source || 'model')) %></td>
+                <td class="px-3 py-2 text-neutral-500 whitespace-nowrap">
+                  <%= t('admin.ai.sourceKind.' + (r.source || 'model')) %>
+                  <%# Что стало с ответом дальше: лёг ли он в кэш канала, и если нет - кто решил.
+                      Без этой строки «вечный» ответ модели и отклонённый нами выглядят одинаково,
+                      а «почему кэш не растёт» выясняется только чтением кода. Строки, записанные
+                      до появления поля, не показывают ничего - у них ответа на этот вопрос нет. %>
+                  <% if (typeof r.cached === 'boolean') { %>
+                    <p class="text-xs mt-1 <%= r.cached ? 'text-emerald-500' : 'text-neutral-600' %>">
+                      <%= t('admin.ai.cacheFate.' + (r.cached ? 'stored' : r.cacheable === 'eternal' ? 'volatile' : 'temporary')) %>
+                    </p>
+                  <% } %>
+                </td>
                 <td class="px-3 py-2 text-right text-neutral-500 tabular-nums whitespace-nowrap">
                   <%= r.costUsd != null ? '$' + r.costUsd.toFixed(4) : '—' %>
                 </td>
