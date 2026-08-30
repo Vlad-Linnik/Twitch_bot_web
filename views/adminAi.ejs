@@ -71,6 +71,7 @@
       <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
         <div class="px-4 py-3">
           <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.model') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.modelHint') %></p>
           <select name="model" class="w-full sm:w-72 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
             <% validation.MODELS.forEach(function (m) { %>
               <option value="<%= m %>" <%= config.model === m ? 'selected' : '' %>><%= m %></option>

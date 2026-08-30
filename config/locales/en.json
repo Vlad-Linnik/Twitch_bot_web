@@ -1411,6 +1411,7 @@
       "masterSwitchHint": "The master switch. Off stops replies on every channel at once. The bot only answers while the channel is live: off air a mention falls through to the scripted replies, exactly as it does with the feature switched off.",
       "budgetHeading": "Model and budget",
       "model": "Model",
+      "modelHint": "Each provider has its own key in the bot's .env: ANTHROPIC_API_KEY for claude-*, GEMINI_API_KEY for gemini-*. Without the right key the bot falls back to its scripted replies and says nothing about it. gemini-3.5-flash-lite has a free tier - it is bounded by request count rather than money (limits live in AI Studio), and Google trains on what is sent: viewer messages and the memory about them.",
       "dailyLimit": "Requests per day",
       "dailyLimitHint": "Shared across all channels. Cache and filter hits do not count - they never reach the model.",
       "cooldown": "Per-channel cooldown, sec",
