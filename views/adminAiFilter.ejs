@@ -10,6 +10,10 @@
 
   <p class="text-neutral-500 text-sm mb-6"><%= t('admin.ai.filterHint') %></p>
 
+  <% if (editError) { %>
+    <p class="mb-4 text-sm text-red-400"><%= t('admin.ai.filterEditError.' + editError) %></p>
+  <% } %>
+
   <%# Заготовки теперь по каналам: пишет их модель, и в общей таблице придуманный ею ответ
       выдавался бы во всех чатах бота сразу. %>
   <form method="get" action="/admin/ai/filter" class="mb-6">
@@ -56,19 +60,38 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-800">
-            <% entries.forEach(function (e) { %>
-              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
-                <td class="px-4 py-2 text-neutral-200"><%= e.text %></td>
-                <td class="px-4 py-2 text-neutral-400"><%= e.answer %></td>
-                <td class="px-4 py-2 text-neutral-400 tabular-nums"><%= e.hits || 0 %></td>
-                <td class="px-4 py-2 text-neutral-500"><%= t('admin.ai.source.' + (e.source || 'admin')) %></td>
-                <td class="px-4 py-2 text-right">
-                  <form method="post" action="/admin/ai/filter/delete">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                    <input type="hidden" name="channel" value="<%= selected %>" />
-                    <input type="hidden" name="text" value="<%= e.text %>" />
-                    <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.delete') %></button>
-                  </form>
+            <% entries.forEach(function (e, i) { %>
+              <tr class="odd:bg-neutral-950 even:bg-neutral-900/40 align-top">
+                <%# Строка правится на месте: заготовку пишет модель, и чаще всего от неё нужен не
+                    снос, а исправленный ответ. Поля стоят каждое в своей колонке, а сама форма
+                    лежит в последней ячейке и связана с ними атрибутом form - растянуть <form> на
+                    несколько <td> нельзя. На соседней странице памяти правится одно поле, поэтому
+                    там форма целиком помещается в одну ячейку и этот приём не нужен. %>
+                <td class="px-4 py-2 align-middle">
+                  <input type="text" form="filter-edit-<%= i %>" name="newText" value="<%= e.text %>" required maxlength="300"
+                         class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+                </td>
+                <td class="px-4 py-2 align-middle">
+                  <input type="text" form="filter-edit-<%= i %>" name="answer" value="<%= e.answer %>" required maxlength="500"
+                         class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+                </td>
+                <td class="px-4 py-2 text-neutral-400 tabular-nums align-middle"><%= e.hits || 0 %></td>
+                <td class="px-4 py-2 text-neutral-500 align-middle"><%= t('admin.ai.source.' + (e.source || 'admin')) %></td>
+                <td class="px-4 py-2 align-middle">
+                  <div class="flex items-center justify-end gap-4">
+                    <form method="post" action="/admin/ai/filter/edit" id="filter-edit-<%= i %>">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                      <input type="hidden" name="channel" value="<%= selected %>" />
+                      <input type="hidden" name="text" value="<%= e.text %>" />
+                      <button type="submit" class="text-purple-400 hover:text-purple-300 text-xs whitespace-nowrap"><%= t('admin.ai.save') %></button>
+                    </form>
+                    <form method="post" action="/admin/ai/filter/delete">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                      <input type="hidden" name="channel" value="<%= selected %>" />
+                      <input type="hidden" name="text" value="<%= e.text %>" />
+                      <button type="submit" class="text-red-400 hover:text-red-300 text-xs"><%= t('admin.ai.delete') %></button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             <% }); %>

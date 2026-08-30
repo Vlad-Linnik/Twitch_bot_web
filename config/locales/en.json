@@ -1456,11 +1456,16 @@
       "directmsgCooldown": "Brush-off reply cooldown, sec",
       "insultCumulative": "Banned-word stacking window, sec",
       "insultCumulativeHint": "A repeat offence inside this window lengthens the timeout.",
-      "filterHint": "Messages not worth spending a request on. Matching is exact, so \"hi\" and \"hi!\" are two different entries. Entries are shared by every channel.",
+      "filterHint": "Messages not worth spending a request on. Matching is exact, so \"hi\" and \"hi!\" are two different entries. Entries are per channel: the model writes them itself, and a shared table would serve an answer it invented in one chat to every other one. Text and answer can be corrected in place.",
       "colText": "Message",
       "colAnswer": "Reply",
       "colHits": "Hits",
       "colSource": "Added by",
+      "filterEditError": {
+        "duplicate": "An entry with that text already exists - the edit was cancelled rather than silently dropping one of the two answers.",
+        "empty": "Neither the text nor the answer can be empty: the bot serves a filter entry without asking the model, so a blank one counts a hit and then falls through to the model anyway. Use Delete to remove the entry.",
+        "failed": "The edit could not be saved - there is no longer an entry with that text."
+      },
       "filterEmpty": "The filter is empty so far.",
       "source": {
         "ai": "model",

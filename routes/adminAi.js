@@ -205,7 +205,14 @@ router.get("/admin/ai/filter", requireAdmin, async (req, res, next) => {
     const channels = await channelsRepo.listAll();
     const selected = req.query.channel || (await defaultChannel(channels));
     const entries = selected ? await aiFilterRepo.listForChannel(selected) : [];
-    res.render("adminAiFilter", { tab: "ai", aiTab: "filter", channels, selected, entries });
+    res.render("adminAiFilter", {
+      tab: "ai",
+      aiTab: "filter",
+      channels,
+      selected,
+      entries,
+      editError: String(req.query.error || ""),
+    });
   } catch (err) {
     next(err);
   }
@@ -219,6 +226,33 @@ router.post("/admin/ai/filter", settingsWriteLimiter, requireAdmin, verifyToken,
       await adminActionLogsRepo.logAction({ admin: req.user, action: "ai.filter.upsert", target: channel + "/" + key });
     }
     res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Правка строки на месте. Раньше страница умела только добавлять и удалять, а исправить ответ,
+// который написала модель, можно было лишь набрав его текст-ключ заново в форме добавления - то
+// есть вслепую и с риском завести вторую строку вместо правки первой.
+router.post("/admin/ai/filter/edit", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const result = await aiFilterRepo.updateEntry({
+      channelLogin: channel,
+      text: req.body.text,
+      newText: req.body.newText,
+      answer: req.body.answer,
+    });
+    if (result.ok) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: "ai.filter.edit",
+        target: channel + "/" + String(req.body.text || ""),
+        details: { after: result.key, answer: String(req.body.answer || "").slice(0, 500) },
+      });
+    }
+    const failed = result.ok ? "" : "&error=" + encodeURIComponent(result.reason || "failed");
+    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}${failed}`);
   } catch (err) {
     next(err);
   }
