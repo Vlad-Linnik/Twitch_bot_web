@@ -96,6 +96,14 @@
                            class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
                     <button type="submit" class="text-purple-400 hover:text-purple-300 text-xs whitespace-nowrap mt-1"><%= t('admin.ai.factSave') %></button>
                   </form>
+                  <%# Слова, по которым бот ищет этот факт: их пишет он сам, когда факт запоминает.
+                      Показаны, но не правятся — правка текста делает строку admin-строкой, а такие
+                      уходят в запрос всегда и в отборе не участвуют, то есть править было бы нечего. %>
+                  <% if (e.keywords && e.keywords.length) { %>
+                    <p class="text-neutral-600 text-xs mt-1" title="<%= t('admin.ai.memoryKeywordsHint') %>">
+                      <span class="text-neutral-700"><%= t('admin.ai.memoryKeywords') %>:</span> <%= e.keywords.join(', ') %>
+                    </p>
+                  <% } %>
                 </td>
                 <%# Чей это факт. Учить бота может кто угодно, но вес слова разный: он решает, кого
                     модель послушает при противоречии и кто вылетит первым при переполнении. %>

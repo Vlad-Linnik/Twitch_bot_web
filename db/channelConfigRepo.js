@@ -83,6 +83,7 @@ async function saveAiConfig(channelLogin, ai, updatedBy) {
         "ai.enabled": Boolean(ai.enabled),
         "ai.tone": String(ai.tone ?? ""),
         "ai.cheatsheet": String(ai.cheatsheet ?? ""),
+        "ai.memoryShare": Boolean(ai.memoryShare),
         updatedAt: new Date(),
         updatedBy: String(updatedBy),
       },

@@ -39,6 +39,17 @@
                     class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.ai ? config.ai.tone : '' %></textarea>
         </div>
 
+        <div class="px-4 py-4 flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.memoryShare') %></span>
+            <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.memoryShareHint') %></p>
+          </div>
+          <label class="toggle-switch shrink-0">
+            <input type="checkbox" name="aiMemoryShare" <%= config.ai && config.ai.memoryShare ? 'checked' : '' %> class="sr-only" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
         <div class="px-4 py-3">
           <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.cheatsheet') %></label>
           <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.cheatsheetHint') %></p>

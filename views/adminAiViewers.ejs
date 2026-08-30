@@ -62,6 +62,15 @@
     </form>
   <% } %>
 
+  <%# Обмен памятью виден на этой странице, а не только в настройках канала: иначе непонятно, почему
+      бот знает про человека то, чего в списке ниже нет, и почему удалённая строка «вернулась» —
+      она не вернулась, это другая строка другого канала. %>
+  <% if (memoryPool.length) { %>
+    <p class="mb-4 rounded-md border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-sm text-neutral-400">
+      <%= t('admin.ai.memoryPoolNotice') %> <span class="text-neutral-200"><%= memoryPool.join(', ') %></span>
+    </p>
+  <% } %>
+
   <% if (!groups.length) { %>
     <% if (!channelAiEnabled) { %>
       <p class="text-sm text-amber-500"><%= t('admin.ai.memoryChannelAiOff') %></p>
@@ -122,6 +131,14 @@
                                class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
                         <button type="submit" class="text-purple-400 hover:text-purple-300 text-xs whitespace-nowrap mt-1"><%= t('admin.ai.factSave') %></button>
                       </form>
+                      <%# Слова, по которым бот ищет этот факт: их пишет он сам, когда факт запоминает.
+                          Показаны, но не правятся — правка текста делает строку admin-строкой, а такие
+                          уходят в запрос всегда и в отборе не участвуют, то есть править было бы нечего. %>
+                      <% if (e.keywords && e.keywords.length) { %>
+                        <p class="text-neutral-600 text-xs mt-1" title="<%= t('admin.ai.memoryKeywordsHint') %>">
+                          <span class="text-neutral-700"><%= t('admin.ai.memoryKeywords') %>:</span> <%= e.keywords.join(', ') %>
+                        </p>
+                      <% } %>
                     </td>
                     <td class="px-3 py-2 whitespace-nowrap">
                       <% if (e.source === 'admin') { %>

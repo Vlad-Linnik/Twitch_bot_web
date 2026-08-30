@@ -169,7 +169,7 @@ router.post(
       // Both halves land in the channel's own change log rather than only in the admin log: the
       // owner cannot edit these any more, but they can still see that they changed and when.
       const changes = diffConfig(existing, parsed);
-      for (const field of ["enabled", "tone", "cheatsheet"]) {
+      for (const field of ["enabled", "tone", "cheatsheet", "memoryShare"]) {
         const before = existing.ai ? existing.ai[field] : null;
         if (before !== ai[field]) {
           changes.push({ field: `ai.${field}`, before: before ?? null, after: ai[field] });
@@ -428,6 +428,20 @@ router.get("/admin/ai/viewers", requireAdmin, async (req, res, next) => {
       selected ? channelConfigRepo.getConfig(selected) : Promise.resolve({}),
     ]);
     const channelAiEnabled = Boolean(channelConfig.ai && channelConfig.ai.enabled);
+
+    // С кем этот канал делит память о зрителях. Считается здесь, а не показывается одной галкой,
+    // потому что страница отвечает на вопрос «что бот знает про этого человека», а с включённым
+    // обменом ответ на него шире списка ниже: удаление строки здесь не трогает её двойника,
+    // записанного в соседнем чате, - там своя строка со своим автором.
+    let memoryPool = [];
+    if (channelConfig.ai && channelConfig.ai.memoryShare) {
+      const others = channels.filter((c) => c.channelLogin !== selected);
+      const otherConfigs = await Promise.all(others.map((c) => channelConfigRepo.getConfig(c.channelLogin)));
+      memoryPool = others
+        .filter((c, i) => otherConfigs[i].ai && otherConfigs[i].ai.memoryShare)
+        .map((c) => c.channelLogin);
+    }
+
     res.render("adminAiViewers", {
       tab: "ai",
       aiTab: "viewers",
@@ -436,6 +450,7 @@ router.get("/admin/ai/viewers", requireAdmin, async (req, res, next) => {
       groups,
       config,
       channelAiEnabled,
+      memoryPool,
       editError: req.query.error || null,
       maxFactLen: aiUserMemoryRepo.MAX_FACT_LEN,
     });
