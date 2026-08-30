@@ -1563,7 +1563,10 @@
       "rapportMaxMultiplierHint": "Ceiling on how much longer a timeout gets for the people the bot likes least. One means the scale does not affect the length. The base length comes from the field above; the curve between them is set in code.",
       "logRapport": "standing",
       "logPunishWarn": "warned instead of timed out",
-      "logPunishTimeout": "timeout of"
+      "logPunishTimeout": "timeout of",
+      "promptDiffTitle": "Compare with the built-in rules",
+      "promptDiffNone": "no differences",
+      "promptDiffLegend": "Green is what was added here; red is what was dropped from the built-in rules. A reworded line shows as a pair - the dropped one first, then its replacement. This compares the saved text, not what is typed in the field."
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",

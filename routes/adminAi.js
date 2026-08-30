@@ -27,6 +27,7 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { diffConfig } = require("../lib/settingsDiff");
 const { parseSubmittedConfig } = require("../lib/settingsValidation");
 const aiValidation = require("../lib/aiSettingsValidation");
+const { diffLines } = require("../lib/promptDiff");
 
 const router = express.Router();
 const requireAdmin = requireLevel(0);
@@ -71,6 +72,13 @@ router.get("/admin/ai", requireAdmin, async (req, res, next) => {
       ignoredCount,
       tally,
       validation: aiValidation,
+      // Построчная сверка действующих правил со встроенными. Сравнивается тот же текст, что лежит
+      // в поле формы (свой, а если своего нет - встроенный), поэтому «отличий нет» здесь означает
+      // ровно то же, что и подпись над полем. Без опубликованного ботом встроенного текста
+      // сравнивать не с чем - тогда null, и блок не рисуется.
+      promptDiff: config.builtinSystemPrompt
+        ? diffLines(config.builtinSystemPrompt, config.systemPrompt || config.builtinSystemPrompt)
+        : null,
       // Not a knob: the key lives in the BOT's .env, so the site can only report whether its own
       // copy is present. A bot without the key falls back to the scripted replies.
       keyPresent: Boolean(process.env.ANTHROPIC_API_KEY),

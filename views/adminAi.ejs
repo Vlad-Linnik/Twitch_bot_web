@@ -280,6 +280,39 @@
       <% } else { %>
         <p class="mt-2 text-xs text-neutral-600"><%= t('admin.ai.systemPromptBuiltinUnknown') %></p>
       <% } %>
+
+      <%# Сверка со встроенными правилами. Свёрнута по умолчанию: сравнение нужно, когда правила
+          правят, а не каждый раз, когда страницу открыли ради лимита.
+
+          Показывается СОХРАНЁННЫЙ текст, а не набранный в поле. Живая сверка по мере набора
+          потребовала бы алгоритм ещё и на клиенте — третью копию того, чему нельзя разъезжаться, —
+          и отвечала бы на другой вопрос: «что я сейчас печатаю» вместо «что у меня сохранено». %>
+      <% if (promptDiff) { %>
+        <details class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40">
+          <summary class="cursor-pointer select-none px-4 py-3 text-sm text-neutral-300">
+            <%= t('admin.ai.promptDiffTitle') %>
+            <% if (promptDiff.identical) { %>
+              <span class="ml-2 text-xs text-neutral-500"><%= t('admin.ai.promptDiffNone') %></span>
+            <% } else { %>
+              <span class="ml-2 text-xs text-emerald-400">+<%= promptDiff.added %></span>
+              <span class="ml-1 text-xs text-red-400">&minus;<%= promptDiff.removed %></span>
+            <% } %>
+          </summary>
+          <div class="border-t border-neutral-800 px-2 py-2">
+            <p class="px-2 pb-2 text-xs text-neutral-600"><%= t('admin.ai.promptDiffLegend') %></p>
+            <div class="overflow-x-auto">
+              <%# Маркер +/- живёт в собственной колонке, а не приклеен к тексту. Строки правил сами
+                  начинаются с дефиса, и слитный вариант давал «- - Мат, грубость...» — читается как
+                  опечатка. Он же select-none: при копировании блока маркеры не попадают в буфер, то
+                  есть скопированное остаётся текстом промта, а не диффом. Цвет при этом не
+                  единственный признак — маркер работает и в монохроме. %>
+              <pre class="text-xs leading-relaxed font-mono"><% promptDiff.rows.forEach(function (row) { %><%
+                %><span class="block px-2 whitespace-pre-wrap <%= row.type === 'add' ? 'bg-emerald-500/10 text-emerald-300' : row.type === 'del' ? 'bg-red-500/10 text-red-300' : 'text-neutral-500' %>"><span class="select-none opacity-50"><%= row.type === 'add' ? '+ ' : row.type === 'del' ? '- ' : '  ' %></span><%= row.text %></span><%
+              %><% }); %></pre>
+            </div>
+          </div>
+        </details>
+      <% } %>
     </section>
 
     <button type="submit" class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
