@@ -140,8 +140,9 @@ const durakRoomCreateLimiter = createSimpleLimiter({ windowMs: 10 * 60 * 1000, m
 // board for everyone else at the table.
 const durakStickerLimiter = createSimpleLimiter({ windowMs: 8 * 1000, max: 4 });
 
-// Generating the Amnesty Bureau's fourth sheet is the only action on this site that spends money
-// per press (~2 cents, see lib/unbanOpinionsGenerator.js). The real bound is elsewhere - a case
+// Generating the Amnesty Bureau's fourth sheet is the only action on this site that can spend money
+// per press (free on Google, ~2 cents when it falls back to Anthropic - see
+// lib/unbanOpinionsGenerator.js). The real bound is elsewhere - a case
 // that already has a sheet is refused with 409, so the spend is capped by how many appeals are
 // actually queued - and this is the backstop against a runaway loop rather than the primary
 // control, hence a ceiling generous enough to work through a whole queue in one sitting.

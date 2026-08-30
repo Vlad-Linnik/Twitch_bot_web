@@ -28,7 +28,7 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
 const { parseEffectiveAt } = require("../lib/unbanDecisionValidation");
 const { parseOpinions } = require("../lib/unbanOpinionsValidation");
-const { generateOpinions, OpinionsGenerationError } = require("../lib/unbanOpinionsGenerator");
+const { generateOpinions, buildSpeakers, OpinionsGenerationError } = require("../lib/unbanOpinionsGenerator");
 const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
 const {
   settingsWriteLimiter,
@@ -48,6 +48,17 @@ function getAnthropicClient() {
     anthropicClient = new Anthropic({ apiKey: env.anthropicApiKey });
   }
   return anthropicClient;
+}
+
+// Which vendors this deployment can hold a hearing with. The ORDER is the generator's business,
+// not this route's - all that is decided here is which keys exist, and an empty list is what
+// becomes the 503 below. Rebuilt per press because it is two object literals, and pinning it in a
+// module variable would only cache the answer to "was the key set at boot".
+function hearingSpeakers() {
+  return buildSpeakers({
+    google: env.geminiApiKey ? { apiKey: env.geminiApiKey } : null,
+    anthropic: env.anthropicApiKey ? getAnthropicClient() : null,
+  });
 }
 
 // Per-moderator ceiling on sniper shots - see the sniper.json handler for why this exists on
@@ -537,16 +548,16 @@ router.post(
 
 // Fills the desk's fourth sheet: runs the two-turn hearing and stores the result.
 //
-// THE ONLY ENDPOINT ON THIS SITE THAT SPENDS MONEY. Everything else here writes a document; this
-// one buys two speeches from Anthropic (~2 cents, lib/unbanOpinionsGenerator.js). Three guards
-// stack, and the middle one is the load-bearing one:
+// THE ONLY ENDPOINT ON THIS SITE THAT CAN SPEND MONEY. Everything else here writes a document;
+// this one buys two speeches - free on Google, ~2 cents on the Anthropic fallback
+// (lib/unbanOpinionsGenerator.js). Three guards stack, and the middle one is the load-bearing one:
 //   - opinionsGenerateLimiter, per user, exempting nobody - the backstop against a runaway loop.
 //   - a case that already has a sheet is refused. This is what actually bounds the spend: the
 //     button exists to fill a BLANK sheet, so the ceiling is the number of queued appeals, not the
 //     number of times someone can click. It also protects the record - a regeneration would
 //     silently replace a sheet a moderator may already have read and decided from.
-//   - no key configured answers 503 rather than 500, so the page can say the feature is off
-//     instead of showing a crash for an optional add-on.
+//   - no key at all - neither vendor - answers 503 rather than 500, so the page can say the
+//     feature is off instead of showing a crash for an optional add-on.
 //
 // Deliberately NOT written to SettingsChangeLog, for the same reason starting a chat vote isn't:
 // the sheet is commentary, not moderation state, and the verdict row already carries the
@@ -562,7 +573,8 @@ router.post(
       if (!channel) return;
       if (!(await requireShiftJson(req, res))) return;
 
-      if (!env.anthropicApiKey) {
+      const speakers = hearingSpeakers();
+      if (!speakers.length) {
         return res.status(503).json({ error: "generation_unavailable" });
       }
       if (!opinionsGenerateLimiter(req.user.userId)) {
@@ -581,11 +593,13 @@ router.post(
 
       let generated;
       try {
-        generated = await generateOpinions({ client: getAnthropicClient(), brief });
+        generated = await generateOpinions({ speakers, brief });
       } catch (err) {
         if (err instanceof OpinionsGenerationError) {
           // 502: the failure is upstream of us and the moderator can simply press again. The
           // reason travels so the page can distinguish "try again" from "this won't work".
+          // Every vendor in the list has already logged its own failure by now; this line is the
+          // one that ties them to a case.
           console.warn(`[opinions] generation failed for ${unbanCase._id}: ${err.reason} - ${err.message}`);
           return res.status(502).json({ error: "generation_failed", reason: err.reason });
         }

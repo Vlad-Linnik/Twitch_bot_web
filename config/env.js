@@ -63,12 +63,15 @@ const env = {
   // whole site down if unset.
   adminApiToken: process.env.ADMIN_API_TOKEN || null,
 
-  // The one credential on this site that costs money per use: it buys the two speeches on the
-  // Amnesty Bureau desk's fourth sheet (lib/unbanOpinionsGenerator.js). Optional and fail-closed
-  // for the same reason as adminApiToken above - unset simply greys out one button on one page,
-  // and taking the whole site down over a missing key for an advisory feature would be absurd.
-  // Roughly two cents per generated case at the configured model; the endpoint that spends it is
-  // rate-limited per moderator and refuses a case that already has a sheet.
+  // The two model keys that buy the speeches on the Amnesty Bureau desk's fourth sheet
+  // (lib/unbanOpinionsGenerator.js). They are not equals: Google is tried first and its free tier
+  // is bounded by request count rather than money, so the Anthropic key is what a hearing falls
+  // back on when Google fails - roughly two cents, for those cases only. Both are optional and
+  // fail closed for the same reason as adminApiToken above: with neither set one button on one
+  // page greys out, and taking the whole site down over a missing key for an advisory feature
+  // would be absurd. The endpoint that spends them is rate-limited per moderator and refuses a
+  // case that already has a sheet.
+  geminiApiKey: process.env.GEMINI_API_KEY || null,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
 };
 

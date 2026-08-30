@@ -8,8 +8,9 @@
 // UnbanBureauShifts: see ../CLAUDE.md's collections table for what does belong in the shared one.
 //
 // TWO THINGS WRITE IT, AND THE SHEET LOOKS THE SAME EITHER WAY. The desk's "заказать разбор"
-// button generates the speeches in-process (lib/unbanOpinionsGenerator.js, Sonnet 5, ~2 cents a
-// case); the other path is a person arguing the case by hand against a brief
+// button generates the speeches in-process (lib/unbanOpinionsGenerator.js - free on Gemini, ~2
+// cents on the Anthropic fallback; the stored `model` says which one wrote this sheet); the other
+// path is a person arguing the case by hand against a brief
 // (GET /admin/api/unban-requests/:id/brief) on a stronger model and PUTting the result back
 // through the bearer-token admin API. The by-hand path is the older of the two and runs its own,
 // fuller prompts (../../.claude/agents/amnesty-*-v4.md) that the button deliberately does not:
