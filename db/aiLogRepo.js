@@ -12,20 +12,62 @@ const { connect } = require("./connection");
 const DEFAULT_RETENTION_DAYS = 30;
 const TTL_INDEX_NAME = "createdAt_ttl";
 
-let collection;
+// Mongo's code for "an index with this name already exists with different options".
+const INDEX_OPTIONS_CONFLICT = 85;
 
+let collection;
+let initializing = null;
+
+// Одновременный вызов - обычное дело: страница настроек читает журнал двумя запросами сразу
+// (Promise.all в routes/adminAi.js). Поэтому инициализация однопоточная - второй вызов ждёт
+// первый, а не создаёт те же индексы параллельно с ним. Handle кладётся в кэш только после
+// успеха, иначе неудачная инициализация запоминается как удачная и повториться уже не может.
 async function ensureInitialized() {
   if (collection) return collection;
+  if (!initializing) initializing = init().finally(() => (initializing = null));
+  return initializing;
+}
+
+async function init() {
   const db = await connect();
-  collection = db.collection("AiReplyLog");
-  await collection.createIndex({ channel: 1, userId: 1, createdAt: -1 });
-  await collection.createIndex({ createdAt: -1 });
-  await collection.createIndex({ verdict: 1, createdAt: -1 });
-  await collection.createIndex(
-    { createdAt: 1 },
-    { name: TTL_INDEX_NAME, expireAfterSeconds: DEFAULT_RETENTION_DAYS * 86400 }
-  );
-  return collection;
+  const col = db.collection("AiReplyLog");
+  await ensureIndexes(col);
+  collection = col;
+  return col;
+}
+
+// Индексы не нужны, чтобы показать страницу, поэтому их создание её и не роняет: ошибка уходит в
+// лог, чтение продолжается. Так было не всегда, и цена оказалась заметной - несовпадение опций
+// TTL (ниже) роняло ПЕРВЫЙ запрос после каждого перезапуска, а второй получал закэшированный
+// handle, до индексов не доходил и работал. Ошибка, которая лечится обновлением страницы, по
+// логам не ищется: её просто никто не видит.
+async function ensureIndexes(col) {
+  const wanted = [{ channel: 1, userId: 1, createdAt: -1 }, { createdAt: -1 }, { verdict: 1, createdAt: -1 }];
+  for (const key of wanted) {
+    try {
+      await col.createIndex(key);
+    } catch (err) {
+      console.error("[aiLogRepo] createIndex", JSON.stringify(key), "failed:", err.message);
+    }
+  }
+  await ensureTtlIndex(col);
+}
+
+// Дефолт здесь - СЕМЯ для пустой базы, а не мнение о настройке. Живой срок хранения принадлежит
+// AiConfig.memoryTtlDays и применяется через collMod (setRetentionDays ниже), поэтому конфликт
+// опций на этом индексе означает ровно одно: срок уже настроен, и настроен не по умолчанию. Это
+// нормальное состояние, а не ошибка, - гасим именно код 85 и именно на этом индексе, чтобы
+// настоящая поломка (нет прав, битая коллекция) по-прежнему попадала в лог.
+async function ensureTtlIndex(col) {
+  try {
+    await col.createIndex(
+      { createdAt: 1 },
+      { name: TTL_INDEX_NAME, expireAfterSeconds: DEFAULT_RETENTION_DAYS * 86400 }
+    );
+  } catch (err) {
+    if (err.code === INDEX_OPTIONS_CONFLICT) return;
+    console.error("[aiLogRepo] TTL index setup failed:", err.message);
+  }
 }
 
 // A TTL index's expiry cannot be changed by re-issuing createIndex - Mongo treats an index with
