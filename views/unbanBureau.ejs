@@ -132,7 +132,7 @@
             <span><%= t('unbanBureau.fontExperts') %></span>
             <div class="ub-controls-group">
               <button type="button" class="ub-font-btn" data-font="experts" data-delta="-1">-</button>
-              <span id="ub-font-experts-display">13px</span>
+              <span id="ub-font-experts-display">14px</span>
               <button type="button" class="ub-font-btn" data-font="experts" data-delta="1">+</button>
             </div>
           </div>
@@ -245,6 +245,17 @@
           <div id="ub-experts-empty-text"><%= t('unbanBureau.expertsEmpty') %></div>
           <button type="button" id="ub-experts-generate"><%= t('unbanBureau.expertsGenerate') %></button>
         </div>
+        <%# The bench: what the judge can do about what is on the sheet. Shown only once a hearing
+            exists (.ub-has-opinions in the stylesheet) - on a blank sheet the only control is the
+            order button above. The textarea and the buttons appear in the drag handler's allow-list
+            in the client, or grabbing one of them would drag the whole sheet instead of typing. %>
+        <div id="ub-experts-foot">
+          <textarea id="ub-judge-input" maxlength="<%= maxRemarkChars %>" placeholder="<%= t('unbanBureau.expertRemarkPlaceholder') %>"></textarea>
+          <div id="ub-experts-actions">
+            <button type="button" id="ub-judge-send" class="ub-sheet-btn"><%= t('unbanBureau.expertRemarkSend') %></button>
+            <button type="button" id="ub-floor-next" class="ub-sheet-btn"><%= t('unbanBureau.expertFloorAdvocate') %></button>
+          </div>
+        </div>
         <div id="ub-experts-mark"></div>
       </div>
 
@@ -290,6 +301,7 @@
        data-locale="<%= locale %>"
        data-newest-first="<%= newestFirst ? '1' : '0' %>"
        data-heartbeat-ms="<%= heartbeatMs %>"
+       data-max-spoken-turns="<%= maxSpokenTurns %>"
        <%# Identifies this page load at the desk. Echoed back on the heartbeat and the pagehide
            hand-back so a reload's beacon can't delete the lease the NEW page just took. %>
        data-shift-token="<%= shiftToken %>"
@@ -313,8 +325,19 @@
          needStamp: t('unbanBureau.needStamp'),
          expertProsecutor: t('unbanBureau.expertProsecutor'),
          expertAdvocate: t('unbanBureau.expertAdvocate'),
-         expertRebuttal: t('unbanBureau.expertRebuttal'),
+         expertJudge: t('unbanBureau.expertJudge'),
          expertRewritten: t('unbanBureau.expertRewritten'),
+         expertLabelDemand: t('unbanBureau.expertLabelDemand'),
+         expertLabelCounter: t('unbanBureau.expertLabelCounter'),
+         expertFloorProsecutor: t('unbanBureau.expertFloorProsecutor'),
+         expertFloorAdvocate: t('unbanBureau.expertFloorAdvocate'),
+         expertFloorWorking: t('unbanBureau.expertFloorWorking'),
+         expertFloorClosed: t('unbanBureau.expertFloorClosed'),
+         expertTurnFailed: t('unbanBureau.expertTurnFailed'),
+         expertRemarkSend: t('unbanBureau.expertRemarkSend'),
+         expertRemarkSending: t('unbanBureau.expertRemarkSending'),
+         expertRemarkFailed: t('unbanBureau.expertRemarkFailed'),
+         expertNoHearing: t('unbanBureau.expertNoHearing'),
          expertsGenerate: t('unbanBureau.expertsGenerate'),
          expertsGenerating: t('unbanBureau.expertsGenerating'),
          expertsGenerated: t('unbanBureau.expertsGenerated'),
@@ -396,6 +419,9 @@
        }) %>"></div>
 
   <script src="<%= asset('/js/emoteMatch.js') %>" defer></script>
+  <%# The speech tokenizer, before the page script that calls it. Lives under js/games/engines/
+      because this repo has no bundler and lib/ never reaches the browser - see that file's header. %>
+  <script src="<%= asset('/js/games/engines/speechMarkup.js') %>" defer></script>
   <script src="<%= asset('/js/games/unban-bureau.js') %>" defer></script>
 <% } %>
 

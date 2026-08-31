@@ -898,6 +898,35 @@ body.ub-playing footer {
 
 /* --- fourth sheet internals ----------------------------------------------- */
 
+/* THE SPEECHES ARE THE ONE THING ON THIS DESK NOT SET IN THE PIXEL FONT.
+   Monocraft is the chrome of the whole scene and stays that way for every
+   label, role name and caption below - but a speech runs to a couple of
+   thousand characters of continuous prose, and a pixel monospace at that
+   length is a wall. The appeal note already breaks the rule in the other
+   direction (a handwriting face for the applicant's own words), so "each
+   document on this desk has its own hand" is the established convention here
+   rather than an exception being invented for this sheet.
+
+   A system serif, not a fourth downloaded font: the page already ships two
+   .ttf files, and a third would cost every visit for something the reader's
+   own machine already has a good copy of. */
+#ub-experts-card {
+  --ub-speech-font: Georgia, "PT Serif", "Times New Roman", serif;
+  /* Ink colours per speaker. Kept as variables on the card so a turn block sets
+     ONE property and everything in it - stripe, role name, rule chip - follows.
+     Both sides are dark enough to read as ink on cream at 12px; they are told
+     apart by hue, and by the stripe and role name, never by hue alone. */
+  --ub-ink: #1e1a13;
+  --ub-ink-muted: #6a5c42;
+  --ub-role: #8c2f22;
+}
+/* Set on the turn blocks, and reused by name on the bench button so that "whose
+   turn is next" is the same ink there as on the speech it will produce. These
+   rules set the variable and nothing else, which is what makes that safe. */
+.ub-turn-prosecutor, .ub-role-prosecutor { --ub-role: #8c2f22; }
+.ub-turn-advocate,   .ub-role-advocate   { --ub-role: #26507a; }
+.ub-turn-judge,      .ub-role-judge      { --ub-role: #5b4a7a; }
+
 #ub-experts-title {
   position: absolute;
   top: 20px;
@@ -919,40 +948,224 @@ body.ub-playing footer {
   bottom: 20px;
   overflow-y: auto;
   overflow-x: hidden;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
-  color: #1e1a13;
+  color: var(--ub-ink);
   pointer-events: auto;
   word-break: break-word;
 }
+/* The bench only appears once there is a hearing to address, so the body keeps
+   its full height on a blank sheet. Docked, neither is visible at all. */
+.ub-has-opinions #ub-experts-body { bottom: 104px; }
+.ub-small-experts #ub-experts-body { bottom: 20px; }
 #ub-experts-body::-webkit-scrollbar { width: 6px; }
 #ub-experts-body::-webkit-scrollbar-track { background: transparent; }
 #ub-experts-body::-webkit-scrollbar-thumb { background: rgb(0 0 0 / 0.2); border-radius: 3px; }
 
-.ub-speech + .ub-speech { margin-top: 16px; }
-.ub-speech-role {
-  font-size: 12px;
-  letter-spacing: 1px;
-  color: #6a5c42;
-  margin-bottom: 3px;
-}
-/* pre-wrap so a paragraph break an agent typed survives, without letting the
-   text forge structure - the string is set via textContent, never as markup. */
-.ub-speech-text { white-space: pre-wrap; }
-/* The prosecutor's second move is a reply to the defence, so it is indented and
-   ruled off - otherwise it reads as a third, separate accusation. */
-.ub-speech-rebuttal {
-  border-left: 2px solid rgb(0 0 0 / 0.2);
+/* --- one turn ------------------------------------------------------------- */
+
+/* Every turn is ruled off on the left in its speaker's colour. That stripe is
+   what makes an eight-turn transcript scannable: who is speaking is answered
+   before a single word is read, and it survives at any font size the reader
+   picks. */
+.ub-turn {
+  border-left: 3px solid var(--ub-role);
   padding-left: 10px;
 }
-/* Says the accusation above is the rewritten one. Without it a moderator has no
-   way to tell a first draft from a second, and the difference is the whole
-   reason the prosecutor gets a second move. */
-.ub-speech-note {
-  font-size: 11px;
+.ub-turn + .ub-turn { margin-top: 18px; }
+
+.ub-turn-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+/* The turn number, printed small. Order is the whole structure of a hearing -
+   each speech answers the one above it - and the number is what lets a
+   moderator say "the third turn" to themselves while scrolling. */
+.ub-turn-n {
+  font-size: 0.75em;
+  color: var(--ub-ink-muted);
+  opacity: 0.7;
+  min-width: 1.2em;
+}
+.ub-turn-role {
+  font-size: 0.85em;
+  letter-spacing: 1px;
+  color: var(--ub-role);
+}
+/* The rule point, as a chip. This is the field a moderator is most often
+   looking for - the whole question is whether a channel rule was broken - so
+   it sits on the head row rather than inside the speech. */
+.ub-turn-rule {
+  font-size: 0.75em;
+  letter-spacing: 0.5px;
+  color: var(--ub-role);
+  border: 1px solid var(--ub-role);
+  border-radius: 2px;
+  padding: 1px 5px;
+  opacity: 0.85;
+}
+.ub-turn-headline {
+  font-family: var(--ub-speech-font);
+  font-size: 1.05em;
+  font-weight: bold;
+  line-height: 1.35;
+  color: var(--ub-ink);
+  margin-bottom: 6px;
+}
+/* pre-wrap so a paragraph break a speaker typed survives, without letting the
+   text forge structure - the string is set through the tokenizer in
+   public/js/games/engines/speechMarkup.js, which emits text nodes and <em>s and
+   has no code path that can produce anything else. */
+.ub-turn-speech {
+  font-family: var(--ub-speech-font);
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+/* The one inline mark a speech may carry. Italic AND a colour shift, because
+   italic alone is nearly invisible in a serif at this size, and colour alone
+   would not survive a reader who cannot separate these hues. */
+.ub-turn-speech .ub-em {
+  font-style: italic;
+  color: var(--ub-role);
+}
+
+/* Quotes are the applicant's own words, so they are set apart from the speech
+   that leans on them: a moderator checking a claim against the log needs to see
+   at a glance which text is the speaker's and which is evidence. */
+.ub-turn-quotes { margin-top: 7px; }
+.ub-quote {
+  font-family: var(--ub-speech-font);
+  font-style: italic;
+  font-size: 0.95em;
+  line-height: 1.4;
+  color: #3f382c;
+  background: rgb(0 0 0 / 0.035);
+  border-left: 2px solid rgb(0 0 0 / 0.18);
+  padding: 2px 7px;
+  margin-top: 3px;
+}
+
+/* Demand and counter are one labelled line each. The label is in the pixel font
+   and the value in the serif, which is the same division as the head row: the
+   sheet's own words are chrome, the speaker's words are prose. */
+.ub-turn-demand,
+.ub-turn-counter {
+  margin-top: 7px;
+  font-family: var(--ub-speech-font);
+  font-size: 0.95em;
+  line-height: 1.4;
+}
+.ub-turn-label {
+  display: block;
+  font-family: "Monocraft", monospace;
+  font-size: 0.72em;
+  letter-spacing: 1px;
+  color: var(--ub-ink-muted);
+  margin-bottom: 1px;
+}
+.ub-turn-demand { color: var(--ub-role); }
+.ub-turn-counter { color: #4a4034; }
+
+/* Says the accusation above is the rewritten one. Only ever appears on sheets
+   written through the by-hand admin PUT, which is the one path that still has a
+   revise move - without it a moderator has no way to tell a first draft from a
+   second. */
+.ub-turn-note {
+  font-size: 0.78em;
   color: #7a6a4d;
   margin-top: 4px;
 }
+
+/* --- the judge ------------------------------------------------------------ */
+
+/* The moderator's own remark, and it has to look like a person rather than a
+   third expert: hence the avatar and the nick in the colour they use in chat.
+   The tint behind it does the rest - a remark is an interruption in the
+   transcript, not another speech in it. */
+.ub-turn-judge {
+  background: rgb(91 74 122 / 0.06);
+  padding-top: 6px;
+  padding-bottom: 7px;
+  padding-right: 8px;
+}
+.ub-judge-avatar {
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #2a211a;
+  flex: none;
+}
+.ub-judge-name {
+  font-size: 0.85em;
+  color: var(--ub-role);
+}
+.ub-turn-judge .ub-turn-speech { font-style: italic; }
+
+/* --- the bench: what the judge can do ------------------------------------- */
+
+#ub-experts-foot {
+  position: absolute;
+  left: 24px;
+  right: 22px;
+  bottom: 18px;
+  height: 78px;
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: auto;
+}
+.ub-has-opinions #ub-experts-foot { display: flex; }
+/* Docked, the sheet is 63px wide and shows nothing but its ink mark. */
+.ub-small-experts #ub-experts-foot { display: none !important; }
+
+#ub-judge-input {
+  width: 100%;
+  height: 42px;
+  resize: none;
+  font-family: "Monocraft", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #2b2519;
+  background: rgb(0 0 0 / 0.02);
+  border: 1px solid rgb(0 0 0 / 0.22);
+  border-radius: 2px;
+  padding: 5px 7px;
+  outline: none;
+}
+#ub-judge-input:focus { border-color: rgb(0 0 0 / 0.45); background: rgb(0 0 0 / 0.04); }
+#ub-judge-input::placeholder { color: #9a8c73; }
+
+#ub-experts-actions { display: flex; gap: 6px; }
+/* Styled as ink on paper rather than as the desk's dark chrome buttons: they
+   live on the sheet, not on the desktop. Same reasoning as the order button in
+   the empty state below. */
+.ub-sheet-btn {
+  flex: 1;
+  font-family: "Monocraft", monospace;
+  font-size: 11px;
+  color: #5b4f3a;
+  background: rgb(0 0 0 / 0.03);
+  border: 1px dashed #a89878;
+  border-radius: 2px;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ub-sheet-btn:hover:not(:disabled) { background: rgb(0 0 0 / 0.07); color: #3d3427; }
+.ub-sheet-btn:disabled { cursor: default; opacity: 0.5; }
+/* Whose turn it is next is on the button itself, in that side's colour, so the
+   moderator is choosing "let the advocate answer" rather than pressing a
+   generic "continue". */
+#ub-floor-next { color: var(--ub-role); border-color: var(--ub-role); opacity: 0.9; }
+#ub-floor-next:hover:not(:disabled) { opacity: 1; }
+
 #ub-experts-empty {
   position: absolute;
   top: 50%;
@@ -969,8 +1182,7 @@ body.ub-playing footer {
 /* The order button sits inside the empty state so it disappears with it - both when the sheet is
    docked and the moment a hearing lands. The wrapper carries `pointer-events: none` (the whole
    sheet is draggable and the empty notice must not swallow a drag), so the button has to opt back
-   in for itself. Styled as ink on paper rather than as the desk's dark chrome buttons: it lives on
-   the sheet, not on the desktop. */
+   in for itself. */
 #ub-experts-empty { pointer-events: none; }
 #ub-experts-empty-text { margin-bottom: 10px; }
 #ub-experts-generate {

@@ -65,6 +65,12 @@
                   <% if (r.similarTo) { %>
                     <p class="text-xs text-sky-400 mt-1"><%= t('admin.ai.similarTo') %>: <%= r.similarTo %></p>
                   <% } %>
+                  <%# Правка кэша самой моделью. Стоит вплотную к similarTo не случайно: вместе они
+                      говорят, КАКУЮ заготовку она тронула, а порознь не говорят - стёртой строки в
+                      кэше уже нет, а переписанная выглядит там как обычная. %>
+                  <% if (r.cacheFix === 'delete' || r.cacheFix === 'replace') { %>
+                    <p class="text-xs text-orange-400 mt-1"><%= t('admin.ai.cacheFix.' + r.cacheFix) %></p>
+                  <% } %>
                   <% if (r.remembered) { %>
                     <p class="text-xs text-purple-400 mt-1"><%= t('admin.ai.memoryAdded') %>: <%= r.remembered %></p>
                   <% } %>

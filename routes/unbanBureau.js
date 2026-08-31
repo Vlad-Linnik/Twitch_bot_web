@@ -27,8 +27,23 @@ const unbanBureauValidation = require("../lib/unbanBureauValidation");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
 const { parseEffectiveAt } = require("../lib/unbanDecisionValidation");
-const { parseOpinions } = require("../lib/unbanOpinionsValidation");
-const { generateOpinions, buildSpeakers, OpinionsGenerationError } = require("../lib/unbanOpinionsGenerator");
+const {
+  parseOpinions,
+  parseSpeechTurn,
+  parseJudgeTurn,
+  toTranscript,
+  nextSpeaker,
+  countSpoken,
+  MAX_SPOKEN_TURNS,
+  MAX_REMARK_CHARS,
+} = require("../lib/unbanOpinionsValidation");
+const {
+  generateOpinions,
+  generateTurn,
+  buildSpeakers,
+  OpinionsGenerationError,
+} = require("../lib/unbanOpinionsGenerator");
+const userProfileService = require("../db/userProfileService");
 const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
 const {
   settingsWriteLimiter,
@@ -198,6 +213,11 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
       },
       heartbeatMs: unbanBureauShiftRepo.SHIFT_HEARTBEAT_MS,
       shiftToken,
+      // The judge box enforces its own cap in the browser as well as here, and one constant feeds
+      // both - a maxlength baked into the template drifts from the validator the first time either
+      // moves.
+      maxRemarkChars: MAX_REMARK_CHARS,
+      maxSpokenTurns: MAX_SPOKEN_TURNS,
     });
   } catch (err) {
     next(err);
@@ -253,9 +273,12 @@ router.get(
       //
       // Skipped when paging the log (?before=): that request is a scroll-back for more chat lines
       // and re-sending an unchanged sheet with each page is pure waste.
+      // Normalized on the way out, never on the way in: a sheet stored before the hearing became an
+      // ordered transcript is adapted to one here, so the page has exactly one shape to render. See
+      // lib/unbanOpinionsValidation.js's header for why that is an adapter and not a migration.
       const opinions = req.query.before
         ? undefined
-        : await unbanOpinionsRepo.findByCaseId(String(unbanCase._id));
+        : toTranscript(await unbanOpinionsRepo.findByCaseId(String(unbanCase._id)));
 
       res.json({
         ok: true,
@@ -621,7 +644,192 @@ router.post(
         parsed.value
       );
 
-      res.json({ ok: true, opinions: doc });
+      res.json({ ok: true, opinions: toTranscript(doc) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Loads the case and its hearing for the two continuation routes below, answering the request
+// itself on every failure so the caller only has to handle the success.
+//
+// It also does the one repair those routes need: a sheet stored under the old two-sided shape has no
+// `turns` array, so there is nothing to append to. Rather than teach the repo to grow one, it is
+// normalized and rewritten once, here, the first time somebody continues such a hearing - after
+// which it is an ordinary document. Doing it lazily rather than in a migration means the rewrite
+// only ever touches sheets a moderator is actually working on, and what it writes is the same text
+// the page was already showing (toTranscript is what rendered them before this write, too).
+async function loadHearing(req, res, channel) {
+  const unbanCase = await unbanRequestsRepo.findById(req.body.id);
+  if (!unbanCase || String(unbanCase.channelId) !== String(channel.channelId)) {
+    res.status(404).json({ error: "not_found" });
+    return null;
+  }
+
+  const stored = await unbanOpinionsRepo.findByCaseId(String(unbanCase._id));
+  if (!stored) {
+    // There is nothing to continue. The blank sheet's own button is the way in, and it is a
+    // different route because it buys two speeches rather than one.
+    res.status(409).json({ error: "no_hearing" });
+    return null;
+  }
+
+  if (Array.isArray(stored.turns)) return { unbanCase, doc: stored };
+
+  const normalized = toTranscript(stored);
+  const parsed = parseOpinions({
+    turns: normalized.turns,
+    model: stored.model,
+    effort: stored.effort,
+  });
+  if (!parsed.ok) {
+    console.warn("[opinions] legacy sheet " + unbanCase._id + " could not be normalized: " + parsed.reason);
+    res.status(500).json({ error: "hearing_unreadable", reason: parsed.reason });
+    return null;
+  }
+  const doc = await unbanOpinionsRepo.upsertOpinions(
+    String(unbanCase._id),
+    { channelId: channel.channelId, channelLogin: channel.channelLogin },
+    parsed.value
+  );
+  return { unbanCase, doc };
+}
+
+// POST /:channel/unban-bureau/opinions-turn.json - "передать слово".
+//
+// Buys ONE more speech on a hearing that already exists. WHO speaks is not the caller's to choose:
+// the floor goes to whichever side did not speak last (lib/unbanOpinionsValidation.js's
+// nextSpeaker), skipping past the judge's own remarks, because a hearing where the moderator could
+// call the same side twice in a row is not a hearing - it is a way to buy the answer you wanted.
+//
+// Two ceilings apply and they bound different things. The hourly opinionsGenerateLimiter is the
+// per-moderator spend brake, shared with the opening press. MAX_SPOKEN_TURNS bounds this one case:
+// without it, "the number of queued appeals" stopped being the bound on spend the moment a single
+// case could be argued indefinitely. The repo's append enforces the absolute array cap atomically on
+// top of both - see appendTurn().
+router.post(
+  "/:channel/unban-bureau/opinions-turn.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      if (!(await requireShiftJson(req, res))) return;
+
+      const speakers = hearingSpeakers();
+      if (!speakers.length) {
+        return res.status(503).json({ error: "generation_unavailable" });
+      }
+      if (!opinionsGenerateLimiter(req.user.userId)) {
+        return res.status(429).json({ error: "too_many_generations" });
+      }
+
+      const loaded = await loadHearing(req, res, channel);
+      if (!loaded) return;
+      const { unbanCase, doc } = loaded;
+
+      if (countSpoken(doc.turns) >= MAX_SPOKEN_TURNS) {
+        return res.status(409).json({ error: "hearing_closed", maxTurns: MAX_SPOKEN_TURNS });
+      }
+
+      const role = nextSpeaker(doc.turns);
+      const brief = await unbanDossierRepo.getCaseBrief(channel.channelLogin, unbanCase);
+
+      let generated;
+      try {
+        generated = await generateTurn({ speakers, brief, turns: doc.turns, role });
+      } catch (err) {
+        if (err instanceof OpinionsGenerationError) {
+          console.warn(
+            "[opinions] " + role + " turn failed for " + unbanCase._id + ": " + err.reason + " - " + err.message
+          );
+          return res.status(502).json({ error: "generation_failed", reason: err.reason });
+        }
+        throw err;
+      }
+
+      // Through the same validator every other writer goes through, rather than trusting our own
+      // generator: the field caps live there, and a model that ran long must be rejected by the same
+      // rule regardless of which button paid for it.
+      const parsed = parseSpeechTurn(generated.turn, {
+        role,
+        n: doc.turns.length + 1,
+        model: generated.model,
+        vendor: generated.vendor,
+      });
+      if (!parsed.ok) {
+        console.warn("[opinions] generated turn rejected for " + unbanCase._id + ": " + parsed.reason);
+        return res.status(502).json({ error: "generation_failed", reason: parsed.reason });
+      }
+
+      const updated = await unbanOpinionsRepo.appendTurn(String(unbanCase._id), parsed.value);
+      if (!updated) {
+        return res.status(409).json({ error: "hearing_closed", maxTurns: MAX_SPOKEN_TURNS });
+      }
+
+      res.json({ ok: true, opinions: toTranscript(updated) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /:channel/unban-bureau/opinions-remark.json - the judge speaks.
+//
+// The moderator's own words, into the transcript, under their own name. No model call and no token:
+// this sits on the write limiter like any other form post, NOT on the generation limiter, because
+// rationing what a person may say at their own desk would be rationing the wrong thing. What it does
+// cost is the next turn's prompt, which is why the remark has a length cap and why remarks count
+// against the document's absolute turn ceiling.
+//
+// The author is resolved through db/userProfileService.js - the one owner of "how should this user be
+// displayed", including a custom nick colour where one is set - and stored ON the turn rather than
+// looked up at render time: a desk is worked by whoever holds the shift, so remarks on one sheet are
+// routinely by different people, and a name resolved later is today's name rather than the one they
+// signed with.
+router.post(
+  "/:channel/unban-bureau/opinions-remark.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      if (!(await requireShiftJson(req, res))) return;
+
+      const loaded = await loadHearing(req, res, channel);
+      if (!loaded) return;
+      const { unbanCase, doc } = loaded;
+
+      // Fails soft by design (see getDisplayProfile) - a remark must not be lost because a colour
+      // lookup timed out, so an unresolved avatar or colour renders the judge plainly instead.
+      const profile = await userProfileService.getDisplayProfile(req.user.userId);
+
+      const parsed = parseJudgeTurn({
+        text: req.body.text,
+        author: {
+          userId: req.user.userId,
+          login: req.user.login,
+          displayName: req.user.displayName,
+          avatarUrl: profile.avatarUrl || req.user.avatarUrl,
+          color: profile.color,
+        },
+        n: doc.turns.length + 1,
+      });
+      if (!parsed.ok) {
+        return res.status(400).json({ error: "invalid_remark", reason: parsed.reason });
+      }
+
+      const updated = await unbanOpinionsRepo.appendTurn(String(unbanCase._id), parsed.value);
+      if (!updated) {
+        return res.status(409).json({ error: "hearing_closed", maxTurns: MAX_SPOKEN_TURNS });
+      }
+
+      res.json({ ok: true, opinions: toTranscript(updated) });
     } catch (err) {
       next(err);
     }

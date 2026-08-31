@@ -47,7 +47,16 @@
             <% entries.forEach(function (e) { %>
               <tr class="odd:bg-neutral-950 even:bg-neutral-900/40">
                 <td class="px-4 py-2 text-neutral-200"><%= e.text %></td>
-                <td class="px-4 py-2 text-neutral-400"><%= e.answer %></td>
+                <td class="px-4 py-2 text-neutral-400">
+                  <%= e.answer %>
+                  <%# Строку переписала сама модель, признав прежний ответ устаревшим (см.
+                      TwitchBot/games/aiReply.js). Без отметки исправленная строка неотличима от
+                      записанной при первом ответе на этот вопрос, а решение «оставить или удалить»
+                      зависит как раз от того, откуда взялся текст. %>
+                  <% if (e.fixedAt) { %>
+                    <span class="ml-1 text-xs text-orange-400" title="<%= new Date(e.fixedAt).toLocaleString(locale) %>"><%= t('admin.ai.cacheFixed') %></span>
+                  <% } %>
+                </td>
                 <td class="px-4 py-2 text-neutral-400 tabular-nums"><%= e.hits || 0 %></td>
                 <td class="px-4 py-2 text-right">
                   <form method="post" action="/admin/ai/cache/delete">

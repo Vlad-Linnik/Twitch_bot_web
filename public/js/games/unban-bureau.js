@@ -32,6 +32,9 @@
   var newestFirst = config.dataset.newestFirst === "1";
   var HEARTBEAT_MS = parseInt(config.dataset.heartbeatMs, 10) || 25000;
   var SHIFT_TOKEN = config.dataset.shiftToken || "";
+  // How many SPOKEN turns one case may buy, from lib/unbanOpinionsValidation.js via the render.
+  // Only ever decides whether the bench button is dead; the server enforces it for real.
+  var MAX_SPOKEN_TURNS = parseInt(config.dataset.maxSpokenTurns, 10) || 8;
   // name -> {name, url}, same channel-wide map the news comments box resolves against
   // (public/js/emoteMatch.js, shared with that page). Used to swap emote names for their real
   // image in the appeal text and chat log - EmoteMatch.tokenizeForPreview does the whole-token
@@ -581,35 +584,62 @@
     });
   }
 
-  // Renders the two expert speeches onto the fourth sheet, or its empty state.
+  // ── THE FOURTH SHEET ──────────────────────────────────────────────────────────────────────────
   //
-  // Every string here goes through textContent, like the rest of this file: these are model-written
-  // paragraphs quoting an applicant's own chat lines back, i.e. attacker-influenced text on a page a
-  // tier-2 moderator is logged into.
+  // A hearing is an ordered transcript: the prosecutor's charge, the advocate's answer, whatever
+  // further speeches the moderator called for, and the moderator's own remarks between them. The
+  // server sends it already normalized (lib/unbanOpinionsValidation.js's toTranscript), so sheets
+  // written before the transcript existed arrive in exactly the same shape as new ones and there is
+  // only one thing to render.
   //
-  // `null` is the normal case, not an error - most appeals are never argued. The sheet then shows
-  // its empty state and, docked, carries no ink mark, so the moderator can tell at a glance from the
-  // desk whether there is anything on it to pick up.
+  // The transcript for the case on screen, kept here rather than re-read off the DOM: both bench
+  // controls need to know who spoke last and how many speeches have been bought, and neither
+  // question is answerable from the rendered sheet.
+  var hearing = null;
+  // ONE model call at a time on this page, whichever button started it. The lock is global rather
+  // than per case on purpose: clicking through the queue would otherwise let a moderator start a
+  // paid call on every case in a few seconds.
+  var generating = false;
+
+  function spokenTurns(turns) {
+    var n = 0;
+    for (var i = 0; i < (turns || []).length; i += 1) {
+      if (turns[i].role !== "judge") n += 1;
+    }
+    return n;
+  }
+
+  // Who gets the floor next. The judge never takes it from a side - a remark is an interjection, not
+  // a speech - so this walks back past any number of judge turns to find who actually spoke last.
+  // The same rule runs server-side (nextSpeaker there); this copy only decides what the button says,
+  // and the server never trusts it.
+  function floorNext(turns) {
+    for (var i = (turns || []).length - 1; i >= 0; i -= 1) {
+      if (turns[i].role === "prosecutor") return "advocate";
+      if (turns[i].role === "advocate") return "prosecutor";
+    }
+    return "prosecutor";
+  }
+
   // Orders the hearing for the case on screen. The call is slow - two sequential model turns, tens
   // of seconds - which makes "the moderator moved on while it ran" the normal case rather than an
   // edge one. So the case is captured up front and the sheet is only painted if that same case is
   // still the one being looked at; otherwise the result is announced and left for the moderator to
   // find when they come back to it (it is already stored server-side by then).
-  var generating = false;
   function requestOpinions() {
     if (generating) return;
     var c = currentCase();
     if (!c) return;
 
     generating = true;
-    syncGenerateBtn();
+    syncSheetControls();
 
     // `_id`, not `id` - the queue in data-cases carries raw case documents, and every other write
     // on this page (decide/vote/sniper) addresses them the same way.
     var requestedId = c._id;
     post("opinions.json", { id: requestedId }).then(function (res) {
       generating = false;
-      syncGenerateBtn();
+      syncSheetControls();
 
       if (res.status === 200 && res.data && res.data.opinions) {
         var shown = currentCase();
@@ -627,59 +657,218 @@
     });
   }
 
-  // One hearing at a time per page, and the button says so on whichever blank sheet is on screen.
-  // The lock is global rather than per case on purpose: clicking through the queue would otherwise
-  // let a moderator start a paid call on every case in a few seconds.
-  function syncGenerateBtn() {
-    var btn = $("ub-experts-generate");
-    btn.disabled = generating;
-    btn.textContent = generating ? T.expertsGenerating : T.expertsGenerate;
+  // "Передать слово" - buys ONE more speech. Which side speaks is the server's decision, not this
+  // button's; the label below only reports it, so a stale sheet cannot call the same side twice.
+  function requestFloor() {
+    if (generating || !hearing) return;
+    var c = currentCase();
+    if (!c) return;
+
+    generating = true;
+    syncSheetControls();
+
+    var requestedId = c._id;
+    post("opinions-turn.json", { id: requestedId }).then(function (res) {
+      generating = false;
+      syncSheetControls();
+
+      if (res.status === 200 && res.data && res.data.opinions) {
+        var shown = currentCase();
+        if (shown && shown._id === requestedId) renderOpinions(res.data.opinions);
+        else toast(T.expertsGenerated);
+        return;
+      }
+      if (res.status === 409 && res.data && res.data.error === "shift_taken") return;
+      if (res.status === 409 && res.data && res.data.error === "hearing_closed") {
+        return toast(T.expertFloorClosed);
+      }
+      if (res.status === 409 && res.data && res.data.error === "no_hearing") {
+        return toast(T.expertNoHearing);
+      }
+      if (res.status === 503) return toast(T.expertsGenerateUnavailable);
+      if (res.status === 429) return toast(T.expertsGenerateTooMany);
+      toast(T.expertTurnFailed);
+    });
   }
 
+  // The judge's own remark. Costs nothing and takes no model call, so it is NOT behind the
+  // `generating` lock - a moderator may type while a speech is being written, and the remark simply
+  // lands after it.
+  var filing = false;
+  function sendRemark() {
+    if (filing || !hearing) return;
+    var box = $("ub-judge-input");
+    var text = box.value.trim();
+    if (!text) return;
+    var c = currentCase();
+    if (!c) return;
+
+    filing = true;
+    syncSheetControls();
+
+    var requestedId = c._id;
+    post("opinions-remark.json", { id: requestedId, text: text }).then(function (res) {
+      filing = false;
+
+      if (res.status === 200 && res.data && res.data.opinions) {
+        // Cleared only on success: a remark the server refused is still in the box to fix or retry,
+        // rather than lost to a toast.
+        box.value = "";
+        var shown = currentCase();
+        if (shown && shown._id === requestedId) renderOpinions(res.data.opinions);
+        else syncSheetControls();
+        return;
+      }
+      syncSheetControls();
+      if (res.status === 409 && res.data && res.data.error === "shift_taken") return;
+      if (res.status === 409 && res.data && res.data.error === "hearing_closed") {
+        return toast(T.expertFloorClosed);
+      }
+      if (res.status === 409 && res.data && res.data.error === "no_hearing") {
+        return toast(T.expertNoHearing);
+      }
+      toast(T.expertRemarkFailed);
+    });
+  }
+
+  // Everything on the sheet whose enabled state or label depends on what is happening: the order
+  // button on a blank sheet, and the two bench controls on a filled one.
+  function syncSheetControls() {
+    var order = $("ub-experts-generate");
+    order.disabled = generating;
+    order.textContent = generating ? T.expertsGenerating : T.expertsGenerate;
+
+    var floor = $("ub-floor-next");
+    var send = $("ub-judge-send");
+    var input = $("ub-judge-input");
+    var turns = (hearing && hearing.turns) || [];
+    var exhausted = spokenTurns(turns) >= MAX_SPOKEN_TURNS;
+    var role = floorNext(turns);
+
+    // The colour classes only set the --ub-role variable, so the button borrows the same ink the
+    // speaker's own turns are ruled in - the moderator is picking "let the advocate answer", not
+    // pressing a generic continue.
+    floor.className = "ub-sheet-btn ub-role-" + role;
+    floor.disabled = generating || exhausted;
+    floor.textContent = exhausted
+      ? T.expertFloorClosed
+      : generating
+        ? T.expertFloorWorking
+        : role === "advocate" ? T.expertFloorAdvocate : T.expertFloorProsecutor;
+
+    send.disabled = filing;
+    send.textContent = filing ? T.expertRemarkSending : T.expertRemarkSend;
+    input.disabled = filing;
+  }
+
+  // Renders one speech. Every string goes through textContent or the tokenizer, like the rest of
+  // this file: these are model-written paragraphs quoting an applicant's own chat lines back, i.e.
+  // attacker-influenced text on a page a tier-2 moderator is logged into.
+  function renderSpeechTurn(turn) {
+    var block = el("div", "ub-turn ub-turn-" + turn.role);
+
+    var head = el("div", "ub-turn-head");
+    head.appendChild(el("span", "ub-turn-n", turn.n));
+    head.appendChild(el("span", "ub-turn-role",
+      turn.role === "advocate" ? T.expertAdvocate : T.expertProsecutor));
+    if (turn.rule) head.appendChild(el("span", "ub-turn-rule", turn.rule));
+    block.appendChild(head);
+
+    if (turn.headline) block.appendChild(el("div", "ub-turn-headline", turn.headline));
+
+    // The one place on this sheet where the text is not set as a flat string: the speaker may mark
+    // a few words as load-bearing, and SpeechMarkup turns those into <em>s built from text nodes.
+    // It has no code path that produces markup - see its header.
+    var speech = el("div", "ub-turn-speech");
+    window.SpeechMarkup.renderSpeechInto(speech, turn.speech);
+    block.appendChild(speech);
+
+    if (turn.quotes && turn.quotes.length) {
+      var quotes = el("div", "ub-turn-quotes");
+      turn.quotes.forEach(function (quote) {
+        quotes.appendChild(el("div", "ub-quote", "«" + quote + "»"));
+      });
+      block.appendChild(quotes);
+    }
+
+    // Objection and demand are the two labelled one-liners that close a turn, and they sit together
+    // below the argument rather than above it: what the other side got wrong and what this side
+    // wants are both conclusions, and putting either between the thesis and the speech breaks the
+    // read from one into the other.
+    if (turn.counter) {
+      var counter = el("div", "ub-turn-counter");
+      counter.appendChild(el("span", "ub-turn-label", T.expertLabelCounter));
+      counter.appendChild(document.createTextNode(turn.counter));
+      block.appendChild(counter);
+    }
+
+    if (turn.demand) {
+      var demand = el("div", "ub-turn-demand");
+      demand.appendChild(el("span", "ub-turn-label", T.expertLabelDemand));
+      demand.appendChild(document.createTextNode(turn.demand));
+      block.appendChild(demand);
+    }
+
+    // Only ever set on sheets written through the by-hand admin PUT, the one path that still has a
+    // revise move. Without it a moderator cannot tell a first draft from a second.
+    if (turn.revised) block.appendChild(el("div", "ub-turn-note", T.expertRewritten));
+
+    return block;
+  }
+
+  // Renders the moderator's own remark, under their name and face. The author travels on the turn
+  // rather than being looked up now: a desk is worked by whoever holds the shift, so two remarks on
+  // one sheet are routinely by two different people.
+  function renderJudgeTurn(turn) {
+    var block = el("div", "ub-turn ub-turn-judge");
+    var who = turn.author || {};
+
+    var head = el("div", "ub-turn-head");
+    head.appendChild(el("span", "ub-turn-n", turn.n));
+    if (who.avatarUrl) {
+      var avatar = el("img", "ub-judge-avatar");
+      // Validated server-side to be an https URL before it was stored (parseJudgeTurn), which is
+      // what makes it safe to put in a src here.
+      avatar.src = who.avatarUrl;
+      avatar.alt = "";
+      head.appendChild(avatar);
+    }
+    var name = el("span", "ub-judge-name", who.displayName || who.login || "");
+    // Their own chat colour, stored as a validated #rrggbb. Falls back to the bench's own ink when
+    // the moderator never set one.
+    if (who.color) name.style.color = who.color;
+    head.appendChild(name);
+    head.appendChild(el("span", "ub-turn-role", T.expertJudge));
+    block.appendChild(head);
+
+    var speech = el("div", "ub-turn-speech");
+    window.SpeechMarkup.renderSpeechInto(speech, turn.speech);
+    block.appendChild(speech);
+
+    return block;
+  }
+
+  // Paints the whole sheet, or its empty state.
+  //
+  // `null` is the normal case, not an error - most appeals are never argued. The sheet then shows
+  // its empty state and, docked, carries no ink mark, so the moderator can tell at a glance from the
+  // desk whether there is anything on it to pick up.
   function renderOpinions(opinions) {
     var body = $("ub-experts-body");
     var card = $("ub-experts-card");
     body.textContent = "";
-    syncGenerateBtn();
 
-    var has = Boolean(opinions && opinions.prosecutor && opinions.advocate);
+    hearing = opinions && opinions.turns && opinions.turns.length ? opinions : null;
+    var has = Boolean(hearing);
     card.classList.toggle("ub-has-opinions", has);
     $("ub-experts-empty").style.display = has ? "none" : "";
+    syncSheetControls();
     if (!has) return;
 
-    // The order is the order of the hearing, and it matters: the advocate is answering the
-    // accusation directly above it, and the prosecutor's reply answers the defence above that.
-    var speeches = [
-      { role: T.expertProsecutor, text: opinions.prosecutor.final,
-        note: opinions.decision === "rewrite" ? T.expertRewritten : null },
-      { role: T.expertAdvocate, text: opinions.advocate.final },
-    ];
-    if (opinions.prosecutor.rebuttal) {
-      speeches.push({ role: T.expertRebuttal, text: opinions.prosecutor.rebuttal, rebuttal: true });
-    }
-
-    speeches.forEach(function (speech) {
-      if (!speech.text) return;
-      var block = document.createElement("div");
-      block.className = "ub-speech" + (speech.rebuttal ? " ub-speech-rebuttal" : "");
-
-      var role = document.createElement("div");
-      role.className = "ub-speech-role";
-      role.textContent = speech.role;
-      block.appendChild(role);
-
-      var text = document.createElement("div");
-      text.className = "ub-speech-text";
-      text.textContent = speech.text;
-      block.appendChild(text);
-
-      if (speech.note) {
-        var note = document.createElement("div");
-        note.className = "ub-speech-note";
-        note.textContent = speech.note;
-        block.appendChild(note);
-      }
-      body.appendChild(block);
+    // The order is the order of the hearing, and it matters: each speech answers the one above it.
+    hearing.turns.forEach(function (turn) {
+      if (!turn || !turn.speech) return;
+      body.appendChild(turn.role === "judge" ? renderJudgeTurn(turn) : renderSpeechTurn(turn));
     });
     body.scrollTop = 0;
   }
@@ -1524,6 +1713,17 @@
   });
 
   $("ub-experts-generate").addEventListener("click", requestOpinions);
+  $("ub-floor-next").addEventListener("click", requestFloor);
+  $("ub-judge-send").addEventListener("click", sendRemark);
+  // Ctrl/Cmd+Enter files the remark, the way every other multi-line box on the site does. A plain
+  // Enter has to stay a newline: a remark to the court is often two sentences, and losing the second
+  // one to a reflex keypress would be the worst possible time to find that out.
+  $("ub-judge-input").addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      sendRemark();
+    }
+  });
 
   // --- stamp machine -------------------------------------------------------
 
@@ -1824,7 +2024,7 @@
     chat: { el: "ub-chat-logs", size: 14, min: 8, max: 24, display: "ub-font-chat-display" },
     appeal: { el: "ub-appeal-text", size: 30, min: 10, max: 60, display: "ub-font-appeal-display" },
     visa: { el: "ub-visa-reason", size: 13, min: 8, max: 24, display: "ub-font-visa-display" },
-    experts: { el: "ub-experts-body", size: 13, min: 8, max: 24, display: "ub-font-experts-display" },
+    experts: { el: "ub-experts-body", size: 14, min: 8, max: 24, display: "ub-font-experts-display" },
     rules: { el: "ub-rules-body", size: 13, min: 8, max: 24, display: "ub-font-rules-display" },
   };
 

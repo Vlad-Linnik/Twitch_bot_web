@@ -29,7 +29,10 @@ router.use("/admin/api", adminApiLimiter, requireApiToken);
 // so the parser is scoped to it rather than added app-wide, for the same reason routes/games.js
 // mounts its own: a parser mounted globally is a buffer every other route then has to defend.
 // 32kB is far above the three capped speeches (MAX_OPINION_CHARS each) this ever carries.
-const opinionsBody = express.json({ limit: "32kb" });
+// Sized off the shape rather than off the old two-speech body: a hearing may now carry up to
+// MAX_TURNS speeches of MAX_OPINION_CHARS each, and a driver restoring a full transcript at the
+// old 32kb would have hit a 413 that says nothing about which limit it broke.
+const opinionsBody = express.json({ limit: "256kb" });
 
 // Resolves :id to {unbanCase, channel} or answers the request itself. Shared by the three
 // case-scoped endpoints below, which otherwise repeat the same two lookups and two 404s.
