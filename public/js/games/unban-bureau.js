@@ -62,6 +62,10 @@
   // this grid rather than to whole design pixels (see snapToPixel).
   var designPerDevicePx = 1;
   var current = 0;
+  // The desk opens with nobody at the window: the queue is out on the street and the moderator
+  // calls the first applicant in with the loudspeaker, exactly as they call every one after them.
+  // Until that happens there is no case in front of them — see currentCase().
+  var started = false;
   var currentDecision = null; // 'approved' | 'denied' — set by stamping, required to submit
   var isProcessing = false;
   var stats = { approved: 0, denied: 0, handled: 0 };
@@ -203,7 +207,12 @@
     });
   }
 
-  function currentCase() { return cases[current]; }
+  // Null until the first applicant is called. Saying "there is no case" rather than carrying the
+  // `started` flag into every reader is what makes the idle desk cost nothing: the live poll, the
+  // visa, the two weapons and the experts sheet all already handle a null case — a queue can empty
+  // out from under them — so an empty desk needs no new branch in any of them. It is also what
+  // keeps the chat vote off: scheduleVote() is only ever reached through renderCase().
+  function currentCase() { return started ? cases[current] : null; }
 
   // --- the shift -----------------------------------------------------------
   // Only one moderator works a channel's desk at a time (db/unbanBureauShiftRepo.js). The server
@@ -881,7 +890,9 @@
     var experts = $("ub-experts-card");
     var rules = $("ub-rules-card");
 
-    Array.prototype.forEach.call(document.querySelectorAll(".ub-paper"), function (n) { n.style.display = "block"; });
+    // Everything except the manual, which belongs to the empty desk and left it on the first call
+    // (hideGuide) — dealing it back would slide it up under every applicant's papers.
+    Array.prototype.forEach.call(document.querySelectorAll(".ub-paper:not(#ub-guide-card)"), function (n) { n.style.display = "block"; });
 
     appeal.classList.remove("ub-no-transition");
     appeal.classList.add("ub-small-appeal");
@@ -916,6 +927,19 @@
       appeal.style.top = "740px";
       $("ub-chat-logs").scrollTop = $("ub-chat-logs").scrollHeight;
     }, 50);
+  }
+
+  // The manual (views/unbanBureau.ejs's #ub-guide-card) lies on the desk while it is empty and
+  // slides off the bottom of it when the first applicant is called. Read once and then out of the
+  // way: the desk needs the room for five documents, and a reload is the way back to it.
+  function hideGuide() {
+    var guide = $("ub-guide-card");
+    // The drag handler pins ub-no-transition on whatever was last picked up and only the dealt
+    // papers ever have it taken off again — without this a manual the moderator moved would
+    // vanish on the spot instead of sliding away.
+    guide.classList.remove("ub-no-transition");
+    guide.style.top = "1200px";
+    setTimeout(function () { guide.style.display = "none"; }, 800);
   }
 
   function renderStats() {
@@ -1689,16 +1713,20 @@
       .catch(function () { toast(T.failed); isProcessing = false; });
   }
 
-  // Calls the next applicant: the person at the head of the street queue peels off toward the
-  // booth, and the next case is dealt.
-  function advance() {
+  // The person at the head of the street queue peels off toward the booth. Split out of advance()
+  // because the first call of the shift does this too, without stepping the case index.
+  function callWalkerIn() {
     var alive = walkers.filter(function (w) { return !w.dead && !w.inBooth; });
     alive.sort(function (a, b) { return b.distance - a.distance; });
-    if (alive[0]) {
-      alive[0].inBooth = true;
-      setWalkerSprite(alive[0], "ub-walker");
-      alive[0].el.style.zIndex = 1000;
-    }
+    if (!alive[0]) return;
+    alive[0].inBooth = true;
+    setWalkerSprite(alive[0], "ub-walker");
+    alive[0].el.style.zIndex = 1000;
+  }
+
+  // Calls the next applicant: one walker peels off toward the booth, and the next case is dealt.
+  function advance() {
+    callWalkerIn();
 
     isProcessing = false;
     if (current + 1 >= cases.length) { toast(T.allDone); return; }
@@ -1706,9 +1734,19 @@
     renderCase();
   }
 
+  // The first call of the shift, which advance() cannot be: it steps to the NEXT case, and from a
+  // desk that has shown none that would skip the first applicant entirely.
+  function openDesk() {
+    started = true;
+    hideGuide();
+    callWalkerIn();
+    renderCase();
+  }
+
   $("ub-loudspeaker").addEventListener("click", function () {
     if (isProcessing) return;
     play("speaker");
+    if (!started) { openDesk(); return; }
     advance();
   });
 
@@ -2088,12 +2126,15 @@
   function applyPickMode() {
     sortCases();
     current = 0;
-    renderCase();
+    // Re-ordering the queue before the first call must not deal a case: the desk is still empty,
+    // the manual is still lying on it, and nobody has been called to the window.
+    if (started) renderCase();
   }
 
-  // Puts the saved preferences back on the controls, before boot's first renderCase(). Ordering
-  // matters for the queue: this only SORTS, leaving the render to boot - calling applyPickMode() here
-  // would render a case and fetch its dossier before the rest of the page had been wired up.
+  // Puts the saved preferences back on the controls, before the desk opens. Ordering matters for
+  // the queue: this only SORTS, leaving the render to the first call - and applyPickMode() is not
+  // the same thing even now that it refuses to render on a desk nobody has been called to, since
+  // the very first case must be dealt by the loudspeaker rather than by restoring a preference.
   //
   // It also fixes a mismatch that predates the saving: the panel's markup ships with `shuffle`
   // checked while `pickMode` starts from the server's own newest/oldest ordering, so the radio said
@@ -2211,10 +2252,17 @@
   var spawnTimer = setInterval(spawnWalker, 600);
   requestAnimationFrame(stepStreet);
 
-  // Must come before the first renderCase(): it decides the queue order and the font sizes the very
-  // first case is drawn with.
+  // Must come before the desk opens: it decides the queue order and the font sizes the very first
+  // case is drawn with.
   restorePrefs();
-  renderCase();
+
+  // The desk opens empty — no applicant, no case papers, just the manual on it. Everything else is
+  // already live: the street fills up, the rifle and the grenade work (neither has ever needed a
+  // case), and only the chat vote waits, because there is nothing at the window to vote on.
+  // renderStats() is what the first renderCase() used to do here; without it the counter reads
+  // "0 / 0" over a full queue.
+  $("ub-guide-card").style.display = "block";
+  renderStats();
   var liveTimer = setInterval(pollLive, LIVE_POLL_MS);
   var heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
 

@@ -165,8 +165,65 @@
       <div id="ub-toast"></div>
     </div>
 
-    <%# The five documents. Everything inside is filled via textContent by the client. %>
+    <%# The five case documents (everything inside them is filled via textContent by the client),
+        plus the manual, which is about the desk rather than about a case. %>
     <div id="ub-papers-layer">
+
+      <%# The manual: what lies on the desk before anybody has been called. The first call sweeps
+          it off (hideGuide() in the client), and a reload is the way back to it.
+          Static and server-rendered - it is the one paper here whose text the client never
+          touches, which is why it can be written in the template instead of built from a
+          dictionary like everything else on this page.
+          Its pictures are the desk's OWN things, printed: the megaphone is cropped out of the
+          artwork at the coordinates #ub-loudspeaker sits on, the rifle and the grenade are the
+          wall buttons themselves. See #ub-guide-card in the stylesheet for why they are grey. %>
+      <div class="ub-paper ub-draggable" id="ub-guide-card">
+        <div id="ub-guide-title"><%= t('unbanBureau.guideTitle') %></div>
+        <div id="ub-guide-subtitle"><%= t('unbanBureau.guideSubtitle') %></div>
+
+        <div id="ub-guide-rows">
+          <div class="ub-guide-row">
+            <div class="ub-guide-pic ub-pic-call"></div>
+            <div class="ub-guide-text"><span class="ub-guide-term"><%= t('unbanBureau.guideCallTitle') %></span><%= t('unbanBureau.guideCallText') %></div>
+          </div>
+
+          <div class="ub-guide-row">
+            <div class="ub-guide-pic ub-pic-papers"></div>
+            <div class="ub-guide-text"><span class="ub-guide-term"><%= t('unbanBureau.guidePapersTitle') %></span><%= t('unbanBureau.guidePapersText') %></div>
+          </div>
+
+          <div class="ub-guide-row">
+            <div class="ub-guide-pic ub-pic-stamp"></div>
+            <div class="ub-guide-text"><span class="ub-guide-term"><%= t('unbanBureau.guideStampTitle') %></span><%= t('unbanBureau.guideStampText') %></div>
+          </div>
+
+          <div class="ub-guide-row">
+            <%# The one picture with nothing in the room behind it - the vote is a bar on the HUD,
+                not an object on the wall. Drawn as ink on the page instead. A constant with no
+                interpolated data, like the three badge SVGs in the client. %>
+            <div class="ub-guide-pic ub-pic-vote">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 4h18v12h-8l-4 4v-4H3V4Z" />
+                <path d="M6 10h5M8.5 7.5v5" />
+                <path d="M14 10h4" />
+              </svg>
+            </div>
+            <div class="ub-guide-text"><span class="ub-guide-term"><%= t('unbanBureau.guideVoteTitle') %></span><%= t('unbanBureau.guideVoteText') %></div>
+          </div>
+
+          <div class="ub-guide-row">
+            <div class="ub-guide-pic ub-pic-awp"></div>
+            <div class="ub-guide-text"><span class="ub-guide-term"><%= t('unbanBureau.guideSniperTitle') %></span><%= t('unbanBureau.guideSniperText') %></div>
+          </div>
+
+          <div class="ub-guide-row">
+            <div class="ub-guide-pic ub-pic-grenade"></div>
+            <div class="ub-guide-text"><span class="ub-guide-term"><%= t('unbanBureau.guideGrenadeTitle') %></span><%= t('unbanBureau.guideGrenadeText') %></div>
+          </div>
+        </div>
+
+        <div id="ub-guide-foot"><%= t('unbanBureau.guideFoot') %></div>
+      </div>
       <div class="ub-paper ub-draggable" id="ub-user-card">
         <%# Covers the card until Twitch's half of the dossier is on it. The bot is the only side
             that can read it (see ../CLAUDE.md's "Бюро амнистии"), so the site asks and waits ~2s.

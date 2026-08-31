@@ -414,6 +414,132 @@ body.ub-playing footer {
   display: none !important;
 }
 
+/* --- the manual ------------------------------------------------------------
+   The sheet lying on the desk before anybody has been called, and the only paper
+   here that is about the desk rather than about a case. The first call sweeps it
+   off (hideGuide() in the client).
+   Sized so all six entries are readable at once: the sheet is read in one look
+   and then taken away, so a scrollbar on it would just be a way of hiding half
+   the instructions.
+   THE PICTURES ARE GREY ON PURPOSE, and they are the room's own things rather
+   than icons - the megaphone is cropped out of the artwork at the coordinates
+   #ub-loudspeaker sits on, the rifle and the grenade are the wall buttons
+   themselves. Printed in grey they read as pictures ON a sheet of paper; in
+   colour they read as controls lying on one, which is exactly the thing this
+   desk spends the rest of the stylesheet establishing. */
+#ub-guide-card {
+  left: 760px;
+  top: 470px;
+  width: 880px;
+  /* Height follows the text on purpose: the Russian and English entries do not
+     wrap to the same number of lines, and a fixed sheet has to be tall enough
+     for the longer of the two in both. */
+  padding: 26px 30px 22px;
+  background-color: #efe7d8;
+  color: #2f2a22;
+  /* Slides off the bottom of the desk on the first call, matching the way the
+     case papers slide up onto it. */
+  transition: top 0.7s ease-in;
+}
+/* The same inset dotted rule the other two desk sheets wear. */
+#ub-guide-card::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 2px dotted #b7a988;
+  pointer-events: none;
+}
+#ub-guide-title {
+  font-size: 19px;
+  letter-spacing: 3px;
+  text-align: center;
+  color: #3b3327;
+}
+#ub-guide-subtitle {
+  margin-top: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(0 0 0 / 0.25);
+  font-size: 12px;
+  text-align: center;
+  color: #6f6350;
+}
+#ub-guide-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  margin-top: 16px;
+}
+.ub-guide-row {
+  display: flex;
+  gap: 12px;
+  width: calc(50% - 11px);
+}
+.ub-guide-pic {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
+  filter: grayscale(1) contrast(1.05);
+}
+.ub-guide-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #1e1a13;
+}
+.ub-guide-term {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 2px;
+  margin-bottom: 2px;
+  color: #3b3327;
+}
+#ub-guide-foot {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 11px;
+  color: #6f6350;
+}
+
+/* The megaphone, cropped straight out of main-gui.png at 1.1x rather than drawn
+   again: the reader is being told to click that exact object, so the picture has
+   to be it. The crop starts just below the box's top edge - a few rows higher and
+   a strip of the street behind it comes along. */
+.ub-pic-call {
+  background-image: url("/img/games/unban-bureau/main-gui.png");
+  background-size: 2112px 1188px;
+  background-position: -648px -283px;
+}
+.ub-pic-papers {
+  background-image: url("/img/games/unban-bureau/appeal-card.png");
+}
+/* The machine's own green button rather than the mark it leaves: the imprint is
+   70x30, which at this size is a grey smudge, and the button is the thing the
+   sentence is telling them to press. */
+.ub-pic-stamp {
+  background-image: url("/img/games/unban-bureau/btn-green.png");
+}
+/* The two wall buttons at their own aspect ratio - `contain` leaves the rifle
+   narrow in its box, which is what it looks like on the wall. */
+.ub-pic-awp {
+  background-image: url("/img/games/unban-bureau/button-awp.png");
+}
+.ub-pic-grenade {
+  background-image: url("/img/games/unban-bureau/button-grenade.png");
+}
+/* The vote has no object in the room to photograph, so it is drawn. crispEdges
+   keeps the diagonal of the tail blocky, next to five pixel-art neighbours. */
+.ub-pic-vote svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  shape-rendering: crispEdges;
+}
+
 /* --- user card internals -------------------------------------------------- */
 
 #ub-uc-avatar {
