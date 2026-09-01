@@ -85,6 +85,7 @@
             <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colViewer') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colScore') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colNextPunishment') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colPardons') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colFactSource') %></th>
             <th class="px-4 py-2"></th>
           </tr>
@@ -120,6 +121,22 @@
                     отвечает на «что будет дальше» иначе всех прочих, и это надо сказать. %>
                 <% if (r.hostile) { %>
                   <span class="block text-xs text-amber-500 mt-0.5"><%= t('admin.ai.rapportHostile') %></span>
+                <% } %>
+              </td>
+              <%# Сколько раз человека уже прощали. Частоту прощения код не ограничивает - решает
+                  модель, - и эта колонка единственное место, где видно, не превратилось ли «извини»
+                  в способ обнулять счёт по расписанию. %>
+              <td class="px-4 py-2 align-middle text-xs">
+                <% if (r.pardonCount) { %>
+                  <span class="text-neutral-300 tabular-nums"><%= r.pardonCount %></span>
+                  <% if (r.pardonedAt) { %>
+                    <span class="block text-neutral-600"><%= new Date(r.pardonedAt).toLocaleDateString('ru-RU') %></span>
+                  <% } %>
+                  <% if (r.pardonedBy && r.pardonedBy !== r.login) { %>
+                    <span class="block text-neutral-600"><%= r.pardonedBy %></span>
+                  <% } %>
+                <% } else { %>
+                  <span class="text-neutral-700"><%= t('admin.ai.pardonNever') %></span>
                 <% } %>
               </td>
               <td class="px-4 py-2 align-middle text-xs text-neutral-500">

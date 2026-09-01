@@ -86,6 +86,27 @@
                       <%= t('admin.ai.logRapport') %>: <%= r.rapportBefore %> &rarr; <%= r.rapportAfter %>
                     </p>
                   <% } %>
+                  <%# Прощение. Для автора переход виден и строкой выше, для того, за кого
+                      заступились, - только здесь: его строка правится в обход обычного сдвига, и
+                      прыжок с -10 на 0 иначе необъясним. %>
+                  <% if (r.pardoned) { %>
+                    <p class="text-xs text-emerald-400 mt-1">
+                      <%= t('admin.ai.logPardon') %>: <%= r.pardoned %>
+                      <% if (typeof r.pardonAfter === 'number') { %>
+                        <span class="text-neutral-500"><%= r.pardonBefore %> &rarr; <%= r.pardonAfter %></span>
+                      <% } %>
+                    </p>
+                  <% } %>
+                  <%# Тайм-аут по собственной просьбе - не наказание, поэтому и цвет другой, и с
+                      punishAction он не смешивается. sent при этом остаётся true: ответ уходит. %>
+                  <% if (r.selfTimeout) { %>
+                    <p class="text-xs text-sky-400 mt-1">
+                      <%= t('admin.ai.logSelfTimeout') %>: <%= Math.round(r.selfTimeout / 60) %> <%= t('admin.ai.minutesShort') %>
+                      <% if (r.selfTimedOut !== true) { %>
+                        <span class="text-neutral-500">· <%= t('admin.ai.notSent') %></span>
+                      <% } %>
+                    </p>
+                  <% } %>
                   <% if (r.punishAction === 'warn') { %>
                     <p class="text-xs text-amber-500 mt-1"><%= t('admin.ai.logPunishWarn') %></p>
                   <% } else if (r.punishAction === 'timeout' && r.timeoutSeconds) { %>

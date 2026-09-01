@@ -215,12 +215,16 @@ router.get("/admin/ai/filter", requireAdmin, async (req, res, next) => {
     const channels = await channelsRepo.listAll();
     const selected = req.query.channel || (await defaultChannel(channels));
     const entries = selected ? await aiFilterRepo.listForChannel(selected) : [];
+    // Неразобранные - наверх: строка, которую бот предложил, но никто не смотрел, в чат не уходит,
+    // и единственное, что с ней можно сделать, - это посмотреть.
+    entries.sort((a, b) => Number(Boolean(a.approved)) - Number(Boolean(b.approved)));
     res.render("adminAiFilter", {
       tab: "ai",
       aiTab: "filter",
       channels,
       selected,
       entries,
+      pending: entries.filter((e) => e.approved !== true).length,
       editError: String(req.query.error || ""),
     });
   } catch (err) {
@@ -263,6 +267,27 @@ router.post("/admin/ai/filter/edit", settingsWriteLimiter, requireAdmin, verifyT
     }
     const failed = result.ok ? "" : "&error=" + encodeURIComponent(result.reason || "failed");
     res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}${failed}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Согласование строки. Бот отдаёт из фильтра только согласованные - заготовка отвечает вечно, всем
+// и без модели, а предлагает её один разговор с одним человеком. Кнопка работает в обе стороны:
+// снять согласование - это выключить строку, не потеряв ни текста, ни счётчика попаданий.
+router.post("/admin/ai/filter/approve", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const channel = String(req.body.channel || "");
+    const approved = req.body.approved === "on" || req.body.approved === "1";
+    const ok = await aiFilterRepo.setApproved(channel, req.body.text, approved);
+    if (ok) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: approved ? "ai.filter.approve" : "ai.filter.unapprove",
+        target: channel + "/" + String(req.body.text || ""),
+      });
+    }
+    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
   } catch (err) {
     next(err);
   }

@@ -63,7 +63,9 @@ async function upsert({ channelLogin, text, answer, source }) {
   await col.updateOne(
     { channel: withHash(channel), text: key },
     {
-      $set: { answer: reply, source: source || "admin" },
+      // Строку, написанную человеком, согласовывать не у кого - она уже согласована тем, что её
+      // написали. Флаг ставится и при правке ботовской строки: разобрать её и есть согласование.
+      $set: { answer: reply, source: source || "admin", approved: true },
       $setOnInsert: { channel: withHash(channel), text: key, hits: 0, lastHitAt: null, createdAt: new Date() },
     },
     { upsert: true }
@@ -99,10 +101,35 @@ async function updateEntry({ channelLogin, text, newText, answer }) {
   // есть, - чей это текст.
   const res = await col.updateOne(
     { channel, text: String(text) },
-    { $set: { text: nextKey, answer: reply, source: "admin" } }
+    { $set: { text: nextKey, answer: reply, source: "admin", approved: true } }
   );
   if (!res.matchedCount) return { ok: false, reason: "failed" };
   return { ok: true, key: nextKey };
+}
+
+// СОГЛАСОВАНИЕ. Бот отдаёт из фильтра только строки с approved: true - см. findFilterAnswer в
+// TwitchBot/db/aiStore.js. Заготовка отвечает вечно, всем и без модели, а заводит её один разговор
+// с одним человеком, поэтому между «модель предложила» и «отвечает в чат» стоит человек. Та же
+// стадия, что у наказаний (observe → enforce) и у античита.
+//
+// Снятие согласования - не удаление: строку бывает нужно выключить, не теряя ни текста, ни hits,
+// по которым видно, работала она вообще или нет.
+async function setApproved(channelLogin, text, approved) {
+  const col = await ensureInitialized();
+  const res = await col.updateOne(
+    { channel: withHash(channelLogin), text: aiTextKey(text) },
+    { $set: { approved: Boolean(approved) } }
+  );
+  return res.matchedCount > 0;
+}
+
+// Сколько строк ждёт разбора - для значка в списке разделов. Строки, заведённые до появления
+// флага, попадают сюда же: approved у них нет вовсе, и отвечать они перестали.
+async function countPending(channelLogin) {
+  const col = await ensureInitialized();
+  const where = { approved: { $ne: true } };
+  if (channelLogin) where.channel = withHash(channelLogin);
+  return col.countDocuments(where);
 }
 
 async function remove(channelLogin, text) {
@@ -110,4 +137,13 @@ async function remove(channelLogin, text) {
   await col.deleteOne({ channel: withHash(channelLogin), text: aiTextKey(text) });
 }
 
-module.exports = { listForChannel, count, countForChannel, upsert, updateEntry, remove };
+module.exports = {
+  listForChannel,
+  count,
+  countForChannel,
+  countPending,
+  upsert,
+  updateEntry,
+  setApproved,
+  remove,
+};

@@ -49,6 +49,9 @@
   <% } else { %>
     <div class="rounded-lg border border-neutral-800 overflow-hidden">
       <div class="overflow-x-auto">
+        <% if (typeof pending !== 'undefined' && pending) { %>
+          <p class="px-4 py-2 text-xs text-amber-400 border-b border-neutral-800"><%= t('admin.ai.filterPending').replace('%s', pending) %></p>
+        <% } %>
         <table class="w-full text-sm">
           <thead class="bg-neutral-900 text-neutral-400">
             <tr>
@@ -56,6 +59,7 @@
               <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colAnswer') %></th>
               <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colHits') %></th>
               <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colSource') %></th>
+              <th class="text-left font-medium px-4 py-2"><%= t('admin.ai.colApproved') %></th>
               <th class="px-4 py-2"></th>
             </tr>
           </thead>
@@ -77,8 +81,24 @@
                 </td>
                 <td class="px-4 py-2 text-neutral-400 tabular-nums align-middle"><%= e.hits || 0 %></td>
                 <td class="px-4 py-2 text-neutral-500 align-middle"><%= t('admin.ai.source.' + (e.source || 'admin')) %></td>
+                <%# Согласование. Бот отдаёт из фильтра только согласованные строки, поэтому колонка
+                    отвечает не на «нравится ли она нам», а на «отвечает ли она сейчас в чат». %>
+                <td class="px-4 py-2 align-middle">
+                  <% if (e.approved === true) { %>
+                    <span class="text-emerald-400 text-xs whitespace-nowrap"><%= t('admin.ai.approved') %></span>
+                  <% } else { %>
+                    <span class="text-amber-400 text-xs whitespace-nowrap"><%= t('admin.ai.pending') %></span>
+                  <% } %>
+                </td>
                 <td class="px-4 py-2 align-middle">
                   <div class="flex items-center justify-end gap-4">
+                    <form method="post" action="/admin/ai/filter/approve">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                      <input type="hidden" name="channel" value="<%= selected %>" />
+                      <input type="hidden" name="text" value="<%= e.text %>" />
+                      <input type="hidden" name="approved" value="<%= e.approved === true ? '0' : '1' %>" />
+                      <button type="submit" class="<%= e.approved === true ? 'text-neutral-400 hover:text-neutral-300' : 'text-emerald-400 hover:text-emerald-300' %> text-xs whitespace-nowrap"><%= e.approved === true ? t('admin.ai.unapprove') : t('admin.ai.approve') %></button>
+                    </form>
                     <form method="post" action="/admin/ai/filter/edit" id="filter-edit-<%= i %>">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                       <input type="hidden" name="channel" value="<%= selected %>" />
