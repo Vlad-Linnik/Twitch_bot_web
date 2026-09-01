@@ -52,8 +52,19 @@ async function listForChannel(channelLogin, config) {
       label: rapport.describe(score),
       action,
       willBeSeconds: action === "timeout" ? rapport.timeoutSeconds(base, score, max) : null,
+      // На дне наказание назначает код по минусу от модели, а не по её вердикту, - то есть строка
+      // отвечает на «что будет за следующее нарушение» иначе, чем все остальные. Без пометки это
+      // видно только в исходниках бота.
+      hostile: rapport.isHostile(score),
     };
   });
+}
+
+// Сколько человек на дне шкалы по всем каналам. Для сводки на первой странице раздела: дно - это
+// единственное место, где бот наказывает без вердикта модели, и знать его размер стоит сразу.
+async function countHostile() {
+  const col = await ensureInitialized();
+  return col.countDocuments({ score: { $lte: rapport.HOSTILE_AT } });
 }
 
 async function countForChannel(channelLogin) {
@@ -119,6 +130,7 @@ module.exports = {
   MAX_SCORE: rapport.MAX_SCORE,
   listForChannel,
   countForChannel,
+  countHostile,
   setScore,
   remove,
   clearChannel,

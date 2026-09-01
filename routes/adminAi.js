@@ -1,6 +1,6 @@
 // Tier-0 admin pages for the AI mention replies: the global settings, the per-channel fine
 // settings that moved off the channel owner's own page, and the six tables the feature keeps -
-// filter, answer cache, channel memory, viewer memory, call journal, ignore list.
+// filter, answer cache, channel memory, viewer memory, call journal, rapport.
 //
 // WHY THIS IS ADMIN-ONLY. The channel owner keeps what is theirs: the banned-word list, the reply
 // phrases, and the on/off switches for both. Everything here either spends the project's API
@@ -17,7 +17,6 @@ const aiConfigRepo = require("../db/aiConfigRepo");
 const aiFilterRepo = require("../db/aiFilterRepo");
 const aiCacheRepo = require("../db/aiCacheRepo");
 const aiLogRepo = require("../db/aiLogRepo");
-const aiIgnoreRepo = require("../db/aiIgnoreRepo");
 const aiMemoryRepo = require("../db/aiMemoryRepo");
 const aiUserMemoryRepo = require("../db/aiUserMemoryRepo");
 const aiRapportRepo = require("../db/aiRapportRepo");
@@ -56,11 +55,13 @@ function startOfToday() {
 
 router.get("/admin/ai", requireAdmin, async (req, res, next) => {
   try {
-    const [config, today, filterCount, ignoredCount, tally] = await Promise.all([
+    const [config, today, filterCount, hostileCount, tally] = await Promise.all([
       aiConfigRepo.getConfig(),
       aiLogRepo.spendSince(startOfToday()),
       aiFilterRepo.count(),
-      aiIgnoreRepo.count(),
+      // Сколько человек на дне шкалы. Стоит на первой странице раздела, потому что дно - это
+      // единственное место, где бот наказывает не по вердикту модели, а по решению кода.
+      aiRapportRepo.countHostile(),
       aiLogRepo.reviewTally(),
     ]);
     res.render("adminAi", {
@@ -69,7 +70,7 @@ router.get("/admin/ai", requireAdmin, async (req, res, next) => {
       config,
       today,
       filterCount,
-      ignoredCount,
+      hostileCount,
       tally,
       validation: aiValidation,
       // Построчная сверка действующих правил со встроенными. Сравнивается тот же текст, что лежит
@@ -726,30 +727,5 @@ router.post(
     }
   }
 );
-
-// --- ignore list --------------------------------------------------------------------------------
-
-router.get("/admin/ai/ignored", requireAdmin, async (req, res, next) => {
-  try {
-    const entries = await aiIgnoreRepo.list();
-    res.render("adminAiIgnored", { tab: "ai", aiTab: "ignored", entries });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/ignored/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    await aiIgnoreRepo.remove(req.body.channel, req.body.userId);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.ignored.remove",
-      target: `${req.body.channel}/${req.body.userId}`,
-    });
-    res.redirect("/admin/ai/ignored");
-  } catch (err) {
-    next(err);
-  }
-});
 
 module.exports = router;

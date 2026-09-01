@@ -89,7 +89,15 @@
                   <% if (r.punishAction === 'warn') { %>
                     <p class="text-xs text-amber-500 mt-1"><%= t('admin.ai.logPunishWarn') %></p>
                   <% } else if (r.punishAction === 'timeout' && r.timeoutSeconds) { %>
-                    <p class="text-xs text-red-400 mt-1"><%= t('admin.ai.logPunishTimeout') %> <%= Math.round(r.timeoutSeconds / 60) %> <%= t('admin.ai.minutesShort') %></p>
+                    <p class="text-xs text-red-400 mt-1">
+                      <%= t('admin.ai.logPunishTimeout') %> <%= Math.round(r.timeoutSeconds / 60) %> <%= t('admin.ai.minutesShort') %>
+                      <%# Наказание без вердикта timeout - решение кода по дну шкалы, а не модели.
+                          Без подписи такая строка читается как «мут за обычное сообщение», то есть
+                          как ошибка. %>
+                      <% if (r.verdict !== 'timeout') { %>
+                        <span class="text-neutral-500">· <%= t('admin.ai.logPunishFloor') %></span>
+                      <% } %>
+                    </p>
                   <% } %>
                 </td>
                 <td class="px-3 py-2 text-neutral-500 whitespace-nowrap">

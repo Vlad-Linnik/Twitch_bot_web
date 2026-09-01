@@ -39,8 +39,8 @@
         <div class="text-xl font-semibold tabular-nums text-neutral-100"><%= filterCount %></div>
       </div>
       <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.ignoredSize') %></div>
-        <div class="text-xl font-semibold tabular-nums text-neutral-100"><%= ignoredCount %></div>
+        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.hostileSize') %></div>
+        <div class="text-xl font-semibold tabular-nums <%= hostileCount ? 'text-amber-500' : 'text-neutral-100' %>"><%= hostileCount %></div>
       </div>
     </div>
     <% if (today.requests >= config.dailyRequestLimit) { %>

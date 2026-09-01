@@ -116,6 +116,11 @@
                 <% } else { %>
                   <%= t('admin.ai.rapportNextTimeout') %> <%= Math.round(r.willBeSeconds / 60) %> <%= t('admin.ai.minutesShort') %>
                 <% } %>
+                <%# На дне нарушением считается уже сам минус от модели, а не её вердикт - строка
+                    отвечает на «что будет дальше» иначе всех прочих, и это надо сказать. %>
+                <% if (r.hostile) { %>
+                  <span class="block text-xs text-amber-500 mt-0.5"><%= t('admin.ai.rapportHostile') %></span>
+                <% } %>
               </td>
               <td class="px-4 py-2 align-middle text-xs text-neutral-500">
                 <%= r.source === 'admin' ? t('admin.ai.factSourceAdmin') : t('admin.ai.factSourceAi') %>
