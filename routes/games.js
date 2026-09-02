@@ -1,5 +1,6 @@
 const express = require("express");
 const gameScoresRepo = require("../db/gameScoresRepo");
+const { buildLeaderboard } = require("../db/gameLeaderboard");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
@@ -59,7 +60,6 @@ const GAME_DURAK_ONLINE = "durak-multiplayer";
 // realtime/sunduchkiRoomManager.js's finalizeGame computes and persists it
 // after every multiplayer game (durakElo.js's rating math, reused verbatim).
 const GAME_SUNDUCHKI_ONLINE = "sunduchki-multiplayer";
-const TOP_LIMIT = 10;
 // Sanity cap on submitted scores. The game itself can't validate a client-run
 // score, but a legitimate marathon run stays far below this - anything above is
 // a forged request, not a game.
@@ -69,39 +69,6 @@ const MAX_SCORE = 2000000;
 // in public/js/games/cloud-climber.js and db/gameScoresRepo.js's submitScore).
 const MAX_CLIMB = 2000000;
 const DEATH_MARKS_PAGE_SIZE = 20;
-
-// Top 10 rows plus (when the visitor is logged in and ranked below them) their
-// own row with its real rank - the view renders that as the 11th line. Names
-// and chat colors come from the profile cache, same as the stats pages.
-async function buildLeaderboard(game, userId) {
-  const top = await gameScoresRepo.getTop(game, TOP_LIMIT);
-  const me = userId ? await gameScoresRepo.getUserBestAndRank(game, userId) : null;
-
-  const ids = top.map((row) => row.userId);
-  if (userId) ids.push(String(userId));
-  const profiles = await profileCacheRepo.getOrFetchProfiles(ids);
-
-  const nameOf = (id) => {
-    const profile = profiles.get(String(id));
-    return {
-      displayName: (profile && profile.displayName) || "…",
-      color: (profile && profile.chatColor) || null,
-    };
-  };
-
-  const rows = top.map((row, i) => ({
-    rank: i + 1,
-    score: row.bestScore,
-    isMe: userId != null && row.userId === String(userId),
-    ...nameOf(row.userId),
-  }));
-
-  let myRow = null;
-  if (me && !rows.some((row) => row.isMe)) {
-    myRow = { rank: me.rank, score: me.bestScore, ...nameOf(userId) };
-  }
-  return { rows, myRow };
-}
 
 // The on-site games hub. Game logic is fully client-side (public/js/games/*);
 // the server's only game state is the per-user best score behind the

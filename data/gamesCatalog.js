@@ -215,6 +215,24 @@ module.exports = [
       </svg>`,
   },
   {
+    id: "higher-lower",
+    url: "/games/higher-lower",
+    nameKey: "games.higherLower.name",
+    descKey: "games.higherLower.cardDescription",
+    preview: `
+      <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+        <rect x="6" y="10" width="64" height="70" rx="4" fill="#1e1b4b"/>
+        <rect x="80" y="10" width="64" height="70" rx="4" fill="#3b0764"/>
+        <text x="38" y="40" font-size="13" font-family="sans-serif" font-weight="bold" fill="#e5e7eb" text-anchor="middle">чат</text>
+        <text x="38" y="60" font-size="14" font-family="sans-serif" font-weight="bold" fill="#fde047" text-anchor="middle">22578</text>
+        <text x="112" y="36" font-size="13" font-family="sans-serif" font-weight="bold" fill="#e5e7eb" text-anchor="middle">билд</text>
+        <path d="M112 46 l7 8 h-14 z" fill="#4ade80"/>
+        <path d="M112 72 l-7 -8 h14 z" fill="#f87171"/>
+        <circle cx="75" cy="45" r="11" fill="#0a0a0a"/>
+        <text x="75" y="49" font-size="9" font-family="sans-serif" font-weight="bold" fill="#a1a1aa" text-anchor="middle">vs</text>
+      </svg>`,
+  },
+  {
     id: "unban-bureau",
     // Not a /games/* page: it's per-channel and tier-2 gated, so the card points at a picker
     // that forwards to /<channel>/unban-bureau (routes/unbanBureau.js). See requiresModerator.

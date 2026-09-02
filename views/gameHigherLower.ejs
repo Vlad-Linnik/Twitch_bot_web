@@ -1,0 +1,158 @@
+<%- include('partials/head', { title: t('games.higherLower.name') }) %>
+<%- include('partials/nav') %>
+
+<%# Three screens in one page, swapped by public/js/games/higher-lower.js:
+      #hl-setup  - channel/mode/period picker + leaderboards
+      #hl-play   - the two panels
+      #hl-over   - the end-of-run screen
+    The play screen is full-bleed (the two cards are the page), so it sits outside the usual
+    max-w container while the other two stay inside it. %>
+
+<main class="pt-14">
+  <!-- ------------------------------------------------------------------ setup -->
+  <section id="hl-setup" class="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+    <div class="mb-4 flex items-baseline justify-between gap-4">
+      <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.higherLower.name') %></h1>
+      <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.higherLower.backToGames') %></a>
+    </div>
+
+    <%# Shown only when the session still holds an open run. One life makes a dropped connection
+        expensive, so a reload offers the round back instead of eating the streak. %>
+    <div id="hl-resume" hidden class="mb-6 rounded-xl border border-purple-800 bg-purple-950/40 p-4">
+      <p class="text-sm font-semibold text-purple-200 mb-1"><%= t('games.higherLower.resumeTitle') %></p>
+      <p id="hl-resume-body" class="text-sm text-neutral-300 mb-3"></p>
+      <div class="flex gap-2">
+        <button type="button" id="hl-resume-go"
+                class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"><%= t('games.higherLower.resumeContinue') %></button>
+        <button type="button" id="hl-resume-drop"
+                class="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm transition-colors"><%= t('games.higherLower.resumeDrop') %></button>
+      </div>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-[1fr_14rem] items-start">
+      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+        <p class="text-sm text-neutral-400 mb-5"><%= t('games.higherLower.setupIntro') %></p>
+
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.higherLower.modeLabel') %></p>
+        <div class="flex gap-2 mb-5" role="group" id="hl-mode">
+          <button type="button" data-mode="words"
+                  class="hl-toggle is-on flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors"><%= t('games.higherLower.modeWords') %></button>
+          <button type="button" data-mode="emotes"
+                  class="hl-toggle flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors"><%= t('games.higherLower.modeEmotes') %></button>
+        </div>
+
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.higherLower.periodLabel') %></p>
+        <div class="flex gap-2 mb-5" role="group" id="hl-period">
+          <button type="button" data-period="all"
+                  class="hl-toggle is-on flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors"><%= t('games.higherLower.periodAll') %></button>
+          <button type="button" data-period="month"
+                  class="hl-toggle flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors"><%= t('games.higherLower.periodMonth') %></button>
+        </div>
+
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.higherLower.channelLabel') %></p>
+        <div id="hl-channels" class="space-y-2 mb-5"
+             data-pool-label="<%= t('games.higherLower.poolLabel') %>"
+             data-empty-label="<%= t('games.higherLower.noChannels') %>"
+             data-loading-label="<%= t('games.higherLower.loading') %>"></div>
+
+        <button type="button" id="hl-play-btn" disabled
+                class="w-full px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white font-semibold transition-colors">
+          <%= t('games.higherLower.play') %>
+        </button>
+        <p id="hl-setup-error" class="text-sm text-red-400 mt-3" hidden><%= t('games.higherLower.error') %></p>
+      </div>
+
+      <%# Leaderboard - same row markup as every other game's aside, and the same markup
+          lbRow() in public/js/games/higher-lower.js rebuilds after a run. There is ONE of these
+          for the whole page: the end-of-run screen needs it too (losing without being told
+          whether you made the table is the one moment the table matters most), and the script
+          moves this element between the two mount points rather than a second copy of the markup
+          being kept in step by hand. %>
+      <div id="hl-lb-slot-setup">
+      <aside id="hl-leaderboard" class="rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+             data-empty-label="<%= t('games.higherLower.leaderboardEmpty') %>">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.higherLower.leaderboardTitle') %></p>
+        <ol id="hl-lb-list" class="space-y-0.5"></ol>
+        <div id="hl-lb-me" class="mt-1 pt-1 border-t border-neutral-800" hidden>
+          <ol id="hl-lb-me-row"></ol>
+        </div>
+        <p id="hl-local-best" class="text-xs text-neutral-400 mt-3" hidden>
+          <%= t('games.higherLower.localBest') %>: <span id="hl-local-best-value" class="tabular-nums text-neutral-200">0</span>
+        </p>
+        <% if (!user) { %>
+          <p class="text-xs text-neutral-500 mt-3">
+            <%= t('games.higherLower.loginToSave') %>
+            <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-purple-400 hover:text-purple-300"><%= t('nav.login') %></a>
+          </p>
+        <% } %>
+      </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ play -->
+  <section id="hl-play" hidden>
+    <div id="hl-stage" class="hl-stage">
+      <div id="hl-track" class="hl-track"></div>
+
+      <div class="hl-vs" aria-hidden="true">vs</div>
+
+      <div class="hl-hud">
+        <span class="hl-hud-item"><%= t('games.higherLower.best') %>: <b id="hl-hud-best" class="tabular-nums">0</b></span>
+        <span class="hl-hud-item"><%= t('games.higherLower.score') %>: <b id="hl-hud-score" class="tabular-nums">0</b></span>
+      </div>
+
+      <a href="/games" class="hl-exit"><%= t('games.higherLower.backToGames') %></a>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ game over -->
+  <section id="hl-over" hidden class="max-w-md mx-auto px-4 sm:px-6 py-10 text-center">
+    <h2 id="hl-over-title" class="text-3xl font-bold text-neutral-100 mb-2"></h2>
+    <p id="hl-over-body" class="text-sm text-neutral-400 mb-6" hidden></p>
+    <p class="text-xs uppercase tracking-wide text-neutral-500"><%= t('games.higherLower.finalScore') %></p>
+    <p id="hl-over-score" class="text-6xl font-bold text-yellow-300 tabular-nums mb-6">0</p>
+    <p id="hl-over-note" class="text-sm text-neutral-400 mb-6" hidden></p>
+    <div class="flex gap-3">
+      <button type="button" id="hl-again"
+              class="flex-1 px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors"><%= t('games.higherLower.playAgain') %></button>
+      <button type="button" id="hl-back-setup"
+              class="flex-1 px-4 py-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium transition-colors"><%= t('games.higherLower.changeSetup') %></button>
+    </div>
+    <%# The single #hl-leaderboard aside is moved in here while this screen is up. %>
+    <div id="hl-lb-slot-over" class="mt-8 text-left"></div>
+  </section>
+</main>
+
+<%# Server payload. Inlined through safeJson rather than JSON.stringify because the labels in it
+    are chat-derived tokens - attacker-controlled text, exactly what lib/safeJson.js exists for.
+    csrfToken is read off `locals` because middleware/csrf.js issues one only to logged-in
+    visitors; a bare reference would be a ReferenceError for a guest, who is allowed to play. %>
+<script id="hl-data" type="application/json"><%- safeJson({
+  channels,
+  leaderboards,
+  resume,
+  csrfToken: locals.csrfToken || null,
+  loggedIn: !!user,
+  labels: {
+    has: t('games.higherLower.has'),
+    messages: t('games.higherLower.messages'),
+    comparePrefix: t('games.higherLower.comparePrefix'),
+    higher: t('games.higherLower.higher'),
+    lower: t('games.higherLower.lower'),
+    gameOver: t('games.higherLower.gameOver'),
+    clearedTitle: t('games.higherLower.clearedTitle'),
+    clearedBody: t('games.higherLower.clearedBody'),
+    notRanked: t('games.higherLower.notRanked'),
+    error: t('games.higherLower.error'),
+    resumeTitle: t('games.higherLower.resumeTitle'),
+    resumeBody: t('games.higherLower.resumeBody'),
+    resumeContinue: t('games.higherLower.resumeContinue'),
+    resumeDrop: t('games.higherLower.resumeDrop')
+  }
+}) %></script>
+
+<%- include('partials/gameVolumeControl') %>
+<script src="<%= asset('/js/games/gameVolume.js') %>"></script>
+<script src="<%= asset('/js/games/higher-lower.js') %>" defer></script>
+<%- include('partials/foot') %>

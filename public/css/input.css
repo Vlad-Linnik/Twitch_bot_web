@@ -2175,3 +2175,313 @@ body.theme-hall-wide .throne-vitrine__case {
   font-size: 0.78rem;
   color: var(--throne-ink-soft);
 }
+
+/* ============================================================================
+   "Выше — ниже" (views/gameHigherLower.ejs, public/js/games/higher-lower.js)
+
+   Two panels fill the viewport and the whole strip slides by exactly one panel
+   after every right answer, so the challenger becomes the next anchor. The
+   panels live in an absolutely positioned track and are placed by --slot
+   (0, 1, 2...); advancing adds .hl-advance to translate the track one slot,
+   and once the transition ends the JS drops the leftmost panel, renumbers the
+   rest and clears the transform under .hl-noanim so nothing animates back.
+
+   The split axis changes with the viewport - side by side on a desktop, top
+   and bottom on a phone - which is why the translate direction is a media
+   query rather than a constant.
+
+   There is no photograph behind a card the way the genre's usual reference has
+   one: a chat word has no picture. The backdrop is generated from the token
+   itself (--hue/--bx/--by/--cx/--cy, all hashed from the string in JS), so the
+   same word looks the same every time it appears without anything being stored.
+   ============================================================================ */
+
+.hl-stage {
+  position: relative;
+  height: calc(100dvh - 3.5rem);
+  overflow: hidden;
+  background: #0a0a0a;
+  user-select: none;
+}
+
+.hl-track {
+  position: absolute;
+  inset: 0;
+  transition: transform 620ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+.hl-track.hl-noanim {
+  transition: none;
+}
+
+.hl-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 1.25rem;
+  text-align: center;
+  overflow: hidden;
+  color: #fafafa;
+}
+
+@media (min-width: 768px) {
+  .hl-panel {
+    top: 0;
+    height: 100%;
+    width: 50%;
+    left: calc(var(--slot) * 50%);
+  }
+  .hl-track.hl-advance {
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 767.98px) {
+  .hl-panel {
+    left: 0;
+    width: 100%;
+    height: 50%;
+    top: calc(var(--slot) * 50%);
+  }
+  .hl-track.hl-advance {
+    transform: translateY(-50%);
+  }
+}
+
+/* The generated backdrop. Two soft blobs over a dark gradient - enough fixture
+   that two adjacent panels never read as one surface, dark enough that white
+   type stays legible over any hue the hash lands on. */
+.hl-panel::before {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  background:
+    radial-gradient(55% 55% at var(--bx) var(--by), hsl(var(--hue) 72% 32% / 0.9), transparent 72%),
+    radial-gradient(45% 45% at var(--cx) var(--cy), hsl(calc(var(--hue) + 45) 60% 24% / 0.85), transparent 72%),
+    linear-gradient(155deg, hsl(var(--hue) 42% 13%), hsl(calc(var(--hue) + 30) 48% 6%));
+}
+/* A faint weave so a flat gradient does not read as an unfinished page. */
+.hl-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.028) 0 2px,
+    transparent 2px 7px
+  );
+  pointer-events: none;
+}
+
+.hl-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* A hard edge between the two halves. The backdrop hue comes from the token, so
+   two neighbours can land on nearby hues by chance and the split stops reading;
+   this guarantees the boundary regardless of what was drawn. */
+@media (min-width: 768px) {
+  .hl-panel + .hl-panel {
+    box-shadow: inset 2px 0 0 rgba(250, 250, 250, 0.14);
+  }
+}
+@media (max-width: 767.98px) {
+  .hl-panel + .hl-panel {
+    box-shadow: inset 0 2px 0 rgba(250, 250, 250, 0.14);
+  }
+}
+
+.hl-token {
+  font-weight: 800;
+  line-height: 1.05;
+  font-size: clamp(1.5rem, 5.2vw, 4rem);
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+}
+
+/* The token's own row. In the emote mode it reserves the height of a picture, so a card showing
+   an image and a card showing a bare name (an emote that has left the channel's set keeps its
+   usage row but loses its URL) still put their headings on the same line. */
+.hl-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.hl-track.hl-emotes .hl-head {
+  min-height: clamp(6.5rem, 17vh, 12rem);
+}
+
+.hl-emote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+}
+
+.hl-emote-img {
+  height: clamp(4rem, 14vh, 9rem);
+  width: auto;
+  max-width: 80%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.6));
+}
+
+.hl-emote-name {
+  font-weight: 700;
+  font-size: clamp(1rem, 2.2vw, 1.75rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+
+.hl-has,
+.hl-unit {
+  font-size: clamp(0.75rem, 1.5vw, 1rem);
+  color: rgba(250, 250, 250, 0.72);
+}
+
+.hl-count {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2rem, 7vw, 5rem);
+  line-height: 1.05;
+  color: #fde047;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.6);
+}
+
+/* The number and the two buttons occupy the SAME vertical space, so the two
+   halves' headings line up. Without this the taller side (two pills) pushes its
+   word higher than the other's and the pair reads as misaligned rather than as
+   two of the same thing. */
+.hl-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(6rem, 12vh, 7.5rem);
+  width: 100%;
+}
+
+.hl-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(15rem, 70%);
+}
+
+.hl-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border: 2px solid rgba(250, 250, 250, 0.85);
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: clamp(0.85rem, 1.6vw, 1.05rem);
+  color: #fde047;
+  background: rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: background-color 140ms, transform 140ms;
+}
+.hl-choice:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+.hl-choice:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.hl-choice:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Verdict flash on the card that was just answered. */
+.hl-panel.hl-ok::after {
+  background-color: rgba(34, 197, 94, 0.22);
+  animation: hl-flash 700ms ease-out;
+}
+.hl-panel.hl-bad::after {
+  background-color: rgba(239, 68, 68, 0.26);
+  animation: hl-flash 700ms ease-out;
+}
+@keyframes hl-flash {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+.hl-vs {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background: #0a0a0a;
+  color: #a1a1aa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px rgba(10, 10, 10, 0.45);
+}
+
+/* Both readings sit bottom-LEFT, not one per corner: the shared volume slider
+   (views/partials/gameVolumeControl.ejs) is fixed to the bottom-right on every
+   game page, and the score was landing underneath it. */
+.hl-hud {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: rgba(250, 250, 250, 0.85);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.hl-exit {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  z-index: 3;
+  font-size: 0.8rem;
+  color: rgba(250, 250, 250, 0.7);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+}
+.hl-exit:hover {
+  color: #fafafa;
+}
+
+/* Setup screen mode/period toggles. */
+.hl-toggle {
+  background: #262626;
+  color: #d4d4d4;
+  border: 1px solid #404040;
+}
+.hl-toggle:hover:not(:disabled) {
+  background: #333333;
+}
+.hl-toggle.is-on {
+  background: #7e22ce;
+  border-color: #9333ea;
+  color: #ffffff;
+}
+.hl-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
