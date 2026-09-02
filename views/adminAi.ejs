@@ -248,45 +248,32 @@
     <section class="mb-12">
       <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.systemPrompt') %></h2>
       <p class="text-neutral-500 text-sm mb-2"><%= t('admin.ai.systemPromptHint') %></p>
-      <%# Единственное, что правка этого текста ломает молча: без блока про remember/forget модель
-          перестаёт заполнять поля, ошибки при этом нет. Об этом надо сказать прямо. %>
-      <p class="text-amber-500/80 text-xs mb-3"><%= t('admin.ai.systemPromptWarning') %></p>
-      <%# В поле ВСЕГДА лежит текст, который сейчас работает: свой, если он сохранён, иначе
-          встроенный из кода бота. Так правила можно править по одной строке, а не только
-          заменять целиком. Пустым поле не остаётся никогда — пустое поле не подсказывает, что
-          вообще уходит в модель.
-
-          Обратная сторона: сохранённая копия перестаёт следовать за кодом. Поэтому при
-          сохранении текст, дословно совпавший со встроенным, пишется как пустой — тогда канал
-          снова следует за кодом, и правка правил в коде до него доедет. См. parseGlobalConfig. %>
+      <%# ТОЛЬКО ЧТЕНИЕ. Правила живут в коде бота, и меняются они там; сюда их публикует сам бот
+          при старте (aiStore.publishBuiltinPrompt), поэтому показанный текст - это тот же текст,
+          который уходит в модель, а не копия из этого репозитория. Поля формы здесь нет вовсе:
+          страница осталась ровно тем, ради чего её открывают, - посмотреть, что именно уходит в
+          модель. Механика полей (remember, forget и нумерация памяти) в этот текст не входит и
+          здесь не показана: бот дописывает её сам, и в панели её не правят тем более. %>
+      <p class="text-neutral-500 text-xs mb-3"><%= t('admin.ai.systemPromptWarning') %></p>
+      <%# Чьи правила в силе. Своих правил панель больше не заводит, но сохранённые прежней формой
+          не стёрты и продолжают работать у бота - и тогда эта подпись единственное место, где это
+          видно. %>
       <p class="text-xs mb-2 <%= config.systemPrompt ? 'text-purple-400' : 'text-neutral-600' %>">
         <%= config.systemPrompt ? t('admin.ai.systemPromptCustom') : t('admin.ai.systemPromptBuiltinInUse') %>
       </p>
-      <textarea id="systemPrompt" name="systemPrompt" rows="20" maxlength="<%= validation.MAX_SYSTEM_PROMPT_LEN %>"
-                class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-purple-500"><%= config.systemPrompt || config.builtinSystemPrompt %></textarea>
-      <% if (config.builtinSystemPrompt) { %>
-        <%# Текст приходит из кода бота, а не из копии в этом репозитории - см. aiConfigRepo.
-            Кнопка только возвращает его в поле: сохранение остаётся отдельным шагом.
-            nonce обязателен - CSP сайта не разрешает inline-скрипты без него (см. app.js). %>
-        <button type="button" id="fillBuiltinPrompt"
-                class="mt-2 text-xs text-purple-400 hover:text-purple-300"><%= t('admin.ai.systemPromptFillBuiltin') %></button>
-        <script type="application/json" id="builtinPromptData"><%- safeJson(config.builtinSystemPrompt) %></script>
-        <script nonce="<%= cspNonce %>">
-          document.getElementById('fillBuiltinPrompt').addEventListener('click', function () {
-            document.getElementById('systemPrompt').value =
-              JSON.parse(document.getElementById('builtinPromptData').textContent);
-          });
-        </script>
+      <% const effectivePrompt = config.systemPrompt || config.builtinSystemPrompt; %>
+      <% if (effectivePrompt) { %>
+        <pre class="w-full max-h-[32rem] overflow-y-auto rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-400 font-mono leading-relaxed whitespace-pre-wrap"><%= effectivePrompt %></pre>
       <% } else { %>
-        <p class="mt-2 text-xs text-neutral-600"><%= t('admin.ai.systemPromptBuiltinUnknown') %></p>
+        <%# Ни своих правил, ни опубликованного ботом текста: показывать нечего, и это единственный
+            случай, когда страница не может ответить, что уходит в модель. %>
+        <p class="text-xs text-neutral-600"><%= t('admin.ai.systemPromptBuiltinUnknown') %></p>
       <% } %>
 
-      <%# Сверка со встроенными правилами. Свёрнута по умолчанию: сравнение нужно, когда правила
-          правят, а не каждый раз, когда страницу открыли ради лимита.
-
-          Показывается СОХРАНЁННЫЙ текст, а не набранный в поле. Живая сверка по мере набора
-          потребовала бы алгоритм ещё и на клиенте — третью копию того, чему нельзя разъезжаться, —
-          и отвечала бы на другой вопрос: «что я сейчас печатаю» вместо «что у меня сохранено». %>
+      <%# Сверка со встроенными правилами. Свёрнута по умолчанию: страницу открывают чаще ради
+          лимита, чем ради правил, а с правилами только для чтения отличия и вовсе появляются лишь
+          у канала, чей текст остался в базе от прежней формы. Ради этого случая блок и остаётся:
+          иначе разницу между работающими правилами и кодом не увидеть нигде. %>
       <% if (promptDiff) { %>
         <details class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40">
           <summary class="cursor-pointer select-none px-4 py-3 text-sm text-neutral-300">
