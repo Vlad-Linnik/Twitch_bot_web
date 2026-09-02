@@ -17,7 +17,7 @@
 // Channel-field convention: `messages`, `words`, `WordLifetimeStats` and the new ChatWordStats
 // all store `channel` WITH a leading "#". statsRepo.js documents the wider inconsistency.
 const { connect } = require("./connection");
-const { extractWords, LIFETIME_BUCKET } = require("../lib/textStats");
+const { extractWords, stripGifSpans, LIFETIME_BUCKET } = require("../lib/textStats");
 const limits = require("../config/statsLimits");
 const { createCache } = require("../lib/queryCache");
 
@@ -204,7 +204,7 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
     // Newest-first + capped: a top chatter can have six figures of messages, and this is the one
     // read path with no precomputed collection behind it. Uses {channel, userId, timestamp}.
     const cursor = messages
-      .find(query, { projection: { _id: 0, message: 1 } })
+      .find(query, { projection: { _id: 0, message: 1, gifs: 1 } })
       .sort({ timestamp: -1 })
       .limit(limits.MAX_USER_MESSAGES_SCANNED)
       .batchSize(1000);
@@ -215,16 +215,22 @@ async function getUserClouds(channelLogin, userId, requestedPeriod, requestedLim
 
     for await (const doc of cursor) {
       scanned++;
+      // A GIF (T2/T3 subscriber feature) arrives as ordinary text - the GIPHY title in square
+      // brackets - and is only distinguishable by the `gifs` spans the bot stored alongside it.
+      // This is the same blanking the bot applied before writing ChatWordStats; without it the
+      // per-user cloud would disagree with the channel's, which is the drift the hand-synced
+      // tokenizer copy exists to prevent.
+      const statText = stripGifSpans(doc.message, doc.gifs);
       // extractWords already drops commands, stopwords, URLs and emotes; emotes are counted
       // separately below so the two clouds stay disjoint, exactly as they are channel-wide.
-      for (const word of extractWords(doc.message, isEmote)) {
+      for (const word of extractWords(statText, isEmote)) {
         wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
       }
       if (trackedCanonical.size > 0) {
         // Dedupe per message on the CANONICAL name (not the raw token), so "4head 4Head" in one
         // message counts once - same message-presence semantics the raw-token Set always had.
         const seenCanonical = new Set();
-        for (const token of String(doc.message || "").trim().split(/\s+/)) {
+        for (const token of statText.trim().split(/\s+/)) {
           const canonical = trackedCanonical.get(String(token).toLowerCase());
           if (canonical) seenCanonical.add(canonical);
         }
