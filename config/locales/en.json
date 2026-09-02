@@ -999,6 +999,7 @@
       "approve": "Approved",
       "deny": "Denied",
       "sniper": "Shot fired",
+      "grenade": "Grenade thrown",
       "vote": "Chat vote",
       "takeover": "Shift taken over"
     },
@@ -1065,7 +1066,8 @@
       "unbanApproved": "Approved the unban appeal from {{target}}",
       "unbanDenied": "Denied the unban appeal from {{target}}",
       "unbanVote": "Started a chat vote on {{target}}'s unban appeal",
-      "unbanSniper": "Fired the Amnesty Bureau's stray bullet"
+      "unbanSniper": "Fired the Amnesty Bureau's stray bullet",
+      "unbanGrenade": "Threw the Amnesty Bureau's grenade"
     }
   },
   "moderatorPermissions": {

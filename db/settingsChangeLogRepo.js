@@ -15,6 +15,21 @@ const DEFAULT_LIMIT = 25;
 // within this window, logChange() extends it in place instead of inserting a new one.
 const COALESCE_WINDOW_MS = 15000;
 
+// The Бюро амнистии desk's two weapons (routes/unbanBureau.js) are fired in bursts - the rifle's
+// own ceiling allows six a minute - and a burst is one bit of clowning around with several
+// victims, not several decisions. One row per trigger pull buries a shift's actual verdicts, so a
+// repeat inside this window bumps `count` on the standing row instead of inserting another one:
+// the journal shows "×5" on a single line. That row's timestamp is the LAST shot of the burst, so
+// the newest thing that happened is still the top row.
+//
+// Much wider than COALESCE_WINDOW_MS because nothing here is a keystroke: shots come as fast as
+// the ceiling allows and then stop. Two bursts an hour apart stay two rows - merging them would
+// claim a run of shots that never happened.
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+// Only these carry `count`; on every other action, and on every row written before this existed,
+// a missing `count` reads as 1.
+const BURST_ACTIONS = new Set(["sniper", "grenade"]);
+
 let collection;
 
 async function ensureInitialized() {
@@ -60,6 +75,29 @@ async function logChange({ channelLogin, user, category, action, target, before,
     }
   }
 
+  // Burst-coalescing for the desk's weapons. Unlike the autosave case above there is nothing to
+  // merge - consecutive shots are identical rows by construction - so only the tally and the time
+  // move.
+  if (BURST_ACTIONS.has(action)) {
+    const recent = await col.findOne(
+      { channelLogin: login, category, action, moderatorId: String(user.userId) },
+      { sort: { timestamp: -1 } }
+    );
+    // A row with no `count` predates this and is therefore far older than the window anyway;
+    // refusing to merge into one is what keeps $inc from writing a 1 where it would mean 2.
+    if (
+      recent &&
+      typeof recent.count === "number" &&
+      Date.now() - recent.timestamp.getTime() < BURST_WINDOW_MS
+    ) {
+      await col.updateOne(
+        { _id: recent._id },
+        { $inc: { count: 1 }, $set: { timestamp: new Date() } }
+      );
+      return;
+    }
+  }
+
   await col.insertOne({
     channelLogin: login,
     moderatorId: String(user.userId),
@@ -71,6 +109,7 @@ async function logChange({ channelLogin, user, category, action, target, before,
     target,
     before: normBefore,
     after: normAfter,
+    ...(BURST_ACTIONS.has(action) ? { count: 1 } : {}),
   });
 }
 

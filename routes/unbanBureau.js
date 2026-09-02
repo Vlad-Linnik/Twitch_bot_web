@@ -341,10 +341,10 @@ router.post(
 
       const { previous } = await unbanBureauShiftRepo.forceAcquire(channel.channelLogin, req.user);
 
-      // Unlike starting a vote or firing the sniper (both dropped from this journal as duplicates
-      // of a record kept elsewhere), an eviction has no other record anywhere and it is taken
-      // against a named colleague. Skipped when there was nobody to evict - the lease had already
-      // lapsed, so nothing was taken from anyone.
+      // Unlike starting a vote (dropped from this journal as a duplicate of the vote record), an
+      // eviction has no other record anywhere and it is taken against a named colleague. Skipped
+      // when there was nobody to evict - the lease had already lapsed, so nothing was taken from
+      // anyone.
       if (previous && previous.userId !== String(req.user.userId)) {
         await settingsChangeLogRepo.logChange({
           channelLogin: channel.channelLogin,
@@ -483,6 +483,30 @@ router.post(
   }
 );
 
+// Journals a trigger pull. `SniperShots` already records the shot itself, but that collection has
+// no page anywhere and lives in the bot's database, so the only place a channel owner reads what
+// happened on their desk - next to the verdicts, in the same journal - never mentioned the two
+// things here that punish a viewer who never appealed anything.
+//
+// No target: the page cannot name one and the bot draws it a couple of seconds later, into a
+// database this journal (web-only, see db/settingsChangeLogRepo.js) cannot be joined against. So a
+// row states who fired and when, and the outcome stays in `SniperShots` and in Twitch's own
+// moderation log. Repeat pulls collapse onto one row with a tally - BURST_ACTIONS there.
+//
+// Called only after the write it describes has been accepted: a shot refused by the per-moderator
+// ceiling or a grenade refused by the channel cooldown never happened.
+async function logWeapon(channel, user, action) {
+  await settingsChangeLogRepo.logChange({
+    channelLogin: channel.channelLogin,
+    user,
+    category: "unban_request",
+    action,
+    target: null,
+    before: null,
+    after: null,
+  });
+}
+
 // Fires the "stray bullet". Records a request; TwitchBot's scheduler picks the target and calls
 // Twitch within ~2s. The page cannot name a victim - see db/sniperShotsRepo.js.
 router.post(
@@ -505,9 +529,8 @@ router.post(
       }
 
       const shot = await sniperShotsRepo.requestShot(channel, req.user, req.body.id || null);
+      await logWeapon(channel, req.user, "sniper");
 
-      // Deliberately NOT written to SettingsChangeLog (was, until 2026-08-09) - see
-      // db/sniperShotsRepo.js for the shot record itself, which is the audit trail now.
       res.json({ ok: true, shotId: String(shot._id) });
     } catch (err) {
       next(err);
@@ -561,6 +584,8 @@ router.post(
           retryAfterMs: Math.max(0, result.readyAt.getTime() - Date.now()),
         });
       }
+
+      await logWeapon(channel, req.user, "grenade");
 
       res.json({ ok: true, shotId: String(result.shot._id), cooldownMs });
     } catch (err) {
