@@ -10,10 +10,23 @@
 // taken as product decisions with the gap pointed out, the attribution after the sentence itself:
 // what is published is a quotation, the way a quotation is normally published.
 //
-// {channel, word, text, author, builtAt}
+// {channel, word, text, author, builtAt, v}
 const { connectWeb } = require("./connection");
 
 let collection;
+
+// The shape a build writes. Bumped whenever this job starts filling a field the cards read, so
+// jobs/higherLowerExamples.js can tell its own output from an older version's and rebuild.
+//
+// It exists because of what happened without it: attribution shipped after the first build, the
+// rows already on production had no `author` at all, and a rebuild was only ever due on AGE - so
+// every quotation on the site stood unsigned, correctly rendered and empty, until the week ran
+// out. Age answers "has the chat moved on"; this answers "is this row shaped the way the page now
+// reads it", and they are not the same question.
+//
+// v1 rows carry no `v` and no `author`. Nothing migrates them: a build replaces the channel's set
+// outright, which is cheaper than a backfill and is going to run anyway.
+const SHAPE_VERSION = 2;
 
 async function ensureInitialized() {
   if (collection) return collection;
@@ -30,9 +43,10 @@ async function ensureInitialized() {
   return collection;
 }
 
-// word -> {text, author}, for the handful of words a round actually shows. `author` is null on
-// rows written before attribution existed; the card then shows the quote unsigned rather than
-// nothing, and the next weekly rebuild fills it in.
+// word -> {text, author}, for the handful of words a round actually shows. `author` is null when
+// the line's writer could not be named at all; the card then shows the quote unsigned rather than
+// nothing. A row from an older shape has no author either - hasStaleShape() below is what gets
+// those rebuilt rather than served unsigned until REBUILD_AFTER_MS runs out.
 async function getExamples(channelLogin, words) {
   if (!words || words.length === 0) return new Map();
   const col = await ensureInitialized();
@@ -41,6 +55,16 @@ async function getExamples(channelLogin, words) {
     .project({ _id: 0, word: 1, text: 1, author: 1 })
     .toArray();
   return new Map(rows.map((r) => [r.word, { text: r.text, author: r.author || null }]));
+}
+
+// Whether any of this channel's rows were written by a build older than SHAPE_VERSION. Counted
+// with a limit rather than fetched: the answer is yes/no, and the {channel, word} index carries
+// it. A row the current build wrote always has the field, even when the author came out null, so
+// this settles once the rebuild has run and cannot loop a channel into rebuilding every sweep.
+async function hasStaleShape(channelLogin) {
+  const col = await ensureInitialized();
+  const behind = await col.countDocuments({ channel: channelLogin, v: { $ne: SHAPE_VERSION } }, { limit: 1 });
+  return behind > 0;
 }
 
 // When this channel was last scanned, or null if never. Drives the freshness check that keeps a
@@ -74,6 +98,7 @@ async function replaceForChannel(channelLogin, entries, builtAt = new Date()) {
                 text: entry.text,
                 author: entry.author || null,
                 builtAt,
+                v: SHAPE_VERSION,
               },
             },
             upsert: true,
@@ -88,4 +113,4 @@ async function replaceForChannel(channelLogin, entries, builtAt = new Date()) {
   return { written: words.length, removed: stale.deletedCount };
 }
 
-module.exports = { getExamples, lastBuiltAt, replaceForChannel };
+module.exports = { getExamples, lastBuiltAt, hasStaleShape, replaceForChannel, SHAPE_VERSION };

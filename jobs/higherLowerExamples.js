@@ -107,13 +107,19 @@ function startExampleRefreshLoop() {
     for (const channel of channels) {
       try {
         const built = await examplesRepo.lastBuiltAt(channel.channelLogin);
-        if (built && Date.now() - built.getTime() < REBUILD_AFTER_MS) continue;
+        const fresh = built && Date.now() - built.getTime() < REBUILD_AFTER_MS;
+        // Age is not the only reason to rebuild. Rows written by an older build are missing a
+        // field the card reads - attribution was added after the first one shipped - and a week of
+        // unsigned quotations is not an answer to that. See SHAPE_VERSION.
+        const reshape = fresh && (await examplesRepo.hasStaleShape(channel.channelLogin));
+        if (fresh && !reshape) continue;
         const t0 = Date.now();
         const res = await buildForChannel(channel.channelLogin);
         if (res.pool === 0) continue;
         console.log(
           `[higherLowerExamples] ${channel.channelLogin}: ${res.found}/${res.pool} words got a line ` +
-            `(${res.removed} stale removed) in ${((Date.now() - t0) / 1000).toFixed(1)}s`
+            `(${res.removed} stale removed) in ${((Date.now() - t0) / 1000).toFixed(1)}s` +
+            (reshape ? ` - rebuilt early: rows were older than shape v${examplesRepo.SHAPE_VERSION}` : "")
         );
       } catch (err) {
         console.error(`[higherLowerExamples] ${channel.channelLogin} failed:`, err.message);

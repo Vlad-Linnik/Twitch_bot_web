@@ -2342,12 +2342,14 @@ body.theme-hall-wide .throne-vitrine__case {
   overflow-wrap: anywhere;
 }
 
-/* Also held at a line's height when unsigned, for the same reason. */
+/* Also held at a line's height when unsigned, for the same reason. Quieter than the quotation it
+   signs but not by much: at the size this block is set, the signature was faint enough to read as
+   an empty line even when there was a name in it. */
 .hl-example-author {
   display: block;
   min-height: 1.35em;
   font-size: 0.92em;
-  color: rgba(250, 250, 250, 0.4);
+  color: rgba(250, 250, 250, 0.55);
   overflow-wrap: anywhere;
 }
 
@@ -2443,6 +2445,16 @@ body.theme-hall-wide .throne-vitrine__case {
   line-height: 1.05;
   color: #fde047;
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.6);
+}
+
+/* Every number on screen has its 67s picked out, wherever the pair falls - 167,
+   670, 12 671. A running gag, not information, so it is colour and nothing else:
+   the weight and the size stay put, the digits do not move, and a number without
+   a 67 in it looks exactly as it did. Pink because the counts are yellow and the
+   HUD is grey, so it reads as deliberate on either. */
+.hl-67 {
+  color: #f472b6;
+  text-shadow: 0 0 14px rgba(244, 114, 182, 0.45);
 }
 
 /* The number and the two buttons occupy the SAME vertical space, so the two
@@ -2589,4 +2601,125 @@ body.theme-hall-wide .throne-vitrine__case {
   background: #7e22ce;
   border-color: #9333ea;
   color: #ffffff;
+}
+
+/* An emote printed inside a chat line (public/js/emoteMatch.js's renderChatText). Sized in `em` so
+   it follows the surrounding type: the same line is shown large on a question card, small in a
+   hint, and smaller still in a "Выше — ниже" quotation. */
+.chat-emote {
+  display: inline-block;
+  height: 1.4em;
+  width: auto;
+  vertical-align: text-bottom;
+  margin: 0 0.1em;
+}
+/* The quotation is clamped to two lines and reserves their height, so its emotes have to stay
+   inside a line box rather than growing it. */
+.hl-example-text .chat-emote {
+  height: 1.2em;
+}
+
+/* ---------------------------------------------------------------------------------------
+   "Угадай чатера" - answering feedback.
+
+   The reveal is the whole beat of this game: a click, a right-or-wrong, and on to the next
+   question a second later. Colour alone reads as a state that was always there; the motion is
+   what says something just happened. All of it is skipped under prefers-reduced-motion, where the
+   colours still carry the answer on their own.
+   --------------------------------------------------------------------------------------- */
+.gc-option {
+  transition: transform 0.12s ease, border-color 0.15s ease, background-color 0.15s ease, opacity 0.25s ease;
+}
+.gc-option:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+.gc-option:not(:disabled):active {
+  transform: scale(0.985);
+}
+
+/* The reveal colours live here rather than as Tailwind utilities on the button, and that is not a
+   style preference. The button already carries `border-neutral-800`; adding `border-emerald-500`
+   to it puts two utilities of equal specificity against each other, and the cascade picks the one
+   later in the compiled sheet, not the one added later to the element - so the border stayed grey
+   and only the background changed. Scoping to .gc-option raises specificity above any single
+   utility and ends the argument. */
+.gc-option.gc-right {
+  border-color: #10b981;
+  background-color: rgba(6, 78, 59, 0.4);
+}
+.gc-option.gc-wrong {
+  border-color: #ef4444;
+  background-color: rgba(69, 10, 10, 0.4);
+}
+
+/* The right answer, whether or not it was the one picked. */
+@keyframes gc-correct-pulse {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.035); }
+  100% { transform: scale(1); }
+}
+.gc-is-correct {
+  animation: gc-correct-pulse 0.42s ease-out;
+}
+
+/* The wrong pick. Short and small - this is a quiz, not a penalty. */
+@keyframes gc-wrong-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  45%      { transform: translateX(4px); }
+  70%      { transform: translateX(-2px); }
+}
+.gc-is-wrong {
+  animation: gc-wrong-shake 0.34s ease-in-out;
+}
+
+/* The options nobody chose recede rather than vanish, so the two that matter stand out. */
+.gc-is-muted {
+  opacity: 0.4;
+}
+
+/* A new question arriving. The card and the options come in together but a touch apart, so the
+   eye lands on the message first and the buttons a moment later. */
+@keyframes gc-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.gc-enter {
+  animation: gc-enter 0.3s ease-out both;
+}
+.gc-enter-late {
+  animation: gc-enter 0.3s ease-out 0.08s both;
+}
+
+/* A hint opening: it grows from the closed placeholder rather than swapping text in place. */
+@keyframes gc-hint-open {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.gc-hint-open {
+  animation: gc-hint-open 0.24s ease-out;
+}
+
+/* The breakdown, dealt out rather than dumped. The delay is set per card from JS (--gc-i), capped
+   there so a ten-card list still finishes quickly. */
+.gc-breakdown-card {
+  animation: gc-enter 0.32s ease-out both;
+  animation-delay: calc(var(--gc-i, 0) * 55ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-option,
+  .gc-is-correct,
+  .gc-is-wrong,
+  .gc-enter,
+  .gc-enter-late,
+  .gc-hint-open,
+  .gc-breakdown-card {
+    animation: none;
+    transition: none;
+  }
+  .gc-option:not(:disabled):hover,
+  .gc-option:not(:disabled):active {
+    transform: none;
+  }
 }

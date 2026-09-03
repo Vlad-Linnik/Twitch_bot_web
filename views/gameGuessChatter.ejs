@@ -112,5 +112,8 @@
   }
 }) %></script>
 
-<script src="<%= asset('/js/games/guess-chatter.js') %>" defer></script>
+<%- include('partials/gameVolumeControl') %>
+<script src="<%= asset("/js/games/gameVolume.js") %>"></script>
+<script src="<%= asset("/js/emoteMatch.js") %>"></script>
+<script src="<%= asset("/js/games/guess-chatter.js") %>" defer></script>
 <%- include('partials/foot') %>

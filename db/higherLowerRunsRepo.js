@@ -10,10 +10,17 @@
 // so reopening the page resumes the round in progress.
 //
 // {runId, userId|null, sessionId, channelLogin, mode, period, score, turn,
-//  anchor: {word, count}, challenger: {word, count}, recent: [word],
+//  anchor: {word, count}, challenger: {word, count},
+//  queue: [{word, count, card}], recent: [word],
 //  startedAt, lastActionAt, expiresAt, status: "open"|"finished", outcome}
+//
+// `queue` is the rounds dealt ahead of the one on screen (lib/higherLower.js's QUEUE_DEPTH): the
+// counts stay here, the `card` beside each is the part the browser is allowed to have early. It
+// is what makes answering cheap - one read and one write, no pool, no emote images, no example
+// lookup - so the wait between the click and the number is a round trip and nothing else.
 const crypto = require("crypto");
 const { connectWeb } = require("./connection");
+const hl = require("../lib/higherLower");
 
 let collection;
 
@@ -46,7 +53,7 @@ function expiryFrom(now) {
   return new Date(now.getTime() + IDLE_TIMEOUT_MS);
 }
 
-async function startRun({ userId, sessionId, channelLogin, mode, period, anchor, challenger }) {
+async function startRun({ userId, sessionId, channelLogin, mode, period, anchor, challenger, queue, recent }) {
   const col = await ensureInitialized();
   const now = new Date();
 
@@ -76,7 +83,9 @@ async function startRun({ userId, sessionId, channelLogin, mode, period, anchor,
     turn: 0,
     anchor,
     challenger,
-    recent: [anchor.word, challenger.word],
+    queue: queue || [],
+    // Newest dealt first - see refill(), which uses recent[0] as the chain's head.
+    recent: recent || [challenger.word, anchor.word],
     startedAt: now,
     lastActionAt: now,
     expiresAt: expiryFrom(now),
@@ -97,20 +106,50 @@ async function findOpen(runId, sessionId) {
 // Advances to the next round. `turn` is the turn being answered, and it is in the FILTER: that is
 // what makes a double-click (or a retried request) land once. The loser matches nothing and gets
 // a conflict instead of a second point.
-async function advance({ runId, sessionId, turn, anchor, challenger, recent }) {
+async function advance({ runId, sessionId, turn, anchor, challenger, queue, recent }) {
   const col = await ensureInitialized();
   const now = new Date();
+  const set = {
+    anchor,
+    challenger,
+    queue: queue || [],
+    lastActionAt: now,
+    expiresAt: expiryFrom(now),
+  };
+  // Only a draw touches the recent window. Taking the next card off the queue deals nothing new,
+  // so leaving it alone here is what keeps this from clobbering a refill that landed in between.
+  if (recent) set.recent = recent;
   const result = await col.findOneAndUpdate(
     { runId: String(runId), sessionId, status: "open", turn },
+    { $set: set, $inc: { score: 1, turn: 1 } },
+    { returnDocument: "after" }
+  );
+  return result && result.value !== undefined ? result.value : result;
+}
+
+// Puts freshly dealt rounds on the back of the queue. Called after the answer has already been
+// sent, so nothing about it is on the path the player waits on - which is also why it has to be
+// safe against arriving late, or after the run has been lost, or twice.
+//
+// `head` is the word the first entry was drawn against, and it is in the FILTER. Since every deal
+// unshifts into `recent`, recent[0] IS the chain's head, so this is a version check: two refills
+// that both drew against the same last card cannot both land, and the loser's cards - drawn
+// against a predecessor that is no longer last - are dropped instead of breaking MIN_GAP between
+// neighbours. Shifting the queue from the front cannot invalidate it, so an answer racing a
+// refill is fine: the entry still follows the card it was drawn against.
+async function refill({ runId, sessionId, head, entries }) {
+  if (!entries || entries.length === 0) return null;
+  const col = await ensureInitialized();
+  const words = entries.map((e) => e.word);
+  const result = await col.findOneAndUpdate(
+    { runId: String(runId), sessionId, status: "open", "recent.0": head },
     {
-      $set: {
-        anchor,
-        challenger,
-        recent,
-        lastActionAt: now,
-        expiresAt: expiryFrom(now),
+      $push: {
+        queue: { $each: entries },
+        // Newest first, bounded - the same window rememberToken() keeps, written atomically
+        // because this update races the answer that will consume the queue.
+        recent: { $each: [...words].reverse(), $position: 0, $slice: hl.RECENT_MEMORY },
       },
-      $inc: { score: 1, turn: 1 },
     },
     { returnDocument: "after" }
   );
@@ -141,6 +180,7 @@ module.exports = {
   startRun,
   findOpen,
   advance,
+  refill,
   finish,
   IDLE_TIMEOUT_MS,
   MAX_OPEN_RUNS,

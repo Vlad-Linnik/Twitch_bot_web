@@ -12,6 +12,8 @@ const channelsRepo = require("../db/channelsRepo");
 const questionsRepo = require("../db/guessChatterRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const { getDisplayProfile } = require("../db/userProfileService");
+const emoteImages = require("../twitch/emoteImages");
+const { pickUsedEmotes } = require("../lib/chatEmotes");
 const gc = require("../lib/guessChatter");
 const { verifyToken } = require("../middleware/csrf");
 const { createSimpleLimiter, statsReadLimiter } = require("../middleware/rateLimiters");
@@ -68,6 +70,16 @@ async function profileMap(userIds) {
   return new Map(rows.map((r) => [r.userId, r]));
 }
 
+// The channel's emote pictures, or an empty map. Fail-soft on purpose, the same call
+// routes/higherLower.js makes: emoteImages.js reaches out to Helix and 7TV, and an unreachable one
+// must cost a picture rather than the game - an emote with no image renders as its name, which is
+// exactly what the chat line said.
+async function emoteMapFor(channelLogin) {
+  const channel = await channelsRepo.findByLogin(channelLogin).catch(() => null);
+  if (!channel || !channel.channelId) return new Map();
+  return emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map());
+}
+
 router.post("/games/guess-chatter/start.json", runLimiter, verifyIfAuthed, async (req, res, next) => {
   try {
     const channelLogin = cleanLogin(req.body.channel);
@@ -106,18 +118,27 @@ router.post("/games/guess-chatter/start.json", runLimiter, verifyIfAuthed, async
       )
     );
 
-    const profiles = await profileMap(rounds.flatMap((r) => r.options.map((o) => o.userId)));
+    const hints = rounds.map((r, i) => gc.pickHints(hintLines[i], r.question._id).map((h) => h.text));
+
+    const [profiles, emoteMap] = await Promise.all([
+      profileMap(rounds.flatMap((r) => r.options.map((o) => o.userId))),
+      emoteMapFor(channelLogin),
+    ]);
 
     res.json({
       ok: true,
       channel: channelLogin,
+      // Only the emotes these lines actually use, not the channel's whole set - see
+      // lib/chatEmotes.js. The client swaps names for pictures; a name with no picture here stays
+      // text, which is what the message said anyway.
+      emotes: pickUsedEmotes([...rounds.map((r) => r.question.text), ...hints.flat()], emoteMap),
       rounds: rounds.map((r, i) => ({
         id: String(r.question._id),
         text: r.question.text,
         at: r.question.ts,
         admixed: !!r.question.admixed,
         answerId: r.question.userId,
-        hints: gc.pickHints(hintLines[i], r.question._id).map((h) => h.text),
+        hints: hints[i],
         options: r.options.map((o) => {
           const p = profiles.get(o.userId);
           return {
@@ -158,12 +179,17 @@ router.get("/games/guess-chatter/context.json", statsReadLimiter, async (req, re
       gc.CONTEXT_AFTER
     );
 
+    // The context is chat too, so it carries its own emotes: the lines around a message are not
+    // the ones the run was built from, and their emotes were never sent.
+    const emoteMap = await emoteMapFor(channelLogin);
+
     // The author's name is replaced everywhere it can appear - as a sender and inside anybody's
     // text - because a neighbour answering "@login да ладно" is the answer printed in full, and so
     // is the author's own next line standing under their own name.
     res.json({
       ok: true,
       placeholder: gc.AUTHOR_PLACEHOLDER,
+      emotes: pickUsedEmotes(lines.map((l) => l.message), emoteMap),
       lines: lines.map((l) => ({
         author: gc.maskAuthor(l.userName, question.login),
         text: gc.maskAuthor(l.message, question.login),

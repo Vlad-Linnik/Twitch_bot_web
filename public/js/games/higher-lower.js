@@ -73,6 +73,26 @@
     }
   }
 
+  // --- Dealt-ahead cards --------------------------------------------------------
+  //
+  // The server deals two rounds beyond the one on screen and sends everything about them except
+  // the count, which is the answer and can never come early. Two things follow. Answering costs
+  // one small round trip and no dealing at all, which is what removes the stall between the click
+  // and the number. And the pictures can be fetched now: a card is otherwise built at the moment
+  // it starts sliding into view, so a cold emote arrives on screen as a blank panel.
+  const warmed = [];
+
+  function preload(cards) {
+    (cards || []).forEach((card) => {
+      if (!card || !card.image) return;
+      const img = new Image();
+      img.src = card.image;
+      // Held on purpose: an Image nobody references can be collected before its fetch lands.
+      warmed.push(img);
+      if (warmed.length > 8) warmed.shift();
+    });
+  }
+
   // --- State -------------------------------------------------------------------
 
   let mode = "words";
@@ -84,6 +104,58 @@
 
   const locale = document.documentElement.lang || "ru";
   const fmt = (n) => Number(n).toLocaleString(locale);
+
+  // --- 67 ----------------------------------------------------------------------
+  //
+  // Every number on screen gets its 67s picked out in another colour - 167, 670, 12 671. A gag
+  // rather than information, so it is colour only: nothing about the weight or the size of a
+  // digit changes, and a number with no 67 in it renders exactly as it did.
+  //
+  // The search runs over the digits alone and the formatted string is marked back from them,
+  // because the number is grouped for the locale by the time it is shown: in «6 712» the pair is
+  // real and only the thousands separator stands between the two digits. Marking that separator
+  // too keeps such a pair one span instead of two.
+  const LUCKY = "67";
+
+  function numberNodes(value) {
+    const text = fmt(value);
+    const at = []; // where each digit of `bare` sits in `text`
+    let bare = "";
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] >= "0" && text[i] <= "9") {
+        at.push(i);
+        bare += text[i];
+      }
+    }
+
+    const mark = new Array(text.length).fill(false);
+    for (let hit = bare.indexOf(LUCKY); hit !== -1; hit = bare.indexOf(LUCKY, hit + 1)) {
+      for (let i = at[hit]; i <= at[hit + LUCKY.length - 1]; i++) mark[i] = true;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < text.length; ) {
+      let j = i;
+      while (j < text.length && mark[j] === mark[i]) j++;
+      const chunk = text.slice(i, j);
+      if (mark[i]) {
+        const span = document.createElement("span");
+        span.className = "hl-67";
+        span.textContent = chunk;
+        frag.appendChild(span);
+      } else {
+        frag.appendChild(document.createTextNode(chunk));
+      }
+      i = j;
+    }
+    return frag;
+  }
+
+  // Every number the player is shown goes through here rather than through textContent.
+  function setNumber(el, value) {
+    el.textContent = "";
+    el.appendChild(numberNodes(value));
+  }
 
   // --- Personal best (month runs only) -----------------------------------------
   //
@@ -222,7 +294,19 @@
 
     const text = document.createElement("span");
     text.className = "hl-example-text";
-    text.textContent = card.example ? "«" + card.example.text + "»" : "";
+    if (card.example) {
+      // The quote is a chat line, so its emotes are printed as pictures rather than as their
+      // names - the server sent the handful this line uses alongside it. Guillemets are added as
+      // their own text nodes so the body can be built by EmoteMatch without string concatenation
+      // ever touching viewer-written text.
+      const index = window.EmoteMatch ? window.EmoteMatch.buildEmoteIndex(card.example.emotes) : null;
+      const body = document.createElement("span");
+      if (window.EmoteMatch) window.EmoteMatch.renderChatText(body, card.example.text, index);
+      else body.textContent = card.example.text;
+      text.appendChild(document.createTextNode("«"));
+      text.appendChild(body);
+      text.appendChild(document.createTextNode("»"));
+    }
     wrap.appendChild(text);
 
     const author = document.createElement("span");
@@ -311,7 +395,7 @@
   function countNode(value) {
     const count = document.createElement("div");
     count.className = "hl-count";
-    count.textContent = fmt(value);
+    setNumber(count, value);
     return count;
   }
 
@@ -365,7 +449,6 @@
   function revealCount(panel, value) {
     const choices = panel.querySelector(".hl-choices");
     const count = countNode(0);
-    count.textContent = "0";
     // Swapped inside the .hl-slot the buttons were in, so the card does not jump as the number
     // takes their place.
     if (choices) choices.replaceWith(count);
@@ -384,7 +467,7 @@
         // Ease-out: fast at first, crawling at the end, which is what makes a close call read as
         // tense rather than as a number appearing.
         const eased = 1 - Math.pow(1 - t, 3);
-        count.textContent = fmt(Math.round(value * eased));
+        setNumber(count, Math.round(value * eased));
         if (now - lastTick > 90 && t < 1) {
           lastTick = now;
           playSound("tick");
@@ -392,7 +475,7 @@
         if (t < 1) {
           requestAnimationFrame(frame);
         } else {
-          count.textContent = fmt(value);
+          setNumber(count, value);
           resolve();
         }
       }
@@ -479,8 +562,9 @@
     trackEl.classList.toggle("hl-emotes", round.mode === "emotes");
     trackEl.appendChild(anchorPanel(round.left, 0));
     trackEl.appendChild(challengerPanel(round.right, 1, round.left.label));
-    hudScore.textContent = String(round.score);
-    hudBest.textContent = String(readLocalBest());
+    preload(round.upcoming);
+    setNumber(hudScore, round.score);
+    setNumber(hudBest, readLocalBest());
     show(playEl);
   }
 
@@ -519,9 +603,12 @@
     playSound(res.correct ? "correct" : "wrong");
 
     if (res.correct && !res.finished) {
+      // Warmed before the animation rather than after it: the count-up, the flash and the slide
+      // are about a second and a half of cover for a picture two rounds away.
+      preload(res.upcoming);
       run.turn = res.turn;
       run.score = res.score;
-      hudScore.textContent = String(res.score);
+      setNumber(hudScore, res.score);
       await wait(420);
       challenger.classList.remove("hl-ok");
       // The card just answered becomes the anchor, so it is what the new challenger is compared
@@ -546,7 +633,7 @@
     overTitle.textContent = res.cleared ? L.clearedTitle : L.gameOver;
     overBody.textContent = res.cleared ? L.clearedBody : "";
     overBody.hidden = !res.cleared;
-    overScore.textContent = fmt(res.score);
+    setNumber(overScore, res.score);
 
     if (res.ranked) {
       overNote.hidden = true;
@@ -579,7 +666,7 @@
 
     const score = document.createElement("span");
     score.className = "tabular-nums text-neutral-100";
-    score.textContent = String(row.score);
+    setNumber(score, row.score);
 
     li.append(rank, name, score);
     return li;
@@ -607,9 +694,9 @@
 
   function refreshLocalBest() {
     const best = readLocalBest();
-    localBestValue.textContent = fmt(best);
+    setNumber(localBestValue, best);
     localBestEl.hidden = best === 0;
-    hudBest.textContent = String(best);
+    setNumber(hudBest, best);
   }
 
   // --- Setup screen ------------------------------------------------------------

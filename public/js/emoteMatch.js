@@ -64,6 +64,41 @@ function tokenizeForPreview(text, emoteIndex) {
     });
 }
 
+// Fills `target` with `text`, emote names swapped for their pictures. Text nodes and <img>
+// elements only - never innerHTML, because every character here is viewer-written (the standing
+// rule for chat-derived content in this codebase).
+//
+// The picture is sized in `em` by .chat-emote rather than at a fixed pixel height, because the
+// same chat line is printed at very different sizes: a question on its own card, a hint in small
+// type, and the two-line clamped quotation on a "Выше — ниже" card, where a 24px image would push
+// the second line out of the height the card reserves for it. Callers that need a different size
+// pass their own class. (public/js/news-comments.js builds these nodes itself, at a fixed height
+// its contenteditable editor depends on - the shape is the same, the sizing rule is not.)
+//
+// Returns the target, so a caller can build and append in one expression.
+function renderChatText(target, text, emoteIndex, className) {
+  target.textContent = "";
+  if (!emoteIndex || emoteIndex.size === 0) {
+    target.textContent = String(text || "");
+    return target;
+  }
+  for (const token of tokenizeForPreview(text, emoteIndex)) {
+    if (token.type === "emote") {
+      const img = document.createElement("img");
+      img.src = token.url;
+      img.alt = token.name;
+      img.title = token.name;
+      img.draggable = false;
+      img.className = className || "chat-emote";
+      img.loading = "lazy";
+      target.appendChild(img);
+    } else if (token.value !== "") {
+      target.appendChild(document.createTextNode(token.value));
+    }
+  }
+  return target;
+}
+
 const emoteMatch = {
   MIN_AUTOCOMPLETE_CHARS,
   MAX_SUGGESTIONS,
@@ -71,6 +106,7 @@ const emoteMatch = {
   getCurrentToken,
   findEmoteMatches,
   tokenizeForPreview,
+  renderChatText,
 };
 
 if (typeof module !== "undefined" && module.exports) {

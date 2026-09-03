@@ -44,6 +44,51 @@
   const againBtn = document.getElementById("gc-again");
   const understoodBtn = document.getElementById("gc-understood");
 
+  // --- Sound -------------------------------------------------------------------
+  //
+  // Its own folder, like every other game with sound: the files are copies rather than references
+  // into a sibling's directory, so one game's re-cut never silently changes another's.
+  //
+  // `correct` and `wrong` are the same two cues the other quiz on this site uses, on purpose - a
+  // player moving between them should not have to learn a second vocabulary.
+  const SOUND_BASE = "/sounds/games/guess-chatter/";
+  const SOUNDS = {
+    correct: new Audio(SOUND_BASE + "correct.wav"),
+    wrong: new Audio(SOUND_BASE + "wrong.wav"),
+    hint: new Audio(SOUND_BASE + "hint.wav"),
+    finish: new Audio(SOUND_BASE + "finish.wav"),
+    next: new Audio(SOUND_BASE + "next.wav"),
+  };
+  SOUNDS.correct.volume = 0.5;
+  // Measured at a peak of 0.06 - a quiet, low, falling tone - so it needs more of the slider than
+  // the others to sit level with them.
+  SOUNDS.wrong.volume = 0.5;
+  SOUNDS.hint.volume = 0.35;
+  SOUNDS.finish.volume = 0.4;
+  // Fires ten times a run, under the reveal that precedes it: a texture, not an event.
+  SOUNDS.next.volume = 0.12;
+
+  function playSound(name) {
+    const base = SOUNDS[name];
+    if (!base) return;
+    try {
+      const node = base.cloneNode(true);
+      node.volume = base.volume * (window.gameVolume ? window.gameVolume.get() : 1);
+      node.play().catch(() => {});
+    } catch (_) {
+      /* audio blocked or unsupported - the game keeps working silently */
+    }
+  }
+
+  // Restarts a one-shot animation on an element that may already be carrying it: removing the
+  // class is not enough on its own, the browser needs a reflow between removal and re-add.
+  function animate(el, className) {
+    if (!el) return;
+    el.classList.remove(className);
+    void el.offsetWidth;
+    el.classList.add(className);
+  }
+
   // --- State -------------------------------------------------------------------
 
   let channel = channelsEl ? channelsEl.querySelector(".is-on").dataset.channel : null;
@@ -52,6 +97,9 @@
   let answers = [];
   let usedHint = false;
   let locked = false;
+  // name -> {name, url} for the emotes these questions use, built from what start.json sent. The
+  // set is per run rather than per channel because a screenful of chat needs a handful of it.
+  let emoteIndex = new Map();
 
   // --- Helpers -----------------------------------------------------------------
 
@@ -84,6 +132,15 @@
       body: form.toString(),
     });
     return res.json();
+  }
+
+  // Every place a chat line is printed goes through here, so an emote looks the same in the
+  // question, in a hint, in the context and in the breakdown. EmoteMatch builds Text and <img>
+  // nodes and never touches innerHTML - the standing rule for viewer-written text.
+  function chatText(el, text, override) {
+    return window.EmoteMatch
+      ? window.EmoteMatch.renderChatText(el, text, override || emoteIndex)
+      : ((el.textContent = String(text || "")), el);
   }
 
   function show(section) {
@@ -131,6 +188,7 @@
       const res = await post("/games/guess-chatter/start.json", { channel });
       if (!res.ok) throw new Error(res.error || "error");
       rounds = res.rounds;
+      emoteIndex = window.EmoteMatch ? window.EmoteMatch.buildEmoteIndex(res.emotes) : new Map();
       index = 0;
       answers = [];
       show("play");
@@ -153,8 +211,12 @@
 
     progressEl.textContent = fill(L.progress, { n: index + 1, total: rounds.length });
     scoreEl.textContent = fill(L.score, { n: answers.filter((a) => a.correct).length });
-    messageEl.textContent = round.text;
+    chatText(messageEl, round.text);
     whenEl.textContent = relativeTime(round.at);
+    animate(messageEl.parentElement, "gc-enter");
+    // Silent on the first question: the run has only just started and there is nothing to have
+    // moved on FROM.
+    if (index > 0) playSound("next");
 
     // Hints: three closed doors, each opening to one more line by the same author. Free, so the
     // only thing they cost is the "unaided" tally on the end screen.
@@ -170,11 +232,13 @@
         "click",
         () => {
           usedHint = true;
-          button.textContent = hint; // textContent, never innerHTML - this is chat text
+          playSound("hint");
+          chatText(button, hint);
           button.className =
             "text-left px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 " +
             "text-sm text-neutral-300 break-words";
           button.disabled = true;
+          animate(button, "gc-hint-open");
         },
         { once: true }
       );
@@ -188,6 +252,7 @@
 
     optionsEl.textContent = "";
     round.options.forEach((option) => optionsEl.appendChild(optionButton(round, option)));
+    animate(optionsEl, "gc-enter-late");
   }
 
   function optionButton(round, option) {
@@ -195,8 +260,8 @@
     button.type = "button";
     button.dataset.userId = option.userId;
     button.className =
-      "flex items-center gap-3 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-900 " +
-      "hover:border-neutral-700 transition-colors text-left";
+      "gc-option flex items-center gap-3 px-3 py-2.5 rounded-lg border border-neutral-800 " +
+      "bg-neutral-900 hover:border-neutral-700 text-left";
 
     if (option.avatarUrl) {
       const img = document.createElement("img");
@@ -232,10 +297,20 @@
       button.disabled = true;
       const isAnswer = button.dataset.userId === round.answerId;
       const isChoice = button.dataset.userId === userId;
-      if (isAnswer) button.classList.add("border-emerald-500", "bg-emerald-950/40");
-      else if (isChoice) button.classList.add("border-red-500", "bg-red-950/40");
-      else button.classList.add("opacity-50");
+      // Colour and motion are separate classes on purpose: animate() removes and re-adds its
+      // class to restart the keyframes, and a colour riding along with it would blink off for a
+      // frame. The colour also has to survive prefers-reduced-motion, where the animation does not.
+      if (isAnswer) {
+        button.classList.add("gc-right");
+        animate(button, "gc-is-correct");
+      } else if (isChoice) {
+        button.classList.add("gc-wrong");
+        animate(button, "gc-is-wrong");
+      } else {
+        button.classList.add("gc-is-muted");
+      }
     });
+    playSound(correct ? "correct" : "wrong");
     scoreEl.textContent = fill(L.score, { n: answers.filter((a) => a.correct).length });
 
     // No "next" button between rounds: the reveal is one glance, and the breakdown at the end is
@@ -260,18 +335,23 @@
       const round = rounds[index];
       const url = `/games/guess-chatter/context.json?channel=${encodeURIComponent(channel)}&id=${encodeURIComponent(round.id)}`;
       const res = await fetch(url, { headers: { Accept: "application/json" } }).then((r) => r.json());
-      renderContext(res.ok ? res.lines : []);
+      renderContext(res.ok ? res.lines : [], res.ok ? res.emotes : []);
       contextEl.hidden = false;
       contextBtn.textContent = L.hideContext;
     } catch (err) {
-      renderContext([]);
+      renderContext([], []);
       contextEl.hidden = false;
     } finally {
       contextBtn.disabled = false;
     }
   });
 
-  function renderContext(lines) {
+  function renderContext(lines, emotes) {
+    // The surrounding lines are not the ones the run was built from, so they bring their own
+    // emotes; merged over the run's rather than replacing them, since both are on screen at once.
+    const contextIndex = window.EmoteMatch
+      ? window.EmoteMatch.buildEmoteIndex([...(emotes || []), ...emoteIndex.values()])
+      : new Map();
     contextEl.textContent = "";
     if (!lines.length) {
       const empty = document.createElement("p");
@@ -287,7 +367,9 @@
       who.className = "font-semibold";
       who.textContent = `${line.author}: `;
       row.appendChild(who);
-      row.appendChild(document.createTextNode(line.text));
+      const body = document.createElement("span");
+      chatText(body, line.text, contextIndex);
+      row.appendChild(body);
       contextEl.appendChild(row);
     });
   }
@@ -305,21 +387,28 @@
     writeBest(score);
 
     breakdownEl.textContent = "";
-    answers.forEach((entry) => breakdownEl.appendChild(breakdownRow(entry)));
+    answers.forEach((entry, i) => {
+      const card = breakdownRow(entry);
+      // Capped so a ten-card list is fully dealt in about a third of a second rather than growing
+      // with the run length.
+      card.style.setProperty("--gc-i", String(Math.min(i, 6)));
+      breakdownEl.appendChild(card);
+    });
 
     show("over");
+    playSound("finish");
     post("/games/guess-chatter/finish.json").catch(() => {});
   }
 
   function breakdownRow(entry) {
     const card = document.createElement("div");
     card.className =
-      "rounded-xl border p-4 " +
+      "gc-breakdown-card rounded-xl border p-4 " +
       (entry.correct ? "border-emerald-900 bg-emerald-950/20" : "border-neutral-800 bg-neutral-900");
 
     const text = document.createElement("p");
     text.className = "text-neutral-200 break-words mb-2";
-    text.textContent = entry.round.text;
+    chatText(text, entry.round.text);
     card.appendChild(text);
 
     const truth = document.createElement("p");

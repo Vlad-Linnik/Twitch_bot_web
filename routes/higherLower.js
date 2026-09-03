@@ -3,7 +3,11 @@
 // card slides into the left slot and a new challenger arrives. Wrong answer - the run is over.
 //
 // The server deals every round and keeps the score, because the answer is the data: the
-// challenger's count must not reach the browser before the guess is in. That also means there is
+// challenger's count must not reach the browser before the guess is in. What CAN go early is
+// everything else about a card - its word, its picture, its quoted line - so rounds are dealt
+// QUEUE_DEPTH ahead and parked in the run document. Answering then reads one document and writes
+// one, and the pool, the emote images and the example lookup happen after the answer has already
+// been sent. That also means there is
 // no client submission and no lib/gameReplay verification here - nothing about the score was ever
 // the client's to claim. What it does NOT defend against is the same counts being published, top
 // 100 at a time, on /<channel>/statistics/chat: this leaderboard is a soft one by construction,
@@ -18,6 +22,7 @@ const examplesRepo = require("../db/higherLowerExamplesRepo");
 const votesRepo = require("../db/higherLowerVotesRepo");
 const { buildLeaderboard } = require("../db/gameLeaderboard");
 const emoteImages = require("../twitch/emoteImages");
+const { pickUsedEmotes } = require("../lib/chatEmotes");
 const hl = require("../lib/higherLower");
 const { verifyToken } = require("../middleware/csrf");
 const { createSimpleLimiter, statsReadLimiter } = require("../middleware/rateLimiters");
@@ -63,8 +68,17 @@ function verifyIfAuthed(req, res, next) {
 // reaches out to Helix and 7TV, and an unreachable one must cost a picture, not the game. An
 // emote that has since left the channel's set has no image at all and is rendered as its name -
 // its usage row is still in the stats and it is a legitimate thing to be asked about.
-async function imageMapFor(mode, channelLogin) {
-  if (mode !== "emotes") return new Map();
+//
+// Fetched in BOTH modes now, because the word mode's quotation is a real chat line and chat lines
+// contain emotes: reading one with the names left as bare words ("паровоза возбуждают только
+// вагоны Jokerge") is reading something the chat never saw.
+//
+// But the two uses are NOT interchangeable, and cardFor keeps them apart. This map is "what
+// renders as a picture in that chat" (Twitch global + channel + 7TV); a word card is "what
+// ChatWordStats counted", and that excludes only what the CHANNEL tracks as an emote. The two
+// disagree: measured on #mistercop, 2 of the 6035 words in the pool ("бро", "сис") resolve to an
+// image here. Putting a picture on those cards would silently turn a word round into an emote one.
+async function imageMapFor(channelLogin) {
   const channel = await channelsRepo.findByLogin(channelLogin);
   if (!channel || !channel.channelId) return new Map();
   return emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map());
@@ -89,11 +103,16 @@ async function exampleMapFor(mode, channelLogin, words, scores) {
   return out;
 }
 
-function cardFor(token, images, examples, votes, { withCount }) {
+function cardFor(token, images, examples, votes, { mode, withCount }) {
+  const example = examples.get(token.word) || null;
   return {
     label: token.word,
-    image: images.get(token.word) || null,
-    example: examples.get(token.word) || null,
+    // Only an emote card carries a picture of itself - see imageMapFor for why the same map cannot
+    // decide this for a word card.
+    image: mode === "emotes" ? images.get(token.word) || null : null,
+    // The quotation carries the emotes it uses, so the client can print it the way chat saw it.
+    // Only the ones this line needs - see lib/chatEmotes.js.
+    example: example ? { ...example, emotes: pickUsedEmotes([example.text], images) } : null,
     // This player's own thumbs, so the buttons come back lit on a word they have already rated.
     // {word: 1|-1, example: 1|-1}; absent keys mean no vote.
     myVotes: (votes && votes[token.word]) || {},
@@ -101,8 +120,19 @@ function cardFor(token, images, examples, votes, { withCount }) {
   };
 }
 
+// One dealt-ahead round as it is stored: the count stays on the server, the card beside it is the
+// half the browser may have early.
+function queueEntry(token, extras) {
+  return {
+    word: token.word,
+    count: token.count,
+    card: cardFor(token, extras.images, extras.examples, extras.votes, { mode: extras.mode, withCount: false }),
+  };
+}
+
 // What the client is allowed to know about the round in progress: the anchor with its number, the
-// challenger without one.
+// challenger without one, and the cards behind them - which carry no counts either, and are there
+// so the browser can fetch their pictures now rather than while one is sliding into view.
 function roundPayload(run, images, examples, votes) {
   return {
     runId: run.runId,
@@ -111,8 +141,9 @@ function roundPayload(run, images, examples, votes) {
     mode: run.mode,
     period: run.period,
     channel: run.channelLogin,
-    left: cardFor(run.anchor, images, examples, votes, { withCount: true }),
-    right: cardFor(run.challenger, images, examples, votes, { withCount: false }),
+    left: cardFor(run.anchor, images, examples, votes, { mode: run.mode, withCount: true }),
+    right: cardFor(run.challenger, images, examples, votes, { mode: run.mode, withCount: false }),
+    upcoming: (run.queue || []).map((e) => e.card).filter(Boolean),
   };
 }
 
@@ -121,11 +152,43 @@ function roundPayload(run, images, examples, votes) {
 async function roundExtras(mode, channelLogin, words, userId) {
   const scores = await higherLowerRepo.getVoteScores(channelLogin).catch(() => new Map());
   const [images, examples, votes] = await Promise.all([
-    imageMapFor(mode, channelLogin),
+    imageMapFor(channelLogin),
     exampleMapFor(mode, channelLogin, words, scores),
     votesRepo.getUserVotes(channelLogin, userId, words).catch(() => ({})),
   ]);
-  return { images, examples, votes };
+  // `mode` rides along because cardFor needs it and every call site already holds these extras.
+  return { mode, images, examples, votes };
+}
+
+// Tops the queue back up to QUEUE_DEPTH. Every caller runs this AFTER its response has gone out
+// and without awaiting it: this is the expensive half of a round (a pool that may have to be
+// rebuilt, an emote-image map that may have to be refetched from Helix and 7TV, an example
+// lookup), and keeping it off the path between the click and the number is the entire point of
+// dealing ahead. Failing costs one card of lookahead and nothing else - the answer route draws
+// inline when the queue runs dry.
+async function refillQueue(run) {
+  const queue = Array.isArray(run.queue) ? run.queue : [];
+  const missing = hl.QUEUE_DEPTH - queue.length;
+  if (missing <= 0) return;
+
+  const [pool, wordVotes] = await Promise.all([
+    higherLowerRepo.getPool(run.channelLogin, run.mode, run.period),
+    higherLowerRepo.getWordVoteMap(run.channelLogin).catch(() => new Map()),
+  ]);
+  // The chain's head: what the next card has to be a legal pair with is the last card dealt, not
+  // the one on screen. With an empty queue those are the same token.
+  const head = queue.length ? queue[queue.length - 1] : run.challenger;
+  const { dealt } = hl.dealAhead(pool, head, run.recent, missing, Math.random, wordVotes);
+  // Nothing legal left to deal. Not a failure: the run clears when the queue finally runs out.
+  if (!dealt.length) return;
+
+  const extras = await roundExtras(run.mode, run.channelLogin, dealt.map((t) => t.word), run.userId);
+  await runsRepo.refill({
+    runId: run.runId,
+    sessionId: run.sessionId,
+    head: head.word,
+    entries: dealt.map((t) => queueEntry(t, extras)),
+  });
 }
 
 // ---------------------------------------------------------------------------------------
@@ -155,6 +218,8 @@ router.get("/games/higher-lower", async (req, res, next) => {
     if (req.session.hlRunId) {
       const openRun = await runsRepo.findOpen(req.session.hlRunId, req.sessionID);
       if (openRun) {
+        // Only the pair on screen needs looking up - the dealt-ahead cards were built when they
+        // were dealt and are stored beside their counts.
         const words = [openRun.anchor.word, openRun.challenger.word];
         const extras = await roundExtras(openRun.mode, openRun.channelLogin, words, userId);
         resume = roundPayload(openRun, extras.images, extras.examples, extras.votes);
@@ -225,14 +290,27 @@ router.post("/games/higher-lower/start.json", roundLimiter, verifyIfAuthed, asyn
     const pair = hl.pickOpeningPair(pool, Math.random, wordVotes);
     if (!pair) return res.status(409).json({ ok: false, error: "pool" });
 
+    // The opening pair plus the rounds behind it, drawn as one chain so every neighbour is a legal
+    // pair. Doing it here rather than on the first answer means the pool is read once for a run
+    // that is about to ask for four cards, and the player is already on a button press that looks
+    // like loading.
+    const opened = hl.rememberToken(hl.rememberToken([], pair.anchor.word), pair.challenger.word);
+    const ahead = hl.dealAhead(pool, pair.challenger, opened, hl.QUEUE_DEPTH, Math.random, wordVotes);
+
+    const userId = req.user ? req.user.userId : null;
+    const words = [pair.anchor.word, pair.challenger.word, ...ahead.dealt.map((t) => t.word)];
+    const extras = await roundExtras(mode, channelLogin, words, userId);
+
     const run = await runsRepo.startRun({
-      userId: req.user ? req.user.userId : null,
+      userId,
       sessionId: req.sessionID,
       channelLogin,
       mode,
       period,
       anchor: { word: pair.anchor.word, count: pair.anchor.count },
       challenger: { word: pair.challenger.word, count: pair.challenger.count },
+      queue: ahead.dealt.map((t) => queueEntry(t, extras)),
+      recent: ahead.recent,
     });
 
     // Load-bearing beyond resuming: middleware/session.js runs with saveUninitialized:false, so a
@@ -242,8 +320,6 @@ router.post("/games/higher-lower/start.json", roundLimiter, verifyIfAuthed, asyn
     // to offer the round back after a reload.
     req.session.hlRunId = run.runId;
 
-    const words = [pair.anchor.word, pair.challenger.word];
-    const extras = await roundExtras(mode, channelLogin, words, req.user ? req.user.userId : null);
     res.json({ ok: true, round: roundPayload(run, extras.images, extras.examples, extras.votes) });
   } catch (err) {
     next(err);
@@ -274,9 +350,40 @@ router.post("/games/higher-lower/answer.json", roundLimiter, verifyIfAuthed, asy
       return res.json({ ok: true, ...(await gameOver(req, finished, revealed)) });
     }
 
-    // Correct: the challenger becomes the anchor and a new one is drawn. The pool is re-read
-    // rather than carried in the run document - it is cached in process for half an hour, and the
-    // rows behind an all-time word pool are 7.5k of them.
+    // Correct: the challenger becomes the anchor and the next card comes off the queue, where it
+    // has been waiting since it was dealt. Nothing is read and nothing is drawn on this path - one
+    // document in, one document out - and the queue is topped up once the answer has gone.
+    const queue = Array.isArray(run.queue) ? run.queue : [];
+    if (queue.length) {
+      const [head, ...rest] = queue;
+      const advanced = await runsRepo.advance({
+        runId,
+        sessionId: req.sessionID,
+        turn,
+        anchor: { word: run.challenger.word, count: run.challenger.count },
+        challenger: { word: head.word, count: head.count },
+        queue: rest,
+      });
+      if (!advanced) return res.status(409).json({ ok: false, error: "turn" });
+
+      res.json({
+        ok: true,
+        correct: true,
+        revealed,
+        score: advanced.score,
+        turn: advanced.turn,
+        next: head.card,
+        upcoming: rest.map((e) => e.card).filter(Boolean),
+      });
+      refillQueue(advanced).catch((err) =>
+        console.error("[higher-lower] queue refill failed:", err.message)
+      );
+      return;
+    }
+
+    // Empty queue: a run started before rounds were dealt ahead, or a refill that never landed.
+    // Draw inline the way this route always did - a slow answer beats a lost run - and let the
+    // refill below stock the queue again for the rounds after it.
     const [pool, wordVotes] = await Promise.all([
       higherLowerRepo.getPool(run.channelLogin, run.mode, run.period),
       higherLowerRepo.getWordVoteMap(run.channelLogin).catch(() => new Map()),
@@ -306,6 +413,7 @@ router.post("/games/higher-lower/answer.json", roundLimiter, verifyIfAuthed, asy
       turn,
       anchor: { word: run.challenger.word, count: run.challenger.count },
       challenger: { word: next.word, count: next.count },
+      queue: [],
       recent: hl.rememberToken(recent, next.word),
     });
     if (!advanced) return res.status(409).json({ ok: false, error: "turn" });
@@ -317,8 +425,12 @@ router.post("/games/higher-lower/answer.json", roundLimiter, verifyIfAuthed, asy
       revealed,
       score: advanced.score,
       turn: advanced.turn,
-      next: cardFor({ word: next.word, count: next.count }, extras.images, extras.examples, extras.votes, { withCount: false }),
+      next: cardFor({ word: next.word, count: next.count }, extras.images, extras.examples, extras.votes, { mode: run.mode, withCount: false }),
+      upcoming: [],
     });
+    refillQueue(advanced).catch((err) =>
+      console.error("[higher-lower] queue refill failed:", err.message)
+    );
   } catch (err) {
     next(err);
   }
