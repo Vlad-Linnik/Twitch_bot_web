@@ -130,7 +130,7 @@
     visitors; a bare reference would be a ReferenceError for a guest, who is allowed to play. %>
 <script id="hl-data" type="application/json"><%- safeJson({
   channels,
-  leaderboards,
+  board,
   resume,
   csrfToken: locals.csrfToken || null,
   loggedIn: !!user,
@@ -148,7 +148,10 @@
     resumeTitle: t('games.higherLower.resumeTitle'),
     resumeBody: t('games.higherLower.resumeBody'),
     resumeContinue: t('games.higherLower.resumeContinue'),
-    resumeDrop: t('games.higherLower.resumeDrop')
+    resumeDrop: t('games.higherLower.resumeDrop'),
+    voteWord: t('games.higherLower.voteWord'),
+    voteExample: t('games.higherLower.voteExample'),
+    voteLogin: t('games.higherLower.voteLogin')
   }
 }) %></script>
 

@@ -2317,6 +2317,81 @@ body.theme-hall-wide .throne-vitrine__case {
   min-height: clamp(6.5rem, 17vh, 12rem);
 }
 
+/* The real chat line under a word. Quiet and italic so it reads as a citation rather than as part
+   of the question, capped at two lines so a long one cannot push the number off the card. */
+.hl-example {
+  margin-top: 0.5rem;
+  max-width: min(26rem, 88%);
+  /* Two lines' worth, held whether or not there is a quote, so both cards' numbers sit at the
+     same height when only one of the two words has a line stored. */
+  min-height: 2.7em;
+  font-style: italic;
+  font-size: clamp(0.72rem, 1.15vw, 0.9rem);
+  line-height: 1.35;
+  color: rgba(250, 250, 250, 0.62);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+/* Thumbs under a word card: one row rates the word, one rates the sentence. Quiet by default so
+   they never compete with Выше/Ниже for attention, and they light up on the player's own vote. */
+.hl-votes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.35rem;
+}
+
+.hl-vote-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+/* Kept in the layout, taken out of sight: the two panels must stay the same height even when only
+   one of the two words has a quote to rate. */
+.hl-vote-row-empty {
+  visibility: hidden;
+}
+
+.hl-vote-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(250, 250, 250, 0.45);
+}
+
+.hl-vote {
+  border: 0;
+  background: transparent;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.35rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.4;
+  cursor: pointer;
+  transition: opacity 140ms, background-color 140ms, transform 120ms;
+}
+.hl-vote:hover:not(:disabled) {
+  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.12);
+}
+.hl-vote:active:not(:disabled) {
+  transform: scale(0.9);
+}
+.hl-vote.is-on {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+}
+.hl-vote:disabled {
+  cursor: default;
+  opacity: 0.22;
+}
+
 .hl-emote {
   display: flex;
   flex-direction: column;

@@ -12,6 +12,7 @@ const { connect } = require("./connection");
 const { LIFETIME_BUCKET } = require("../lib/textStats");
 const limits = require("../config/statsLimits");
 const { createCache } = require("../lib/queryCache");
+const votesRepo = require("./higherLowerVotesRepo");
 const hl = require("../lib/higherLower");
 
 let collections;
@@ -133,4 +134,28 @@ async function listPlayableChannels(channels, mode, period) {
     .sort((a, b) => b.poolSize - a.poolSize);
 }
 
-module.exports = { getPool, getPoolSize, listPlayableChannels, POOL_TTL_MS };
+// ---------------------------------------------------------------------------------------
+// Player votes, cached separately from the pool
+// ---------------------------------------------------------------------------------------
+
+// Short, because this is the one thing on this page a player changes by hand and then expects to
+// see working. It is kept out of the pool cache above deliberately: that one holds thousands of
+// rows and costs ~930ms to rebuild, and dropping it on every thumb press would make voting the
+// most expensive action in the game. The scores map holds only words somebody has actually rated.
+const VOTE_TTL_MS = 60 * 1000;
+
+const { cached: withVoteCache } = createCache({ ttlMs: VOTE_TTL_MS, maxEntries: 100 });
+
+async function getVoteScores(channelLogin) {
+  return withVoteCache(`votes:${channelLogin}`, () => votesRepo.getScores(channelLogin));
+}
+
+// Just the word -> net-score map the sampler needs.
+async function getWordVoteMap(channelLogin) {
+  const scores = await getVoteScores(channelLogin);
+  const map = new Map();
+  for (const [word, s] of scores) if (s.wordNet !== 0) map.set(word, s.wordNet);
+  return map;
+}
+
+module.exports = { getPool, getPoolSize, listPlayableChannels, getVoteScores, getWordVoteMap, POOL_TTL_MS, VOTE_TTL_MS };

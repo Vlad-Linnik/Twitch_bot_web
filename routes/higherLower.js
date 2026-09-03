@@ -14,6 +14,8 @@ const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const higherLowerRepo = require("../db/higherLowerRepo");
 const runsRepo = require("../db/higherLowerRunsRepo");
+const examplesRepo = require("../db/higherLowerExamplesRepo");
+const votesRepo = require("../db/higherLowerVotesRepo");
 const { buildLeaderboard } = require("../db/gameLeaderboard");
 const emoteImages = require("../twitch/emoteImages");
 const hl = require("../lib/higherLower");
@@ -22,10 +24,15 @@ const { createSimpleLimiter, statsReadLimiter } = require("../middleware/rateLim
 
 const router = express.Router();
 
-// The leaderboard exists only for the all-time period - a streak set on a month window is scored
-// against data that will not exist next month, so there is nothing to compare it with. The month
-// mode keeps a personal best in the browser instead.
-const scoreKeyFor = (mode) => `higher-lower-${mode}`;
+// One table per channel AND mode: the two channels' vocabularies are different games, so a streak
+// on one says nothing about a streak on the other. Still only for the all-time period - a streak
+// set on a rolling month window is scored against data that will not exist next month, so the
+// month mode keeps a personal best in the browser instead.
+//
+// A channel login is [a-z0-9_], so it can never be confused with the mode segment in this key.
+// Note the consequence: /admin's per-game score counts (gameScoresRepo.getGameCounts) list one row
+// per channel here rather than one for the game.
+const scoreKeyFor = (mode, channelLogin) => `higher-lower-${mode}-${channelLogin}`;
 const CATALOG_ID = "higher-lower";
 
 // A round is one small request; a run is a few dozen of them. Generous enough that fast play
@@ -63,17 +70,40 @@ async function imageMapFor(mode, channelLogin) {
   return emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map());
 }
 
-function cardFor(token, images, { withCount }) {
+// A real chat line for each of the two words on screen. Words only: the ask was for words, and an
+// emote card already has its picture. Two indexed lookups by {channel, word}, or an empty map -
+// a word with no stored line simply renders without one (jobs/higherLowerExamples.js covers ~99%
+// of a pool, not all of it, and covers nothing at all until it has run once).
+//
+// A line players have voted down is dropped here, on the same curve that thins out a word: a few
+// dislikes and it shows up sometimes, enough of them and never again. The word itself keeps
+// playing - the objection was to the sentence, not to the word.
+async function exampleMapFor(mode, channelLogin, words, scores) {
+  if (mode !== "words") return new Map();
+  const stored = await examplesRepo.getExamples(channelLogin, words).catch(() => new Map());
+  const out = new Map();
+  for (const [word, text] of stored) {
+    const net = scores && scores.has(word) ? scores.get(word).exampleNet : 0;
+    if (hl.passesVote(net)) out.set(word, text);
+  }
+  return out;
+}
+
+function cardFor(token, images, examples, votes, { withCount }) {
   return {
     label: token.word,
     image: images.get(token.word) || null,
+    example: examples.get(token.word) || null,
+    // This player's own thumbs, so the buttons come back lit on a word they have already rated.
+    // {word: 1|-1, example: 1|-1}; absent keys mean no vote.
+    myVotes: (votes && votes[token.word]) || {},
     ...(withCount ? { count: token.count } : {}),
   };
 }
 
 // What the client is allowed to know about the round in progress: the anchor with its number, the
 // challenger without one.
-function roundPayload(run, images) {
+function roundPayload(run, images, examples, votes) {
   return {
     runId: run.runId,
     turn: run.turn,
@@ -81,9 +111,21 @@ function roundPayload(run, images) {
     mode: run.mode,
     period: run.period,
     channel: run.channelLogin,
-    left: cardFor(run.anchor, images, { withCount: true }),
-    right: cardFor(run.challenger, images, { withCount: false }),
+    left: cardFor(run.anchor, images, examples, votes, { withCount: true }),
+    right: cardFor(run.challenger, images, examples, votes, { withCount: false }),
   };
+}
+
+// Everything a round needs that depends on which two words came up: pictures, example lines
+// (already filtered by their own votes) and this player's thumbs.
+async function roundExtras(mode, channelLogin, words, userId) {
+  const scores = await higherLowerRepo.getVoteScores(channelLogin).catch(() => new Map());
+  const [images, examples, votes] = await Promise.all([
+    imageMapFor(mode, channelLogin),
+    exampleMapFor(mode, channelLogin, words, scores),
+    votesRepo.getUserVotes(channelLogin, userId, words).catch(() => ({})),
+  ]);
+  return { images, examples, votes };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -98,11 +140,14 @@ async function playableChannels(mode, period) {
 router.get("/games/higher-lower", async (req, res, next) => {
   try {
     const userId = req.user ? req.user.userId : null;
-    const [channels, wordsBoard, emotesBoard] = await Promise.all([
-      playableChannels("words", "all"),
-      buildLeaderboard(scoreKeyFor("words"), userId),
-      buildLeaderboard(scoreKeyFor("emotes"), userId),
-    ]);
+    const channels = await playableChannels("words", "all");
+
+    // Tables are per channel now, so the page can only render the one the picker will open on -
+    // the largest pool, which is what renderChannels() preselects. Every later switch of channel
+    // or mode fetches its table from board.json.
+    const board = channels.length
+      ? await buildLeaderboard(scoreKeyFor("words", channels[0].channelLogin), userId)
+      : { rows: [], myRow: null };
 
     // Resume: the session remembers the run, so reopening the page lands back on the round in
     // progress instead of costing the player their streak.
@@ -110,18 +155,31 @@ router.get("/games/higher-lower", async (req, res, next) => {
     if (req.session.hlRunId) {
       const openRun = await runsRepo.findOpen(req.session.hlRunId, req.sessionID);
       if (openRun) {
-        const images = await imageMapFor(openRun.mode, openRun.channelLogin);
-        resume = roundPayload(openRun, images);
+        const words = [openRun.anchor.word, openRun.challenger.word];
+        const extras = await roundExtras(openRun.mode, openRun.channelLogin, words, userId);
+        resume = roundPayload(openRun, extras.images, extras.examples, extras.votes);
       } else {
         delete req.session.hlRunId; // finished or expired - stop offering it
       }
     }
 
-    res.render("gameHigherLower", {
-      channels,
-      leaderboards: { words: wordsBoard, emotes: emotesBoard },
-      resume,
-    });
+    res.render("gameHigherLower", { channels, board, resume });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The table for one channel/mode. Fetched whenever the picker's channel or mode changes, since
+// each pairing is its own ladder.
+router.get("/games/higher-lower/board.json", statsReadLimiter, async (req, res, next) => {
+  try {
+    const mode = hl.isMode(req.query.mode) ? req.query.mode : "words";
+    const channelLogin = String(req.query.channel || "").toLowerCase().replace(/^#/, "");
+    if (!/^[a-z0-9_]{3,25}$/.test(channelLogin)) {
+      return res.status(400).json({ ok: false, error: "channel" });
+    }
+    const userId = req.user ? req.user.userId : null;
+    res.json({ ok: true, board: await buildLeaderboard(scoreKeyFor(mode, channelLogin), userId) });
   } catch (err) {
     next(err);
   }
@@ -160,8 +218,11 @@ router.post("/games/higher-lower/start.json", roundLimiter, verifyIfAuthed, asyn
       return res.status(400).json({ ok: false, error: "channel" });
     }
 
-    const pool = await higherLowerRepo.getPool(channelLogin, mode, period);
-    const pair = hl.pickOpeningPair(pool);
+    const [pool, wordVotes] = await Promise.all([
+      higherLowerRepo.getPool(channelLogin, mode, period),
+      higherLowerRepo.getWordVoteMap(channelLogin).catch(() => new Map()),
+    ]);
+    const pair = hl.pickOpeningPair(pool, Math.random, wordVotes);
     if (!pair) return res.status(409).json({ ok: false, error: "pool" });
 
     const run = await runsRepo.startRun({
@@ -181,8 +242,9 @@ router.post("/games/higher-lower/start.json", roundLimiter, verifyIfAuthed, asyn
     // to offer the round back after a reload.
     req.session.hlRunId = run.runId;
 
-    const images = await imageMapFor(mode, channelLogin);
-    res.json({ ok: true, round: roundPayload(run, images) });
+    const words = [pair.anchor.word, pair.challenger.word];
+    const extras = await roundExtras(mode, channelLogin, words, req.user ? req.user.userId : null);
+    res.json({ ok: true, round: roundPayload(run, extras.images, extras.examples, extras.votes) });
   } catch (err) {
     next(err);
   }
@@ -215,9 +277,12 @@ router.post("/games/higher-lower/answer.json", roundLimiter, verifyIfAuthed, asy
     // Correct: the challenger becomes the anchor and a new one is drawn. The pool is re-read
     // rather than carried in the run document - it is cached in process for half an hour, and the
     // rows behind an all-time word pool are 7.5k of them.
-    const pool = await higherLowerRepo.getPool(run.channelLogin, run.mode, run.period);
+    const [pool, wordVotes] = await Promise.all([
+      higherLowerRepo.getPool(run.channelLogin, run.mode, run.period),
+      higherLowerRepo.getWordVoteMap(run.channelLogin).catch(() => new Map()),
+    ]);
     const recent = hl.rememberToken(run.recent, run.challenger.word);
-    const next = hl.pickChallenger(pool, run.challenger, recent, Math.random);
+    const next = hl.pickChallenger(pool, run.challenger, recent, Math.random, wordVotes);
 
     if (!next) {
       // No legal opponent left for this anchor. That is a cleared run, not a loss - the last
@@ -245,15 +310,49 @@ router.post("/games/higher-lower/answer.json", roundLimiter, verifyIfAuthed, asy
     });
     if (!advanced) return res.status(409).json({ ok: false, error: "turn" });
 
-    const images = await imageMapFor(run.mode, run.channelLogin);
+    const extras = await roundExtras(run.mode, run.channelLogin, [next.word], req.user ? req.user.userId : null);
     res.json({
       ok: true,
       correct: true,
       revealed,
       score: advanced.score,
       turn: advanced.turn,
-      next: cardFor({ word: next.word, count: next.count }, images, { withCount: false }),
+      next: cardFor({ word: next.word, count: next.count }, extras.images, extras.examples, extras.votes, { withCount: false }),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------------------
+// Rating words and their example lines
+// ---------------------------------------------------------------------------------------
+
+// Logged in only, unlike playing. A vote changes the pool for everybody, and a guest is an
+// anonymous session anyone can mint again as often as they like - the login is what makes one
+// person one vote rather than one browser one vote.
+router.post("/games/higher-lower/vote.json", roundLimiter, verifyToken, async (req, res, next) => {
+  try {
+    if (!req.user) return res.status(401).json({ ok: false, error: "login" });
+
+    const channelLogin = String(req.body.channel || "").toLowerCase().replace(/^#/, "");
+    const word = String(req.body.word || "");
+    const target = req.body.target === "example" ? "example" : "word";
+    const value = Number.parseInt(req.body.value, 10);
+
+    if (!/^[a-z0-9_]{3,25}$/.test(channelLogin) || !word || word.length > 40) {
+      return res.status(400).json({ ok: false, error: "params" });
+    }
+    if (value !== 1 && value !== -1) return res.status(400).json({ ok: false, error: "value" });
+
+    const result = await votesRepo.castVote({
+      channel: channelLogin,
+      word,
+      target,
+      userId: req.user.userId,
+      value,
+    });
+    res.json({ ok: true, target, value: result.value });
   } catch (err) {
     next(err);
   }
@@ -267,11 +366,11 @@ async function gameOver(req, run, revealed) {
   await gameSessionStatsRepo.recordPlay(CATALOG_ID).catch(() => {});
 
   if (run.userId && isRanked && run.score > 0) {
-    await gameScoresRepo.submitScore(scoreKeyFor(run.mode), run.userId, run.score);
+    await gameScoresRepo.submitScore(scoreKeyFor(run.mode, run.channelLogin), run.userId, run.score);
   }
 
   const leaderboard = isRanked
-    ? await buildLeaderboard(scoreKeyFor(run.mode), req.user ? req.user.userId : null)
+    ? await buildLeaderboard(scoreKeyFor(run.mode, run.channelLogin), req.user ? req.user.userId : null)
     : null;
 
   return {

@@ -137,6 +137,77 @@
 
   // --- Panels ------------------------------------------------------------------
 
+  // --- Rating -------------------------------------------------------------------
+  //
+  // Two pairs of thumbs per word card: one rates the word (how often it gets dealt), one rates the
+  // sentence under it (how often that sentence is printed). Both run on the same curve server-side
+  // - a like holds it where it is, dislikes thin it out, enough of them retire it.
+  //
+  // Voting is for signed-in players; a guest gets the buttons disabled with a title saying why,
+  // rather than a row of controls that silently do nothing.
+
+  function voteButton(card, target, value) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "hl-vote";
+    btn.dataset.target = target;
+    btn.dataset.value = String(value);
+    btn.textContent = value === 1 ? "👍" : "👎";
+    btn.title = DATA.loggedIn ? "" : L.voteLogin;
+    btn.disabled = !DATA.loggedIn;
+    if (card.myVotes && card.myVotes[target] === value) btn.classList.add("is-on");
+
+    btn.addEventListener("click", async () => {
+      if (!DATA.loggedIn) return;
+      const row = btn.parentElement;
+      row.querySelectorAll(".hl-vote").forEach((b) => (b.disabled = true));
+      try {
+        const res = await post("/games/higher-lower/vote.json", {
+          channel: channel,
+          word: card.label,
+          target,
+          value,
+        });
+        if (res && res.ok) {
+          // The server is the authority on what the vote now IS - pressing a lit thumb clears it -
+          // so the row is repainted from the answer rather than from what was clicked.
+          row.querySelectorAll(".hl-vote").forEach((b) => {
+            b.classList.toggle("is-on", Number(b.dataset.value) === res.value);
+          });
+        }
+      } catch (_) {
+        /* a lost vote is not worth interrupting a run for */
+      }
+      row.querySelectorAll(".hl-vote").forEach((b) => (b.disabled = false));
+    });
+    return btn;
+  }
+
+  function voteRow(card, target, label) {
+    const row = document.createElement("div");
+    row.className = "hl-vote-row";
+    const caption = document.createElement("span");
+    caption.className = "hl-vote-label";
+    caption.textContent = label;
+    row.append(caption, voteButton(card, target, 1), voteButton(card, target, -1));
+    return row;
+  }
+
+  function voteBar(card) {
+    const bar = document.createElement("div");
+    bar.className = "hl-votes";
+    bar.appendChild(voteRow(card, "word", L.voteWord));
+
+    // Nothing to rate when the word has no line under it - either none was ever found, or this one
+    // has already been voted down far enough to stop appearing. The row is still built and merely
+    // made invisible, because the two cards have to stay the same height: otherwise the card whose
+    // word happens to have no quote would put its number on a different line from the other's.
+    const exampleRow = voteRow(card, "example", L.voteExample);
+    if (!card.example) exampleRow.classList.add("hl-vote-row-empty");
+    bar.appendChild(exampleRow);
+    return bar;
+  }
+
   function tokenNode(card) {
     if (card.image) {
       // Picture AND name. An emote is typed by its name in chat, the other card's caption refers
@@ -182,6 +253,21 @@
     const head = document.createElement("div");
     head.className = "hl-head";
     head.appendChild(tokenNode(card));
+
+    // A real line from that chat with the word in it - what stands in for the photograph this
+    // genre usually puts behind an item. Always textContent: this is viewer-written text.
+    //
+    // The element is added even when there is no line (roughly one pool word in a hundred has
+    // none, and a channel has none at all until the job has run once), because it reserves the
+    // space either way - otherwise the card that has a quote and the card that does not would put
+    // their numbers at different heights.
+    if (mode === "words") {
+      const quote = document.createElement("div");
+      quote.className = "hl-example";
+      quote.textContent = card.example ? "«" + card.example + "»" : "";
+      head.appendChild(quote);
+      head.appendChild(voteBar(card));
+    }
     panel.appendChild(head);
 
     const has = document.createElement("div");
@@ -442,9 +528,8 @@
 
     if (res.ranked) {
       overNote.hidden = true;
-      // Keep the page's own copy in step, so going back to the setup screen shows the table this
-      // run just changed rather than the one rendered when the page loaded.
-      DATA.leaderboards[mode] = res.leaderboard;
+      // The response already carries this channel/mode's table as the run just left it, so no
+      // second fetch is needed to show the player where they landed.
       renderLeaderboard(res.leaderboard);
     } else {
       overNote.textContent = L.notRanked;
@@ -557,6 +642,7 @@
       radio.addEventListener("change", () => {
         channel = c.channelLogin;
         renderChannels();
+        loadBoard();
         refreshLocalBest();
       });
 
@@ -593,8 +679,23 @@
       channels = [];
     }
     renderChannels();
-    renderLeaderboard(DATA.leaderboards[mode]);
+    await loadBoard();
     refreshLocalBest();
+  }
+
+  // Every channel/mode pairing is its own ladder, so the table is fetched rather than carried in
+  // the page: the picker can reach far more of them than it would be worth rendering up front.
+  async function loadBoard() {
+    if (!channel) return renderLeaderboard(null);
+    try {
+      const res = await fetch(
+        "/games/higher-lower/board.json?mode=" + mode + "&channel=" + encodeURIComponent(channel)
+      );
+      const json = await res.json();
+      renderLeaderboard(json.ok ? json.board : null);
+    } catch (_) {
+      renderLeaderboard(null);
+    }
   }
 
   function wireToggle(group, attr, onPick) {
@@ -669,6 +770,8 @@
   // --- Boot --------------------------------------------------------------------
 
   renderChannels();
-  renderLeaderboard(DATA.leaderboards[mode]);
+  // The server rendered the table for the channel renderChannels() just preselected, so the first
+  // paint needs no fetch; every later change of channel or mode goes through loadBoard().
+  renderLeaderboard(DATA.board);
   refreshLocalBest();
 })();

@@ -732,7 +732,10 @@
       "loginToSave": "Sign in to appear on the leaderboard.",
       "leaderboardTitle": "Top 10",
       "leaderboardEmpty": "Nothing here yet — be the first!",
-      "localBest": "Personal best"
+      "localBest": "Personal best",
+      "voteWord": "Word",
+      "voteExample": "Example",
+      "voteLogin": "Sign in to rate"
     },
     "unbanBureau": {
       "name": "Amnesty Bureau",

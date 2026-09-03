@@ -732,7 +732,10 @@
       "loginToSave": "Войдите, чтобы попадать в таблицу рекордов.",
       "leaderboardTitle": "Топ-10",
       "leaderboardEmpty": "Пока пусто — станьте первым!",
-      "localBest": "Личный рекорд"
+      "localBest": "Личный рекорд",
+      "voteWord": "Слово",
+      "voteExample": "Пример",
+      "voteLogin": "Войдите, чтобы оценивать"
     },
     "unbanBureau": {
       "name": "Бюро амнистии",
