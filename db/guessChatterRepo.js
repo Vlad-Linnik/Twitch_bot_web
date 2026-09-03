@@ -94,9 +94,13 @@ async function listPlayableChannels(channels) {
     ])
     .toArray();
 
+  // The author count decides playability and then stops mattering: the picker shows a login and
+  // nothing else. It used to print min(authors, POOL_SIZE) beside the name, which for any channel
+  // that clears the bar is either the cap itself or a number in the 30-50 band - unlabelled, and
+  // narrow enough that nobody could choose between two channels by it.
   const playable = rows
     .filter((r) => gc.isChannelPlayable(r.authors))
-    .map((r) => ({ channelLogin: r._id, authors: Math.min(r.authors, gc.POOL_SIZE), questions: r.questions }))
+    .map((r) => ({ channelLogin: r._id, questions: r.questions }))
     .sort((a, b) => b.questions - a.questions);
 
   channelCache = { at: Date.now(), rows: playable };
