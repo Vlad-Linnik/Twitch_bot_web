@@ -2715,6 +2715,58 @@ body.theme-hall-wide .throne-vitrine__case {
   animation-delay: calc(var(--gc-i, 0) * 55ms);
 }
 
+/* Thumbs on a line this game dealt: under the question, under each opened hint, and again on the
+   breakdown row of the same question. Quiet by default so they never compete with the four options
+   for attention, and they light up on the player's own vote.
+
+   Deliberately a copy of .hl-vote's shape rather than a shared class: the two games rate on the
+   same curve (lib/voteWeight.js) but not in the same furniture - these rows sit inside a card, a
+   dashed hint slot and a paragraph, where "Выше — ниже" has only the one place to put them. */
+/* Left, in all three places. "Выше — ниже" centres its thumbs because the whole card there is a
+   centred column; every line this game deals is set flush left - the question, the hint, the
+   breakdown row - and a centred row under it reads as belonging to something else. */
+.gc-vote-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.gc-vote-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(250, 250, 250, 0.45);
+}
+
+.gc-vote {
+  border: 0;
+  background: transparent;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.35rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.4;
+  cursor: pointer;
+  transition: opacity 140ms, background-color 140ms, transform 120ms;
+}
+.gc-vote:hover:not(:disabled) {
+  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.12);
+}
+.gc-vote:active:not(:disabled) {
+  transform: scale(0.9);
+}
+.gc-vote.is-on {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+}
+.gc-vote:disabled {
+  cursor: default;
+  opacity: 0.22;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gc-option,
   .gc-is-correct,
@@ -2722,12 +2774,14 @@ body.theme-hall-wide .throne-vitrine__case {
   .gc-enter,
   .gc-enter-late,
   .gc-hint-open,
-  .gc-breakdown-card {
+  .gc-breakdown-card,
+  .gc-vote {
     animation: none;
     transition: none;
   }
   .gc-option:not(:disabled):hover,
-  .gc-option:not(:disabled):active {
+  .gc-option:not(:disabled):active,
+  .gc-vote:active:not(:disabled) {
     transform: none;
   }
 }

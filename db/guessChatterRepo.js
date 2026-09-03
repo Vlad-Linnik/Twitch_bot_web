@@ -19,6 +19,8 @@
 //   ts      - the original message timestamp, the anchor the context lookup needs
 const { connect, connectWeb } = require("./connection");
 const gc = require("../lib/guessChatter");
+const votesRepo = require("./guessChatterVotesRepo");
+const { createCache } = require("../lib/queryCache");
 
 let collection;
 
@@ -108,9 +110,10 @@ async function listPlayableChannels(channels) {
 }
 
 // The raw material for one run: a random draw of strict lines and a smaller one of admixed lines.
-// Drawn wider than ROUNDS because pickOptions can refuse a question whose @-mentions leave too few
-// legal decoys, and a refused question should cost a spare rather than a round.
-async function drawQuestions(channelLogin, poolUserIds, spare = 6) {
+// Drawn wider than ROUNDS because two things downstream can refuse a drawn question and both
+// should cost a spare rather than a round: pickOptions turns away a line whose @-mentions leave
+// too few legal decoys, and pickRunQuestions drops the lines players have thumbed down.
+async function drawQuestions(channelLogin, poolUserIds, spare = 8) {
   const col = await ensureInitialized();
   const inPool = { channel: channelLogin, userId: { $in: poolUserIds } };
   const [strict, loose] = await Promise.all([
@@ -135,6 +138,23 @@ async function drawAuthorLines(channelLogin, userId, size) {
 async function findById(channelLogin, id) {
   const col = await ensureInitialized();
   return col.findOne({ _id: id, channel: channelLogin });
+}
+
+// ---------------------------------------------------------------------------------------
+// Player votes, cached apart from the pool
+// ---------------------------------------------------------------------------------------
+
+// Short, because this is the one thing on this page a player changes by hand and then expects to
+// see working. Kept out of the author/channel caches above deliberately: those hold a $group over
+// the whole pool and cost most of a second to rebuild, and dropping them on every thumb press
+// would make voting the most expensive action in the game. The scores map holds only the lines
+// somebody has actually rated.
+const VOTE_TTL_MS = 60 * 1000;
+
+const { cached: withVoteCache } = createCache({ ttlMs: VOTE_TTL_MS, maxEntries: 100 });
+
+async function getVoteScores(channelLogin) {
+  return withVoteCache(`votes:${channelLogin}`, () => votesRepo.getScores(channelLogin));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -218,6 +238,8 @@ async function replaceForChannel(channelLogin, rows, builtAt = new Date()) {
 module.exports = {
   getAuthors,
   listPlayableChannels,
+  getVoteScores,
+  VOTE_TTL_MS,
   drawQuestions,
   drawAuthorLines,
   findById,

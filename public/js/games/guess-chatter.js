@@ -32,6 +32,7 @@
   const scoreEl = document.getElementById("gc-score");
   const messageEl = document.getElementById("gc-message");
   const whenEl = document.getElementById("gc-when");
+  const questionVoteEl = document.getElementById("gc-question-vote");
   const hintsEl = document.getElementById("gc-hints");
   const contextBtn = document.getElementById("gc-context-btn");
   const contextEl = document.getElementById("gc-context");
@@ -97,6 +98,11 @@
   let answers = [];
   let usedHint = false;
   let locked = false;
+  // key -> {question: 1|-1, hint: 1|-1}, seeded from start.json with this player's existing thumbs
+  // and updated from every answer the vote endpoint gives back. One object for the whole run,
+  // because the same line is rateable in two places at once - on the card during play and again on
+  // its breakdown row - and a thumb pressed in one has to show in the other.
+  let myVotes = {};
   // name -> {name, url} for the emotes these questions use, built from what start.json sent. The
   // set is per run rather than per channel because a screenful of chat needs a handful of it.
   let emoteIndex = new Map();
@@ -165,6 +171,83 @@
     }
   }
 
+  // --- Rating -------------------------------------------------------------------
+  //
+  // A pair of thumbs under every line this game deals: the question on the card, and each hint once
+  // it has been opened. Both run on the server's single curve (lib/voteWeight.js) - a like holds
+  // the line where it is, dislikes thin it out, enough of them retire it - but they are counted
+  // apart, because the same line can be a poor question and an excellent hint. See VOTE_TARGETS in
+  // lib/guessChatter.js.
+  //
+  // The question's thumbs appear twice: on the card, where a line that cannot be guessed at is
+  // obvious before answering, and again on its breakdown row, where the run is read back without a
+  // clock on it - the card is gone a second after the reveal. Both paint from `myVotes`, so a
+  // thumb pressed in one place is lit in the other.
+  //
+  // Voting is for signed-in players; a guest gets the buttons disabled with a title saying why,
+  // rather than a row of controls that silently do nothing.
+
+  function voteOf(key, target) {
+    return (myVotes[key] && myVotes[key][target]) || 0;
+  }
+
+  // Repaints every thumb on the page for one {key, target}, not just the row that was clicked -
+  // that is what keeps the card and the breakdown row in step.
+  //
+  // The key is compared in JS rather than put into an attribute selector: it is folded chat text,
+  // so it can hold quotes and backslashes, and the page never carries more than a couple of dozen
+  // of these buttons anyway.
+  function paintVotes(key, target) {
+    const value = voteOf(key, target);
+    document.querySelectorAll(".gc-vote").forEach((button) => {
+      if (button.dataset.key !== key || button.dataset.target !== target) return;
+      button.classList.toggle("is-on", Number(button.dataset.value) === value);
+    });
+  }
+
+  function voteButton(key, target, value) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gc-vote";
+    button.dataset.key = key;
+    button.dataset.target = target;
+    button.dataset.value = String(value);
+    button.textContent = value === 1 ? "👍" : "👎";
+    button.title = DATA.loggedIn ? (value === 1 ? L.voteUp : L.voteDown) : L.voteLogin;
+    button.disabled = !DATA.loggedIn;
+    if (voteOf(key, target) === value) button.classList.add("is-on");
+
+    button.addEventListener("click", async () => {
+      if (!DATA.loggedIn) return;
+      const row = button.parentElement;
+      row.querySelectorAll(".gc-vote").forEach((b) => (b.disabled = true));
+      try {
+        const res = await post("/games/guess-chatter/vote.json", { channel, key, target, value });
+        if (res && res.ok) {
+          // The server is the authority on what the vote now IS - pressing a lit thumb clears it -
+          // so the state is taken from the answer rather than from what was clicked.
+          myVotes[key] = myVotes[key] || {};
+          myVotes[key][target] = res.value;
+          paintVotes(key, target);
+        }
+      } catch (err) {
+        /* a lost vote is not worth interrupting a run for */
+      }
+      row.querySelectorAll(".gc-vote").forEach((b) => (b.disabled = false));
+    });
+    return button;
+  }
+
+  function voteRow(key, target, label) {
+    const row = document.createElement("div");
+    row.className = "gc-vote-row";
+    const caption = document.createElement("span");
+    caption.className = "gc-vote-label";
+    caption.textContent = label;
+    row.append(caption, voteButton(key, target, 1), voteButton(key, target, -1));
+    return row;
+  }
+
   // --- Setup -------------------------------------------------------------------
 
   if (channelsEl) {
@@ -189,6 +272,7 @@
       if (!res.ok) throw new Error(res.error || "error");
       rounds = res.rounds;
       emoteIndex = window.EmoteMatch ? window.EmoteMatch.buildEmoteIndex(res.emotes) : new Map();
+      myVotes = res.myVotes || {};
       index = 0;
       answers = [];
       show("play");
@@ -213,6 +297,10 @@
     scoreEl.textContent = fill(L.score, { n: answers.filter((a) => a.correct).length });
     chatText(messageEl, round.text);
     whenEl.textContent = relativeTime(round.at);
+    // Rebuilt each round rather than repainted: the key changes with the question, and the row is
+    // three nodes.
+    questionVoteEl.textContent = "";
+    questionVoteEl.appendChild(voteRow(round.key, "question", L.voteQuestion));
     animate(messageEl.parentElement, "gc-enter");
     // Silent on the first question: the run has only just started and there is nothing to have
     // moved on FROM.
@@ -222,10 +310,13 @@
     // only thing they cost is the "unaided" tally on the end screen.
     hintsEl.textContent = "";
     round.hints.forEach((hint) => {
+      // The opened hint and its thumbs share a wrapper: the button becomes the line itself and is
+      // disabled, so the thumbs cannot live inside it.
+      const slot = document.createElement("div");
       const button = document.createElement("button");
       button.type = "button";
       button.className =
-        "text-left px-3 py-2 rounded-lg border border-dashed border-neutral-700 " +
+        "w-full text-left px-3 py-2 rounded-lg border border-dashed border-neutral-700 " +
         "text-sm text-neutral-500 hover:border-neutral-600 hover:text-neutral-400 transition-colors";
       button.textContent = L.hintButton;
       button.addEventListener(
@@ -233,16 +324,20 @@
         () => {
           usedHint = true;
           playSound("hint");
-          chatText(button, hint);
+          chatText(button, hint.text);
           button.className =
-            "text-left px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 " +
+            "w-full text-left px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 " +
             "text-sm text-neutral-300 break-words";
           button.disabled = true;
+          // Only after it has been opened: a closed hint is a door, and nobody can judge a line
+          // they have not been shown.
+          slot.appendChild(voteRow(hint.key, "hint", L.voteHint));
           animate(button, "gc-hint-open");
         },
         { once: true }
       );
-      hintsEl.appendChild(button);
+      slot.appendChild(button);
+      hintsEl.appendChild(slot);
     });
 
     contextEl.hidden = true;
@@ -444,6 +539,9 @@
       note.textContent = L.admixed;
       card.appendChild(note);
     }
+
+    // The same thumbs the card carried, now with the answer known.
+    card.appendChild(voteRow(entry.round.key, "question", L.voteQuestion));
     return card;
   }
 

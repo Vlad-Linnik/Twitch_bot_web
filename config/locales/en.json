@@ -766,7 +766,12 @@
       "justNow": "today",
       "daysAgo": "{{n}} days ago",
       "monthsAgo": "{{n}} months ago",
-      "yearsAgo": "{{n}} years ago"
+      "yearsAgo": "{{n}} years ago",
+      "voteQuestion": "Question",
+      "voteHint": "Hint",
+      "voteLogin": "Sign in to rate",
+      "voteUp": "A good line - keep showing it",
+      "voteDown": "A poor line - show it less often"
     },
     "unbanBureau": {
       "name": "Amnesty Bureau",
