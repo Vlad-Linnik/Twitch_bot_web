@@ -105,6 +105,20 @@
   const locale = document.documentElement.lang || "ru";
   const fmt = (n) => Number(n).toLocaleString(locale);
 
+  // «в 1 сообщении», «в 21 сообщении», но «в 11 сообщениях» - русская форма прыгает по последней
+  // цифре, а не по единице. До редкостей на карточке не бывало числа, которому нужна вторая
+  // форма (порог пула - сотня), и с длинными словами, которые берутся за длину при одном
+  // употреблении, оно появилось. Плюрализатор ради одного слова не заводится: правило здесь, в
+  // словаре только сами формы, а отсутствие ключа (старая страница из кеша) даёт прежнее слово.
+  function unitWord(n) {
+    const one = locale.startsWith("ru") ? n % 10 === 1 && n % 100 !== 11 : n === 1;
+    return one && L.messageOne ? L.messageOne : L.messages;
+  }
+
+  // Со скольких знаков ярус слова переходит на мелкий шрифт - в знаках, потому что сам шрифт уже
+  // резиновый (clamp в .hl-token), а разваливается на четыре строки именно длинное слово.
+  const LONG_LABEL = 16;
+
   // --- 67 ----------------------------------------------------------------------
   //
   // Every number on screen gets its 67s picked out in another colour - 167, 670, 12 671. A gag
@@ -347,7 +361,7 @@
       return wrap;
     }
     const div = document.createElement("div");
-    div.className = "hl-token";
+    div.className = [...card.label].length >= LONG_LABEL ? "hl-token hl-token-long" : "hl-token";
     div.textContent = card.label;
     return div;
   }
@@ -406,7 +420,7 @@
 
     const unit = document.createElement("div");
     unit.className = "hl-unit";
-    unit.textContent = L.messages;
+    unit.textContent = unitWord(card.count);
     panel.appendChild(unit);
     return panel;
   }
@@ -455,7 +469,7 @@
     else panel.appendChild(slot(count));
 
     const unit = panel.querySelector(".hl-unit");
-    if (unit) unit.textContent = L.messages;
+    if (unit) unit.textContent = unitWord(value);
 
     return new Promise((resolve) => {
       const DURATION = 850;

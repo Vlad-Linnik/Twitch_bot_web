@@ -171,14 +171,15 @@ async function refillQueue(run) {
   const missing = hl.QUEUE_DEPTH - queue.length;
   if (missing <= 0) return;
 
-  const [pool, wordVotes] = await Promise.all([
+  const [pool, wordVotes, odd] = await Promise.all([
     higherLowerRepo.getPool(run.channelLogin, run.mode, run.period),
     higherLowerRepo.getWordVoteMap(run.channelLogin).catch(() => new Map()),
+    higherLowerRepo.getOddPools(run.channelLogin, run.mode, run.period),
   ]);
   // The chain's head: what the next card has to be a legal pair with is the last card dealt, not
   // the one on screen. With an empty queue those are the same token.
   const head = queue.length ? queue[queue.length - 1] : run.challenger;
-  const { dealt } = hl.dealAhead(pool, head, run.recent, missing, Math.random, wordVotes);
+  const { dealt } = hl.dealAhead(pool, head, run.recent, missing, Math.random, wordVotes, odd);
   // Nothing legal left to deal. Not a failure: the run clears when the queue finally runs out.
   if (!dealt.length) return;
 
@@ -283,11 +284,12 @@ router.post("/games/higher-lower/start.json", roundLimiter, verifyIfAuthed, asyn
       return res.status(400).json({ ok: false, error: "channel" });
     }
 
-    const [pool, wordVotes] = await Promise.all([
+    const [pool, wordVotes, odd] = await Promise.all([
       higherLowerRepo.getPool(channelLogin, mode, period),
       higherLowerRepo.getWordVoteMap(channelLogin).catch(() => new Map()),
+      higherLowerRepo.getOddPools(channelLogin, mode, period),
     ]);
-    const pair = hl.pickOpeningPair(pool, Math.random, wordVotes);
+    const pair = hl.pickOpeningPair(pool, Math.random, wordVotes, odd);
     if (!pair) return res.status(409).json({ ok: false, error: "pool" });
 
     // The opening pair plus the rounds behind it, drawn as one chain so every neighbour is a legal
@@ -295,7 +297,7 @@ router.post("/games/higher-lower/start.json", roundLimiter, verifyIfAuthed, asyn
     // that is about to ask for four cards, and the player is already on a button press that looks
     // like loading.
     const opened = hl.rememberToken(hl.rememberToken([], pair.anchor.word), pair.challenger.word);
-    const ahead = hl.dealAhead(pool, pair.challenger, opened, hl.QUEUE_DEPTH, Math.random, wordVotes);
+    const ahead = hl.dealAhead(pool, pair.challenger, opened, hl.QUEUE_DEPTH, Math.random, wordVotes, odd);
 
     const userId = req.user ? req.user.userId : null;
     const words = [pair.anchor.word, pair.challenger.word, ...ahead.dealt.map((t) => t.word)];
@@ -384,12 +386,13 @@ router.post("/games/higher-lower/answer.json", roundLimiter, verifyIfAuthed, asy
     // Empty queue: a run started before rounds were dealt ahead, or a refill that never landed.
     // Draw inline the way this route always did - a slow answer beats a lost run - and let the
     // refill below stock the queue again for the rounds after it.
-    const [pool, wordVotes] = await Promise.all([
+    const [pool, wordVotes, odd] = await Promise.all([
       higherLowerRepo.getPool(run.channelLogin, run.mode, run.period),
       higherLowerRepo.getWordVoteMap(run.channelLogin).catch(() => new Map()),
+      higherLowerRepo.getOddPools(run.channelLogin, run.mode, run.period),
     ]);
     const recent = hl.rememberToken(run.recent, run.challenger.word);
-    const next = hl.pickChallenger(pool, run.challenger, recent, Math.random, wordVotes);
+    const next = hl.pickChallenger(pool, run.challenger, recent, Math.random, wordVotes, odd);
 
     if (!next) {
       // No legal opponent left for this anchor. That is a cleared run, not a loss - the last

@@ -19,6 +19,13 @@ const hl = require("../lib/higherLower");
 // The lowest count any word mode/period asks for, so one build serves both. A word in the month
 // pool is NOT necessarily in the all-time pool (25 uses this month, 90 all time), so this cannot
 // simply mirror WORD_MIN_COUNT.all.
+//
+// The oddity bands (hl.RARE_COUNT, hl.LONG_WORD) are deliberately left out, so an oddity card
+// carries no quotation. Covering them would mean building for the WHOLE band rather than for the
+// few hundred rows the game happens to be holding - 108,015 rare words on #mistercop against the
+// 22,879 this builds for now, near enough five times the rows, the writes and the stored
+// megabytes, for the eighth of rounds that is an oddity. A card with no line renders correctly
+// already; about 1% of the ordinary pool never finds one either.
 const EXAMPLE_MIN_COUNT = Math.min(...Object.values(hl.WORD_MIN_COUNT));
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;

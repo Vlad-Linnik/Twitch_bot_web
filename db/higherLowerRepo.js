@@ -96,6 +96,118 @@ async function getPool(channelLogin, mode, period) {
   });
 }
 
+// How many rows of each oddity band are held at a time. Neither band can be read whole and
+// neither needs to be: 108,015 rare words and 5,798 long ones on #mistercop, against 7,558 in the
+// pool proper, while an oddity turns up on an eighth of rounds - a few hundred of them outlast any
+// run. $sample redraws the subset every time the cache expires, so WHICH oddities are in play
+// rotates on POOL_TTL_MS instead of being fixed for the life of the process.
+//
+// The long band is sampled twice as generously because two thirds of it is thrown away afterwards
+// by hl.isLongWord - a length-only band is mostly keyboard mash.
+const RARE_SAMPLE_SIZE = 400;
+const LONG_SAMPLE_SIZE = 800;
+
+// The rare band for one channel/period, as [{word, count}] - words the ordinary pool's threshold
+// keeps out, see hl.RARE_COUNT. Words only: the emote mode has no threshold to be under, so a
+// once-used emote is already in getPool's result.
+//
+// Measured on production: 155ms all-time, 305ms for a month (the pool proper costs ~930ms), and
+// both are cached and drawn off the answer path - see refillQueue in routes/higherLower.js.
+async function getRarePool(channelLogin, mode, period) {
+  if (mode !== "words") return [];
+  const channel = withHash(channelLogin);
+  const band = { $gte: hl.RARE_COUNT.min, $lte: hl.RARE_COUNT.max };
+
+  return withCache(`rare:${period}:${channel}`, async () => {
+    const { chatWordStats } = await ensureInitialized();
+    const start = limits.periodStart(period);
+
+    if (start === null) {
+      // The {channel, date, count, word} index covers the $match, so $sample sorts random keys
+      // over index entries rather than fetching a hundred thousand documents.
+      return chatWordStats
+        .aggregate([
+          { $match: { channel, date: LIFETIME_BUCKET, count: band } },
+          { $sample: { size: RARE_SAMPLE_SIZE } },
+          { $project: { _id: 0, word: 1, count: 1 } },
+        ])
+        .toArray();
+    }
+    // A month's rare words are not the all-time ones with small numbers: the band applies to the
+    // window's own sum, so this has to group first, exactly as groupedSince does for the pool.
+    return chatWordStats
+      .aggregate(
+        [
+          { $match: { channel, date: { $gte: start } } },
+          { $group: { _id: "$word", count: { $sum: "$count" } } },
+          { $match: { count: band } },
+          { $sample: { size: RARE_SAMPLE_SIZE } },
+          { $project: { _id: 0, word: "$_id", count: 1 } },
+        ],
+        { allowDiskUse: false }
+      )
+      .toArray();
+  });
+}
+
+// The long band: words dealt for their length whatever their count, so this one has no count
+// filter at all - most of what it holds was said exactly once. Length is `$strLenCP`, code points,
+// the same unit hl.isLongWord counts in; anything else would disagree about every emoji and every
+// «ё» in a legacy encoding.
+//
+// The mash filter runs HERE, in JS, on the sampled rows rather than in the pipeline: it is four
+// rules deep, and in an aggregation stage it would be both unreadable and untestable. Measured on
+// production: 530ms all-time, 390ms for a month, cached like every other pool and issued
+// concurrently with the pool read that already costs ~930ms.
+async function getLongPool(channelLogin, mode, period) {
+  if (mode !== "words") return [];
+  const channel = withHash(channelLogin);
+  const len = { $gte: hl.LONG_WORD.minLength };
+
+  return withCache(`long:${period}:${channel}`, async () => {
+    const { chatWordStats } = await ensureInitialized();
+    const start = limits.periodStart(period);
+
+    const rows =
+      start === null
+        ? await chatWordStats
+            .aggregate([
+              { $match: { channel, date: LIFETIME_BUCKET } },
+              { $addFields: { len: { $strLenCP: "$word" } } },
+              { $match: { len } },
+              { $sample: { size: LONG_SAMPLE_SIZE } },
+              { $project: { _id: 0, word: 1, count: 1 } },
+            ])
+            .toArray()
+        : await chatWordStats
+            .aggregate(
+              [
+                { $match: { channel, date: { $gte: start } } },
+                { $group: { _id: "$word", count: { $sum: "$count" } } },
+                { $addFields: { len: { $strLenCP: "$_id" } } },
+                { $match: { len } },
+                { $sample: { size: LONG_SAMPLE_SIZE } },
+                { $project: { _id: 0, word: "$_id", count: 1 } },
+              ],
+              { allowDiskUse: false }
+            )
+            .toArray();
+
+    return rows.filter((row) => hl.isLongWord(row.word));
+  });
+}
+
+// Both bands, as the sampler wants them. Never rejects: without the bands the game is the game it
+// was, so a failed read costs the run its oddities and nothing else. Callers pass the result
+// straight into lib/higherLower.js.
+async function getOddPools(channelLogin, mode, period) {
+  const [rare, long] = await Promise.all([
+    getRarePool(channelLogin, mode, period).catch(() => []),
+    getLongPool(channelLogin, mode, period).catch(() => []),
+  ]);
+  return { rare, long };
+}
+
 // ---------------------------------------------------------------------------------------
 // Which channels are offered at all
 // ---------------------------------------------------------------------------------------
@@ -123,7 +235,9 @@ async function getPoolSize(channelLogin, mode, period) {
 }
 
 // The channels worth offering for this mode/period, largest pool first. A channel whose chat is
-// too thin is left out entirely rather than offered and then failing - see MIN_CHANNEL_POOL.
+// too thin is left out entirely rather than offered and then failing - see MIN_CHANNEL_POOL. The
+// oddity bands are deliberately not counted here: they are a garnish on a playable game, not
+// something that can make a thin channel into one.
 async function listPlayableChannels(channels, mode, period) {
   const sizes = await Promise.all(
     channels.map((c) => getPoolSize(c.channelLogin, mode, period).catch(() => 0))
@@ -158,4 +272,15 @@ async function getWordVoteMap(channelLogin) {
   return map;
 }
 
-module.exports = { getPool, getPoolSize, listPlayableChannels, getVoteScores, getWordVoteMap, POOL_TTL_MS, VOTE_TTL_MS };
+module.exports = {
+  getPool,
+  getRarePool,
+  getLongPool,
+  getOddPools,
+  getPoolSize,
+  listPlayableChannels,
+  getVoteScores,
+  getWordVoteMap,
+  POOL_TTL_MS,
+  VOTE_TTL_MS,
+};

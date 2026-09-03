@@ -2303,6 +2303,14 @@ body.theme-hall-wide .throne-vitrine__case {
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
 }
 
+/* A word of twenty or thirty characters - the game deals those on purpose now, see
+   lib/higherLower.js's long band. Same tier, smaller type: at 4rem a word that long
+   breaks into four lines and stops reading as one word. Must stay after .hl-token:
+   both are single-class selectors, so the later rule is the one that wins. */
+.hl-token-long {
+  font-size: clamp(1.05rem, 3vw, 2.25rem);
+}
+
 /* The token's own row. In the emote mode it reserves the height of a picture, so a card showing
    an image and a card showing a bare name (an emote that has left the channel's set keeps its
    usage row but loses its URL) still put their headings on the same line. */
