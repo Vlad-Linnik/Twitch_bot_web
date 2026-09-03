@@ -208,6 +208,34 @@
     return bar;
   }
 
+  // The quotation block: a real line from that chat with the word in it, signed with the name the
+  // person was using when they wrote it. This is what stands in for the photograph the genre
+  // usually puts behind an item. textContent throughout - every character of it is viewer-written.
+  //
+  // The block is built even when there is no line (roughly one pool word in a hundred has none,
+  // and a channel has none at all until the job has run once), because it reserves the height
+  // either way: otherwise the card with a quote and the card without would put their numbers on
+  // different lines.
+  function exampleNode(card) {
+    const wrap = document.createElement("div");
+    wrap.className = "hl-example";
+
+    const text = document.createElement("span");
+    text.className = "hl-example-text";
+    text.textContent = card.example ? "«" + card.example.text + "»" : "";
+    wrap.appendChild(text);
+
+    const author = document.createElement("span");
+    author.className = "hl-example-author";
+    // A row written before attribution existed has no author; the quote then stands unsigned
+    // rather than the whole thing disappearing.
+    author.textContent = card.example && card.example.author ? "— " + card.example.author : "";
+    wrap.appendChild(author);
+
+    wrap.appendChild(voteBar(card));
+    return wrap;
+  }
+
   function tokenNode(card) {
     if (card.image) {
       // Picture AND name. An emote is typed by its name in chat, the other card's caption refers
@@ -261,13 +289,7 @@
     // none, and a channel has none at all until the job has run once), because it reserves the
     // space either way - otherwise the card that has a quote and the card that does not would put
     // their numbers at different heights.
-    if (mode === "words") {
-      const quote = document.createElement("div");
-      quote.className = "hl-example";
-      quote.textContent = card.example ? "«" + card.example + "»" : "";
-      head.appendChild(quote);
-      head.appendChild(voteBar(card));
-    }
+    if (mode === "words") head.appendChild(exampleNode(card));
     panel.appendChild(head);
 
     const has = document.createElement("div");

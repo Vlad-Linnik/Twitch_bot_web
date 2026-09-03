@@ -6,11 +6,11 @@
 //
 // PRIVACY NOTE, deliberate: everywhere else on this site a raw chat message is gated - the log
 // search is requireLevel(2) and the per-user page needs a login - while word counts are public.
-// This collection puts individual lines on a public page. That is a product decision, taken with
-// the gap pointed out; the line carries no author, here or in the document, so what is published
-// is the sentence and not who said it.
+// This collection puts individual lines on a public page, attributed by name. Both steps were
+// taken as product decisions with the gap pointed out, the attribution after the sentence itself:
+// what is published is a quotation, the way a quotation is normally published.
 //
-// {channel, word, text, builtAt}
+// {channel, word, text, author, builtAt}
 const { connectWeb } = require("./connection");
 
 let collection;
@@ -30,15 +30,17 @@ async function ensureInitialized() {
   return collection;
 }
 
-// word -> text, for the handful of words a round actually shows.
+// word -> {text, author}, for the handful of words a round actually shows. `author` is null on
+// rows written before attribution existed; the card then shows the quote unsigned rather than
+// nothing, and the next weekly rebuild fills it in.
 async function getExamples(channelLogin, words) {
   if (!words || words.length === 0) return new Map();
   const col = await ensureInitialized();
   const rows = await col
     .find({ channel: channelLogin, word: { $in: words } })
-    .project({ _id: 0, word: 1, text: 1 })
+    .project({ _id: 0, word: 1, text: 1, author: 1 })
     .toArray();
-  return new Map(rows.map((r) => [r.word, r.text]));
+  return new Map(rows.map((r) => [r.word, { text: r.text, author: r.author || null }]));
 }
 
 // When this channel was last scanned, or null if never. Drives the freshness check that keeps a
@@ -60,12 +62,20 @@ async function replaceForChannel(channelLogin, entries, builtAt = new Date()) {
   for (let i = 0; i < entries.length; i += BATCH) {
     const slice = entries.slice(i, i + BATCH);
     await col.bulkWrite(
-      slice.map(([word, text]) => {
+      slice.map(([word, entry]) => {
         words.push(word);
         return {
           updateOne: {
             filter: { channel: channelLogin, word },
-            update: { $set: { channel: channelLogin, word, text, builtAt } },
+            update: {
+              $set: {
+                channel: channelLogin,
+                word,
+                text: entry.text,
+                author: entry.author || null,
+                builtAt,
+              },
+            },
             upsert: true,
           },
         };

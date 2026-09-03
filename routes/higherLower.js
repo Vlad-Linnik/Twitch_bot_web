@@ -82,9 +82,9 @@ async function exampleMapFor(mode, channelLogin, words, scores) {
   if (mode !== "words") return new Map();
   const stored = await examplesRepo.getExamples(channelLogin, words).catch(() => new Map());
   const out = new Map();
-  for (const [word, text] of stored) {
+  for (const [word, entry] of stored) {
     const net = scores && scores.has(word) ? scores.get(word).exampleNet : 0;
-    if (hl.passesVote(net)) out.set(word, text);
+    if (hl.passesVote(net)) out.set(word, entry);
   }
   return out;
 }

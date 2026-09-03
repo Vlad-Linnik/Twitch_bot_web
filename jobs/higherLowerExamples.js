@@ -62,7 +62,7 @@ async function buildForChannel(channelLogin) {
   const cursor = db
     .collection("messages")
     .find({ channel })
-    .project({ _id: 0, message: 1, gifs: 1 })
+    .project({ _id: 0, message: 1, gifs: 1, userName: 1 })
     .batchSize(2000);
 
   for await (const doc of cursor) {
@@ -74,11 +74,16 @@ async function buildForChannel(channelLogin) {
     const text = String(doc.message || "").trim();
     if (!text || text.length > MAX_LENGTH) continue;
 
+    // The name as it stood when the line was written, not whoever holds that account today: a
+    // rename should not rewrite the attribution on an old quotation. `messages.userName` is the
+    // login, which is what chat showed at the time.
+    const author = String(doc.userName || "") || null;
+
     for (const word of extractWords(text, isEmote)) {
       if (!pool.has(word)) continue;
       if (!isUsable(text, word)) continue;
       const current = found.get(word);
-      if (isBetter(text, current)) found.set(word, text);
+      if (isBetter(text, current ? current.text : null)) found.set(word, { text, author });
     }
   }
 
