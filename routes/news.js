@@ -65,7 +65,7 @@ async function loadCommentTree(post, channel, req, isAdmin, sortMode) {
     newsCommentsRepo.listForPost(post._id),
     // Same channel-wide name -> image map the emote cloud resolves against (twitch/emoteImages.js) -
     // so a comment typed with an emote's name renders the actual emote, not its text signature.
-    emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map()),
+    emoteImages.getEmoteImageMap(channel.channelId, channel.channelLogin).catch(() => new Map()),
   ]);
 
   const userVotes = req.user
@@ -200,7 +200,7 @@ router.get("/:channel/news/:id", async (req, res, next) => {
       // name -> image list the server just used to render existing comments - twitch/emoteImages.js
       // caches per-channel with a TTL, so this second call is a cache hit, not a second Helix/7TV
       // round trip.
-      emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map()),
+      emoteImages.getEmoteImageMap(channel.channelId, channel.channelLogin).catch(() => new Map()),
     ]);
 
     let reacted = new Set();
@@ -366,7 +366,7 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
     const [permission, authorProfile, emoteMap] = await Promise.all([
       computePermission(req.user.userId, channel.channelLogin),
       profileCacheRepo.getOrFetchProfile(req.user.userId).catch(() => null),
-      emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map()),
+      emoteImages.getEmoteImageMap(channel.channelId, channel.channelLogin).catch(() => new Map()),
     ]);
     const node = {
       ...created,

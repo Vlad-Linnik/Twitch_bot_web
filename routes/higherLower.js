@@ -81,7 +81,7 @@ function verifyIfAuthed(req, res, next) {
 async function imageMapFor(channelLogin) {
   const channel = await channelsRepo.findByLogin(channelLogin);
   if (!channel || !channel.channelId) return new Map();
-  return emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map());
+  return emoteImages.getEmoteImageMap(channel.channelId, channelLogin).catch(() => new Map());
 }
 
 // A real chat line for each of the two words on screen. Words only: the ask was for words, and an

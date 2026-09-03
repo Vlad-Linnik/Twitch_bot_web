@@ -89,7 +89,7 @@ async function profileMap(userIds) {
 async function emoteMapFor(channelLogin) {
   const channel = await channelsRepo.findByLogin(channelLogin).catch(() => null);
   if (!channel || !channel.channelId) return new Map();
-  return emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map());
+  return emoteImages.getEmoteImageMap(channel.channelId, channelLogin).catch(() => new Map());
 }
 
 router.post("/games/guess-chatter/start.json", runLimiter, verifyIfAuthed, async (req, res, next) => {

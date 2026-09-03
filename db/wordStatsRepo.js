@@ -17,6 +17,7 @@
 // Channel-field convention: `messages`, `words`, `WordLifetimeStats` and the new ChatWordStats
 // all store `channel` WITH a leading "#". statsRepo.js documents the wider inconsistency.
 const { connect } = require("./connection");
+const { EXTERNAL_SOURCE: EXTERNAL_EMOTE_SOURCE } = require("./emoteRegistryRepo");
 const { extractWords, stripGifSpans, LIFETIME_BUCKET } = require("../lib/textStats");
 const limits = require("../config/statsLimits");
 const { createCache } = require("../lib/queryCache");
@@ -143,8 +144,10 @@ async function getChannelEmoteCloud(channelLogin, requestedPeriod, requestedLimi
   });
 }
 
-// Size of the channel's whiteList - every emote the bot is currently configured to track (7TV
-// set + Twitch global), whether or not it's been typed in chat yet. NOT the same as
+// Size of the channel's whiteList - every emote the bot is currently configured to track (the
+// Twitch global set, the broadcaster's own, and the 7TV/BTTV/FFZ sets that render over this
+// chat), whether or not it's been typed in chat yet. Emotes LEARNT from chat - another
+// broadcaster's, off the `emotes` tag - are not configuration and are excluded. NOT the same as
 // getChannelEmoteCloud(...).emotes.length (capped at whatever leaderboard limit the caller
 // passed, 10 on the channel dashboard) or WordLifetimeStats.countDocuments() (usage: only
 // emotes actually seen at least once - always <= whiteList size, since a newly-synced global
@@ -152,7 +155,7 @@ async function getChannelEmoteCloud(channelLogin, requestedPeriod, requestedLimi
 async function getTrackedEmoteCount(channelLogin) {
   const { whiteList } = await ensureInitialized();
   const channel = withHash(channelLogin);
-  return whiteList.countDocuments({ channel });
+  return whiteList.countDocuments({ channel, source: { $ne: EXTERNAL_EMOTE_SOURCE } });
 }
 
 // ---------------------------------------------------------------------------------------

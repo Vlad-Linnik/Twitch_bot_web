@@ -1,6 +1,7 @@
 // Site-wide stats for the home page, reading collections the bot repo owns
 // (TwitchBot/db/chatStats.js) in the shared twitch_chat_stats db.
 const { connect } = require("./connection");
+const { EXTERNAL_SOURCE: EXTERNAL_EMOTE_SOURCE } = require("./emoteRegistryRepo");
 
 let collections;
 
@@ -29,15 +30,21 @@ async function getGlobalCommandCount() {
 // source collections are small - a few hundred rows per channel, not the ~1.9M-row `messages`
 // collection - so live reads here are cheap.
 //
-// totalEntriesAdded = whiteList size (config: every emote the bot is set up to track - 7TV set +
-// Twitch global - whether or not it's been typed in chat yet), NOT WordLifetimeStats.countDocuments()
-// (usage: only emotes actually seen at least once). "Tracked" means configured, not observed -
-// same {channel, word} pair in two channels correctly counts as two separate entries.
+// totalEntriesAdded = whiteList size (config: every emote the bot is set up to track - the Twitch
+// global set, the broadcaster's own, and the three extension providers - whether or not it's been
+// typed in chat yet), NOT WordLifetimeStats.countDocuments() (usage: only emotes actually seen at
+// least once). "Tracked" means configured, not observed - same {channel, word} pair in two
+// channels correctly counts as two separate entries.
+//
+// Which is exactly why the learnt rows are excluded: an emote of another broadcaster's channel
+// gets its whitelist row BECAUSE somebody typed it (TwitchBot/db/chatStats.js's
+// learnExternalEmotes), so counting those here would quietly turn this number into a usage
+// measure - the one thing the line above says it is not.
 // totalUsageCount is genuinely a usage measure, so it stays on WordLifetimeStats (sum of `count`).
 async function getGlobalEmoteStats() {
   const { wordLifetimeStats, whiteList } = await ensureInitialized();
   const [totalEntriesAdded, usageResult] = await Promise.all([
-    whiteList.countDocuments(),
+    whiteList.countDocuments({ source: { $ne: EXTERNAL_EMOTE_SOURCE } }),
     wordLifetimeStats.aggregate([{ $group: { _id: null, total: { $sum: "$count" } } }]).toArray(),
   ]);
   return { totalUsageCount: usageResult[0]?.total ?? 0, totalEntriesAdded };

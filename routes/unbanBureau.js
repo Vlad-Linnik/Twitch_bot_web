@@ -197,7 +197,7 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     // against (twitch/emoteImages.js) - so an emote name typed in an appeal or said in chat
     // renders as the actual emote in the log/appeal panes, not its text signature.
     const emoteMap = cases.length
-      ? await emoteImages.getEmoteImageMap(channel.channelId).catch(() => new Map())
+      ? await emoteImages.getEmoteImageMap(channel.channelId, channel.channelLogin).catch(() => new Map())
       : new Map();
 
     res.render("unbanBureau", {
