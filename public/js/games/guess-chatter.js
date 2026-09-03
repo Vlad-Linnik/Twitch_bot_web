@@ -362,7 +362,13 @@
     }
     lines.forEach((line) => {
       const row = document.createElement("p");
-      row.className = "break-words" + (line.isAuthor ? " text-purple-300" : " text-neutral-400");
+      // Three states, not two. Every line by the mystery person is tinted, but the one being asked
+      // about is also marked out of the column: it is the card above printed back into its own
+      // conversation, and if it merely shared the tint with their other lines there would be
+      // nothing saying which of them the question is.
+      row.className = line.isQuestion
+        ? "break-words rounded-md border-l-2 border-purple-400 bg-purple-500/10 py-0.5 pl-2 text-purple-100"
+        : "break-words" + (line.isAuthor ? " text-purple-300" : " text-neutral-400");
       const who = document.createElement("span");
       who.className = "font-semibold";
       who.textContent = `${line.author}: `;

@@ -172,12 +172,25 @@ router.get("/games/guess-chatter/context.json", statsReadLimiter, async (req, re
     const question = await questionsRepo.findById(channelLogin, new ObjectId(id));
     if (!question) return res.status(404).json({ ok: false, error: "question" });
 
-    const lines = await questionsRepo.getContext(
+    const { before, after } = await questionsRepo.getContext(
       channelLogin,
       question.ts,
       gc.CONTEXT_BEFORE,
       gc.CONTEXT_AFTER
     );
+
+    // The asked-about line sits in the middle, where it was. Without it the panel is a set of
+    // replies to a message that is not there, and matching the answer to what provoked it - which
+    // is the whole reason to open the context - has to be done from memory of the card above.
+    //
+    // Spliced from the question document rather than fetched with the neighbours: the text is
+    // already here, and asking `messages` for timestamp equality could return a different line
+    // sent in the same millisecond.
+    const lines = [
+      ...before.map((l) => ({ userName: l.userName, message: l.message, isQuestion: false })),
+      { userName: question.login, message: question.text, isQuestion: true },
+      ...after.map((l) => ({ userName: l.userName, message: l.message, isQuestion: false })),
+    ];
 
     // The context is chat too, so it carries its own emotes: the lines around a message are not
     // the ones the run was built from, and their emotes were never sent.
@@ -185,7 +198,9 @@ router.get("/games/guess-chatter/context.json", statsReadLimiter, async (req, re
 
     // The author's name is replaced everywhere it can appear - as a sender and inside anybody's
     // text - because a neighbour answering "@login да ладно" is the answer printed in full, and so
-    // is the author's own next line standing under their own name.
+    // is the author's own next line standing under their own name. The line being asked about is
+    // masked like any other: its sender is the same person, and it is the one line that must not
+    // print their name.
     res.json({
       ok: true,
       placeholder: gc.AUTHOR_PLACEHOLDER,
@@ -194,6 +209,7 @@ router.get("/games/guess-chatter/context.json", statsReadLimiter, async (req, re
         author: gc.maskAuthor(l.userName, question.login),
         text: gc.maskAuthor(l.message, question.login),
         isAuthor: String(l.userName || "").toLowerCase() === String(question.login || "").toLowerCase(),
+        isQuestion: l.isQuestion,
       })),
     });
   } catch (err) {

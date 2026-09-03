@@ -145,6 +145,10 @@ async function findById(channelLogin, id) {
 // ../CLAUDE.md permits (it is writes to a bot-owned collection that need a contract). Two bounded
 // range scans around the anchor rather than one wide one, so "5 before" cannot be swallowed by a
 // busy second.
+//
+// The two halves are handed back separately rather than concatenated, because the caller has to
+// put the asked-about line between them and only it holds that line - the anchor is excluded here
+// by both bounds being strict.
 async function getContext(channelLogin, ts, before, after) {
   const db = await connect();
   const channel = withHash(channelLogin);
@@ -164,7 +168,7 @@ async function getContext(channelLogin, ts, before, after) {
       .limit(after)
       .toArray(),
   ]);
-  return [...pre.reverse(), ...post];
+  return { before: pre.reverse(), after: post };
 }
 
 // ---------------------------------------------------------------------------------------
