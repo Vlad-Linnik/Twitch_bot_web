@@ -259,4 +259,22 @@ module.exports = [
         </g>
       </svg>`,
   },
+  {
+    id: "guess-chatter",
+    url: "/games/guess-chatter",
+    nameKey: "games.guessChatter.name",
+    descKey: "games.guessChatter.cardDescription",
+    preview: `
+      <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+        <path d="M22 10 h106 a4 4 0 0 1 4 4 v28 a4 4 0 0 1 -4 4 h-72 l-12 11 v-11 h-22 a4 4 0 0 1 -4 -4 v-28 a4 4 0 0 1 4 -4 z"
+              fill="#262626" stroke="#404040" stroke-width="1"/>
+        <rect x="32" y="20" width="60" height="4" rx="2" fill="#a3a3a3"/>
+        <rect x="32" y="29" width="84" height="4" rx="2" fill="#737373"/>
+        <circle cx="30" cy="76" r="11" fill="#3f3f46"/>
+        <circle cx="60" cy="76" r="11" fill="#3f3f46"/>
+        <circle cx="90" cy="76" r="11" fill="#7e22ce"/>
+        <text x="90" y="81" text-anchor="middle" font-size="14" font-weight="bold" fill="#ffffff">?</text>
+        <circle cx="120" cy="76" r="11" fill="#3f3f46"/>
+      </svg>`,
+  },
 ];

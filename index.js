@@ -7,6 +7,7 @@ const attachSocketServer = require("./realtime/socketServer");
 const { startProfileCacheRefreshLoop } = require("./twitch/profileCacheScheduler");
 const { startModeratorSyncLoop } = require("./twitch/moderatorSyncScheduler");
 const { startExampleRefreshLoop } = require("./jobs/higherLowerExamples");
+const { startGuessChatterRefreshLoop } = require("./jobs/guessChatter");
 
 async function main() {
   await connect();
@@ -23,6 +24,7 @@ async function main() {
   startProfileCacheRefreshLoop();
   startModeratorSyncLoop();
   startExampleRefreshLoop();
+  startGuessChatterRefreshLoop();
 }
 
 main().catch((err) => {

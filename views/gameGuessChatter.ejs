@@ -1,0 +1,116 @@
+<%- include('partials/head', { title: t('games.guessChatter.name') }) %>
+<%- include('partials/nav') %>
+
+<%# Three screens in one page, swapped by public/js/games/guess-chatter.js:
+      #gc-setup - channel picker
+      #gc-play  - the question, its hints and the four options
+      #gc-over  - the breakdown of all ten rounds
+    The whole run (answers included) arrives in one fetch and is graded here - see
+    routes/guessChatter.js for why that is safe in this game and not in "Выше — ниже". %>
+
+<main class="pt-14">
+  <!-- ------------------------------------------------------------------ setup -->
+  <section id="gc-setup" class="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+    <div class="mb-4 flex items-baseline justify-between gap-4">
+      <h1 class="text-2xl sm:text-3xl font-bold text-neutral-100"><%= t('games.guessChatter.name') %></h1>
+      <a href="/games" class="text-sm text-purple-400 hover:text-purple-300 shrink-0">&larr; <%= t('games.guessChatter.backToGames') %></a>
+    </div>
+
+    <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+      <p class="text-sm text-neutral-400 mb-5"><%= t('games.guessChatter.setupIntro') %></p>
+
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.guessChatter.channelLabel') %></p>
+      <% if (channels.length === 0) { %>
+        <p class="text-sm text-neutral-400 mb-5"><%= t('games.guessChatter.noChannels') %></p>
+      <% } else { %>
+        <div class="flex flex-wrap gap-2 mb-5" id="gc-channels">
+          <% channels.forEach(function (channel, i) { %>
+            <button type="button" data-channel="<%= channel.channelLogin %>"
+                    class="gc-channel<%= i === 0 ? ' is-on' : '' %> px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+              <%= channel.channelLogin %>
+              <span class="text-xs opacity-60"><%= channel.authors %></span>
+            </button>
+          <% }); %>
+        </div>
+        <button type="button" id="gc-play-btn"
+                class="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors"><%= t('games.guessChatter.play') %></button>
+      <% } %>
+      <p id="gc-setup-error" hidden class="mt-3 text-sm text-red-400"></p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ play -->
+  <section id="gc-play" hidden class="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+    <div class="mb-4 flex items-center justify-between gap-4 text-sm">
+      <span id="gc-progress" class="text-neutral-400"></span>
+      <span id="gc-score" class="font-semibold text-neutral-200"></span>
+    </div>
+
+    <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-5 mb-4">
+      <p id="gc-message" class="text-lg sm:text-xl text-neutral-100 leading-relaxed break-words"></p>
+      <p id="gc-when" class="mt-3 text-xs text-neutral-500"></p>
+    </div>
+
+    <%# Three more lines by the same author, free to open. Hidden rather than absent so that a
+        player can try without them - the end screen counts how many rounds went unaided. %>
+    <div class="mb-4">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= t('games.guessChatter.hintsLabel') %></p>
+      <div id="gc-hints" class="grid gap-2"></div>
+    </div>
+
+    <div class="mb-5">
+      <button type="button" id="gc-context-btn"
+              class="text-sm text-purple-400 hover:text-purple-300 transition-colors"><%= t('games.guessChatter.showContext') %></button>
+      <div id="gc-context" hidden class="mt-3 rounded-xl border border-neutral-800 bg-neutral-950 p-4 space-y-1 text-sm"></div>
+    </div>
+
+    <div id="gc-options" class="grid gap-2 sm:grid-cols-2"></div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ over -->
+  <section id="gc-over" hidden class="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+    <h2 class="text-2xl font-bold text-neutral-100 mb-1" id="gc-over-score"></h2>
+    <p class="text-sm text-neutral-400 mb-1" id="gc-over-unaided"></p>
+    <p class="text-sm text-neutral-500 mb-5" id="gc-over-best"></p>
+
+    <div id="gc-breakdown" class="space-y-3 mb-6"></div>
+
+    <div class="flex flex-wrap gap-2">
+      <button type="button" id="gc-again"
+              class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors"><%= t('games.guessChatter.playAgain') %></button>
+      <button type="button" id="gc-understood"
+              class="px-5 py-2.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold transition-colors"><%= t('games.guessChatter.understood') %></button>
+    </div>
+  </section>
+</main>
+
+<%# Server payload. Inlined through safeJson rather than JSON.stringify because the channel logins
+    and every label around them share a page with chat-derived text - see lib/safeJson.js. The run
+    itself never comes through here; it arrives from start.json. %>
+<script id="gc-data" type="application/json"><%- safeJson({
+  csrfToken: locals.csrfToken || null,
+  rounds: rounds,
+  labels: {
+    progress: t('games.guessChatter.progress'),
+    score: t('games.guessChatter.score'),
+    hintButton: t('games.guessChatter.hintButton'),
+    showContext: t('games.guessChatter.showContext'),
+    hideContext: t('games.guessChatter.hideContext'),
+    contextEmpty: t('games.guessChatter.contextEmpty'),
+    overScore: t('games.guessChatter.overScore'),
+    overUnaided: t('games.guessChatter.overUnaided'),
+    overBest: t('games.guessChatter.overBest'),
+    correct: t('games.guessChatter.correct'),
+    wrong: t('games.guessChatter.wrong'),
+    yourAnswer: t('games.guessChatter.yourAnswer'),
+    admixed: t('games.guessChatter.admixed'),
+    error: t('games.guessChatter.error'),
+    justNow: t('games.guessChatter.justNow'),
+    daysAgo: t('games.guessChatter.daysAgo'),
+    monthsAgo: t('games.guessChatter.monthsAgo'),
+    yearsAgo: t('games.guessChatter.yearsAgo')
+  }
+}) %></script>
+
+<script src="<%= asset('/js/games/guess-chatter.js') %>" defer></script>
+<%- include('partials/foot') %>

@@ -2574,3 +2574,19 @@ body.theme-hall-wide .throne-vitrine__case {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* "Угадай чатера" channel picker. Same shape as .hl-toggle - a separate class rather than a
+   shared one because the two games' setup screens are free to diverge. */
+.gc-channel {
+  background: #262626;
+  color: #d4d4d4;
+  border: 1px solid #404040;
+}
+.gc-channel:hover:not(:disabled) {
+  background: #333333;
+}
+.gc-channel.is-on {
+  background: #7e22ce;
+  border-color: #9333ea;
+  color: #ffffff;
+}

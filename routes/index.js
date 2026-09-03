@@ -11,6 +11,7 @@ router.use("/", require("./statistics"));
 router.use("/", require("./commands"));
 router.use("/", require("./games"));
 router.use("/", require("./higherLower"));
+router.use("/", require("./guessChatter"));
 router.use("/", require("./about"));
 router.use("/", require("./privacy"));
 router.use("/", require("./requestBot"));
