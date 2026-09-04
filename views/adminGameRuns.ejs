@@ -34,6 +34,20 @@
     <% }) %>
   </div>
 
+  <%# Re-runs the current rules over the whole open queue, not just this page,
+      and clears whatever they no longer object to. Only offered on the open
+      tab - there is nothing to re-decide on a resolved one. %>
+  <% if (filters.status === 'open') { %>
+    <form method="post" action="/admin/game-runs/recheck" class="mb-6" data-recheck-form
+          data-confirm="<%= t('admin.gameRunsRecheckConfirm') %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors text-xs">
+        <%= t('admin.gameRunsRecheck') %>
+      </button>
+      <span class="ml-3 text-xs text-neutral-600" data-recheck-result data-none="<%= t('admin.gameRunsRecheckNone') %>"></span>
+    </form>
+  <% } %>
+
   <div class="rounded-lg border border-neutral-800 overflow-hidden">
     <div class="overflow-x-auto">
     <table class="w-full text-sm">
@@ -150,6 +164,36 @@
   // Progressive enhancement over the plain form POSTs above: reviewing a flag
   // shouldn't reload the page and throw the admin back to the top of a long
   // triage list. Without JS the forms still work, they just redirect.
+  var recheckForm = document.querySelector("form[data-recheck-form]");
+  if (recheckForm) {
+    recheckForm.addEventListener("submit", function (event) {
+      if (!window.confirm(recheckForm.dataset.confirm)) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      var out = recheckForm.querySelector("[data-recheck-result]");
+      var button = recheckForm.querySelector("button");
+      if (button) button.disabled = true;
+      fetch(recheckForm.action, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(new FormData(recheckForm)),
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          // The list itself is now stale wherever rows were resolved, so
+          // reload rather than patching individual rows out.
+          if (data && data.ok && data.approved > 0) return window.location.reload();
+          if (out) out.textContent = out.dataset.none || "";
+          if (button) button.disabled = false;
+        })
+        .catch(function () {
+          if (button) button.disabled = false;
+        });
+    });
+  }
+
   document.querySelectorAll("form[data-flag-action]").forEach(function (form) {
     form.addEventListener("submit", function (event) {
       var confirmText = form.dataset.confirm;

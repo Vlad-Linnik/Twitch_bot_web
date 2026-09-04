@@ -2046,6 +2046,9 @@
     "gameRunsResetScore": "Reject record",
     "gameRunsApproveConfirm": "Publish this run's score to the leaderboard?",
     "gameRunsResetConfirm": "Reject this run and delete this player's stored best score for this game? This cannot be undone.",
+    "gameRunsRecheck": "Re-check against current rules",
+    "gameRunsRecheckConfirm": "Re-run every open run through the current anti-cheat rules and approve the ones the rules no longer object to? Their scores go onto the leaderboard.",
+    "gameRunsRecheckNone": "Current rules cleared none of the open runs - every one still needs a human.",
     "gameRunsStatus": {
       "open": "Open",
       "dismissed": "Approved",

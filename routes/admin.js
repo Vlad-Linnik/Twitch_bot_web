@@ -23,6 +23,7 @@ const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
 const gameRunFlagsRepo = require("../db/gameRunFlagsRepo");
+const gameRunRecheck = require("../lib/gameReplay/recheck");
 const { SOLO_GAMES } = require("../lib/gameReplay");
 const gamesCatalog = require("../data/gamesCatalog");
 const { SUPPORTED_LOCALES } = require("../config/i18n");
@@ -486,6 +487,79 @@ router.post(
     }
   }
 );
+
+// Re-runs today's rules over the whole open queue and clears the rows they no
+// longer make a finding about, publishing the score each of those was holding.
+//
+// This is the counterpart to fixing a rule: a corrected constant only helps
+// submissions that have not happened yet, while every flag the broken version
+// already wrote sits in the queue waiting for a click that says nothing except
+// "the code was wrong". Deciding that once, in code, and applying it to the
+// backlog is the same judgement made once instead of N times - which is also
+// why it resolves nothing it cannot re-derive (see lib/gameReplay/recheck.js).
+//
+// Not a GET: it publishes scores.
+const RECHECK_PAGE = 100;
+const RECHECK_MAX = 1000;
+
+router.post("/admin/game-runs/recheck", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    let checked = 0;
+    let approved = 0;
+    let published = 0;
+    // Paging by a fixed skip would step over rows as it resolves them (a
+    // resolved flag leaves the `open` filter), so always take the head of the
+    // remaining queue and stop when a whole page yields nothing to resolve.
+    let skip = 0;
+    while (checked < RECHECK_MAX) {
+      const { docs } = await gameRunFlagsRepo.listFlags({ status: "open", skip, limit: RECHECK_PAGE });
+      if (docs.length === 0) break;
+      let resolvedThisPage = 0;
+      for (const flag of docs) {
+        checked++;
+        const verdict = gameRunRecheck.recheckFlag(flag);
+        if (!verdict.recheckable || !verdict.cleared) continue;
+        const ok = await gameRunFlagsRepo.reviewFlag(flag._id, {
+          status: "dismissed",
+          by: req.user.userId,
+          note: `recheck: ${flag.reasons.map((r) => r.code).join(", ")}`,
+          publishedScore: flag.heldScore ?? null,
+        });
+        // Someone resolved it by hand while this loop was running.
+        if (!ok) continue;
+        resolvedThisPage++;
+        approved++;
+        if (flag.heldScore != null) {
+          await gameScoresRepo.submitScore(
+            flag.game,
+            flag.userId,
+            flag.heldScore,
+            flag.heldDeathClimb ?? undefined
+          );
+          published++;
+        }
+      }
+      // Whatever this page left behind stays open, so step past it.
+      skip += docs.length - resolvedThisPage;
+      if (docs.length < RECHECK_PAGE) break;
+    }
+
+    // One log line for the batch, not one per row: the decision an admin made
+    // here was to press the button once.
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "gameRun.recheck",
+      target: "open",
+      details: { checked, approved, published },
+    });
+    if ((req.get("accept") || "").includes("application/json")) {
+      return res.json({ ok: true, checked, approved, published });
+    }
+    return res.redirect("/admin/game-runs");
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post(
   "/admin/game-runs/:id/reset-score",

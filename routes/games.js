@@ -500,7 +500,11 @@ async function applyVerdict(req, res, game, verdict, claimedScore, deathClimb, r
   const userId = req.user.userId;
   const previous = await gameScoresRepo.getUserBestAndRank(game, userId);
   const previousBest = previous ? previous.bestScore : null;
-  const held = !verdict.reject && verdict.reasons.length > 0;
+  // Not every finding is worth withholding a record for - see
+  // gameReplay.shouldHold(). A run flagged only for a client/server score
+  // divergence publishes immediately: the number stored is the player's own
+  // claim, which the replay has already shown to be an UNDER-statement.
+  const held = !verdict.reject && gameReplay.shouldHold(verdict.reasons);
 
   if (verdict.reasons.length) {
     await gameRunFlagsRepo.recordFlag({
@@ -511,9 +515,11 @@ async function applyVerdict(req, res, game, verdict, claimedScore, deathClimb, r
       serverElapsedMs: run ? Date.now() - run.startedAt.getTime() : null,
       simElapsedMs: verdict.simElapsedMs,
       claimedScore,
-      // storedScore is what actually reached the leaderboard, which for a
-      // held run is nothing; heldScore is what approving it would publish.
-      storedScore: null,
+      // storedScore is what this submission published, which for a held run
+      // is nothing; heldScore is what approving it would publish. A flag that
+      // holds nothing (an observational one) went straight to the leaderboard
+      // below, so it records its score here and leaves heldScore empty.
+      storedScore: held ? null : verdict.score,
       heldScore: held ? verdict.score : null,
       heldDeathClimb: held && Number.isFinite(deathClimb) ? deathClimb : null,
       previousBest,
