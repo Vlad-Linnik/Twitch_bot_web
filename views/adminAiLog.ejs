@@ -87,6 +87,24 @@
                       <% } %>
                     </p>
                   <% } %>
+                  <%# Мут ДРУГОМУ человеку по просьбе. Не наказание: бот не судил ни того, кого
+                      замутили, ни его сообщений, поэтому с punishAction это не смешивается. Отказ
+                      показывается тем же блоком - другого следа у непропущенной просьбы нет. %>
+                  <% if (r.muteSeconds) { %>
+                    <p class="text-xs mt-1 <%= r.muteRefused ? 'text-neutral-500' : 'text-orange-400' %>">
+                      <%= t('admin.ai.logMuteRequest') %>: <%= r.mutedUser || '—' %> ·
+                      <% if (r.muteSeconds < 60) { %>
+                        <%= r.muteSeconds %> <%= t('admin.ai.secondsShort') %>
+                      <% } else { %>
+                        <%= Math.round(r.muteSeconds / 60) %> <%= t('admin.ai.minutesShort') %>
+                      <% } %>
+                      <% if (r.muteRefused) { %>
+                        <span class="text-neutral-500">· <%= t('admin.ai.muteRefused.' + r.muteRefused) %></span>
+                      <% } else if (r.muteDone !== true) { %>
+                        <span class="text-neutral-500">· <%= t('admin.ai.notSent') %></span>
+                      <% } %>
+                    </p>
+                  <% } %>
                   <% if (r.punishAction === 'warn') { %>
                     <p class="text-xs text-amber-500 mt-1"><%= t('admin.ai.logPunishWarn') %></p>
                   <% } else if (r.punishAction === 'timeout' && r.timeoutSeconds) { %>

@@ -32,6 +32,17 @@
           </label>
         </div>
 
+        <%# Поимённо выданное право просить бота о муте. Стример и модераторы сюда не вписываются -
+            у них оно есть по роли. %>
+        <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.banRequesters') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.banRequestersHint') %></p>
+          <textarea name="aiBanRequesters" rows="3"
+                    placeholder="<%= t('admin.ai.banRequestersPlaceholder') %>"
+                    class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 font-mono focus:outline-none focus:border-purple-500"><%= config.ai && config.ai.banRequesters ? config.ai.banRequesters.join('\n') : '' %></textarea>
+          <p class="text-neutral-600 text-xs mt-2"><%= t('admin.ai.banRequestersMax') %>: <%= validation.MAX_BAN_REQUESTERS %></p>
+        </div>
+
         <div class="px-4 py-3">
           <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.tone') %></label>
           <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.toneHint') %></p>

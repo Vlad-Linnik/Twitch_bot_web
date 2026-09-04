@@ -1630,7 +1630,18 @@
       "promptDiffTitle": "Compare with the built-in rules",
       "promptDiffNone": "no differences",
       "promptDiffLegend": "Green is what was added here; red is what was dropped from the built-in rules. A reworded line shows as a pair - the dropped one first, then its replacement. This compares the saved text, not what is typed in the field.",
-      "logPunishFloor": "by the rapport floor"
+      "logPunishFloor": "by the rapport floor",
+      "banRequesters": "Who else may ask for a mute",
+      "banRequestersHint": "Logins separated by commas or newlines. The broadcaster and moderators need not be listed - they hold this by role. Anyone listed here can ask the bot to time out any viewer for up to 14 days, which is why the list is short and hand-kept.",
+      "banRequestersPlaceholder": "vasya\npetya",
+      "banRequestersMax": "At most this many logins",
+      "logMuteRequest": "Mute by request",
+      "muteRefused": {
+        "punished": "refused: the message itself was punished",
+        "unknown": "refused: no such login on this channel",
+        "self": "refused: asked about themselves",
+        "protected": "refused: this person cannot be muted"
+      }
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",

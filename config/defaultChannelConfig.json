@@ -137,7 +137,8 @@
   "ai": {
     "enabled": false,
     "tone": "",
-    "cheatsheet": ""
+    "cheatsheet": "",
+    "banRequesters": []
   },
   "responses": {
     "busy": [

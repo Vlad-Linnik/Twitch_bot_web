@@ -83,6 +83,7 @@ async function saveAiConfig(channelLogin, ai, updatedBy) {
         "ai.enabled": Boolean(ai.enabled),
         "ai.tone": String(ai.tone ?? ""),
         "ai.cheatsheet": String(ai.cheatsheet ?? ""),
+        "ai.banRequesters": Array.isArray(ai.banRequesters) ? ai.banRequesters : [],
         updatedAt: new Date(),
         updatedBy: String(updatedBy),
       },
