@@ -38,10 +38,6 @@
         <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.filterSize') %></div>
         <div class="text-xl font-semibold tabular-nums text-neutral-100"><%= filterCount %></div>
       </div>
-      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.hostileSize') %></div>
-        <div class="text-xl font-semibold tabular-nums <%= hostileCount ? 'text-amber-500' : 'text-neutral-100' %>"><%= hostileCount %></div>
-      </div>
     </div>
     <% if (today.requests >= config.dailyRequestLimit) { %>
       <p class="mt-3 text-sm text-amber-400"><%= t('admin.ai.limitReached') %></p>
@@ -124,83 +120,33 @@
                  class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
         </div>
 
-        <%# The channel memory the bot fills in for itself. Separate from the pairs above: those are
-            this viewer's last few exchanges, this is what the bot knows about the channel. %>
+        <%# Память, которую бот пополняет сам. Одна на всё: факты о канале и о его зрителях лежат
+            в одном списке и отбираются одинаково. %>
         <div class="px-4 py-4 flex items-center justify-between gap-4">
           <div class="min-w-0">
-            <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.channelMemoryEnabled') %></span>
-            <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.channelMemoryEnabledHint') %></p>
+            <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.memoryEnabled') %></span>
+            <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.memoryEnabledHint') %></p>
           </div>
           <label class="toggle-switch shrink-0">
-            <input type="checkbox" name="channelMemoryEnabled" <%= config.channelMemoryEnabled ? 'checked' : '' %> class="sr-only" />
+            <input type="checkbox" name="memoryEnabled" <%= config.memoryEnabled ? 'checked' : '' %> class="sr-only" />
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
         <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.channelMemoryMax') %></label>
-          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.channelMemoryMaxHint') %></p>
-          <input type="number" name="channelMemoryMax" value="<%= config.channelMemoryMax %>"
-                 min="<%= validation.BOUNDS.channelMemoryMax.min %>" max="<%= validation.BOUNDS.channelMemoryMax.max %>"
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.memoryMax') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.memoryMaxHint') %></p>
+          <input type="number" name="memoryMax" value="<%= config.memoryMax %>"
+                 min="<%= validation.BOUNDS.memoryMax.min %>" max="<%= validation.BOUNDS.memoryMax.max %>"
                  class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
         </div>
-        <%# Второе число - то самое, которое стоит денег: сколько фактов уезжает в один запрос.
-            Первое ограничивает только размер списка, который админ потом разгребает. %>
         <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.channelMemoryRecall') %></label>
-          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.channelMemoryRecallHint') %></p>
-          <input type="number" name="channelMemoryRecall" value="<%= config.channelMemoryRecall %>"
-                 min="<%= validation.BOUNDS.channelMemoryRecall.min %>" max="<%= validation.BOUNDS.channelMemoryRecall.max %>"
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.memoryRecall') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.memoryRecallHint') %></p>
+          <input type="number" name="memoryRecall" value="<%= config.memoryRecall %>"
+                 min="<%= validation.BOUNDS.memoryRecall.min %>" max="<%= validation.BOUNDS.memoryRecall.max %>"
                  class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
           <p class="text-neutral-600 text-xs mt-2">
-            <a href="/admin/ai/memory" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.channelMemoryLink') %></a>
-          </p>
-        </div>
-
-        <%# Память о зрителях. Отдельный выключатель от памяти канала, потому что это разные
-            решения: «пусть не запоминает про канал» и «пусть не запоминает про людей». %>
-        <div class="px-4 py-4 flex items-center justify-between gap-4">
-          <div class="min-w-0">
-            <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.userMemoryEnabled') %></span>
-            <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.userMemoryEnabledHint') %></p>
-          </div>
-          <label class="toggle-switch shrink-0">
-            <input type="checkbox" name="userMemoryEnabled" <%= config.userMemoryEnabled ? 'checked' : '' %> class="sr-only" />
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
-        </div>
-        <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.userMemoryMax') %></label>
-          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.userMemoryMaxHint') %></p>
-          <input type="number" name="userMemoryMax" value="<%= config.userMemoryMax %>"
-                 min="<%= validation.BOUNDS.userMemoryMax.min %>" max="<%= validation.BOUNDS.userMemoryMax.max %>"
-                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-          <p class="text-neutral-600 text-xs mt-2">
-            <a href="/admin/ai/viewers" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.userMemoryLink') %></a>
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <%# --- punishments --------------------------------------------------- %>
-    <section class="mb-12">
-      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.punishHeading') %></h2>
-      <p class="text-neutral-500 text-sm mb-4"><%= t('admin.ai.punishHint') %></p>
-      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
-        <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-2"><%= t('admin.ai.punishMode') %></label>
-          <label class="flex items-center gap-2 text-sm text-neutral-300 mb-1">
-            <input type="radio" name="punishMode" value="observe" <%= config.punishMode === 'observe' ? 'checked' : '' %> />
-            <%= t('admin.ai.punishObserve') %>
-          </label>
-          <label class="flex items-center gap-2 text-sm text-neutral-300">
-            <input type="radio" name="punishMode" value="enforce" <%= config.punishMode === 'enforce' ? 'checked' : '' %> />
-            <%= t('admin.ai.punishEnforce') %>
-          </label>
-          <p class="text-neutral-600 text-xs mt-2">
-            <%= t('admin.ai.tallySoFar') %>
-            <span class="text-green-400"><%= tally.agree %></span> /
-            <span class="text-red-400"><%= tally.disagree %></span> /
-            <span class="text-neutral-500"><%= tally.unreviewed %></span>
+            <a href="/admin/ai/memory" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.memoryLink') %></a>
           </p>
         </div>
         <div class="px-4 py-3">
@@ -210,29 +156,6 @@
                  class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
         </div>
 
-        <%# Шкала отношения стоит в разделе наказаний, а не памяти, хотя хранит она именно память:
-            видимое её действие - кто получит предупреждение вместо мута и насколько длинным будет
-            мут. Настройка, которую ищут глазами там, где смотрят на наказания. %>
-        <div class="px-4 py-4 flex items-center justify-between gap-4">
-          <div class="min-w-0">
-            <span class="text-sm font-medium text-neutral-200"><%= t('admin.ai.rapportEnabled') %></span>
-            <p class="text-neutral-600 text-xs mt-0.5"><%= t('admin.ai.rapportEnabledHint') %></p>
-          </div>
-          <label class="toggle-switch shrink-0">
-            <input type="checkbox" name="rapportEnabled" <%= config.rapportEnabled ? 'checked' : '' %> class="sr-only" />
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
-        </div>
-        <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.rapportMaxMultiplier') %></label>
-          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.rapportMaxMultiplierHint') %></p>
-          <input type="number" name="rapportMaxMultiplier" value="<%= config.rapportMaxMultiplier %>"
-                 min="<%= validation.BOUNDS.rapportMaxMultiplier.min %>" max="<%= validation.BOUNDS.rapportMaxMultiplier.max %>"
-                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
-          <p class="text-neutral-600 text-xs mt-2">
-            <a href="/admin/ai/rapport" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.tabRapport') %></a>
-          </p>
-        </div>
       </div>
     </section>
 

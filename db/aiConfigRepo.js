@@ -38,34 +38,19 @@ const DEFAULT_AI_CONFIG = {
   requestTimeoutMs: 8000,
   memoryPairs: 5,
   memoryTtlDays: 30,
-  // Whether the bot may add to a channel's memory on its own. Off leaves the memory in place and
-  // still read - it only stops new rows being written from chat.
-  channelMemoryEnabled: true,
+  // Whether the bot may add to the memory on its own. Off leaves the memory in place and still
+  // read - it only stops new rows being written from chat.
+  memoryEnabled: true,
   // How many remembered facts a channel may HOLD, and how many of them ride along with one
   // question. Two numbers rather than one because the bot no longer sends the whole memory: it
   // picks the facts whose words match what was asked (TwitchBot/shared/memoryRecall.js), so the
   // store can grow without the bill growing with it. Only the second number is spend.
-  channelMemoryMax: 200,
-  channelMemoryRecall: 10,
-  // Whether the bot may add to what it knows about individual viewers, and how many facts it may
-  // hold about one of them. ONE number here, not two: only the people in the current exchange are
-  // read back (the asker, plus anyone they named), so a per-person ceiling already bounds what one
-  // call carries. The channel memory needed a second number because its store is shared by
-  // everyone and grows past what any single question can use.
-  userMemoryEnabled: true,
-  userMemoryMax: 10,
-  // Отношение бота к конкретному зрителю: одно число от -10 до +10, которое задаёт и терпение
-  // (первое нарушение - предупреждение, второе - мут), и срок мута, и дружбу. Двигает его модель
-  // в том же вызове, что и ответ, но шаг и диапазон зажимает код бота (TwitchBot/shared/rapport.js,
-  // ручная копия - lib/rapport.js).
   //
-  // ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ, в отличие от обеих памятей. Те ничего не наказывают, а эта настройка
-  // меняет и то, кого мутят, и на сколько, - такое включают осознанно, тем же доводом, что и
-  // общий выключатель наверху.
-  rapportEnabled: false,
-  // Во сколько раз мут может стать длиннее базового timeoutSeconds на самом дне шкалы. Потолок -
-  // настройка, а наклон кривой - константа в коде: крутить его без замера можно только во вред.
-  rapportMaxMultiplier: 5,
+  // ONE store, not two. Facts about the channel and facts about its viewers live in the same
+  // list and are selected the same way; the separate viewer memory, its cross-channel pool and
+  // the relationship scale that gated who was allowed to write into it are all gone.
+  memoryMax: 200,
+  memoryRecall: 10,
   persona: "",
   // Правила целиком, если их переписали здесь. Пусто - работают встроенные из кода бота
   // (games/aiReply.js): настройка, которую не заполняли, не может означать «без правил».

@@ -77,51 +77,12 @@
                   <% if (r.forgot) { %>
                     <p class="text-xs text-neutral-500 mt-1"><%= t('admin.ai.memoryForgot') %>: <%= r.forgot %></p>
                   <% } %>
-                  <%# Шкала отношения: чем была, чем стала, и во что вылился вердикт. Без этих строк
-                      по журналу нельзя решить, стоит ли переводить режим в боевой, - не видно, кому
-                      досталось бы предупреждение, а кому мут и на сколько. Строки, записанные до
-                      появления полей, не показывают ничего: у них ответа на этот вопрос нет. %>
-                  <% if (typeof r.rapportAfter === 'number' && r.rapportAfter !== r.rapportBefore) { %>
-                    <p class="text-xs mt-1 <%= r.rapportAfter > r.rapportBefore ? 'text-emerald-500' : 'text-amber-500' %>">
-                      <%= t('admin.ai.logRapport') %>: <%= r.rapportBefore %> &rarr; <%= r.rapportAfter %>
-                    </p>
-                  <% } %>
-                  <%# Прощение. Для автора переход виден и строкой выше, для того, за кого
-                      заступились, - только здесь: его строка правится в обход обычного сдвига, и
-                      прыжок с -10 на 0 иначе необъясним. %>
-                  <% if (r.pardoned) { %>
-                    <p class="text-xs text-emerald-400 mt-1">
-                      <%= t('admin.ai.logPardon') %>: <%= r.pardoned %>
-                      <% if (typeof r.pardonAfter === 'number') { %>
-                        <span class="text-neutral-500"><%= r.pardonBefore %> &rarr; <%= r.pardonAfter %></span>
-                      <% } %>
-                    </p>
-                  <% } %>
                   <%# Тайм-аут по собственной просьбе - не наказание, поэтому и цвет другой, и с
                       punishAction он не смешивается. sent при этом остаётся true: ответ уходит. %>
                   <% if (r.selfTimeout) { %>
                     <p class="text-xs text-sky-400 mt-1">
                       <%= t('admin.ai.logSelfTimeout') %>: <%= Math.round(r.selfTimeout / 60) %> <%= t('admin.ai.minutesShort') %>
                       <% if (r.selfTimedOut !== true) { %>
-                        <span class="text-neutral-500">· <%= t('admin.ai.notSent') %></span>
-                      <% } %>
-                    </p>
-                  <% } %>
-                  <%# Мут ДРУГОМУ человеку по просьбе. Не наказание: бот не судил ни того, кого
-                      замутили, ни его сообщений, поэтому с punishAction это не смешивается. Отказ
-                      показывается тем же блоком - по нему и видно, кому правило «кто вправе
-                      просить» отказало, а другого следа у непропущенной просьбы нет. %>
-                  <% if (r.muteSeconds) { %>
-                    <p class="text-xs mt-1 <%= r.muteRefused ? 'text-neutral-500' : 'text-orange-400' %>">
-                      <%= t('admin.ai.logMuteRequest') %>: <%= r.mutedUser || '—' %> ·
-                      <% if (r.muteSeconds < 60) { %>
-                        <%= r.muteSeconds %> <%= t('admin.ai.secondsShort') %>
-                      <% } else { %>
-                        <%= Math.round(r.muteSeconds / 60) %> <%= t('admin.ai.minutesShort') %>
-                      <% } %>
-                      <% if (r.muteRefused) { %>
-                        <span class="text-neutral-500">· <%= t('admin.ai.muteRefused.' + r.muteRefused) %></span>
-                      <% } else if (r.muteDone !== true) { %>
                         <span class="text-neutral-500">· <%= t('admin.ai.notSent') %></span>
                       <% } %>
                     </p>

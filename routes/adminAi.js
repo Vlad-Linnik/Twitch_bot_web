@@ -1,6 +1,6 @@
 // Tier-0 admin pages for the AI mention replies: the global settings, the per-channel fine
 // settings that moved off the channel owner's own page, and the six tables the feature keeps -
-// filter, answer cache, channel memory, viewer memory, call journal, rapport.
+// filter, answer cache, memory, call journal.
 //
 // WHY THIS IS ADMIN-ONLY. The channel owner keeps what is theirs: the banned-word list, the reply
 // phrases, and the on/off switches for both. Everything here either spends the project's API
@@ -18,8 +18,6 @@ const aiFilterRepo = require("../db/aiFilterRepo");
 const aiCacheRepo = require("../db/aiCacheRepo");
 const aiLogRepo = require("../db/aiLogRepo");
 const aiMemoryRepo = require("../db/aiMemoryRepo");
-const aiUserMemoryRepo = require("../db/aiUserMemoryRepo");
-const aiRapportRepo = require("../db/aiRapportRepo");
 const userStatsRepo = require("../db/userStatsRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -55,13 +53,10 @@ function startOfToday() {
 
 router.get("/admin/ai", requireAdmin, async (req, res, next) => {
   try {
-    const [config, today, filterCount, hostileCount, tally] = await Promise.all([
+    const [config, today, filterCount, tally] = await Promise.all([
       aiConfigRepo.getConfig(),
       aiLogRepo.spendSince(startOfToday()),
       aiFilterRepo.count(),
-      // Сколько человек на дне шкалы. Стоит на первой странице раздела, потому что дно - это
-      // единственное место, где бот наказывает не по вердикту модели, а по решению кода.
-      aiRapportRepo.countHostile(),
       aiLogRepo.reviewTally(),
     ]);
     res.render("adminAi", {
@@ -70,7 +65,6 @@ router.get("/admin/ai", requireAdmin, async (req, res, next) => {
       config,
       today,
       filterCount,
-      hostileCount,
       tally,
       validation: aiValidation,
       // Построчная сверка действующих правил со встроенными. Сравнивается ровно тот текст, что
@@ -179,7 +173,7 @@ router.post(
       // Both halves land in the channel's own change log rather than only in the admin log: the
       // owner cannot edit these any more, but they can still see that they changed and when.
       const changes = diffConfig(existing, parsed);
-      for (const field of ["enabled", "tone", "cheatsheet", "memoryShare"]) {
+      for (const field of ["enabled", "tone", "cheatsheet"]) {
         const before = existing.ai ? existing.ai[field] : null;
         if (before !== ai[field]) {
           changes.push({ field: `ai.${field}`, before: before ?? null, after: ai[field] });
@@ -440,261 +434,6 @@ router.post("/admin/ai/memory/clear", settingsWriteLimiter, requireAdmin, verify
       details: { removed },
     });
     res.redirect(`/admin/ai/memory?channel=${encodeURIComponent(req.body.channel || "")}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// --- viewer memory ------------------------------------------------------------------------------
-
-// Что бот знает про отдельных зрителей. Отдельная страница, а не колонка на странице памяти
-// канала: разбирают тут не факт, а человека - «что бот вообще про него насобирал» - и строки
-// поэтому сгруппированы по адресату.
-//
-// Смотреть сюда может только админ, как и в память канала: строку про зрителя мог продиктовать
-// кто угодно из чата, и владельцу канала это не список фактов, а список чужих слов о его зрителях.
-router.get("/admin/ai/viewers", requireAdmin, async (req, res, next) => {
-  try {
-    const channels = await channelsRepo.listAll();
-    const selected = req.query.channel || (await defaultChannel(channels));
-    const [groups, config, channelConfig] = await Promise.all([
-      selected ? aiUserMemoryRepo.listForChannel(selected) : Promise.resolve([]),
-      aiConfigRepo.getConfig(),
-      selected ? channelConfigRepo.getConfig(selected) : Promise.resolve({}),
-    ]);
-    const channelAiEnabled = Boolean(channelConfig.ai && channelConfig.ai.enabled);
-
-    // С кем этот канал делит память о зрителях. Считается здесь, а не показывается одной галкой,
-    // потому что страница отвечает на вопрос «что бот знает про этого человека», а с включённым
-    // обменом ответ на него шире списка ниже: удаление строки здесь не трогает её двойника,
-    // записанного в соседнем чате, - там своя строка со своим автором.
-    let memoryPool = [];
-    if (channelConfig.ai && channelConfig.ai.memoryShare) {
-      const others = channels.filter((c) => c.channelLogin !== selected);
-      const otherConfigs = await Promise.all(others.map((c) => channelConfigRepo.getConfig(c.channelLogin)));
-      memoryPool = others
-        .filter((c, i) => otherConfigs[i].ai && otherConfigs[i].ai.memoryShare)
-        .map((c) => c.channelLogin);
-    }
-
-    res.render("adminAiViewers", {
-      tab: "ai",
-      aiTab: "viewers",
-      channels,
-      selected,
-      groups,
-      config,
-      channelAiEnabled,
-      memoryPool,
-      editError: req.query.error || null,
-      maxFactLen: aiUserMemoryRepo.MAX_FACT_LEN,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Добавление руками требует ника, а строка живёт под user-id: ники на Twitch меняются. Ник
-// разрешается через UserIdentities - если бот этого человека ни разу не видел, записывать факт
-// не на кого, и об этом надо сказать, а не молча ничего не сделать.
-router.post("/admin/ai/viewers", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const identity = await userStatsRepo.findUserByName(req.body.login);
-    if (!identity) {
-      return res.redirect(
-        `/admin/ai/viewers?channel=${encodeURIComponent(channel)}&error=unknownUser`
-      );
-    }
-    const subject = { userId: identity.userId, login: identity.currentUserName };
-    const key = await aiUserMemoryRepo.addManual(channel, subject, req.body.fact, req.user.login || req.user.userId);
-    if (key) {
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "ai.userMemory.add",
-        target: channel + "/" + subject.login,
-        details: { fact: String(req.body.fact || "").slice(0, aiUserMemoryRepo.MAX_FACT_LEN) },
-      });
-    }
-    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/viewers/edit", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const result = await aiUserMemoryRepo.updateFact(
-      channel,
-      req.body.userId,
-      req.body.key,
-      req.body.fact,
-      req.user.login || req.user.userId
-    );
-    if (result.ok) {
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "ai.userMemory.edit",
-        target: channel + "/" + String(req.body.userId || ""),
-        details: { before: String(req.body.key || ""), after: String(req.body.fact || "").slice(0, aiUserMemoryRepo.MAX_FACT_LEN) },
-      });
-    }
-    const failed = result.ok ? "" : "&error=" + encodeURIComponent(result.reason || "failed");
-    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}${failed}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/viewers/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    await aiUserMemoryRepo.remove(channel, req.body.userId, req.body.key);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.userMemory.delete",
-      target: channel + "/" + String(req.body.userId || ""),
-      details: { key: String(req.body.key || "") },
-    });
-    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/viewers/clear-user", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const removed = await aiUserMemoryRepo.clearUser(channel, req.body.userId);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.userMemory.clearUser",
-      target: channel + "/" + String(req.body.userId || ""),
-      details: { removed },
-    });
-    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/viewers/clear", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const removed = await aiUserMemoryRepo.clearChannel(channel);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.userMemory.clear",
-      target: channel,
-      details: { removed },
-    });
-    res.redirect(`/admin/ai/viewers?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// --- отношение к зрителям -----------------------------------------------------------------------
-
-// Страница отвечает на один вопрос: что будет этому человеку за следующее нарушение. Само число
-// шкалы без этого ответа мало о чём говорит, поэтому колонка «что будет» считается в репозитории
-// копией правил бота (lib/rapport.js) и показывается рядом со счётом.
-router.get("/admin/ai/rapport", requireAdmin, async (req, res, next) => {
-  try {
-    const channels = await channelsRepo.listAll();
-    const selected = req.query.channel || (await defaultChannel(channels));
-    const config = await aiConfigRepo.getConfig();
-    const [rows, channelConfig] = await Promise.all([
-      selected ? aiRapportRepo.listForChannel(selected, config) : Promise.resolve([]),
-      selected ? channelConfigRepo.getConfig(selected) : Promise.resolve({}),
-    ]);
-    res.render("adminAiRapport", {
-      tab: "ai",
-      aiTab: "rapport",
-      channels,
-      selected,
-      rows,
-      config,
-      channelAiEnabled: Boolean(channelConfig.ai && channelConfig.ai.enabled),
-      // Общий пул виден и здесь, но значит другое, чем на странице памяти: по нему счёт засевается
-      // ОДИН раз, при первом появлении человека на канале, а дальше строка живёт своей жизнью.
-      memoryShare: Boolean(channelConfig.ai && channelConfig.ai.memoryShare),
-      editError: req.query.error || null,
-      minScore: aiRapportRepo.MIN_SCORE,
-      maxScore: aiRapportRepo.MAX_SCORE,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Правится и существующая строка (по userId), и ещё не заведённая (по нику): выставить отношение
-// наперёд - обычное желание, а строка появляется только у того, кто дожил до платного вызова. Ник
-// разрешается через UserIdentities, как и на странице памяти: писать не на кого, если бот этого
-// человека ни разу не видел, и об этом надо сказать, а не молча ничего не сделать.
-router.post("/admin/ai/rapport/set", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    let userId = String(req.body.userId || "");
-    let login = String(req.body.login || "");
-    if (!userId) {
-      const identity = await userStatsRepo.findUserByName(login);
-      if (!identity) {
-        return res.redirect(
-          `/admin/ai/rapport?channel=${encodeURIComponent(channel)}&error=unknownUser`
-        );
-      }
-      userId = identity.userId;
-      login = identity.currentUserName;
-    }
-    const score = await aiRapportRepo.setScore(channel, userId, login, req.body.score, req.user.login || req.user.userId);
-    if (score !== null) {
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "ai.rapport.set",
-        target: channel + "/" + (login || userId),
-        details: { score },
-      });
-    }
-    res.redirect(`/admin/ai/rapport?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Удаление, а не обнуление: ноль - это осознанное «отношусь нейтрально», а отсутствие строки
-// означает, что человека здесь ещё не было, и при включённом пуле следующий его вопрос засеет счёт
-// заново из соседнего канала. Две разные кнопки нужны именно потому, что это два разных решения.
-router.post("/admin/ai/rapport/forget", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const removed = await aiRapportRepo.remove(channel, req.body.userId);
-    if (removed) {
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "ai.rapport.forget",
-        target: channel + "/" + String(req.body.login || req.body.userId || ""),
-        details: {},
-      });
-    }
-    res.redirect(`/admin/ai/rapport?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/rapport/clear", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const removed = await aiRapportRepo.clearChannel(channel);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.rapport.clear",
-      target: channel,
-      details: { removed },
-    });
-    res.redirect(`/admin/ai/rapport?channel=${encodeURIComponent(channel)}`);
   } catch (err) {
     next(err);
   }
