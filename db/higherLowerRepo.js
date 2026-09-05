@@ -102,10 +102,26 @@ async function getPool(channelLogin, mode, period) {
 // run. $sample redraws the subset every time the cache expires, so WHICH oddities are in play
 // rotates on POOL_TTL_MS instead of being fixed for the life of the process.
 //
-// The long band is sampled twice as generously because two thirds of it is thrown away afterwards
-// by hl.isLongWord - a length-only band is mostly keyboard mash.
+// The long band is sampled far more generously because most of it is thrown away afterwards by
+// hl.isLongWord: a length-only band is mostly keyboard mash and fused word pairs, and only 913 of
+// the 5,834 rows it matches on #mistercop survive. The multiplier is what keeps the band a few
+// hundred rows wide after the discard rather than the hundred a flat sample would leave; the
+// sample runs after the scan the query pays for anyway, so its size is not what the read costs.
 const RARE_SAMPLE_SIZE = 400;
-const LONG_SAMPLE_SIZE = 800;
+const LONG_SAMPLE_SIZE = 2000;
+
+// Both bands are drawn from tokens, and a token is not always a word: the tokenizer trims
+// punctuation off the ends but leaves the middle alone, so a missing space after a comma reaches
+// the index as one row. hl.isWordShaped is the whole rule (see WORD_SHAPE there for what it costs
+// each band), and it runs HERE, in JS on the sampled rows, for the reason the mash filter does:
+// the pipeline stage would be neither readable nor testable, and the rows are already in hand.
+//
+// The pool proper is deliberately left alone. Its threshold is 100 messages, and what carries
+// punctuation or digits at that count is the channel's real vocabulary - «что-то», «из-за»,
+// «пое2», «10к» - not two words stuck together.
+function keepWordShaped(rows) {
+  return rows.filter((row) => hl.isWordShaped(row.word));
+}
 
 // The rare band for one channel/period, as [{word, count}] - words the ordinary pool's threshold
 // keeps out, see hl.RARE_COUNT. Words only: the emote mode has no threshold to be under, so a
@@ -131,7 +147,8 @@ async function getRarePool(channelLogin, mode, period) {
           { $sample: { size: RARE_SAMPLE_SIZE } },
           { $project: { _id: 0, word: 1, count: 1 } },
         ])
-        .toArray();
+        .toArray()
+        .then(keepWordShaped);
     }
     // A month's rare words are not the all-time ones with small numbers: the band applies to the
     // window's own sum, so this has to group first, exactly as groupedSince does for the pool.
@@ -146,7 +163,8 @@ async function getRarePool(channelLogin, mode, period) {
         ],
         { allowDiskUse: false }
       )
-      .toArray();
+      .toArray()
+      .then(keepWordShaped);
   });
 }
 
@@ -193,7 +211,7 @@ async function getLongPool(channelLogin, mode, period) {
             )
             .toArray();
 
-    return rows.filter((row) => hl.isLongWord(row.word));
+    return rows.filter((row) => hl.isLongWord(row.word)); // hl.isWordShaped is inside this one
   });
 }
 
