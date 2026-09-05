@@ -337,6 +337,14 @@ async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFA
       // records, and Twitch's copy carries no equivalent.
       probableCause: !doc.fromTwitch && flagged.has(String(doc._id)),
       fromTwitch: Boolean(doc.fromTwitch),
+      // The partner channel this line was written in, during a Twitch shared-chat session - a
+      // numeric channel id, resolved to a name by getDossier(). Null covers three different
+      // things and none of them can be told apart here: sent in this channel, sent before the
+      // bot started recording the tag, or mirrored from Twitch - whose copy of the history
+      // carries no source-channel field at all (probed 2026-09-05: `ViewerCardModLogsChatMessage`
+      // exposes only id/sentAt/sender/content). So the badge marks what IS foreign and never
+      // claims the rest is ours.
+      sourceChannelId: !doc.fromTwitch && doc.sourceRoomId ? String(doc.sourceRoomId) : null,
     })),
     ...actionDocs.map((doc) => ({
       type: "action",
@@ -568,6 +576,31 @@ async function resolveModeratorNames(modIds) {
   return resolved;
 }
 
+// The partner channels a shared-chat line can have come from, id -> name, in one batch.
+//
+// A channel id IS a user id on Twitch, so this is the same profile cache the moderator ids go
+// through; it is kept separate from resolveModeratorNames() only because the two answer different
+// questions - a channel is never "a bot", and colouring a channel name like a moderator's would
+// make a provenance badge read as a person who acted.
+//
+// An id that fails to resolve (a deleted channel, a Helix hiccup) falls back to itself. That is
+// deliberately still enough for the badge: "this line came from somewhere else" is the fact worth
+// showing, and it does not depend on being able to name where.
+async function resolveChannelNames(channelIds) {
+  const unique = [...new Set(channelIds.map(String).filter(Boolean))];
+  if (!unique.length) return {};
+  const profiles = await profileCacheRepo.getOrFetchProfiles(unique);
+  const resolved = {};
+  for (const id of unique) {
+    const profile = profiles.get(id);
+    resolved[id] = {
+      login: profile?.login || null,
+      displayName: profile?.displayName || profile?.login || id,
+    };
+  }
+  return resolved;
+}
+
 // The whole dossier for one case, in one call.
 //
 // Takes the UnbanRequests document rather than a bare userId because half the dossier now lives on
@@ -621,16 +654,19 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
 
   // Comment authors carry their own display name and chat colour from Twitch, so only the log's
   // and the last ban's moderator ids need resolving through the profile cache.
-  const moderators = await resolveModeratorNames([
-    ...(lastBan ? [lastBan.modID] : []),
-    ...(activeStrike?.modId ? [activeStrike.modId] : []),
-    ...log.entries.filter((e) => e.type === "action").map((e) => e.modId),
-    // Twitch-sourced rows already carry a display name, but their modId still resolves the chat
-    // colour and the bot mark; a row from our own records has nothing but the id.
-    ...actions.map((a) => a.modId).filter(Boolean),
-    // Whoever lifted a punishment is often not whoever issued it - that contrast is half of why the
-    // lifting is shown at all, so their id needs resolving too.
-    ...actions.map((a) => a.followUp?.modId).filter(Boolean),
+  const [moderators, sourceChannels] = await Promise.all([
+    resolveModeratorNames([
+      ...(lastBan ? [lastBan.modID] : []),
+      ...(activeStrike?.modId ? [activeStrike.modId] : []),
+      ...log.entries.filter((e) => e.type === "action").map((e) => e.modId),
+      // Twitch-sourced rows already carry a display name, but their modId still resolves the chat
+      // colour and the bot mark; a row from our own records has nothing but the id.
+      ...actions.map((a) => a.modId).filter(Boolean),
+      // Whoever lifted a punishment is often not whoever issued it - that contrast is half of why
+      // the lifting is shown at all, so their id needs resolving too.
+      ...actions.map((a) => a.followUp?.modId).filter(Boolean),
+    ]),
+    resolveChannelNames(log.entries.map((e) => e.sourceChannelId).filter(Boolean)),
   ]);
 
   return {
@@ -681,6 +717,10 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     // subscribed". See TwitchBot/twitch/viewerCardModLogs.js for why this isn't a boolean.
     subscription: unbanCase?.twitchModLogs?.subscription || null,
     moderators,
+    // id -> {login, displayName} for every partner channel appearing in this log page. Empty on
+    // the overwhelming majority of cases, which is what it should be: shared chat is an occasional
+    // arrangement, not a property of the channel.
+    sourceChannels,
   };
 }
 
@@ -747,9 +787,21 @@ async function getCaseBrief(channelLogin, unbanCase) {
     getDossier(channelLogin, unbanCase, { limit: budget.logLimit }),
     getPunishmentContexts(channelLogin, unbanCase, { perAction: budget.perAction, maxActions: budget.maxActions }),
   ]);
+  // The context windows are their own getLogPage() calls, so a partner channel can appear there
+  // and nowhere in the dossier's own page - getDossier() resolved only what it saw. Topped up here
+  // rather than inside buildCaseBrief(), which stays pure: without the name the brief would have
+  // to print a bare channel id at an agent that has no way to look it up.
+  const contextChannelIds = contexts.flatMap((ctx) =>
+    (ctx.messages || []).map((m) => m.sourceChannelId).filter(Boolean)
+  );
+  const missing = contextChannelIds.filter((id) => !dossier.sourceChannels[id]);
+  const sourceChannels = missing.length
+    ? { ...dossier.sourceChannels, ...(await resolveChannelNames(missing)) }
+    : dossier.sourceChannels;
+
   return buildCaseBrief({
     request: unbanCase,
-    dossier,
+    dossier: { ...dossier, sourceChannels },
     contexts,
     channelLogin,
     recentMessages: budget.recentMessages,

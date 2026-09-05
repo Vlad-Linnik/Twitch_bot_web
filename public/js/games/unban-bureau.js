@@ -1024,6 +1024,22 @@
         if (entry.reason) body.appendChild(document.createTextNode(" — " + entry.reason));
         row.appendChild(body);
       } else {
+        // A line written in a partner channel while the two chats were merged (Twitch shared
+        // chat). It goes BEFORE the text, like the timestamp: it says where the applicant was
+        // standing, and a mark at the end of a long message is read after the message has already
+        // been judged. Deliberately not in the flagged colour - this is provenance, not an
+        // accusation.
+        //
+        // Absence proves nothing: the bot only started recording the source channel in
+        // 2026-09, and Twitch's own mirrored history carries no such field at all.
+        if (entry.sourceChannelId) {
+          var source = (dossier.sourceChannels || {})[entry.sourceChannelId] || {};
+          row.appendChild(el(
+            "span",
+            "ub-log-source",
+            T.logSharedChat.replace("{{channel}}", source.displayName || source.login || entry.sourceChannelId)
+          ));
+        }
         var textSpan = el("span", null, null);
         appendWithEmotes(textSpan, entry.text);
         row.appendChild(textSpan);
@@ -1301,6 +1317,11 @@
           payload.messages.forEach(function (message) {
             var line = el("div", "ub-context-line" + (message.flagged ? " ub-log-flagged" : ""));
             line.appendChild(el("span", "ub-log-time", fmtTime(message.timestamp)));
+            // Same shared-chat mark the main log carries, or the two views would disagree about
+            // the same message - see renderLog().
+            if (message.sourceChannel) {
+              line.appendChild(el("span", "ub-log-source", T.logSharedChat.replace("{{channel}}", message.sourceChannel)));
+            }
             line.appendChild(el("span", null, message.message));
             popup.appendChild(line);
           });

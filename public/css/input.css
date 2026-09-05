@@ -1206,6 +1206,20 @@ html.js .save-fab.save-visible {
   letter-spacing: 0.04em;
   color: #f87171;
 }
+/* Provenance, not an accusation: a line the applicant wrote in a partner channel
+   while Twitch shared chat merged the two. Sits before the text and stays out of
+   the flagged red, or "written elsewhere" would read as "and that is why they
+   were banned". */
+.ub-log-source {
+  margin-right: 0.4rem;
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  background: rgb(59 130 246 / 0.15); /* blue-500 */
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: #93c5fd; /* blue-300 */
+  white-space: nowrap;
+}
 
 /* --- chat vote bar -------------------------------------------------------- */
 

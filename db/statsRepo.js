@@ -290,6 +290,12 @@ async function getModActionContext(channelLogin, actionId) {
     message: doc.message,
     timestamp: doc.timestamp,
     flagged: flaggedId ? String(doc._id) === flaggedId : i === docs.length - 1,
+    // Twitch shared chat: the partner channel this line was actually written in, as a numeric
+    // channel id the caller resolves to a name. Absent on everything sent here AND on every row
+    // written before the bot started recording the tag, so its presence is the only claim it
+    // makes. Left unresolved on purpose - this module answers from `messages` and `modLogs` alone,
+    // and the route already has the profile cache.
+    sourceChannelId: doc.sourceRoomId ? String(doc.sourceRoomId) : null,
   }));
 
   return { available: true, messages: result };

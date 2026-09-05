@@ -545,6 +545,23 @@ router.get("/:channel/mod-action-context.json", requireLevelJson(2), statsReadLi
 
     const context = await statsRepo.getModActionContext(channel.channelLogin, req.query.id);
     if (!context) return res.status(404).json({ error: "unknown_action" });
+
+    // A line written in a partner channel during a Twitch shared-chat session carries that
+    // channel's id and nothing else; a channel id is a user id, so the same profile cache that
+    // names moderators names it here. Usually there is nothing to resolve at all, hence the guard
+    // rather than an unconditional batch call.
+    const sourceIds = (context.messages || []).map((m) => m.sourceChannelId).filter(Boolean);
+    if (sourceIds.length) {
+      const profiles = await profileCacheRepo.getOrFetchProfiles([...new Set(sourceIds)]);
+      for (const message of context.messages) {
+        if (!message.sourceChannelId) continue;
+        const profile = profiles.get(message.sourceChannelId);
+        // Falls back to the id: "written elsewhere" is the fact worth showing, and it does not
+        // depend on being able to name where.
+        message.sourceChannel =
+          profile?.displayName || profile?.login || message.sourceChannelId;
+      }
+    }
     res.json(context);
   } catch (err) {
     next(err);

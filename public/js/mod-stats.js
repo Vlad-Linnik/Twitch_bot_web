@@ -551,7 +551,18 @@
       const text = document.createElement("span");
       text.className = item.flagged ? "text-xs text-neutral-100" : "text-xs text-neutral-300";
       text.textContent = item.message;
-      row.append(time, text);
+      row.append(time);
+      // Twitch shared chat: the applicant wrote this in a partner channel, not here. Shown before
+      // the text, in a colour of its own, so it can't be read as part of what was said - and so a
+      // moderator does not judge a line that was never addressed to this chat. Only ever present
+      // on lines recorded after the bot started reading the tag.
+      if (item.sourceChannel) {
+        const source = document.createElement("span");
+        source.className = "text-[10px] text-blue-300 bg-blue-500/15 rounded px-1 mr-1.5 whitespace-nowrap";
+        source.textContent = (panel.dataset.labelShared || "").replace("{{channel}}", item.sourceChannel);
+        row.append(source);
+      }
+      row.append(text);
       list.append(row);
     }
     panel.append(list);
