@@ -9,6 +9,7 @@
 // best - it's expected to go down as well as up, and a missing doc means
 // "hasn't finished a rated game yet" rather than "no attempts logged".
 const { connectWeb } = require("./connection");
+const { COMPOSITE_SCORE_KEYS } = require("../lib/gameScoreKeys");
 
 let collection;
 
@@ -144,12 +145,6 @@ async function getDeathMarksPage(game, afterClimb, limit, excludeUserId) {
   return col.find(query).sort({ deathClimb: 1 }).limit(limit).toArray();
 }
 
-// Distinct-player counts per game (one doc per (game, userId), so this counts
-// how many different players have saved at least one score/rating for that
-// game) - backs the admin panel's "most popular games" ranking. It's a
-// players-ever proxy, not a total-plays counter: nothing here records repeat
-// sessions, and Durak's vs-computer mode never reaches this collection at all
-// (see public/js/games/durak.js), so it can never appear in the ranking.
 // Removes one player's score for one solo game - the corrective action behind
 // /admin/game-runs when a flagged run turns out to be a forgery.
 //
@@ -167,9 +162,31 @@ async function deleteUserScore(game, userId) {
   return result.deletedCount > 0;
 }
 
+// Distinct players per GAME - backs the admin panel's "most popular games" ranking. A
+// players-ever proxy, not a total-plays counter: nothing here records repeat sessions (that is
+// db/gameSessionStatsRepo.js), and Durak's vs-computer mode never reaches this collection at all
+// (see public/js/games/durak.js), so it can never appear in the ranking.
+//
+// Per game is not the same as per document: a game whose boards are split by mode/channel
+// (lib/gameScoreKeys.js) has one doc per board a player ranked on, so the keys are folded first
+// and the count is taken over distinct userIds - summing the boards would count someone who
+// played two channels twice. The fold is expressed as a $cond chain over the same table the JS
+// side reads, so the rule has one home.
 async function getGameCounts() {
   const col = await ensureInitialized();
-  return col.aggregate([{ $group: { _id: "$game", count: { $sum: 1 } } }, { $sort: { count: -1 } }]).toArray();
+  const gameId = COMPOSITE_SCORE_KEYS.reduce(
+    (fallback, { prefix, gameId: id }) => ({
+      $cond: [{ $eq: [{ $indexOfCP: ["$game", prefix] }, 0] }, id, fallback],
+    }),
+    "$game"
+  );
+  return col
+    .aggregate([
+      { $group: { _id: { game: gameId, userId: "$userId" } } },
+      { $group: { _id: "$_id.game", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ])
+    .toArray();
 }
 
 module.exports = {

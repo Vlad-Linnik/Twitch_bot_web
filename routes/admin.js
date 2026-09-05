@@ -290,15 +290,23 @@ router.post("/admin/settings-log/:id/delete", settingsWriteLimiter, requireAdmin
 
 const VISITS_CHART_DAYS = 30;
 
-// Maps a GameScores `game` key to the same display name already used on its own
-// /games/* page - durak-multiplayer has no per-game page of its own (it's a mode
-// within /games/durak), so it gets its own admin-only label instead.
-const GAME_LABEL_KEYS = {
-  "falling-blocks": "games.fallingBlocks.name",
-  "pipe-dodger": "games.pipeDodger.name",
-  "2048": "games.2048.name",
+// A game's display name here is the one its own /games/* card already uses, looked up in the
+// catalog rather than copied - a second list of names drifts, and the missing entries showed as
+// raw keys ("match-3") next to translated ones. Only keys with no card of their own need a label
+// here: a multiplayer ranking is a mode within a game's page, not a separate card. Durak's says
+// which of its two modes it is, because vs-computer keeps its own key alongside; Sunduchki has
+// only the one mode, so its card's name is already the whole answer.
+const EXTRA_GAME_LABEL_KEYS = {
   "durak-multiplayer": "admin.gameDurakOnline",
+  "sunduchki-multiplayer": "games.sunduchki.name",
 };
+
+const CATALOG_NAME_KEYS = new Map(gamesCatalog.map((g) => [g.id, g.nameKey]));
+
+function gameLabel(t, key) {
+  const nameKey = CATALOG_NAME_KEYS.get(key) || EXTRA_GAME_LABEL_KEYS[key];
+  return nameKey ? t(nameKey) : key;
+}
 
 // Named "/admin/visits", not "/admin/statistics" - routes/statistics.js already owns a
 // "/:channel/statistics" route mounted earlier in routes/index.js, which would otherwise swallow
@@ -327,7 +335,7 @@ router.get("/admin/visits", requireAdmin, async (req, res, next) => {
     const games = [...gameKeys]
       .map((key) => ({
         key,
-        label: GAME_LABEL_KEYS[key] ? res.locals.t(GAME_LABEL_KEYS[key]) : key,
+        label: gameLabel(res.locals.t, key),
         players: playersByGame.get(key) || 0,
         sessions: sessionsByGame.get(key) || 0,
         pct: Math.round(((sessionsByGame.get(key) || 0) / maxSessions) * 100),

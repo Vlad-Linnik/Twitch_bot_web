@@ -24,6 +24,7 @@ const { buildLeaderboard } = require("../db/gameLeaderboard");
 const emoteImages = require("../twitch/emoteImages");
 const { pickUsedEmotes } = require("../lib/chatEmotes");
 const hl = require("../lib/higherLower");
+const { HIGHER_LOWER_SCORE_PREFIX } = require("../lib/gameScoreKeys");
 const { verifyToken } = require("../middleware/csrf");
 const { createSimpleLimiter, statsReadLimiter } = require("../middleware/rateLimiters");
 
@@ -35,9 +36,10 @@ const router = express.Router();
 // month mode keeps a personal best in the browser instead.
 //
 // A channel login is [a-z0-9_], so it can never be confused with the mode segment in this key.
-// Note the consequence: /admin's per-game score counts (gameScoresRepo.getGameCounts) list one row
-// per channel here rather than one for the game.
-const scoreKeyFor = (mode, channelLogin) => `higher-lower-${mode}-${channelLogin}`;
+// The prefix comes from lib/gameScoreKeys.js rather than being spelled out here, because that is
+// also what folds these keys back into one game wherever the question is "which game is this"
+// (the admin panel's per-game figures) rather than "which board is this".
+const scoreKeyFor = (mode, channelLogin) => `${HIGHER_LOWER_SCORE_PREFIX}${mode}-${channelLogin}`;
 const CATALOG_ID = "higher-lower";
 
 // A round is one small request; a run is a few dozen of them. Generous enough that fast play
