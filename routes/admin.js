@@ -19,6 +19,9 @@ const diskUsageRepo = require("../db/diskUsageRepo");
 const { computeDiskUsageTrends } = require("../lib/diskUsageAnalysis");
 const memoryUsageRepo = require("../db/memoryUsageRepo");
 const { computeMemoryTrends, downsampleSeries } = require("../lib/memoryUsageAnalysis");
+const requestTimingRepo = require("../db/requestTimingRepo");
+const requestTiming = require("../lib/requestTiming");
+const env = require("../config/env");
 const gameScoresRepo = require("../db/gameScoresRepo");
 const gameSessionStatsRepo = require("../db/gameSessionStatsRepo");
 const gameCatalogRepo = require("../db/gameCatalogRepo");
@@ -385,6 +388,51 @@ router.get("/admin/memory", requireAdmin, async (req, res, next) => {
       days,
       windows: MEMORY_WINDOWS,
       sampleCount: samples.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Slow requests ----------------------------------------------------------
+// What middleware/requestTiming.js collected: per-route percentiles over EVERY request (from
+// hourly histograms, see lib/requestTiming.js) and the individual requests over the threshold.
+// Clicking a route narrows the second list to it. The window cannot reach past the hourly rows'
+// retention, and the slow-row list is additionally bounded by its own shorter one.
+const SLOW_REQUEST_WINDOWS = [1, 7, 30];
+const SLOW_REQUEST_DEFAULT_DAYS = 1;
+const SLOW_REQUEST_ROUTE_LIMIT = 60;
+const SLOW_REQUEST_LIST_LIMIT = 100;
+
+router.get("/admin/slow-requests", requireAdmin, async (req, res, next) => {
+  try {
+    const requestedDays = Number(req.query.days);
+    const days = SLOW_REQUEST_WINDOWS.includes(requestedDays) ? requestedDays : SLOW_REQUEST_DEFAULT_DAYS;
+    const sortBy = requestTiming.SORT_KEYS.includes(req.query.sort) ? req.query.sort : "p95";
+    // Only ever compared for equality against stored labels, never echoed into a query operator.
+    const routeFilter = typeof req.query.route === "string" && req.query.route.length <= 300 ? req.query.route : null;
+
+    const [hourlyRows, slowRows, slowTotal] = await Promise.all([
+      requestTimingRepo.getHourlyRows(days),
+      requestTimingRepo.getRecentSlow({ days, route: routeFilter, limit: SLOW_REQUEST_LIST_LIMIT }),
+      requestTimingRepo.countSlow(days),
+    ]);
+    const routes = requestTiming.summarizeRoutes(hourlyRows, { sortBy, limit: SLOW_REQUEST_ROUTE_LIMIT });
+    const totalRequests = hourlyRows.reduce((sum, r) => sum + (r.count || 0), 0);
+
+    res.render("adminSlowRequests", {
+      tab: "slow-requests",
+      days,
+      windows: SLOW_REQUEST_WINDOWS,
+      sortBy,
+      sortKeys: requestTiming.SORT_KEYS,
+      routeFilter,
+      routes,
+      totalRequests,
+      slowRows,
+      slowTotal,
+      thresholdMs: env.slowRequestMs,
+      slowRetentionDays: requestTimingRepo.SLOW_RETENTION_DAYS,
     });
   } catch (err) {
     next(err);

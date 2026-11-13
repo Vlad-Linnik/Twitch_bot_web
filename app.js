@@ -11,6 +11,7 @@ const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
 const csrf = require("./middleware/csrf");
 const siteVisits = require("./middleware/siteVisits");
+const requestTiming = require("./middleware/requestTiming");
 const safeJson = require("./lib/safeJson");
 
 // sessionMiddleware is built once in index.js and passed in, rather than each
@@ -26,6 +27,9 @@ function createApp(sessionMiddleware) {
 
   app.set("view engine", "ejs");
   app.set("views", path.join(__dirname, "views"));
+
+  // First, so the measured time covers every middleware below - see middleware/requestTiming.js.
+  app.use(requestTiming);
 
   // Per-request CSP nonce for the two inline <script>s in views/partials/head.ejs.
   // Must be mounted BEFORE helmet: its script-src directive function reads this

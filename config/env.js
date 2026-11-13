@@ -72,6 +72,11 @@ const env = {
   // would be absurd. The endpoint that spends them is rate-limited per moderator and refuses a
   // case that already has a sheet.
   geminiApiKey: process.env.GEMINI_API_KEY || null,
+
+  // A request at least this slow (ms, measured to the last byte) is kept as its own row with a
+  // breakdown on /admin/slow-requests (middleware/requestTiming.js). Every request is counted in
+  // the per-route percentiles regardless; this only decides which ones are worth a closer look.
+  slowRequestMs: parseInt(process.env.SLOW_REQUEST_MS, 10) || 1000,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
 };
 

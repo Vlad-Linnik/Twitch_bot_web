@@ -1,0 +1,190 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabSlowRequests') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const stampFmt = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const numFmt = new Intl.NumberFormat(dateLocale);
+
+  function fmtMs(ms) {
+    if (ms === null || ms === undefined || !isFinite(ms)) return '—';
+    if (ms >= 1000) return (ms / 1000).toFixed(ms >= 10000 ? 1 : 2) + ' ' + t('admin.slowReqUnitS');
+    return (ms >= 10 ? Math.round(ms) : ms.toFixed(1)) + ' ' + t('admin.slowReqUnitMs');
+  }
+  // Red at or past the threshold, amber from half of it - the same scale as the slow-row list,
+  // so a red p95 means "most of what you see in the list below is this route".
+  function msTone(ms) {
+    if (ms === null || ms === undefined) return 'text-neutral-500';
+    if (ms >= thresholdMs) return 'text-red-400';
+    if (ms >= thresholdMs / 2) return 'text-amber-400';
+    return 'text-neutral-300';
+  }
+  function pageHref(overrides) {
+    const params = Object.assign({ days: days, sort: sortBy, route: routeFilter }, overrides);
+    const qs = Object.keys(params)
+      .filter(function (k) { return params[k] !== null && params[k] !== undefined && params[k] !== ''; })
+      .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+      .join('&');
+    return '/admin/slow-requests' + (qs ? '?' + qs : '');
+  }
+  const sortColumns = { count: 'admin.slowReqColCount', p50: 'admin.slowReqColP50', p95: 'admin.slowReqColP95', max: 'admin.slowReqColMax', total: 'admin.slowReqColTotal' };
+%>
+
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <section>
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+      <p class="text-xs text-neutral-600 max-w-2xl"><%= t('admin.slowReqIntro') %></p>
+      <div class="flex items-center gap-1 shrink-0">
+        <span class="text-[11px] text-neutral-600 mr-1"><%= t('admin.memoryWindow') %></span>
+        <% windows.forEach(function (w) { %>
+          <a href="<%= pageHref({ days: w }) %>"
+             class="px-2 py-1 rounded text-xs tabular-nums transition-colors <%= w === days ? 'bg-purple-500/20 text-purple-300' : 'text-neutral-500 hover:text-neutral-300' %>">
+            <%= w %><%= t('admin.memoryWindowDays') %>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.slowReqTileRequests') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= numFmt.format(totalRequests) %></p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.slowReqTileSlow') %></p>
+        <p class="text-xl font-semibold tabular-nums <%= slowTotal ? 'text-amber-400' : 'text-neutral-100' %>"><%= numFmt.format(slowTotal) %></p>
+        <p class="text-[11px] text-neutral-600">
+          <%= totalRequests ? ((slowTotal / totalRequests) * 100).toFixed(2) + '%' : '—' %>
+          <% if (days > slowRetentionDays) { %> · <%= t('admin.slowReqRetention', { days: slowRetentionDays }) %><% } %>
+        </p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.slowReqTileThreshold') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= fmtMs(thresholdMs) %></p>
+        <p class="text-[11px] text-neutral-600">SLOW_REQUEST_MS</p>
+      </div>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+        <p class="text-xs text-neutral-500"><%= t('admin.slowReqTileRoutes') %></p>
+        <p class="text-xl font-semibold text-neutral-100 tabular-nums"><%= numFmt.format(routes.length) %></p>
+      </div>
+    </div>
+
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.slowReqRoutesHeading') %></h2>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.slowReqRoutesIntro') %></p>
+
+    <% if (!routes.length) { %>
+      <p class="text-sm text-neutral-500 mb-10"><%= t('admin.slowReqEmpty') %></p>
+    <% } else { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 overflow-x-auto mb-10">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[11px] text-neutral-500 border-b border-neutral-800">
+              <th class="px-4 py-2 font-medium"><%= t('admin.slowReqColRoute') %></th>
+              <% Object.keys(sortColumns).forEach(function (key) { %>
+                <th class="px-3 py-2 font-medium text-right whitespace-nowrap">
+                  <a href="<%= pageHref({ sort: key }) %>" class="<%= sortBy === key ? 'text-purple-300' : 'hover:text-neutral-300' %>">
+                    <%= t(sortColumns[key]) %><% if (sortBy === key) { %> ↓<% } %>
+                  </a>
+                </th>
+              <% }) %>
+              <th class="px-3 py-2 font-medium text-right whitespace-nowrap" title="<%= t('admin.slowReqColDbHint') %>"><%= t('admin.slowReqColDb') %></th>
+              <th class="px-3 py-2 font-medium text-right whitespace-nowrap"><%= t('admin.slowReqColRender') %></th>
+              <th class="px-3 py-2 font-medium text-right whitespace-nowrap">5xx</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% routes.forEach(function (r) { %>
+              <tr class="border-b border-neutral-900 last:border-0 <%= routeFilter === r.route ? 'bg-purple-500/5' : '' %>">
+                <td class="px-4 py-2 text-neutral-200 font-mono text-xs">
+                  <a href="<%= pageHref({ route: r.route }) %>#slow-list" class="hover:text-purple-300">
+                    <span class="text-neutral-500"><%= r.method %></span> <%= r.route %>
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right text-neutral-400 tabular-nums whitespace-nowrap"><%= numFmt.format(r.count) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap <%= msTone(r.p50) %>"><%= fmtMs(r.p50) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap <%= msTone(r.p95) %>"><%= fmtMs(r.p95) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap <%= msTone(r.max) %>"><%= fmtMs(r.max) %></td>
+                <td class="px-3 py-2 text-right text-neutral-400 tabular-nums whitespace-nowrap"><%= fmtMs(r.totalMs) %></td>
+                <td class="px-3 py-2 text-right text-neutral-400 tabular-nums whitespace-nowrap">
+                  <%= fmtMs(r.avgDbMs) %>
+                  <span class="text-[11px] text-neutral-600">×<%= r.avgDbCount.toFixed(1) %></span>
+                </td>
+                <td class="px-3 py-2 text-right text-neutral-400 tabular-nums whitespace-nowrap"><%= fmtMs(r.avgRenderMs) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap <%= r.errors ? 'text-red-400' : 'text-neutral-600' %>"><%= r.errors %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
+    <div id="slow-list" class="flex flex-wrap items-baseline justify-between gap-3 mb-1">
+      <h2 class="text-lg font-semibold text-neutral-100"><%= t('admin.slowReqListHeading', { threshold: fmtMs(thresholdMs) }) %></h2>
+      <% if (routeFilter) { %>
+        <p class="text-xs text-neutral-500">
+          <%= t('admin.slowReqFilteredBy') %> <span class="font-mono text-neutral-300"><%= routeFilter %></span>
+          · <a href="<%= pageHref({ route: null }) %>#slow-list" class="text-purple-300 hover:underline"><%= t('admin.slowReqClearFilter') %></a>
+        </p>
+      <% } %>
+    </div>
+    <p class="text-xs text-neutral-600 mb-4"><%= t('admin.slowReqListIntro') %></p>
+
+    <% if (!slowRows.length) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.slowReqListEmpty') %></p>
+    <% } else { %>
+      <div class="rounded-lg border border-neutral-800 bg-neutral-900/60 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[11px] text-neutral-500 border-b border-neutral-800">
+              <th class="px-4 py-2 font-medium"><%= t('admin.slowReqColWhen') %></th>
+              <th class="px-3 py-2 font-medium"><%= t('admin.slowReqColRoute') %></th>
+              <th class="px-3 py-2 font-medium text-right"><%= t('admin.slowReqColStatus') %></th>
+              <th class="px-3 py-2 font-medium text-right"><%= t('admin.slowReqColTime') %></th>
+              <th class="px-3 py-2 font-medium text-right" title="<%= t('admin.slowReqColTtfbHint') %>"><%= t('admin.slowReqColTtfb') %></th>
+              <th class="px-3 py-2 font-medium text-right" title="<%= t('admin.slowReqColDbHint') %>"><%= t('admin.slowReqColDb') %></th>
+              <th class="px-3 py-2 font-medium text-right"><%= t('admin.slowReqColRender') %></th>
+              <th class="px-3 py-2 font-medium text-right" title="<%= t('admin.slowReqColOtherHint') %>"><%= t('admin.slowReqColOther') %></th>
+              <th class="px-4 py-2 font-medium"><%= t('admin.slowReqColTopDb') %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% slowRows.forEach(function (s) {
+                 const other = Math.max(0, s.totalMs - (s.dbMs || 0) - (s.renderMs || 0)); %>
+              <tr class="border-b border-neutral-900 last:border-0 align-top">
+                <td class="px-4 py-2 text-neutral-500 text-xs whitespace-nowrap tabular-nums"><%= stampFmt.format(s.at) %></td>
+                <td class="px-3 py-2 text-neutral-200 font-mono text-xs whitespace-nowrap">
+                  <span class="text-neutral-500"><%= s.method %></span> <%= s.route %>
+                  <% if (s.aborted) { %><span class="ml-1 text-[10px] uppercase text-amber-400"><%= t('admin.slowReqAborted') %></span><% } %>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap <%= s.status >= 500 ? 'text-red-400' : s.status >= 400 ? 'text-amber-400' : 'text-neutral-400' %>"><%= s.status %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold <%= msTone(s.totalMs) %>"><%= fmtMs(s.totalMs) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap text-neutral-400"><%= fmtMs(s.ttfbMs) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap text-neutral-400 whitespace-nowrap">
+                  <%= fmtMs(s.dbMs) %> <span class="text-[11px] text-neutral-600">×<%= s.dbCount %></span>
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap text-neutral-400"><%= fmtMs(s.renderMs) %></td>
+                <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap text-neutral-400"><%= fmtMs(other) %></td>
+                <td class="px-4 py-2 text-xs text-neutral-500">
+                  <% (s.dbOps || []).forEach(function (op) { %>
+                    <div class="whitespace-nowrap">
+                      <span class="tabular-nums text-neutral-300"><%= fmtMs(op.ms) %></span>
+                      <%= op.op %><% if (op.coll) { %> <span class="font-mono text-neutral-400"><%= op.coll %></span><% } %>
+                      <% if (op.failed) { %><span class="text-red-400">✕</span><% } %>
+                    </div>
+                  <% }) %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

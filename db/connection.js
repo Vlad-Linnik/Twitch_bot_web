@@ -1,7 +1,10 @@
 const { MongoClient } = require("mongodb");
 const env = require("../config/env");
 
-const client = new MongoClient(env.mongoUri);
+// monitorCommands makes the driver emit commandStarted/Succeeded/Failed, which is how
+// middleware/requestTiming.js attributes Mongo time to the request that caused it. No listener,
+// no work beyond building the event object.
+const client = new MongoClient(env.mongoUri, { monitorCommands: true });
 let db;
 let webDb;
 
