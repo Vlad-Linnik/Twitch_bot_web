@@ -54,6 +54,33 @@ article.post-card {
   contain: layout;
 }
 
+/* The channel media sections (views/mediaGrid.ejs, mediaItem.ejs and their partials) draw every
+   colour and shape that makes a section look like itself from these variables, set by a class on
+   <main> (routes/movies.js and routes/gamesStream.js pick the theme). Films: gold on warm black,
+   2:3 posters with soft corners. Games: cyan on cold slate, 3:4 box art with tight corners - Twitch's
+   own category art is 3:4, and a game shelf should not read as a film shelf. The values are plain
+   colours, not Tailwind variables, so they exist whether or not a given utility is used anywhere. */
+.media-theme-movies {
+  --sec-accent: #fbbf24;
+  --sec-accent-strong: #fcd34d;
+  --sec-accent-soft: #fde68a;
+  --sec-surface: #1c1917;
+  --sec-base: #0c0a09;
+  --sec-aspect: 2 / 3;
+  --sec-radius: 0.75rem;
+  --sec-radius-lg: 1rem;
+}
+.media-theme-games {
+  --sec-accent: #22d3ee;
+  --sec-accent-strong: #67e8f9;
+  --sec-accent-soft: #a5f3fc;
+  --sec-surface: #0f172a;
+  --sec-base: #020617;
+  --sec-aspect: 3 / 4;
+  --sec-radius: 0.375rem;
+  --sec-radius-lg: 0.5rem;
+}
+
 /* Same shared-element morph, for /<channel>/settings's quick-link cards (views/settings.ejs,
    data-vt-name="settings-heading" - public/js/page-transitions.js) into whichever sub-page's own
    heading (channelCustomCommandsSettings.ejs, channelVariablesSettings.ejs, channelSpamSignatures.ejs,

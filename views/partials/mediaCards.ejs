@@ -1,7 +1,8 @@
 <%#
-  A run of grid tiles (movies now, games later) - the first portion of the grid and every portion
+  A run of grid tiles (movies and games) - the first portion of the grid and every portion
   list.json returns, so a tile loaded on scroll is the same markup as one rendered first.
-  Expects: cards (routes/movies.js's shapeCard), channel, section, csrf.
+  Expects: cards (routes/mediaSection.js's shapeCard), channel, section, csrf, sec/st (the section's
+  view config and translator, set by the router).
 
   A suggestion's tile also gets the promote/not-now control (partials/suggestionVote.ejs) under it,
   outside the link - a form inside an <a> is invalid and would swallow the click. A planned
@@ -16,13 +17,13 @@
   (lib/mediaImage.js's gridPosterUrl) - the grid's HTML does not contain the normal URL at all.
   The [data-list-item] wrapper is public/js/infinite-list.js's anchor for "back".
 %>
-<% const typeLabel = (c) => c.mediaType ? t('movies.type.' + c.mediaType) : ''; %>
+<% const typeLabel = (c) => c.mediaType ? st('type.' + c.mediaType) : ''; %>
 <% cards.forEach(function(card) { %>
   <div data-list-item="<%= card.id %>">
     <a href="/<%= channel.channelLogin %>/<%= section %>/<%= card.id %>"
-       class="group block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-400">
-      <div class="relative aspect-[2/3] rounded-xl overflow-hidden bg-stone-900 shadow-lg shadow-black/40 ring-1 ring-white/5
-                  transition duration-200 group-hover:-translate-y-1 group-hover:ring-amber-400/70 group-hover:shadow-amber-500/10">
+       class="group block rounded-(--sec-radius) focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--sec-accent)">
+      <div class="relative aspect-(--sec-aspect) rounded-(--sec-radius) overflow-hidden bg-(--sec-surface) shadow-lg shadow-black/40 ring-1 ring-white/5
+                  transition duration-200 group-hover:-translate-y-1 group-hover:ring-(--sec-accent)/70 group-hover:shadow-(--sec-accent)/10">
         <% if (card.posterUrl) { %>
           <img src="<%= card.posterUrl %>" alt="" loading="lazy" decoding="async"
                class="absolute inset-0 w-full h-full object-cover<%= card.nsfw ? ' scale-110' : '' %>" />
@@ -38,27 +39,30 @@
             <span class="px-1.5 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-bold tracking-wide">18+</span>
           <% } %>
           <% if (card.status === 'accepted') { %>
-            <span class="px-1.5 py-0.5 rounded-md bg-sky-500 text-stone-950 text-[10px] font-bold"><%= t('movies.statusPlanned') %></span>
+            <span class="px-1.5 py-0.5 rounded-md bg-sky-500 text-stone-950 text-[10px] font-bold"><%= st('statusPlanned') %></span>
           <% } else if (card.status === 'rejected') { %>
-            <span class="px-1.5 py-0.5 rounded-md bg-stone-700 text-stone-200 text-[10px] font-bold"><%= t('movies.statusRejected') %></span>
+            <span class="px-1.5 py-0.5 rounded-md bg-stone-700 text-stone-200 text-[10px] font-bold"><%= st('statusRejected') %></span>
           <% } %>
           <% if (card.posterPending) { %>
-            <span class="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 text-[10px] font-semibold ring-1 ring-amber-500/40"><%= t('movies.coverPending') %></span>
+            <span class="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 text-[10px] font-semibold ring-1 ring-amber-500/40"><%= st('coverPending') %></span>
           <% } %>
         </div>
         <% if (card.streamerRating) { %>
           <%# A ticket stub flush to the right edge - the score that is the streamer's own. %>
-          <span class="absolute top-2 right-0 flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-l-md bg-amber-400 text-stone-950 text-xs font-extrabold tabular-nums shadow"
-                title="<%= t('movies.ratingStreamer') %>">
+          <span class="absolute top-2 right-0 flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-l-md bg-(--sec-accent) text-stone-950 text-xs font-extrabold tabular-nums shadow"
+                title="<%= st('ratingStreamer') %>">
             <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z"/></svg>
             <%= card.streamerRating %>
           </span>
         <% } %>
 
         <div class="absolute inset-x-0 bottom-0 p-3">
+          <% if (card.extras && card.extras.gameState) { %>
+            <span class="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-(--sec-accent)/15 text-(--sec-accent-strong) text-[10px] font-medium ring-1 ring-(--sec-accent)/30"><%= st('gameState.' + card.extras.gameState) %></span>
+          <% } %>
           <% if (card.progress) { %>
-            <span class="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-medium tabular-nums ring-1 ring-amber-400/30">
-              <% if (card.progress.kind === 'percent') { %><%= t('movies.progressPercent', { done: card.progress.done }) %><% } else if (card.progress.total) { %><%= t('movies.progressEpisodes', { done: card.progress.done, total: card.progress.total }) %><% } else { %><%= t('movies.progressEpisodesOpen', { done: card.progress.done }) %><% } %>
+            <span class="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-(--sec-accent)/15 text-(--sec-accent-strong) text-[10px] font-medium tabular-nums ring-1 ring-(--sec-accent)/30">
+              <% if (card.progress.kind === 'percent') { %><%= st('progressPercent', { done: card.progress.done }) %><% } else if (card.progress.total) { %><%= st('progressEpisodes', { done: card.progress.done, total: card.progress.total }) %><% } else { %><%= st('progressEpisodesOpen', { done: card.progress.done }) %><% } %>
             </span>
           <% } %>
           <h3 class="text-sm font-bold text-white leading-snug line-clamp-2 drop-shadow"><%= card.title %></h3>
@@ -68,13 +72,19 @@
 
       <%# Under the poster: the two outside numbers, compact. %>
       <p class="mt-2 px-0.5 flex items-center gap-2 text-[11px] tabular-nums">
-        <span class="inline-flex items-center gap-1 <%= card.viewerAverage !== null ? 'text-amber-200' : 'text-stone-600' %>" title="<%= t('movies.ratingViewers') %>">
+        <span class="inline-flex items-center gap-1 <%= card.viewerAverage !== null ? 'text-(--sec-accent-soft)' : 'text-stone-600' %>" title="<%= st('ratingViewers') %>">
           <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z"/></svg>
           <%= card.viewerAverage !== null ? card.viewerAverage.toFixed(1) : '—' %>
         </span>
-        <% if (card.imdbRating !== null && card.imdbRating !== undefined) { %>
-          <span class="inline-flex items-center gap-1 text-stone-300" title="IMDb">
-            <span class="px-1 rounded-sm bg-[#f5c518] text-black text-[9px] font-black leading-[1.4]">IMDb</span><%= card.imdbRating.toFixed(1) %>
+        <% if (card.externalRating) { %>
+          <span class="inline-flex items-center gap-1 text-stone-300">
+            <%- include('externalRating', { rating: card.externalRating, size: 'sm' }) %>
+          </span>
+        <% } %>
+        <% if (card.extras && card.extras.minutes) { %>
+          <span class="inline-flex items-center gap-1 text-(--sec-accent-soft)" title="<%= st('onStream') %>">
+            <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 4v3.69l2.53 2.53-1.06 1.06-2.97-2.97V6h1.5z"/></svg>
+            <%= card.extras.minutes >= 60 ? st('hoursShort', { n: Math.round(card.extras.minutes / 60) }) : st('minutesShort', { n: card.extras.minutes }) %>
           </span>
         <% } %>
         <% if (card.commentCount) { %>

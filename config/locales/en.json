@@ -989,7 +989,6 @@
       "progressTotal": "Total episodes",
       "progressHint": "Empty - no badge. The badge shows while something is left.",
       "recordingUrl": "Recording link",
-      "recordingHint": "Twitch (videos), YouTube, VK Video or Rutube.",
       "poster": "Poster",
       "posterKeep": "Without a new file the current one stays.",
       "nsfw": "18+: blur the cover",
@@ -1092,6 +1091,78 @@
         "stale": "This was already decided - the page has been refreshed.",
         "reason_required": "Write a reason to reject it."
       }
+    }
+  },
+  "gamesStream": {
+    "titleSuffix": "games",
+    "tab": {
+      "done": "Played"
+    },
+    "create": "Add a game",
+    "sort": {
+      "hours": "Most hours on stream",
+      "steam": "Steam reviews"
+    },
+    "empty": {
+      "done": "Nothing played yet."
+    },
+    "backToGrid": "All games",
+    "gameState": {
+      "playing": "Playing",
+      "completed": "Completed",
+      "dropped": "Dropped"
+    },
+    "onStream": "On stream",
+    "lastOnStream": "last on {{date}}",
+    "hoursShort": "{{n}} h",
+    "minutesShort": "{{n}} min",
+    "form": {
+      "newTitle": "New game",
+      "statusOption": {
+        "done": "Played"
+      },
+      "poster": "Cover",
+      "gameState": "Progress",
+      "gameStateNone": "— not set —",
+      "steam": "Steam (store link or app id)",
+      "twitchCategory": "Twitch category",
+      "twitchCategoryHint": "As it is named on Twitch: hours on stream are counted by it.",
+      "playedWithoutCard": "On stream, but no card yet:",
+      "error": {
+        "steam_invalid": "Steam: an app id or a store.steampowered.com/app/… link is needed.",
+        "category_invalid": "Twitch category: at most 50 characters.",
+        "duplicate": "This game already has a card on the channel: the Steam app or Twitch category matched.",
+        "duplicate_watched": "This game has already been played on stream:",
+        "duplicate_open": "This game has already been suggested — back it with your vote:",
+        "duplicate_rejected": "This game was suggested before and rejected:"
+      }
+    },
+    "lookup": {
+      "tab": {
+        "twitch": "Twitch categories",
+        "steam": "Steam"
+      },
+      "source": {
+        "twitch": "Twitch",
+        "steam": "Steam"
+      }
+    },
+    "attribution": {
+      "lead": "Game data comes from open sources:",
+      "games": "Names, art and reviews:",
+      "notAffiliated": "This site is not affiliated with either."
+    },
+    "suggest": {
+      "button": "Suggest a game",
+      "loginToSuggest": "Log in to suggest a game",
+      "notAllowed": "Games can be suggested by those who have chatted on this channel.",
+      "title": "Suggest a game",
+      "intro": "Find the game in the search or fill it in by hand. {{login}}'s moderators will decide whether to plan it.",
+      "noteLabel": "Why it is worth playing (optional)",
+      "coverHint": "Your own cover only if the game is not in the search. JPEG, PNG or WebP up to 5 MB; everyone sees it once a moderator approves it."
+    },
+    "vote": {
+      "promote": "Promote — I want it played"
     }
   },
   "comments": {
@@ -2125,7 +2196,9 @@
       "newsDisabled": "News feed disabled for the channel.",
       "deleted": "The entire settings change log has been deleted.",
       "moviesEnabled": "Movies section enabled for the channel.",
-      "moviesDisabled": "Movies section disabled for the channel."
+      "moviesDisabled": "Movies section disabled for the channel.",
+      "gamesEnabled": "The Games section is on for the channel.",
+      "gamesDisabled": "The Games section is off for the channel."
     },
     "healthHeading": "Service health",
     "healthMessages": "Messages stored",
@@ -2213,7 +2286,9 @@
         "newsEnable": "News feed enabled",
         "newsDisable": "News feed disabled",
         "moviesEnable": "Movies section enabled",
-        "moviesDisable": "Movies section disabled"
+        "moviesDisable": "Movies section disabled",
+        "gamesEnable": "Games section enabled",
+        "gamesDisable": "Games section disabled"
       },
       "game": {
         "hide": "Game hidden",
@@ -2252,7 +2327,8 @@
         "reject": "Suggestion rejected",
         "reopen": "Suggestion reopened",
         "approvePoster": "Cover approved",
-        "removePoster": "Cover removed"
+        "removePoster": "Cover removed",
+        "steamSync": "Steam reviews refreshed by hand"
       },
       "mediaComment": {
         "delete": "Comment under a card deleted",
@@ -2450,7 +2526,7 @@
     "colMovies": "Movies",
     "moviesEnable": "Enable movies",
     "moviesDisable": "Disable movies",
-    "tabMedia": "Movie sources",
+    "tabMedia": "Movie & game sources",
     "media": {
       "sourcesHeading": "Card search",
       "filmsTab": "Films & series",
@@ -2476,9 +2552,20 @@
       "running": "Updating…",
       "flash": {
         "imdbSynced": "IMDb ratings updated.",
-        "imdbFailed": "Updating IMDb ratings failed - details below."
-      }
-    }
+        "imdbFailed": "Updating IMDb ratings failed - details below.",
+        "steamStarted": "Steam reviews refresh started — the result shows here in a few minutes."
+      },
+      "gamesTab": "Games",
+      "cardsGames": "Of them games",
+      "cardsWithSteam": "With a Steam id",
+      "cardsWithSteamRating": "With Steam reviews",
+      "steamHeading": "Steam reviews",
+      "steamHint": "Once a day, one request per game with a Steam id: the share of positive reviews. Only games with a Steam id are refreshed.",
+      "steamBlocked": "Steam turned this server away (redirect, 403 or 429) — the scores stayed as they were."
+    },
+    "colGames": "Games",
+    "gamesEnable": "Enable games",
+    "gamesDisable": "Disable games"
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",

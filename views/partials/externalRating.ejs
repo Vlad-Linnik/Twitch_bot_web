@@ -1,0 +1,11 @@
+<%#
+  The outside rating of a card, drawn in its source's own colours so it never reads as one of ours:
+  IMDb's yellow block with the 0-10 figure (a film), Steam's dark-blue block with the share of
+  positive reviews (a game). Expects: rating ({source, value, votes}), size ("sm" | "md").
+%>
+<% const md = typeof size !== 'undefined' && size === 'md'; %>
+<% if (rating.source === 'steam') { %>
+  <span class="<%= md ? 'px-1.5 py-0.5 text-xs' : 'px-1 text-[9px] leading-[1.4]' %> rounded-sm bg-[#1b2838] text-[#66c0f4] font-black ring-1 ring-[#66c0f4]/30">Steam</span><span class="<%= md ? 'text-2xl font-extrabold tabular-nums text-white' : '' %>"><%= Math.round(rating.value) %>%</span>
+<% } else { %>
+  <span class="<%= md ? 'px-1.5 py-0.5 text-xs' : 'px-1 text-[9px] leading-[1.4]' %> rounded-sm bg-[#f5c518] text-black font-black">IMDb</span><span class="<%= md ? 'text-2xl font-extrabold tabular-nums text-white' : '' %>"><%= rating.value.toFixed(1) %></span>
+<% } %>

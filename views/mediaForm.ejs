@@ -3,37 +3,37 @@
     18+ tick and "why it is worth watching"; status, progress, the recording link and the
     streamer's fields are not rendered at all (and not read by the server either). %>
 <% const suggesting = mode === 'suggest'; %>
-<% const heading = suggesting ? 'movies.suggest.title' : item ? 'movies.form.editTitle' : 'movies.form.newTitle'; %>
-<%- include('partials/head', { title: channel.channelLogin + ' · ' + t(heading) }) %>
+<% const heading = suggesting ? 'suggest.title' : item ? 'form.editTitle' : 'form.newTitle'; %>
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + st(heading) }) %>
 <%- include('partials/nav') %>
 
 <%
   const v = values || {};
   const val = (k) => (v[k] === undefined || v[k] === null ? '' : v[k]);
   const action = suggesting
-    ? '/' + channel.channelLogin + '/movies/suggest'
-    : item ? '/' + channel.channelLogin + '/movies/' + item._id + '/edit' : '/' + channel.channelLogin + '/movies';
-  const back = item ? '/' + channel.channelLogin + '/movies/' + item._id : '/' + channel.channelLogin + '/movies' + (suggesting ? '?tab=suggestions' : '');
+    ? '/' + channel.channelLogin + '/' + sec.path + '/suggest'
+    : item ? '/' + channel.channelLogin + '/' + sec.path + '/' + item._id + '/edit' : '/' + channel.channelLogin + '/' + sec.path;
+  const back = item ? '/' + channel.channelLogin + '/' + sec.path + '/' + item._id : '/' + channel.channelLogin + '/' + sec.path + (suggesting ? '?tab=suggestions' : '');
   const input = 'w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600';
   const nsfwChecked = v.nsfw === true || v.nsfw === '1' || v.nsfw === 'on';
 %>
 
 <main class="pt-14 max-w-2xl mx-auto px-6 py-12">
-  <a href="<%= back %>" data-transition="backward" class="inline-block mb-4 text-sm text-neutral-500 hover:text-neutral-300">&larr; <%= t('movies.form.back') %></a>
-  <h1 class="text-2xl font-bold text-neutral-100 mb-1"><%= t(heading) %></h1>
-  <p class="text-sm text-neutral-500 mb-8"><%= suggesting ? t('movies.suggest.intro', { login: channel.channelLogin }) : channel.channelLogin %></p>
+  <a href="<%= back %>" data-transition="backward" class="inline-block mb-4 text-sm text-neutral-500 hover:text-neutral-300">&larr; <%= st('form.back') %></a>
+  <h1 class="text-2xl font-bold text-neutral-100 mb-1"><%= st(heading) %></h1>
+  <p class="text-sm text-neutral-500 mb-8"><%= suggesting ? st('suggest.intro', { login: channel.channelLogin }) : channel.channelLogin %></p>
 
   <% if (errors.length) { %>
     <div class="mb-6 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3">
       <ul class="list-disc pl-4 space-y-0.5">
-        <% errors.forEach(function(code) { %><li><%= t('movies.form.error.' + code) %></li><% }) %>
+        <% errors.forEach(function(code) { %><li><%= st('form.error.' + code) %></li><% }) %>
       </ul>
       <% if (duplicate) { %>
         <%# The card the suggestion ran into: watched, still open (vote for it there), or rejected
             with the reason the moderators gave. %>
         <p class="mt-2">
           <a href="<%= duplicate.href %>" class="font-semibold text-emerald-300 underline hover:text-emerald-200"><%= duplicate.title %></a>
-          <% if (duplicate.reason) { %><span class="block mt-1 text-red-200/80"><%= t('movies.suggest.rejectedBecause') %> <%= duplicate.reason %></span><% } %>
+          <% if (duplicate.reason) { %><span class="block mt-1 text-red-200/80"><%= st('suggest.rejectedBecause') %> <%= duplicate.reason %></span><% } %>
         </p>
       <% } %>
     </div>
@@ -48,145 +48,193 @@
     <%# Search in outside sources: a JS-only helper over the plain form below, which stays the
         whole feature without JS. Rendered hidden; the script reveals it. %>
     <section data-lookup hidden data-lookup-url="<%= lookupUrl %>"
-             data-msg-empty="<%= t('movies.lookup.empty') %>" data-msg-unavailable="<%= t('movies.lookup.unavailable') %>"
-             data-msg-loading="<%= t('movies.lookup.loading') %>" data-msg-picked="<%= t('movies.lookup.picked') %>"
+             data-msg-empty="<%= st('lookup.empty') %>" data-msg-unavailable="<%= st('lookup.unavailable') %>"
+             data-msg-loading="<%= st('lookup.loading') %>" data-msg-picked="<%= st('lookup.picked') %>"
              class="rounded-lg border border-purple-900/60 bg-purple-950/20 p-4">
       <div class="flex flex-wrap items-center gap-2 mb-2">
-        <span class="text-sm font-medium text-neutral-200"><%= t('movies.lookup.heading') %></span>
+        <span class="text-sm font-medium text-neutral-200"><%= st('lookup.heading') %></span>
         <div class="flex gap-1 ml-auto" role="tablist">
-          <% ['films', 'anime'].forEach(function(tab, i) { %>
+          <% Object.keys(lookupSources).forEach(function(tab, i) { %>
             <button type="button" role="tab" data-lookup-tab="<%= tab %>" aria-selected="<%= i === 0 ? 'true' : 'false' %>"
                     class="px-2.5 py-1 rounded-md text-xs border border-neutral-700 text-neutral-400 aria-selected:border-purple-600 aria-selected:text-neutral-100 aria-selected:bg-purple-600/15">
-              <%= t('movies.lookup.tab.' + tab) %> <span class="text-neutral-500">· <%= t('movies.lookup.source.' + lookupSources[tab]) %></span>
+              <%= st('lookup.tab.' + tab) %> <span class="text-neutral-500">· <%= st('lookup.source.' + lookupSources[tab]) %></span>
             </button>
           <% }) %>
         </div>
       </div>
-      <input type="search" data-lookup-input autocomplete="off" maxlength="100" placeholder="<%= t('movies.lookup.placeholder') %>"
+      <input type="search" data-lookup-input autocomplete="off" maxlength="100" placeholder="<%= st('lookup.placeholder') %>"
              class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
       <p data-lookup-status class="mt-2 text-xs text-neutral-500" aria-live="polite"></p>
       <ul data-lookup-results class="mt-2 grid gap-1 max-h-80 overflow-y-auto"></ul>
       <div data-lookup-picked hidden class="mt-3 flex items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-2">
         <img data-lookup-picked-img alt="" class="w-12 h-[72px] object-cover rounded bg-neutral-800" />
         <p data-lookup-picked-text class="text-xs text-neutral-300 flex-1 min-w-0"></p>
-        <button type="button" data-lookup-clear class="text-xs text-neutral-500 hover:text-neutral-200"><%= t('movies.lookup.clear') %></button>
+        <button type="button" data-lookup-clear class="text-xs text-neutral-500 hover:text-neutral-200"><%= st('lookup.clear') %></button>
       </div>
     </section>
 
     <div class="grid sm:grid-cols-2 gap-4">
       <label class="block sm:col-span-2">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.title') %></span>
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.title') %></span>
         <input type="text" name="title" required maxlength="200" value="<%= val('title') %>" class="<%= input %>" />
       </label>
       <label class="block sm:col-span-2">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.originalTitle') %></span>
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.originalTitle') %></span>
         <input type="text" name="originalTitle" maxlength="200" value="<%= val('originalTitle') %>" class="<%= input %>" />
       </label>
       <label class="block">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.year') %></span>
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.year') %></span>
         <input type="number" name="year" min="1870" max="2100" step="1" value="<%= val('year') %>" class="<%= input %>" />
       </label>
+      <%# The section decides which of its own fields exist (sec.fields - routes/movies.js,
+          routes/gamesStream.js): a film's type and IMDb id, a game's state, Steam id and Twitch
+          category. The server reads only the fields of its own kind either way. %>
+      <% if (sec.fields.mediaType) { %>
       <label class="block">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.type') %></span>
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.type') %></span>
         <select name="mediaType" data-media-type class="<%= input %>">
           <% mediaTypes.forEach(function(type) { %>
-            <option value="<%= type %>"<%= v.mediaType === type ? ' selected' : '' %>><%= t('movies.type.' + type) %></option>
-          <% }) %>
-        </select>
-      </label>
-      <% if (!suggesting) { %>
-      <label class="block">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.status') %></span>
-        <select name="status" class="<%= input %>">
-          <% statuses.forEach(function(s) { %>
-            <option value="<%= s %>"<%= v.status === s ? ' selected' : '' %>><%= t('movies.form.statusOption.' + s) %></option>
+            <option value="<%= type %>"<%= v.mediaType === type ? ' selected' : '' %>><%= st('type.' + type) %></option>
           <% }) %>
         </select>
       </label>
       <% } %>
+      <% if (sec.fields.gameState && !suggesting) { %>
       <label class="block">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.imdbId') %></span>
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.gameState') %></span>
+        <select name="gameState" class="<%= input %>">
+          <option value=""><%= st('form.gameStateNone') %></option>
+          <% ['playing', 'completed', 'dropped'].forEach(function(state) { %>
+            <option value="<%= state %>"<%= v.gameState === state ? ' selected' : '' %>><%= st('gameState.' + state) %></option>
+          <% }) %>
+        </select>
+      </label>
+      <% } %>
+      <% if (!suggesting) { %>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.status') %></span>
+        <select name="status" class="<%= input %>">
+          <% statuses.forEach(function(s) { %>
+            <option value="<%= s %>"<%= v.status === s ? ' selected' : '' %>><%= st('form.statusOption.' + s) %></option>
+          <% }) %>
+        </select>
+      </label>
+      <% } %>
+      <% if (sec.fields.imdbId) { %>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.imdbId') %></span>
         <input type="text" name="imdbId" maxlength="300" placeholder="tt1375666" value="<%= val('imdbId') %>" class="<%= input %>" />
       </label>
+      <% } %>
+      <% if (sec.fields.steam) { %>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.steam') %></span>
+        <input type="text" name="steamAppId" maxlength="300" placeholder="https://store.steampowered.com/app/292030/" value="<%= val('steamAppId') %>" class="<%= input %>" />
+      </label>
+      <% } %>
+      <% if (sec.fields.twitchCategory) { %>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.twitchCategory') %></span>
+        <input type="text" name="twitchCategoryName" maxlength="50" value="<%= val('twitchCategoryName') %>" class="<%= input %>" />
+        <span class="block mt-1 text-xs text-neutral-600"><%= st('form.twitchCategoryHint') %></span>
+      </label>
+      <% } %>
     </div>
+
+    <% if (typeof playedWithoutCard !== 'undefined' && playedWithoutCard.length && !item && !suggesting) { %>
+      <%# Games that were on stream and have no card yet, most-played first: one click prefills
+          the title and the category (GET ?category=, so it works without JS). %>
+      <div class="rounded-md border border-cyan-900/50 bg-cyan-950/20 p-3">
+        <p class="text-xs text-neutral-400 mb-2"><%= st('form.playedWithoutCard') %></p>
+        <div class="flex flex-wrap gap-1.5">
+          <% playedWithoutCard.forEach(function(g) { %>
+            <a href="/<%= channel.channelLogin %>/<%= sec.path %>/new?category=<%= encodeURIComponent(g.name) %>"
+               class="px-2 py-1 rounded-md bg-neutral-900 ring-1 ring-neutral-800 hover:ring-cyan-600 text-xs text-neutral-200">
+              <%= g.name %> <span class="text-neutral-500 tabular-nums">· <%= g.minutes >= 60 ? st('hoursShort', { n: Math.round(g.minutes / 60) }) : st('minutesShort', { n: g.minutes }) %></span>
+            </a>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
 
     <% if (suggesting) { %>
       <label class="block">
-        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.suggest.noteLabel') %></span>
-        <textarea name="note" rows="4" maxlength="<%= noteMax %>" class="<%= input %>" placeholder="<%= t('movies.suggest.notePlaceholder') %>"><%= val('note') %></textarea>
-        <span class="block mt-1 text-xs text-neutral-600"><%= t('movies.suggest.noteHint', { max: noteMax }) %></span>
+        <span class="block text-xs text-neutral-500 mb-1"><%= st('suggest.noteLabel') %></span>
+        <textarea name="note" rows="4" maxlength="<%= noteMax %>" class="<%= input %>" placeholder="<%= st('suggest.notePlaceholder') %>"><%= val('note') %></textarea>
+        <span class="block mt-1 text-xs text-neutral-600"><%= st('suggest.noteHint', { max: noteMax }) %></span>
       </label>
     <% } else { %>
+    <% if (sec.fields.progress) { %>
     <fieldset class="rounded-md border border-neutral-800 p-4">
-      <legend class="px-1 text-xs text-neutral-500"><%= t('movies.form.progress') %></legend>
+      <legend class="px-1 text-xs text-neutral-500"><%= st('form.progress') %></legend>
       <%# Both inputs render without JS, with a hint saying which applies; public/js/media-form.js
           hides the episode total for a film and swaps the first label. %>
       <div class="grid grid-cols-2 gap-4">
         <label class="block">
           <span class="block text-xs text-neutral-500 mb-1" data-progress-done-label
-                data-label-film="<%= t('movies.form.progressPercent') %>" data-label-episodes="<%= t('movies.form.progressDone') %>">
-            <%= t('movies.form.progressDoneEither') %>
+                data-label-film="<%= st('form.progressPercent') %>" data-label-episodes="<%= st('form.progressDone') %>">
+            <%= st('form.progressDoneEither') %>
           </span>
           <input type="number" name="progressDone" min="0" max="5000" step="1" value="<%= val('progressDone') %>" class="<%= input %>" />
         </label>
         <label class="block" data-progress-total>
-          <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.progressTotal') %></span>
+          <span class="block text-xs text-neutral-500 mb-1"><%= st('form.progressTotal') %></span>
           <input type="number" name="progressTotal" min="1" max="5000" step="1" value="<%= val('progressTotal') %>" class="<%= input %>" />
         </label>
       </div>
-      <p class="mt-2 text-xs text-neutral-600"><%= t('movies.form.progressHint') %></p>
+      <p class="mt-2 text-xs text-neutral-600"><%= st('form.progressHint') %></p>
     </fieldset>
+    <% } %>
 
     <label class="block">
-      <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.recordingUrl') %></span>
+      <span class="block text-xs text-neutral-500 mb-1"><%= st('form.recordingUrl') %></span>
       <input type="url" name="recordingUrl" maxlength="500" value="<%= val('recordingUrl') %>" placeholder="https://www.twitch.tv/videos/…" class="<%= input %>" />
-      <span class="block mt-1 text-xs text-neutral-600"><%= t('movies.form.recordingHint') %></span>
     </label>
     <% } %>
 
     <div>
-      <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.poster') %></span>
+      <span class="block text-xs text-neutral-500 mb-1"><%= st('form.poster') %></span>
       <% if (posterUrl) { %>
         <img src="<%= posterUrl %>" alt="" class="mb-2 h-40 rounded-md border border-neutral-800" />
-        <p class="text-xs text-neutral-600 mb-2"><%= t('movies.form.posterKeep') %></p>
+        <p class="text-xs text-neutral-600 mb-2"><%= st('form.posterKeep') %></p>
       <% } %>
-      <% if (suggesting) { %><p class="text-xs text-neutral-600 mb-2"><%= t('movies.suggest.coverHint') %></p><% } %>
+      <% if (suggesting) { %><p class="text-xs text-neutral-600 mb-2"><%= st('suggest.coverHint') %></p><% } %>
       <input type="file" name="poster" accept="<%= suggesting ? 'image/jpeg,image/png,image/webp' : 'image/*' %>"
              class="w-full text-sm text-neutral-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:text-neutral-300 file:text-xs" />
       <label class="mt-3 flex items-center gap-2 text-sm text-neutral-300">
         <input type="checkbox" name="nsfw" value="1" data-nsfw-checkbox class="accent-purple-600"<%= nsfwChecked ? ' checked' : '' %> />
-        <%= t('movies.form.nsfw') %>
+        <%= st('form.nsfw') %>
       </label>
-      <p class="mt-1 text-xs text-neutral-600"><%= t('movies.form.nsfwHint') %></p>
+      <p class="mt-1 text-xs text-neutral-600"><%= st('form.nsfwHint') %></p>
     </div>
 
     <% if (canWriteStreamerFields) { %>
       <fieldset class="rounded-md border border-amber-900/50 p-4 space-y-4">
-        <legend class="px-1 text-xs text-amber-500/80"><%= t('movies.form.streamerFields', { login: channel.channelLogin }) %></legend>
+        <legend class="px-1 text-xs text-amber-500/80"><%= st('form.streamerFields', { login: channel.channelLogin }) %></legend>
         <label class="block max-w-[10rem]">
-          <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.streamerRating') %></span>
+          <span class="block text-xs text-neutral-500 mb-1"><%= st('form.streamerRating') %></span>
           <select name="streamerRating" class="<%= input %>">
-            <option value=""><%= t('movies.form.noRating') %></option>
+            <option value=""><%= st('form.noRating') %></option>
             <% for (let n = 10; n >= 1; n--) { %>
               <option value="<%= n %>"<%= String(val('streamerRating')) === String(n) ? ' selected' : '' %>><%= n %></option>
             <% } %>
           </select>
         </label>
         <label class="block">
-          <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.review') %></span>
+          <span class="block text-xs text-neutral-500 mb-1"><%= st('form.review') %></span>
           <textarea name="review" rows="8" maxlength="20000" class="<%= input %> font-mono"><%= val('review') %></textarea>
-          <span class="block mt-1 text-xs text-neutral-600"><%= t('movies.form.reviewHint') %></span>
+          <span class="block mt-1 text-xs text-neutral-600"><%= st('form.reviewHint') %></span>
         </label>
       </fieldset>
     <% } %>
 
     <div class="flex items-center gap-2">
-      <button type="submit" class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"><%= t(suggesting ? 'movies.suggest.submit' : 'movies.form.save') %></button>
-      <a href="<%= back %>" class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= t('movies.form.cancel') %></a>
+      <button type="submit" class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"><%= st(suggesting ? 'suggest.submit' : 'form.save') %></button>
+      <a href="<%= back %>" class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= st('form.cancel') %></a>
     </div>
   </form>
 
-  <%- include('partials/mediaAttribution') %>
+  <%- include('partials/mediaAttribution', { which: sec.attribution }) %>
 </main>
 
 <script src="<%= asset('/js/media-form.js') %>" defer></script>

@@ -58,7 +58,7 @@ function createApp(sessionMiddleware) {
         directives: {
           // + the poster sources, for the previews in a movie card's search dropdown only - a saved
           // card shows its own copy from /uploads (lib/mediaImageHosts.js).
-          "img-src": [...IMG_SRC_DIRECTIVE, ...MEDIA_IMAGE_ORIGINS],
+          "img-src": [...new Set([...IMG_SRC_DIRECTIVE, ...MEDIA_IMAGE_ORIGINS])],
           "script-src": ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
         },
       },

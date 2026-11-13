@@ -48,6 +48,15 @@ async function ensureInitialized() {
       { channelLogin: 1, kind: 1, "external.shikimoriId": 1 },
       { unique: true, partialFilterExpression: { "external.shikimoriId": { $type: "number" } } }
     );
+    // Games: one card per Steam app and per Twitch category on a channel.
+    await collection.createIndex(
+      { channelLogin: 1, kind: 1, "external.steamAppId": 1 },
+      { unique: true, partialFilterExpression: { "external.steamAppId": { $type: "number" } } }
+    );
+    await collection.createIndex(
+      { channelLogin: 1, kind: 1, "external.twitchCategoryId": 1 },
+      { unique: true, partialFilterExpression: { "external.twitchCategoryId": { $type: "string" } } }
+    );
     // The nightly IMDb rating sync looks cards up by IMDb id across every channel.
     await collection.createIndex({ "external.imdbId": 1 }, { partialFilterExpression: { "external.imdbId": { $type: "string" } } });
   } catch (err) {
@@ -78,6 +87,7 @@ async function create(doc) {
     nsfw: Boolean(doc.nsfw),
     recordingUrl: doc.recordingUrl || null,
     progress: doc.progress || null,
+    gameState: doc.gameState || null,
     ratings: { streamer: doc.streamerRating ?? null, viewers: { sum: 0, count: 0 }, external: null },
     review: doc.review || null,
     commentCount: 0,
@@ -200,15 +210,36 @@ async function setImdbRatings(ratings, fetchedAt = new Date()) {
   return result.modifiedCount;
 }
 
+// Every distinct Steam app id on any game card - the set the daily review pass asks Steam about.
+async function distinctSteamAppIds() {
+  const col = await ensureInitialized();
+  return col.distinct("external.steamAppId", { kind: "game", "external.steamAppId": { $type: "number" } });
+}
+
+// Writes one source's outside ratings: Map<id, {value, votes}>, matched on `field` (e.g.
+// "external.steamAppId"). One updateMany per id, batched.
+async function setExternalRatings(source, field, ratings, fetchedAt = new Date()) {
+  if (!ratings.size) return 0;
+  const col = await ensureInitialized();
+  const ops = [...ratings].map(([id, { value, votes }]) => ({
+    updateMany: { filter: { [field]: id }, update: { $set: { "ratings.external": { source, value, votes, fetchedAt } } } },
+  }));
+  const result = await col.bulkWrite(ops, { ordered: false });
+  return result.modifiedCount;
+}
+
 // /admin/media's counters.
 async function sourceStats() {
   const col = await ensureInitialized();
-  const [total, withImdb, withRating] = await Promise.all([
+  const [total, withImdb, withRating, games, withSteam, withSteamRating] = await Promise.all([
     col.countDocuments({}),
     col.countDocuments({ "external.imdbId": { $type: "string" } }),
     col.countDocuments({ "ratings.external.source": "imdb" }),
+    col.countDocuments({ kind: "game" }),
+    col.countDocuments({ kind: "game", "external.steamAppId": { $type: "number" } }),
+    col.countDocuments({ "ratings.external.source": "steam" }),
   ]);
-  return { total, withImdb, withRating };
+  return { total, withImdb, withRating, games, withSteam, withSteamRating };
 }
 
 module.exports = {
@@ -225,5 +256,7 @@ module.exports = {
   incSuggestionVotes,
   distinctImdbIds,
   setImdbRatings,
+  distinctSteamAppIds,
+  setExternalRatings,
   sourceStats,
 };

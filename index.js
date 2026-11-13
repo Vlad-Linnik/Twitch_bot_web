@@ -9,6 +9,7 @@ const { startModeratorSyncLoop } = require("./twitch/moderatorSyncScheduler");
 const { startExampleRefreshLoop } = require("./jobs/higherLowerExamples");
 const { startGuessChatterRefreshLoop } = require("./jobs/guessChatter");
 const { startImdbRatingsSync } = require("./jobs/imdbRatingsSync");
+const { startSteamReviewsSync } = require("./jobs/steamReviewsSync");
 
 async function main() {
   await connect();
@@ -27,6 +28,7 @@ async function main() {
   startExampleRefreshLoop();
   startGuessChatterRefreshLoop();
   startImdbRatingsSync();
+  startSteamReviewsSync();
 }
 
 main().catch((err) => {

@@ -2,8 +2,8 @@
 <%- include('partials/nav') %>
 
 <%#
-  A movie card's own page. Its look is the section's own (warm black, amber/gold), not the news
-  post's: a backdrop band made from the poster's blurred copy - lib/mediaImage.js stores one for
+  A movie or game card's own page. Its look is the section's own (the media-theme-* variables:
+  gold on warm black for films, cyan on cold slate for games), not the news post's: a backdrop band made from the poster's blurred copy - lib/mediaImage.js stores one for
   every poster, so the band costs no extra file and never shows an 18+ cover unblurred - the poster
   floating over it, the three scores as plates, the review as a signed quote.
 
@@ -14,40 +14,40 @@
 <%
   const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
   const csrf = user ? csrfToken : '';
-  const base = '/' + channel.channelLogin + '/movies/' + item.id;
+  const base = '/' + channel.channelLogin + '/' + sec.path + '/' + item.id;
   const mine = myRating ? myRating.value : 0;
   const badge = (() => {
     const p = item.progress;
     if (!p) return null;
-    if (p.unit === 'percent') return t('movies.progressPercent', { done: p.done });
-    return p.total ? t('movies.progressEpisodes', { done: p.done, total: p.total }) : t('movies.progressEpisodesOpen', { done: p.done });
+    if (p.unit === 'percent') return st('progressPercent', { done: p.done });
+    return p.total ? st('progressEpisodes', { done: p.done, total: p.total }) : st('progressEpisodesOpen', { done: p.done });
   })();
   const starPath = 'M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z';
 %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-12">
+<main class="pt-14 max-w-4xl mx-auto px-6 py-12 media-theme-<%= sec.theme %>">
 
   <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
 
   <% if (sectionPreview) { %>
     <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
-      <%= t('movies.previewNotice') %>
+      <%= st('previewNotice') %>
     </div>
   <% } %>
 
-  <a href="/<%= channel.channelLogin %>/movies" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-amber-300/80 hover:text-amber-200">&larr; <%= t('movies.backToGrid') %></a>
+  <a href="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('backToGrid') %></a>
 
-  <article class="relative rounded-2xl overflow-hidden bg-stone-950 ring-1 ring-white/5">
+  <article class="relative rounded-(--sec-radius-lg) overflow-hidden bg-(--sec-base) ring-1 ring-white/5">
     <% if (item.poster && item.poster.blurUrl) { %>
       <img src="<%= item.poster.blurUrl %>" alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover scale-125 opacity-50" />
-      <div class="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/80 to-stone-950/40"></div>
+      <div class="absolute inset-0 bg-gradient-to-r from-(--sec-base) via-(--sec-base)/80 to-(--sec-base)/40"></div>
     <% } else { %>
-      <div class="absolute inset-0 bg-gradient-to-br from-amber-950/40 to-stone-950"></div>
+      <div class="absolute inset-0 bg-gradient-to-br from-(--sec-accent)/10 to-(--sec-base)"></div>
     <% } %>
 
     <div class="relative flex flex-col sm:flex-row gap-6 p-5 sm:p-7">
       <div class="w-44 sm:w-52 shrink-0 self-center sm:self-start">
-        <div class="relative aspect-[2/3] rounded-xl overflow-hidden bg-stone-900 shadow-2xl shadow-black/60 ring-1 ring-white/10">
+        <div class="relative aspect-(--sec-aspect) rounded-(--sec-radius) overflow-hidden bg-(--sec-surface) shadow-2xl shadow-black/60 ring-1 ring-white/10">
           <% if (item.poster) { %>
             <%# An 18+ cover renders as its blurred copy; the normal one's URL is only in
                 data-full-src, swapped in by public/js/media-item.js on request. The button starts
@@ -57,14 +57,14 @@
                  <% if (item.nsfw) { %>data-nsfw-poster data-full-src="<%= item.poster.url %>"<% } %> />
             <% if (item.nsfw) { %>
               <button type="button" data-nsfw-reveal hidden
-                      class="absolute inset-x-3 bottom-3 px-2 py-1.5 rounded-full bg-stone-950/85 text-stone-100 text-xs font-semibold hover:bg-stone-900 ring-1 ring-white/10">
-                <%= t('movies.revealNsfw') %>
+                      class="absolute inset-x-3 bottom-3 px-2 py-1.5 rounded-full bg-(--sec-base)/85 text-stone-100 text-xs font-semibold hover:bg-(--sec-surface) ring-1 ring-white/10">
+                <%= st('revealNsfw') %>
               </button>
             <% } %>
           <% } else { %>
             <span class="absolute inset-0 grid place-items-center text-5xl text-stone-700" aria-hidden="true">🎞</span>
             <% if (item.hasHiddenPoster) { %>
-              <span class="absolute inset-x-2 bottom-3 text-center text-[11px] text-stone-400"><%= t('movies.coverHidden') %></span>
+              <span class="absolute inset-x-2 bottom-3 text-center text-[11px] text-stone-400"><%= st('coverHidden') %></span>
             <% } %>
           <% } %>
           <% if (item.nsfw) { %>
@@ -78,13 +78,14 @@
         <% if (item.originalTitle) { %><p class="mt-0.5 text-sm italic text-stone-400"><%= item.originalTitle %></p><% } %>
 
         <div class="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
-          <% [item.year, item.mediaType ? t('movies.type.' + item.mediaType) : null].filter(Boolean).forEach(function(chip) { %>
+          <% [item.year, item.mediaType ? st('type.' + item.mediaType) : null].filter(Boolean).forEach(function(chip) { %>
             <span class="px-2 py-0.5 rounded-full bg-white/5 text-stone-300 ring-1 ring-white/10"><%= chip %></span>
           <% }) %>
-          <% if (item.status === 'accepted') { %><span class="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"><%= t('movies.statusPlanned') %></span><% } %>
-          <% if (item.status === 'suggested') { %><span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"><%= t('movies.statusSuggested') %></span><% } %>
-          <% if (item.status === 'rejected') { %><span class="px-2 py-0.5 rounded-full bg-stone-700/60 text-stone-200 ring-1 ring-white/10"><%= t('movies.statusRejected') %></span><% } %>
-          <% if (badge) { %><span class="px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30 tabular-nums"><%= t('movies.watchedLabel') %>: <%= badge %></span><% } %>
+          <% if (item.status === 'accepted') { %><span class="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"><%= st('statusPlanned') %></span><% } %>
+          <% if (item.status === 'suggested') { %><span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"><%= st('statusSuggested') %></span><% } %>
+          <% if (item.status === 'rejected') { %><span class="px-2 py-0.5 rounded-full bg-stone-700/60 text-stone-200 ring-1 ring-white/10"><%= st('statusRejected') %></span><% } %>
+          <% if (item.extras && item.extras.gameState) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30"><%= st('gameState.' + item.extras.gameState) %></span><% } %>
+          <% if (badge) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30 tabular-nums"><%= st('watchedLabel') %>: <%= badge %></span><% } %>
         </div>
 
         <% if (item.suggestion) { %>
@@ -92,7 +93,7 @@
               escaped here like any other text, newlines kept by whitespace-pre-line. %>
           <div class="mt-4 max-w-xl">
             <p class="text-xs text-stone-400">
-              <%= t('movies.suggest.by') %> <span class="font-semibold text-emerald-300"><%= item.suggestion.displayName %></span>
+              <%= st('suggest.by') %> <span class="font-semibold text-emerald-300"><%= item.suggestion.displayName %></span>
               <span class="text-stone-600">· <%= new Date(item.suggestion.createdAt).toLocaleDateString(dateLocale) %></span>
             </p>
             <% if (item.suggestion.note) { %>
@@ -102,42 +103,49 @@
         <% } %>
         <% if (item.status === 'rejected' && item.rejectReason) { %>
           <p class="mt-3 max-w-xl rounded-lg bg-black/30 ring-1 ring-white/10 px-3 py-2 text-sm text-stone-300">
-            <span class="text-stone-500"><%= t('movies.suggest.rejectedBecause') %></span> <%= item.rejectReason %>
+            <span class="text-stone-500"><%= st('suggest.rejectedBecause') %></span> <%= item.rejectReason %>
           </p>
         <% } %>
         <% if (item.votable) { %>
           <div class="mt-4">
-            <%- include('partials/suggestionVote', { card: { id: item.id, score: item.score, myVote: item.myVote }, channel, section: 'movies', csrf, user, size: 'md' }) %>
-            <p class="mt-1 text-[11px] text-stone-500"><%= t('movies.vote.scoreHint') %></p>
+            <%- include('partials/suggestionVote', { card: { id: item.id, score: item.score, myVote: item.myVote }, channel, section: sec.path, csrf, user, size: 'md' }) %>
+            <p class="mt-1 text-[11px] text-stone-500"><%= st('vote.scoreHint') %></p>
           </div>
         <% } %>
 
         <%# Three plates, three different sources - each drawn its own way so they never read as
             one number repeated: the streamer's gold medal, the viewers' star, IMDb's own yellow. %>
         <dl class="mt-5 flex flex-wrap gap-3">
-          <div class="flex items-center gap-3 pr-4 rounded-2xl bg-black/30 ring-1 ring-white/10 p-2">
-            <dd class="grid place-items-center w-12 h-12 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-amber-400 text-stone-950 shadow-lg shadow-amber-500/20' : 'bg-stone-800 text-stone-500' %>">
+          <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
+            <dd class="grid place-items-center w-12 h-12 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-(--sec-accent) text-stone-950 shadow-lg shadow-(--sec-accent)/20' : 'bg-stone-800 text-stone-500' %>">
               <%= item.ratings.streamer || '—' %>
             </dd>
-            <dt class="text-[11px] leading-tight text-stone-400"><%= t('movies.ratingStreamer') %><br /><span class="text-stone-500"><%= t('movies.outOfTen') %></span></dt>
+            <dt class="text-[11px] leading-tight text-stone-400"><%= st('ratingStreamer') %><br /><span class="text-stone-500"><%= st('outOfTen') %></span></dt>
           </div>
-          <div class="flex items-center gap-3 pr-4 rounded-2xl bg-black/30 ring-1 ring-white/10 p-2">
+          <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
             <dd class="flex items-center gap-1.5 pl-2">
-              <svg class="w-6 h-6 <%= item.viewerAverage !== null ? 'text-amber-300' : 'text-stone-700' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-viewer-star><path d="<%= starPath %>"/></svg>
+              <svg class="w-6 h-6 <%= item.viewerAverage !== null ? 'text-(--sec-accent-strong)' : 'text-stone-700' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-viewer-star><path d="<%= starPath %>"/></svg>
               <span class="text-2xl font-extrabold tabular-nums <%= item.viewerAverage !== null ? 'text-white' : 'text-stone-600' %>" data-viewer-average><%= item.viewerAverage !== null ? item.viewerAverage.toFixed(1) : '—' %></span>
             </dd>
-            <dt class="text-[11px] leading-tight text-stone-400"><%= t('movies.ratingViewers') %><br />
-              <span class="text-stone-500" data-viewer-count data-template="<%= t('movies.ratingCount', { count: '{{count}}' }) %>" data-none="<%= t('movies.ratingNone') %>"><%= item.viewerCount ? t('movies.ratingCount', { count: item.viewerCount }) : t('movies.ratingNone') %></span>
+            <dt class="text-[11px] leading-tight text-stone-400"><%= st('ratingViewers') %><br />
+              <span class="text-stone-500" data-viewer-count data-template="<%= st('ratingCount', { count: '{{count}}' }) %>" data-none="<%= st('ratingNone') %>"><%= item.viewerCount ? st('ratingCount', { count: item.viewerCount }) : st('ratingNone') %></span>
             </dt>
           </div>
-          <% if (item.imdbRating) { %>
-            <%# IMDb's own figure from the nightly dataset pass (jobs/imdbRatingsSync.js). %>
-            <div class="flex items-center gap-3 pr-4 rounded-2xl bg-black/30 ring-1 ring-white/10 p-2">
+          <% if (item.externalRating) { %>
+            <%# The outside figure, from a daily pass: IMDb's own for a film, Steam's share of positive
+                reviews for a game - each drawn in its source's own colours (partials/externalRating). %>
+            <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
               <dd class="flex items-center gap-2 pl-1">
-                <span class="px-1.5 py-0.5 rounded bg-[#f5c518] text-black text-xs font-black">IMDb</span>
-                <span class="text-2xl font-extrabold tabular-nums text-white"><%= item.imdbRating.value.toFixed(1) %></span>
+                <%- include('partials/externalRating', { rating: item.externalRating, size: 'md' }) %>
               </dd>
-              <dt class="text-[11px] leading-tight text-stone-500"><%= t('movies.ratingCount', { count: item.imdbRating.votes.toLocaleString(dateLocale) }) %></dt>
+              <dt class="text-[11px] leading-tight text-stone-500"><%= st('ratingCount', { count: item.externalRating.votes.toLocaleString(dateLocale) }) %></dt>
+            </div>
+          <% } %>
+          <% if (item.extras && item.extras.minutes) { %>
+            <%# Games: how long it was on stream and when last, from the bot's 5-minute samples. %>
+            <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
+              <dd class="pl-2 text-2xl font-extrabold tabular-nums text-white"><%= item.extras.minutes >= 60 ? st('hoursShort', { n: Math.round(item.extras.minutes / 60) }) : st('minutesShort', { n: item.extras.minutes }) %></dd>
+              <dt class="text-[11px] leading-tight text-stone-400"><%= st('onStream') %><% if (item.extras.lastSeen) { %><br /><span class="text-stone-500"><%= st('lastOnStream', { date: new Date(item.extras.lastSeen).toLocaleDateString(dateLocale) }) %></span><% } %></dt>
             </div>
           <% } %>
         </dl>
@@ -145,20 +153,20 @@
         <div class="mt-5 flex flex-wrap items-center gap-2">
           <% if (item.recordingUrl) { %>
             <a href="<%= item.recordingUrl %>" target="_blank" rel="noopener noreferrer nofollow"
-               class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-stone-950 text-sm font-semibold hover:bg-amber-300">
+               class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-(--sec-accent) text-stone-950 text-sm font-semibold hover:bg-(--sec-accent-strong)">
               <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6z"/></svg>
-              <%= t('movies.recordingLink') %>
+              <%= st('recordingLink') %>
             </a>
           <% } %>
-          <% if (item.external && item.external.imdbId) { %>
-            <a href="https://www.imdb.com/title/<%= item.external.imdbId %>/" target="_blank" rel="noopener noreferrer nofollow"
-               class="px-3 py-1.5 rounded-full text-sm text-stone-300 ring-1 ring-white/15 hover:ring-white/30">IMDb ↗</a>
-          <% } %>
+          <% (item.extras && item.extras.links || (item.external && item.external.imdbId ? [{ href: 'https://www.imdb.com/title/' + item.external.imdbId + '/', label: 'IMDb' }] : [])).forEach(function(link) { %>
+            <a href="<%= link.href %>" target="_blank" rel="noopener noreferrer nofollow"
+               class="px-3 py-1.5 rounded-full text-sm text-stone-300 ring-1 ring-white/15 hover:ring-white/30"><%= link.label %> ↗</a>
+          <% }) %>
           <% if (canEdit) { %>
-            <a href="<%= base %>/edit" class="ml-auto px-3 py-1.5 rounded-full text-xs font-medium text-stone-300 ring-1 ring-white/15 hover:ring-amber-400/60 hover:text-amber-200"><%= t('movies.edit') %></a>
-            <form method="post" action="<%= base %>/delete" data-confirm-delete="<%= t('movies.deleteConfirm') %>" class="inline">
+            <a href="<%= base %>/edit" class="ml-auto px-3 py-1.5 rounded-full text-xs font-medium text-stone-300 ring-1 ring-white/15 hover:ring-(--sec-accent)/60 hover:text-(--sec-accent-soft)"><%= st('edit') %></a>
+            <form method="post" action="<%= base %>/delete" data-confirm-delete="<%= st('deleteConfirm') %>" class="inline">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
-              <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-medium text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10"><%= t('movies.delete') %></button>
+              <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-medium text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10"><%= st('delete') %></button>
             </form>
           <% } %>
         </div>
@@ -170,21 +178,21 @@
     <%# Moderation of a suggestion: the cover first (a viewer's upload is hidden from everyone else
         until approved), then the decision. Only levels 0-2 holding the "discussions" right see the
         buttons; the author sees only that the cover is waiting. %>
-    <section id="decision" class="mt-6 rounded-2xl bg-emerald-950/20 ring-1 ring-emerald-500/20 px-4 sm:px-5 py-4 space-y-3">
+    <section id="decision" class="mt-6 rounded-(--sec-radius-lg) bg-emerald-950/20 ring-1 ring-emerald-500/20 px-4 sm:px-5 py-4 space-y-3">
       <% if (decidedFlash) { %>
-        <p class="text-xs text-amber-300"><%= t('movies.decide.flash.' + decidedFlash) %></p>
+        <p class="text-xs text-amber-300"><%= st('decide.flash.' + decidedFlash) %></p>
       <% } %>
       <% if (item.posterPending) { %>
         <div class="flex flex-wrap items-center gap-2 text-sm">
-          <span class="text-amber-300"><%= t(canEdit ? 'movies.coverPendingModerator' : 'movies.coverPendingAuthor') %></span>
+          <span class="text-amber-300"><%= st(canEdit ? 'coverPendingModerator' : 'coverPendingAuthor') %></span>
           <% if (canEdit) { %>
             <form method="post" action="<%= base %>/poster/approve" class="inline">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
-              <button type="submit" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500 text-stone-950 hover:bg-emerald-400"><%= t('movies.coverApprove') %></button>
+              <button type="submit" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500 text-stone-950 hover:bg-emerald-400"><%= st('coverApprove') %></button>
             </form>
-            <form method="post" action="<%= base %>/poster/remove" class="inline" data-confirm-delete="<%= t('movies.coverRemoveConfirm') %>">
+            <form method="post" action="<%= base %>/poster/remove" class="inline" data-confirm-delete="<%= st('coverRemoveConfirm') %>">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
-              <button type="submit" class="px-3 py-1 rounded-full text-xs font-semibold text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10"><%= t('movies.coverRemove') %></button>
+              <button type="submit" class="px-3 py-1 rounded-full text-xs font-semibold text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10"><%= st('coverRemove') %></button>
             </form>
           <% } %>
         </div>
@@ -194,22 +202,22 @@
           <% if (decisions.includes('accept')) { %>
             <form method="post" action="<%= base %>/decide" class="inline">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
-              <button type="submit" name="action" value="accept" class="px-3.5 py-1.5 rounded-full text-sm font-semibold bg-sky-500 text-stone-950 hover:bg-sky-400"><%= t('movies.decide.accept') %></button>
+              <button type="submit" name="action" value="accept" class="px-3.5 py-1.5 rounded-full text-sm font-semibold bg-sky-500 text-stone-950 hover:bg-sky-400"><%= st('decide.accept') %></button>
             </form>
           <% } %>
           <% if (decisions.includes('reopen')) { %>
             <form method="post" action="<%= base %>/decide" class="inline">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
-              <button type="submit" name="action" value="reopen" class="px-3.5 py-1.5 rounded-full text-sm font-semibold ring-1 ring-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10"><%= t('movies.decide.reopen') %></button>
+              <button type="submit" name="action" value="reopen" class="px-3.5 py-1.5 rounded-full text-sm font-semibold ring-1 ring-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10"><%= st('decide.reopen') %></button>
             </form>
           <% } %>
           <% if (decisions.includes('reject')) { %>
             <form method="post" action="<%= base %>/decide" class="flex flex-wrap items-center gap-2 flex-1 min-w-[16rem]">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
               <input type="hidden" name="action" value="reject" />
-              <input type="text" name="reason" required maxlength="300" placeholder="<%= t('movies.decide.reasonPlaceholder') %>"
-                     class="flex-1 min-w-[10rem] rounded-full bg-stone-900 border border-stone-700 text-sm text-stone-100 placeholder:text-stone-500 px-3 py-1.5 focus:outline-none focus:border-red-400" />
-              <button type="submit" class="px-3.5 py-1.5 rounded-full text-sm font-semibold text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/10"><%= t('movies.decide.reject') %></button>
+              <input type="text" name="reason" required maxlength="300" placeholder="<%= st('decide.reasonPlaceholder') %>"
+                     class="flex-1 min-w-[10rem] rounded-full bg-(--sec-surface) border border-stone-700 text-sm text-stone-100 placeholder:text-stone-500 px-3 py-1.5 focus:outline-none focus:border-red-400" />
+              <button type="submit" class="px-3.5 py-1.5 rounded-full text-sm font-semibold text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/10"><%= st('decide.reject') %></button>
             </form>
           <% } %>
         </div>
@@ -218,12 +226,12 @@
   <% } %>
 
   <% if (item.status !== 'rejected') { %>
-    <section id="rating" class="mt-6 rounded-2xl bg-stone-900/60 ring-1 ring-white/5 px-4 sm:px-5 py-4">
-      <h3 class="text-sm font-semibold text-stone-200 mb-2"><%= t('movies.yourRating') %></h3>
+    <section id="rating" class="mt-6 rounded-(--sec-radius-lg) bg-(--sec-surface)/60 ring-1 ring-white/5 px-4 sm:px-5 py-4">
+      <h3 class="text-sm font-semibold text-stone-200 mb-2"><%= st('yourRating') %></h3>
       <% if (!user) { %>
-        <p class="text-sm"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-amber-300 hover:text-amber-200"><%= t('movies.loginToRate') %></a></p>
+        <p class="text-sm"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-(--sec-accent-strong) hover:text-(--sec-accent-soft)"><%= st('loginToRate') %></a></p>
       <% } else if (!canRate) { %>
-        <p class="text-sm text-stone-500"><%= t('movies.ownerCannotRate') %></p>
+        <p class="text-sm text-stone-500"><%= st('ownerCannotRate') %></p>
       <% } else { %>
         <%# Ten stars, each a submit button of one form - so it works without JS: the star you
             click is the score, and the star of the score you already gave posts "clear", which
@@ -231,27 +239,27 @@
             the hover/keyboard preview (roving focus, arrow keys), posts by fetch and patches in
             place. Lit stars are drawn by the server too, so the score shows before any script. %>
         <form method="post" action="<%= base %>/rate" data-rate-form data-current="<%= mine || '' %>"
-              data-label-pick="<%= t('movies.starPick', { n: '{{n}}' }) %>" data-label-clear="<%= t('movies.starClear', { n: '{{n}}' }) %>"
+              data-label-pick="<%= st('starPick', { n: '{{n}}' }) %>" data-label-clear="<%= st('starClear', { n: '{{n}}' }) %>"
               class="flex flex-wrap items-center gap-x-4 gap-y-2">
           <input type="hidden" name="_csrf" value="<%= csrf %>" />
-          <div role="radiogroup" aria-label="<%= t('movies.starsLabel') %>" class="flex" data-stars>
+          <div role="radiogroup" aria-label="<%= st('starsLabel') %>" class="flex" data-stars>
             <% for (let n = 1; n <= 10; n++) { %>
-              <% const label = mine === n ? t('movies.starClear', { n }) : t('movies.starPick', { n }); %>
+              <% const label = mine === n ? st('starClear', { n }) : st('starPick', { n }); %>
               <button type="submit" name="value" value="<%= mine === n ? 'clear' : n %>" data-star="<%= n %>"
                       role="radio" aria-checked="<%= mine === n ? 'true' : 'false' %>" aria-label="<%= label %>" title="<%= label %>"
                       data-lit="<%= n <= mine ? '1' : '0' %>"
-                      class="p-0.5 rounded text-stone-700 hover:text-amber-300 data-[lit=1]:text-amber-400 transition-colors focus-visible:outline-2 focus-visible:outline-amber-400">
+                      class="p-0.5 rounded text-stone-700 hover:text-(--sec-accent-strong) data-[lit=1]:text-(--sec-accent) transition-colors focus-visible:outline-2 focus-visible:outline-(--sec-accent)">
                 <%# 24 px on a phone: ten stars must fit a 375 px screen inside the panel (measured overflow at 28 px). %>
                 <svg class="w-6 h-6 sm:w-8 sm:h-8" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="<%= starPath %>"/></svg>
               </button>
             <% } %>
           </div>
-          <span class="text-lg font-bold tabular-nums text-amber-200" data-star-readout><%= mine ? mine + '/10' : '' %></span>
+          <span class="text-lg font-bold tabular-nums text-(--sec-accent-soft)" data-star-readout><%= mine ? mine + '/10' : '' %></span>
         </form>
         <p class="mt-2 text-xs text-stone-500" data-rate-note
-           data-note-counted="<%= t('movies.rateCounted') %>" data-note-not-counted="<%= t('movies.rateNotCounted') %>"
-           data-note-cleared="<%= t('movies.rateCleared') %>" data-note-error="<%= t('movies.rateError') %>">
-          <% if (ratingFlash === 'cleared') { %><%= t('movies.rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= t('movies.rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= t('movies.rateCounted') %><% } else if (ratingFlash) { %><%= t('movies.rateError') %><% } else { %><%= t('movies.rateHint') %><% } %>
+           data-note-counted="<%= st('rateCounted') %>" data-note-not-counted="<%= st('rateNotCounted') %>"
+           data-note-cleared="<%= st('rateCleared') %>" data-note-error="<%= st('rateError') %>">
+          <% if (ratingFlash === 'cleared') { %><%= st('rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= st('rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= st('rateCounted') %><% } else if (ratingFlash) { %><%= st('rateError') %><% } else { %><%= st('rateHint') %><% } %>
         </p>
       <% } %>
     </section>
@@ -259,12 +267,12 @@
 
   <% if (item.review) { %>
     <section class="mt-6">
-      <h3 class="sr-only"><%= t('movies.reviewHeading', { login: channel.channelLogin }) %></h3>
-      <figure class="relative rounded-2xl bg-stone-900/40 px-6 py-5 border-l-4 border-amber-400">
-        <span class="absolute -top-3 left-4 text-5xl leading-none text-amber-400/40 select-none" aria-hidden="true">“</span>
+      <h3 class="sr-only"><%= st('reviewHeading', { login: channel.channelLogin }) %></h3>
+      <figure class="relative rounded-(--sec-radius-lg) bg-(--sec-surface)/40 px-6 py-5 border-l-4 border-(--sec-accent)">
+        <span class="absolute -top-3 left-4 text-5xl leading-none text-(--sec-accent)/40 select-none" aria-hidden="true">“</span>
         <blockquote class="prose-news text-stone-200 text-[15px] leading-relaxed"><%- item.review.bodyHtml %></blockquote>
         <figcaption class="mt-3 text-xs text-stone-400">
-          — <span class="font-semibold text-amber-200"><%= channel.channelLogin %></span>
+          — <span class="font-semibold text-(--sec-accent-soft)"><%= channel.channelLogin %></span>
           <% if (item.review.updatedAt) { %><span class="text-stone-600">· <%= new Date(item.review.updatedAt).toLocaleDateString(dateLocale) %></span><% } %>
         </figcaption>
       </figure>
@@ -273,7 +281,7 @@
 
   <%- include('partials/discussion', { commentCount: item.commentCount || 0 }) %>
 
-  <%- include('partials/mediaAttribution') %>
+  <%- include('partials/mediaAttribution', { which: sec.attribution }) %>
 </main>
 
 <script src="<%= asset('/js/emoteMatch.js') %>" defer></script>

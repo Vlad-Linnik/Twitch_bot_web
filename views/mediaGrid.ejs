@@ -1,0 +1,96 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + st('titleSuffix') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12 media-theme-<%= sec.theme %>">
+
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
+
+  <% if (sectionPreview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+      <%= st('previewNotice') %>
+    </div>
+  <% } %>
+
+  <%# The section's own controls: amber pills on warm black, not the news feed's purple and
+      underlined tabs. The colours and shapes come from the section's theme (the media-theme-* classes
+      in public/css/input.css): gold on warm black for films, cyan on cold slate for games. %>
+  <div class="flex flex-wrap items-center gap-3 mb-5">
+    <nav class="inline-flex gap-1 p-1 rounded-full bg-(--sec-surface) ring-1 ring-white/5" aria-label="<%= st('tabsLabel') %>">
+      <% tabs.forEach(function(tab) { %>
+        <a href="<%= tab.href %>" data-transition="instant"<% if (tab.key === view.tab) { %> aria-current="page"<% } %>
+           class="px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors <%= tab.key === view.tab ? 'bg-(--sec-accent) text-stone-950' : 'text-stone-400 hover:text-(--sec-accent-soft)' %>">
+          <%= st('tab.' + tab.key) %> <span class="text-xs tabular-nums <%= tab.key === view.tab ? 'text-stone-800' : 'text-stone-600' %>"><%= tab.count %></span>
+        </a>
+      <% }) %>
+    </nav>
+    <% if (view.tab === 'suggestions' && suggest) { %>
+      <%# Suggesting is a viewer action, so it sits on the suggestions tab only - and says why it is
+          not offered rather than just hiding the button. %>
+      <% if (suggest.allowed) { %>
+        <a href="/<%= channel.channelLogin %>/<%= sec.path %>/suggest"
+           class="<%= canEdit ? '' : 'ml-auto ' %>inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500 text-stone-950 hover:bg-emerald-400 text-sm font-semibold transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" /></svg>
+          <%= st('suggest.button') %>
+        </a>
+      <% } else if (suggest.reason === 'login') { %>
+        <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-sm text-emerald-300 hover:text-emerald-200"><%= st('suggest.loginToSuggest') %></a>
+      <% } else { %>
+        <span class="text-xs text-stone-500"><%= st('suggest.chatOnly') %></span>
+      <% } %>
+    <% } %>
+    <% if (canEdit) { %>
+      <a href="/<%= channel.channelLogin %>/<%= sec.path %>/new"
+         class="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-(--sec-accent)/60 text-(--sec-accent-strong) hover:bg-(--sec-accent) hover:text-stone-950 text-sm font-semibold transition-colors">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" /></svg>
+        <%= st('create') %>
+      </a>
+    <% } %>
+  </div>
+
+  <%# A plain GET form: sort and search work without JS, and the URL is shareable. %>
+  <form method="get" action="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="instant" class="flex flex-wrap items-center gap-2 mb-8">
+    <% if (view.tab !== 'done') { %><input type="hidden" name="tab" value="<%= view.tab %>" /><% } %>
+    <input type="search" name="q" value="<%= view.q %>" maxlength="100" placeholder="<%= st('searchPlaceholder') %>"
+           class="flex-1 min-w-[10rem] rounded-full bg-(--sec-surface) border border-stone-700 text-sm text-stone-100 placeholder:text-stone-500 px-4 py-1.5 focus:outline-none focus:border-(--sec-accent)" />
+    <label class="flex items-center gap-2 text-sm text-neutral-400">
+      <span class="sr-only sm:not-sr-only"><%= st('sortLabel') %></span>
+      <select name="sort" data-autosubmit
+              class="rounded-full bg-(--sec-surface) border border-stone-700 text-sm text-stone-100 px-3 py-1.5 focus:outline-none focus:border-(--sec-accent)">
+        <% sorts.forEach(function(s) { %>
+          <option value="<%= s %>"<%= s === view.sort ? ' selected' : '' %>><%= st('sort.' + s) %></option>
+        <% }) %>
+      </select>
+    </label>
+    <button type="submit" class="px-4 py-1.5 rounded-full bg-stone-800 text-stone-200 hover:bg-stone-700 text-sm"><%= st('searchSubmit') %></button>
+  </form>
+
+  <% if (cards.length === 0) { %>
+    <p class="text-center text-stone-500 text-sm py-16"><%= view.q ? st('emptySearch') : st('empty.' + view.tab) %></p>
+  <% } else { %>
+    <%# Same contract as the news feed (public/js/infinite-list.js): data-src without a cursor, the
+        next cursor lives in the "show more" link below. %>
+    <div id="media-grid" data-infinite-list data-src="<%= listSrc %>"
+         <% if (restoreKey) { %>data-restore="<%= restoreKey %>"<% } %>
+         class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-6">
+      <%- include('partials/mediaCards', { cards, channel, section: sec.path, csrf }) %>
+    </div>
+  <% } %>
+
+  <% if (nextHref) { %>
+    <div class="flex justify-center mt-8">
+      <a href="<%= nextHref %>" data-infinite-more="media-grid" data-transition="instant"
+         data-retry-label="<%= t('news.loadFailed') %>" data-loading-label="<%= t('news.loading') %>"
+         class="px-5 py-2 rounded-full border border-(--sec-accent)/40 text-sm text-(--sec-accent-soft) hover:bg-(--sec-accent) hover:text-stone-950 transition-colors">
+        <%= t('news.loadMore') %>
+      </a>
+    </div>
+  <% } %>
+
+  <%- include('partials/mediaAttribution', { which: sec.attribution }) %>
+</main>
+
+<script src="<%= asset('/js/infinite-list.js') %>" defer></script>
+<script src="<%= asset('/js/media-grid.js') %>" defer></script>
+<script src="<%= asset('/js/suggestion-vote.js') %>" defer></script>
+
+<%- include('partials/foot') %>

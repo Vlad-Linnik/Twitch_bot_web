@@ -26,7 +26,8 @@
   const url = root.dataset.lookupUrl;
   const DEBOUNCE_MS = 350;
 
-  let tab = "films";
+  // The first tab the server drew is the default (films for movies, Twitch for games).
+  let tab = tabs.length ? tabs[0].dataset.lookupTab : "films";
   let timer = null;
   let seq = 0;
 
@@ -111,6 +112,9 @@
       setField("year", d.year);
       setField("mediaType", d.mediaType);
       setField("imdbId", d.imdbId);
+      // Games: the Steam app and the Twitch category the pick belongs to.
+      setField("steamAppId", d.external && d.external.steamAppId);
+      setField("twitchCategoryName", d.external && d.external.twitchCategoryName);
       if (d.episodes && d.mediaType !== "film") setField("progressTotal", d.episodes);
       const nsfw = form.querySelector("[data-nsfw-checkbox]");
       if (nsfw && d.nsfwHint) nsfw.checked = true;

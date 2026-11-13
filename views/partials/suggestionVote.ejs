@@ -28,27 +28,27 @@
     <input type="hidden" name="_csrf" value="<%= csrf %>" />
     <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
     <button type="submit" name="value" value="<%= card.myVote === 1 ? 'clear' : '1' %>" data-vote="1"
-            aria-pressed="<%= card.myVote === 1 ? 'true' : 'false' %>" title="<%= t(card.myVote === 1 ? 'movies.vote.promoteUndo' : 'movies.vote.promote') %>"
-            aria-label="<%= t('movies.vote.promoteShort') %>"
+            aria-pressed="<%= card.myVote === 1 ? 'true' : 'false' %>" title="<%= st(card.myVote === 1 ? 'vote.promoteUndo' : 'vote.promote') %>"
+            aria-label="<%= st('vote.promoteShort') %>"
             class="<%= pill %> inline-flex items-center gap-1 whitespace-nowrap rounded-full font-semibold transition-colors border
                    border-emerald-500/60 text-emerald-300 hover:bg-emerald-500/15
                    aria-pressed:bg-emerald-500 aria-pressed:border-emerald-500 aria-pressed:text-stone-950">
-      <span aria-hidden="true">▲</span><span class="<%= big ? '' : 'sr-only' %>"><%= t('movies.vote.promoteShort') %></span>
+      <span aria-hidden="true">▲</span><span class="<%= big ? '' : 'sr-only' %>"><%= st('vote.promoteShort') %></span>
     </button>
     <span data-vote-score class="min-w-[2.5ch] text-center font-bold tabular-nums <%= big ? 'text-base' : 'text-xs' %> <%= card.score > 0 ? 'text-emerald-300' : card.score < 0 ? 'text-slate-400' : 'text-stone-400' %>"
-          title="<%= t('movies.vote.scoreHint') %>"><%= signed %></span>
+          title="<%= st('vote.scoreHint') %>"><%= signed %></span>
     <button type="submit" name="value" value="<%= card.myVote === -1 ? 'clear' : '-1' %>" data-vote="-1"
-            aria-pressed="<%= card.myVote === -1 ? 'true' : 'false' %>" title="<%= t(card.myVote === -1 ? 'movies.vote.notNowUndo' : 'movies.vote.notNow') %>"
+            aria-pressed="<%= card.myVote === -1 ? 'true' : 'false' %>" title="<%= st(card.myVote === -1 ? 'vote.notNowUndo' : 'vote.notNow') %>"
             class="<%= pill %> inline-flex items-center whitespace-nowrap rounded-full font-semibold transition-colors border
                    border-slate-500/60 text-slate-300 hover:bg-slate-500/15
                    aria-pressed:bg-slate-500 aria-pressed:border-slate-500 aria-pressed:text-white">
-      <%= t('movies.vote.notNowShort') %>
+      <%= st('vote.notNowShort') %>
     </button>
   </form>
 <% } else { %>
   <span class="inline-flex items-center gap-1.5 <%= big ? 'text-sm' : 'text-xs' %>" id="vote-<%= card.id %>">
     <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>"
-       class="<%= pill %> rounded-full border border-emerald-500/40 text-emerald-300/80 hover:text-emerald-200" title="<%= t('movies.vote.loginToVote') %>"><span aria-hidden="true">▲</span> <%= t('movies.vote.promoteShort') %></a>
+       class="<%= pill %> rounded-full border border-emerald-500/40 text-emerald-300/80 hover:text-emerald-200" title="<%= st('vote.loginToVote') %>"><span aria-hidden="true">▲</span> <%= st('vote.promoteShort') %></a>
     <span class="font-bold tabular-nums text-stone-400"><%= signed %></span>
   </span>
 <% } %>

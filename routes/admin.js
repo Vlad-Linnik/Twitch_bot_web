@@ -45,6 +45,7 @@ const { saveThemeImage, saveRemoteImage, themeImageBytes, deleteThemeImage } = r
 const steamShowcase = require("../lib/steamShowcase");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
 const imdbRatingsSync = require("../jobs/imdbRatingsSync");
+const steamReviewsSync = require("../jobs/steamReviewsSync");
 
 const REJECT_REASON_MAX_LENGTH = 300;
 // The bot writes a fresh heartbeat doc every 30s (TwitchBot's index.js) - anything older than a
@@ -197,6 +198,23 @@ router.post("/admin/channels/:login/toggle-movies", settingsWriteLimiter, requir
       });
     }
     res.redirect(`/admin?flash=${enable ? "moviesEnabled" : "moviesDisabled"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/channels/:login/toggle-games", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const enable = req.body.gamesEnabled === "1";
+    const changed = await channelsRepo.setSectionEnabled(req.params.login, "gamesEnabled", enable);
+    if (changed) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: enable ? "channel.gamesEnable" : "channel.gamesDisable",
+        target: req.params.login.toLowerCase(),
+      });
+    }
+    res.redirect(`/admin?flash=${enable ? "gamesEnabled" : "gamesDisabled"}`);
   } catch (err) {
     next(err);
   }
@@ -835,12 +853,19 @@ function uploadNewsImage(req, res, next) {
 // the TMDB token is set is shown; the token itself never is.
 router.get("/admin/media", requireAdmin, async (req, res, next) => {
   try {
-    const [status, stats] = await Promise.all([imdbRatingsSync.getStatus(), mediaItemsRepo.sourceStats()]);
+    const [status, steamStatus, stats] = await Promise.all([
+      imdbRatingsSync.getStatus(),
+      steamReviewsSync.getStatus(),
+      mediaItemsRepo.sourceStats(),
+    ]);
     res.render("adminMedia", {
       tab: "media",
       tmdbConfigured: Boolean(env.tmdbReadToken),
+      twitchConfigured: Boolean(env.twitchClientId),
       imdbStatus: status,
       imdbRunning: imdbRatingsSync.isRunning(),
+      steamStatus,
+      steamRunning: steamReviewsSync.isRunning(),
       stats,
       flash: typeof req.query.flash === "string" ? req.query.flash : null,
     });
@@ -861,6 +886,30 @@ router.post("/admin/media/imdb-sync", settingsWriteLimiter, requireAdmin, verify
       details: result.ok ? `${result.found}/${result.wanted}` : result.error,
     });
     res.redirect(`/admin/media?flash=${result.ok ? "imdbSynced" : "imdbFailed"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Not awaited, unlike the IMDb pass: Steam is asked once per game with a pause between requests, so
+// a run over a few hundred cards outlasts any sensible request. The page says the run has started;
+// its result shows on the next visit.
+router.post("/admin/media/steam-sync", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    if (!steamReviewsSync.isRunning()) {
+      steamReviewsSync
+        .runOnce()
+        .then((result) =>
+          adminActionLogsRepo.logAction({
+            admin: req.user,
+            action: "media.steamSync",
+            target: "steam",
+            details: result.ok ? `${result.found}/${result.wanted}` : result.error,
+          })
+        )
+        .catch((err) => console.error("[admin] steam sync:", err.message));
+    }
+    res.redirect("/admin/media?flash=steamStarted");
   } catch (err) {
     next(err);
   }
