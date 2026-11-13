@@ -17,7 +17,9 @@
 
   <% const csrf = user ? csrfToken : ''; %>
 
-  <section class="mt-8" id="comments">
+  <%# data-thread-base / data-actions-base: the only place public/js/comment-thread.js learns
+      where this thread's endpoints are (lib/discussion.js's threadUrls). %>
+  <section class="mt-8" id="comments" data-thread-base="<%= threadBase %>" data-actions-base="<%= actionsBase %>">
     <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('comments.heading') %> (<span data-comment-count><%= post.commentCount %></span>)</h2>
 
     <% if (commentError) { %>
@@ -26,12 +28,12 @@
       </div>
     <% } %>
 
-    <% if (isAdmin && restrictedUsers.length > 0) { %>
+    <% if (canModerate && restrictedUsers.length > 0) { %>
       <div class="mb-6 rounded-md border border-neutral-800 bg-neutral-900/60 p-3" id="restricted-users">
         <p class="text-xs text-neutral-500 mb-2"><%= t('comments.restrictedHeading') %></p>
         <div class="flex flex-wrap gap-2">
           <% restrictedUsers.forEach(function(r) { %>
-            <form method="post" action="/<%= channel.channelLogin %>/news/comment-bans/<%= r.userId %>/unrestrict" data-transition="instant"
+            <form method="post" action="<%= actionsBase %>/comment-bans/<%= r.userId %>/unrestrict" data-transition="instant"
                   class="flex items-center gap-1.5 rounded-md bg-neutral-800 pl-2 pr-1 py-1 text-xs">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
               <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
@@ -50,10 +52,10 @@
     <% } else if (isRestricted) { %>
       <p class="mb-6 text-sm text-amber-400"><%= t('comments.restrictedNotice') %></p>
     <% } else { %>
-      <%# data-comment-post-form: public/js/news-comments.js posts this via fetch and splices the
+      <%# data-comment-post-form: public/js/comment-thread.js posts this via fetch and splices the
           rendered reply into #comment-thread-root itself - no reload, no scroll jump. Falls back
           to this plain POST (routes/news.js's classic redirect branch) with no JS. %>
-      <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" class="mb-8 flex flex-col gap-2" data-comment-post-form>
+      <form method="post" action="<%= threadBase %>/comments" class="mb-8 flex flex-col gap-2" data-comment-post-form>
         <input type="hidden" name="_csrf" value="<%= csrf %>" />
         <input type="hidden" name="sort" value="<%= commentSort %>" />
         <div class="relative">
@@ -71,13 +73,13 @@
     <% if (commentTree.length === 0) { %>
       <p class="text-sm text-neutral-600 py-6 text-center"><%= t('comments.empty') %></p>
     <% } else { %>
-      <%# Real <a href="?sort=..."> links - work with no JS. public/js/news-comments.js
+      <%# Real <a href="?sort=..."> links - work with no JS. public/js/comment-thread.js
           progressively enhances the group: a click fetches the same GET .../comments.json
           "load more" already uses (skip=0, the new sort) and swaps #comment-thread-root's
           contents in place, so re-sorting never reloads the page or moves the scroll position -
           only falls back to the real navigation if the fetch itself fails. %>
       <div class="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-900 p-0.5 w-fit mb-4"
-           role="group" data-comment-sort-group data-channel="<%= channel.channelLogin %>" data-post="<%= post.id %>" data-active-sort="<%= commentSort %>">
+           role="group" data-comment-sort-group data-active-sort="<%= commentSort %>">
         <% commentSortModes.forEach(function(mode) { %>
           <a href="?sort=<%= mode %>#comments" data-transition="instant" data-sort="<%= mode %>"
              class="px-2 py-1 text-xs rounded transition-colors <%= mode === commentSort ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-500 hover:text-neutral-300' %>">
@@ -86,10 +88,10 @@
         <% }) %>
       </div>
 
-      <%- include('partials/commentThread', { nodes: commentTree, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl, isRoot: true }) %>
+      <%- include('partials/commentThread', { nodes: commentTree, channel, threadBase, actionsBase, user, canModerate, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl, isRoot: true }) %>
       <div data-comment-loadmore-slot>
         <% if (hasMoreComments) { %>
-          <button type="button" data-comment-loadmore data-channel="<%= channel.channelLogin %>" data-post="<%= post.id %>"
+          <button type="button" data-comment-loadmore
                   data-sort="<%= commentSort %>" data-offset="<%= nextCommentOffset %>" data-loading-text="<%= t('comments.loadingMore') %>"
                   class="mt-4 w-full text-sm text-neutral-400 hover:text-neutral-200 border border-neutral-800 hover:border-neutral-700 rounded-md py-2 transition-colors">
             <%= t('comments.loadMore') %>
@@ -98,9 +100,9 @@
       </div>
       <%# Always rendered (even when nothing needs loading right now) so a sort switch that
           reveals more pages under the new order has a template to clone from - see
-          public/js/news-comments.js's swapCommentSort(). %>
+          public/js/comment-thread.js's swapCommentSort(). %>
       <template id="load-more-template">
-        <button type="button" data-comment-loadmore data-channel="<%= channel.channelLogin %>" data-post="<%= post.id %>"
+        <button type="button" data-comment-loadmore
                 data-loading-text="<%= t('comments.loadingMore') %>"
                 class="mt-4 w-full text-sm text-neutral-400 hover:text-neutral-200 border border-neutral-800 hover:border-neutral-700 rounded-md py-2 transition-colors">
           <%= t('comments.loadMore') %>
@@ -111,13 +113,13 @@
 </main>
 
 <%# Channel emote name -> image list for the comment box's autocomplete/live preview
-    (public/js/emoteMatch.js + news-comments.js). Not chat-derived (it's Twitch Helix/7TV API
+    (public/js/emoteMatch.js + comment-thread.js). Not chat-derived (it's Twitch Helix/7TV API
     data, not something a visitor typed), but inlined via safeJson anyway for the same reason
     every other inlined payload on this site is - see lib/safeJson.js. %>
 <script id="comment-emote-data" type="application/json"><%- safeJson(emoteList) %></script>
 
 <%# Translated comment-post error strings, keyed the same as routes/news.js's JSON error codes -
-    public/js/news-comments.js reads this to show an inline message on a failed AJAX post instead
+    public/js/comment-thread.js reads this to show an inline message on a failed AJAX post instead
     of the old redirect-with-?error= banner. Fixed UI copy, not visitor-derived, but inlined via
     safeJson anyway for the same reason every other inlined payload on this site is. %>
 <script id="comment-error-messages" type="application/json"><%- safeJson({
@@ -128,8 +130,8 @@
   too_deep: t('comments.error.too_deep'),
 }) %></script>
 
-<script src="<%= asset('/js/news-reactions.js') %>" defer></script>
+<script src="<%= asset('/js/reactions.js') %>" defer></script>
 <script src="<%= asset('/js/emoteMatch.js') %>" defer></script>
-<script src="<%= asset('/js/news-comments.js') %>" defer></script>
+<script src="<%= asset('/js/comment-thread.js') %>" defer></script>
 
 <%- include('partials/foot') %>

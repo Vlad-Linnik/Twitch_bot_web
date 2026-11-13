@@ -1,5 +1,5 @@
 // Pure emote-name matching/tokenizing helpers behind the comment box's autocomplete + live
-// preview (public/js/news-comments.js). No DOM here on purpose - these run against plain
+// preview (public/js/comment-thread.js). No DOM here on purpose - these run against plain
 // strings/arrays so they're unit-testable with Node's test runner the same way lib/*.js is
 // (see tests/emoteMatch.test.js), even though this file itself ships to the browser as a plain
 // <script> (no bundler in this project - see views/newsPost.ejs). The `module.exports` guard at
@@ -72,7 +72,7 @@ function tokenizeForPreview(text, emoteIndex) {
 // same chat line is printed at very different sizes: a question on its own card, a hint in small
 // type, and the two-line clamped quotation on a "Выше — ниже" card, where a 24px image would push
 // the second line out of the height the card reserves for it. Callers that need a different size
-// pass their own class. (public/js/news-comments.js builds these nodes itself, at a fixed height
+// pass their own class. (public/js/comment-thread.js builds these nodes itself, at a fixed height
 // its contenteditable editor depends on - the shape is the same, the sizing rule is not.)
 //
 // Returns the target, so a caller can build and append in one expression.

@@ -109,7 +109,7 @@ h1.settings-heading {
 .prose-news hr { border-color: var(--color-neutral-800, #262626); margin: 1em 0; }
 
 /* Collapsed state for a long news comment body (views/partials/commentThread.ejs,
-   public/js/news-comments.js) - clipped to a fixed height with a fade into the "read more"
+   public/js/comment-thread.js) - clipped to a fixed height with a fade into the "read more"
    button below it, so the cut-off reads as intentional rather than as truncated/broken text. */
 .news-comment-collapsed {
   max-height: 168px;
@@ -119,7 +119,7 @@ h1.settings-heading {
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
 }
 
-/* Placeholder text for the emote-aware comment editor (public/js/news-comments.js's
+/* Placeholder text for the emote-aware comment editor (public/js/comment-thread.js's
    contenteditable replacement for a plain <textarea>) - contenteditable has no native
    `placeholder` attribute, so this stands in for one. :empty only matches when the element has
    truly zero child nodes (not even an empty text node), which is exactly the state

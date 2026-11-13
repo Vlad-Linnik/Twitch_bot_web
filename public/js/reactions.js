@@ -1,6 +1,7 @@
-// Heart-toggle buttons on the news feed (views/partials/newsCard.ejs) - POSTs to
-// /:channel/news/:id/react and flips data-liked/the count optimistically, rolling back if the
-// request fails. The two reaction types ("like"/"superlike") are independent toggles handled by
+// Heart-toggle buttons (views/partials/newsCard.ejs, and every other channel section's cards) -
+// POSTs to the button's own data-react-url and flips data-liked/the count optimistically, rolling
+// back if the request fails. The URL is on the button rather than assembled here, so this file
+// knows nothing about which section it is in. The two reaction types ("like"/"superlike") are independent toggles handled by
 // the same code path - the button's own data-type decides which one a click affects.
 //
 // Logged-out visitors get the same clickable button (not disabled/greyed out) - a click sends
@@ -8,17 +9,17 @@
 // session (middleware/csrf.js's ensureToken), so its absence is the reliable "not logged in"
 // signal - same convention every "Login with Twitch" link on the site uses. ?returnTo= is the
 // current page (routes/authRoutes.js reads/sanitizes it, lib/returnTo.js) so login lands them
-// back on this news feed instead of the home page.
+// back on this page instead of the home page.
 //
 // One delegated listener rather than one per button: the feed appends cards as the reader
 // scrolls (public/js/infinite-list.js), and a button that arrives later must work the same.
 (() => {
   document.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-news-react]");
+    const button = event.target.closest("[data-react]");
     if (!button) return;
     if (button.dataset.busy === "1") return;
 
-    const { postId, channel, type, csrf } = button.dataset;
+    const { reactUrl, type, csrf } = button.dataset;
     if (!csrf) {
       const returnTo = window.location.pathname + window.location.search;
       window.location.href = `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
@@ -36,7 +37,7 @@
     button.dataset.busy = "1";
 
     try {
-      const response = await fetch(`/${channel}/news/${postId}/react`, {
+      const response = await fetch(reactUrl, {
         method: "POST",
         body: new URLSearchParams({ type, _csrf: csrf }),
         headers: { Accept: "application/json" },

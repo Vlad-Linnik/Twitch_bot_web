@@ -1,5 +1,6 @@
-// Per-channel restriction on who may POST news comments (site-admin/tier-0 only - see
-// routes/news.js). Same default-open idiom as db/modPermissionOverridesRepo.js: absence of a row
+// Per-channel restriction on who may POST comments in the channel's discussions (set by levels
+// 0-2 - see routes/news.js). One list per channel, not per section: someone restricted on a
+// channel does not get a fresh platform under another of its sections. Same default-open idiom as db/modPermissionOverridesRepo.js: absence of a row
 // means "may comment", a row only exists to record an explicit restriction, so lifting one
 // deletes the row rather than flipping a flag. Keyed by channelLogin (not channelId) to match
 // every other News* collection in this feature (NewsPosts/NewsComments are both channelLogin-
@@ -15,7 +16,13 @@ async function ensureInitialized() {
   if (collection) return collection;
   const db = await connectWeb();
   collection = db.collection("NewsCommentBans");
-  await collection.createIndex({ channelLogin: 1, userId: 1 }, { unique: true });
+  // In a catch: the handle is already cached, so a throw would fail only the first request
+  // after a restart and then silently heal.
+  try {
+    await collection.createIndex({ channelLogin: 1, userId: 1 }, { unique: true });
+  } catch (err) {
+    console.error("[newsCommentBansRepo] createIndex failed:", err.message);
+  }
   return collection;
 }
 
@@ -25,7 +32,7 @@ async function isBanned(channelLogin, userId) {
   return Boolean(doc);
 }
 
-// The admin-only "restricted commenters" list for one channel.
+// The moderators' "restricted commenters" list for one channel.
 async function listForChannel(channelLogin) {
   const col = await ensureInitialized();
   return col.find({ channelLogin: channelLogin.toLowerCase() }).sort({ createdAt: -1 }).toArray();

@@ -920,7 +920,7 @@
     "submit": "Отправить",
     "reply": "Ответить",
     "removed": "[удалено модератором]",
-    "removedAdminBadge": "Удалено (видно только администраторам)",
+    "removedAdminBadge": "Удалено (видно только модераторам)",
     "upvote": "Мне нравится",
     "downvote": "Мне не нравится",
     "loginToComment": "Войдите через Twitch, чтобы оставить комментарий",
@@ -1146,7 +1146,8 @@
       "counter": "Переменная",
       "variable": "Переменная",
       "long_ban": "Long-ban",
-      "unban_request": "Заявка на разбан"
+      "unban_request": "Заявка на разбан",
+      "comment": "Обсуждение"
     },
     "action": {
       "add": "Добавлено",
@@ -1159,7 +1160,9 @@
       "sniper": "Выстрел",
       "grenade": "Граната",
       "vote": "Голосование",
-      "takeover": "Смена перехвачена"
+      "takeover": "Смена перехвачена",
+      "restrict": "Ограничен",
+      "unrestrict": "Ограничение снято"
     },
     "colChanges": "Что изменилось",
     "rawDetails": "Исходные данные",
@@ -1224,6 +1227,9 @@
       "unbanApproved": "Одобрил заявку на разбан от {{target}}",
       "unbanDenied": "Отклонил заявку на разбан от {{target}}",
       "unbanVote": "Запустил голосование чата по заявке {{target}}",
+      "commentDeleted": "Удалён комментарий {{target}}",
+      "commenterRestricted": "{{target}} больше не может комментировать",
+      "commenterUnrestricted": "{{target}} снова может комментировать",
       "unbanSniper": "Выстрелил шальной пулей Бюро амнистии",
       "unbanGrenade": "Бросил гранату Бюро амнистии"
     }

@@ -1,7 +1,14 @@
 // /:channel/news - the public per-channel news feed (off by default; admin-toggled per
-// channel via /admin's Channels table, admin-authored via /admin/news - see CLAUDE.md's plan).
-// Mirrors routes/statistics.js's channel-scoped 404 pattern: unknown channel or a channel with
-// the feature off both 404, except a tier-0 admin previewing before flipping the toggle on.
+// channel via /admin's Channels table, admin-authored via /admin/news). Visibility - unknown
+// channel or the feed switched off both 404, except for a tier-0 admin previewing before the
+// toggle is on - is middleware/channelSection.js's loadChannelSection, shared with the other
+// channel sections.
+//
+// Discussion moderation (delete a comment, restrict or unrestrict a commenter) is open to levels
+// 0-2: the site admin, the channel owner and the channel's moderators. A post is written by the
+// admin, but the conversation under it happens in the channel's community, and the people who
+// moderate that community's chat are the ones who know who to restrict. NewsCommentBans stays one
+// list per channel, not per post.
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const newsRepo = require("../db/newsRepo");
@@ -10,15 +17,18 @@ const newsCommentsRepo = require("../db/newsCommentsRepo");
 const newsCommentVotesRepo = require("../db/newsCommentVotesRepo");
 const newsCommentBansRepo = require("../db/newsCommentBansRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
+const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const emoteImages = require("../twitch/emoteImages");
 const requireLogin = require("../middleware/requireLogin");
 const { verifyToken } = require("../middleware/csrf");
 const { computePermission, requireLevel } = require("../middleware/permissions");
+const { loadChannelSection } = require("../middleware/channelSection");
 const { createSimpleLimiter } = require("../middleware/rateLimiters");
 const { sanitizeReturnTo } = require("../lib/returnTo");
 const cursorPaging = require("../lib/cursorPaging");
 const { buildChannelNav } = require("../lib/channelNav");
+const { canModerateDiscussion, canRestrictAuthor, threadUrls } = require("../lib/discussion");
 const {
   MAX_DEPTH,
   MAX_BODY_LENGTH,
@@ -41,10 +51,19 @@ const COMMENTS_PAGE_SIZE = 20;
 const REACTION_TYPES = ["like", "superlike"];
 
 // Same two-shapes-one-handler convention as routes/settings.js's autosave forms: a fetch with
-// Accept: application/json gets JSON back (public/js/news-comments.js's comment-post handler,
+// Accept: application/json gets JSON back (public/js/comment-thread.js's comment-post handler,
 // which splices the reply straight into the thread with no reload), the plain no-JS form submit
 // gets the classic redirect.
 const wantsJson = (req) => (req.get("accept") || "").includes("application/json");
+
+// Reads (the feed, the permalink, comments.json) let an admin preview a switched-off feed.
+// Writes that leave data behind (a heart, a comment, a vote) do not: nothing should accumulate on
+// a section nobody else can see yet. Moderation does - an admin cleaning up in preview is fine.
+const newsPage = loadChannelSection("news");
+const newsJson = loadChannelSection("news", { json: true });
+const newsWriteJson = loadChannelSection("news", { json: true, allowPreview: false });
+const newsWrite = loadChannelSection("news", { allowPreview: false });
+const newsModerate = loadChannelSection("news", { maxLevel: 2 });
 
 // `?sort=`/a posted `sort` field is user-controlled input - never trust it past
 // isValidCommentSort(), which is also what buildCommentTree() itself falls back on internally,
@@ -59,11 +78,15 @@ function resolveCommentSort(value) {
 
 // Shared by the permalink page (GET /:channel/news/:id) and the "load more comments" JSON
 // endpoint below: one query for every comment on the post (small collection, capped - see
-// db/newsCommentsRepo.js), then the avatar/color/emote-image shaping both call sites need.
+// db/threadStore.js), then the avatar/color/emote-image shaping both call sites need.
 // Returns the FULL nested tree (buildCommentTree) - pagination is applied by the caller by
 // slicing the ROOT array, not by limiting this query, because a reply must load together with
 // whichever root thread it belongs to and there's no cheap way to know that boundary up front.
-async function loadCommentTree(post, channel, req, isAdmin, sortMode) {
+//
+// For a moderator each node also gets canRestrict - whether the server would accept restricting
+// its author (lib/discussion.js's canRestrictAuthor) - so the button is only drawn where it works.
+// One permission lookup per distinct author, and only when the viewer can moderate at all.
+async function loadCommentTree(post, channel, req, sortMode) {
   const [flatComments, emoteMap] = await Promise.all([
     newsCommentsRepo.listForPost(post._id),
     // Same channel-wide name -> image map the emote cloud resolves against (twitch/emoteImages.js) -
@@ -80,6 +103,13 @@ async function loadCommentTree(post, channel, req, isAdmin, sortMode) {
   const authorProfiles = await profileCacheRepo.getOrFetchProfiles(flatComments.map((c) => c.authorUserId));
   const emoteLookup = buildEmoteLookup(emoteMap);
 
+  const authorLevels = new Map();
+  if (canModerateDiscussion(req.permission)) {
+    const authorIds = [...new Set(flatComments.map((c) => String(c.authorUserId)))];
+    const levels = await Promise.all(authorIds.map((id) => computePermission(id, channel.channelLogin)));
+    authorIds.forEach((id, i) => authorLevels.set(id, levels[i]));
+  }
+
   const shapedComments = flatComments.map((c) => {
     const profile = authorProfiles.get(String(c.authorUserId));
     return {
@@ -90,10 +120,47 @@ async function loadCommentTree(post, channel, req, isAdmin, sortMode) {
       authorAvatarUrl: profile?.avatarUrl || null,
       authorChatColor: profile?.chatColor || null,
       renderedBody: renderCommentBody(c.body, emoteLookup),
+      canRestrict: authorLevels.has(String(c.authorUserId))
+        ? canRestrictAuthor(req.permission, authorLevels.get(String(c.authorUserId)))
+        : false,
     };
   });
 
   return buildCommentTree(shapedComments, sortMode);
+}
+
+// The locals partials/commentThread.ejs needs besides the nodes themselves - one place, so the
+// permalink page, comments.json and the single-comment JSON reply cannot drift apart.
+function threadLocals(req, res, channel, post, commentSort) {
+  return {
+    channel,
+    user: req.user,
+    canModerate: canModerateDiscussion(req.permission),
+    ...threadUrls("news", channel.channelLogin, String(post._id)),
+    maxCommentDepth: MAX_DEPTH,
+    maxCommentBodyLength: MAX_BODY_LENGTH,
+    commentSort,
+    csrf: req.user ? res.locals.csrfToken || "" : "",
+  };
+}
+
+// Who moderated what. The site admin's actions go to AdminActionLogs, as every other admin
+// action does; the owner's and moderators' go to the channel's own SettingsChangeLog, which is
+// the journal the owner can actually read (/<channel>/settings/change-log).
+async function logModeration(req, channel, { action, adminAction, target, details }) {
+  if (req.permission === 0) {
+    await adminActionLogsRepo.logAction({ admin: req.user, action: adminAction, target: `${channel.channelLogin}:${target}`, details });
+    return;
+  }
+  await settingsChangeLogRepo.logChange({
+    channelLogin: channel.channelLogin,
+    user: req.user,
+    category: "comment",
+    action,
+    target: details || target,
+    before: null,
+    after: null,
+  });
 }
 
 // Low-stakes, frequent clicks - same reasoning/shape as durakStickerLimiter.
@@ -118,17 +185,6 @@ const commentVoteLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 
 // portion it already has.
 const RESTORE_MAX = 240;
 
-// Visibility shared by the feed and list.json: unknown channel or a channel with the feature
-// off both read as "not found", except for a tier-0 admin previewing before the toggle is
-// flipped on.
-async function loadFeedChannel(req) {
-  const channel = await channelsRepo.findByLogin(req.params.channel);
-  if (!channel) return null;
-  const permission = await computePermission(req.user?.userId ?? null, channel.channelLogin);
-  if (!channel.newsEnabled && permission > 0) return null;
-  return { channel, permission };
-}
-
 async function shapeFeedPosts(posts, req) {
   let reacted = new Set();
   if (req.user && posts.length > 0) {
@@ -145,11 +201,9 @@ async function shapeFeedPosts(posts, req) {
   }));
 }
 
-router.get("/:channel/news", async (req, res, next) => {
+router.get("/:channel/news", newsPage, async (req, res, next) => {
   try {
-    const found = await loadFeedChannel(req);
-    if (!found) return res.status(404).render("errors/404");
-    const { channel, permission } = found;
+    const { channel, permission } = req;
 
     const parsed = cursorPaging.parseCursor(newsRepo.FEED_SORT, req.query.cursor);
     if (parsed.error) {
@@ -174,7 +228,7 @@ router.get("/:channel/news", async (req, res, next) => {
       // Authorship stays with the site admin (routes/admin.js's /admin/news). The button only
       // shortens the way there; GET /:channel/news/new opens the same form.
       canCreate: permission === 0 && Boolean(channel.newsEnabled),
-      newsDisabledPreview: !channel.newsEnabled, // true only when a tier-0 admin is previewing
+      newsDisabledPreview: res.locals.sectionPreview,
     });
   } catch (err) {
     next(err);
@@ -184,11 +238,9 @@ router.get("/:channel/news", async (req, res, next) => {
 // One portion of feed cards as HTML, rendered by the same partial as the first paint, plus the
 // cursor of the next portion (null at the end). Declared before /:channel/news/:id, which would
 // otherwise read "list.json" as a post id.
-router.get("/:channel/news/list.json", async (req, res, next) => {
+router.get("/:channel/news/list.json", newsJson, async (req, res, next) => {
   try {
-    const found = await loadFeedChannel(req);
-    if (!found) return res.status(404).json({ ok: false, error: "not_found" });
-    const { channel } = found;
+    const { channel } = req;
 
     let portion;
     let restored = false;
@@ -243,20 +295,17 @@ router.get("/:channel/news/new", requireLevel(0), async (req, res, next) => {
   }
 });
 
-router.post("/:channel/news/:id/react", requireLogin, verifyToken, async (req, res, next) => {
+router.post("/:channel/news/:id/react", requireLogin, verifyToken, newsWriteJson, async (req, res, next) => {
   try {
     if (!reactLimiterAllow(req.user.userId)) {
       return res.status(429).json({ ok: false, error: "rate_limited" });
     }
 
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel || !channel.newsEnabled) return res.status(404).json({ ok: false, error: "not_found" });
-
     const type = req.body.type;
     if (!REACTION_TYPES.includes(type)) return res.status(400).json({ ok: false, error: "invalid_type" });
 
     const post = await newsRepo.getById(req.params.id);
-    if (!post || post.channelLogin !== channel.channelLogin) {
+    if (!post || post.channelLogin !== req.channel.channelLogin) {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
 
@@ -273,14 +322,10 @@ router.post("/:channel/news/:id/react", requireLogin, verifyToken, async (req, r
 // The feed (GET /:channel/news above) only shows reactions - a post's comments live on its own
 // page, same as Reddit's own /r/x/comments/:id/ split, so a heavily-discussed post doesn't bloat
 // the 10-posts-per-portion feed with potentially hundreds of nested replies.
-router.get("/:channel/news/:id", async (req, res, next) => {
+router.get("/:channel/news/:id", newsPage, async (req, res, next) => {
   try {
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel) return res.status(404).render("errors/404");
-
-    const permission = await computePermission(req.user?.userId ?? null, channel.channelLogin);
-    const isAdmin = permission === 0;
-    if (!channel.newsEnabled && !isAdmin) return res.status(404).render("errors/404");
+    const { channel, permission } = req;
+    const canModerate = canModerateDiscussion(permission);
 
     const post = await newsRepo.getById(req.params.id);
     if (!post || post.channelLogin !== channel.channelLogin) return res.status(404).render("errors/404");
@@ -289,10 +334,10 @@ router.get("/:channel/news/:id", async (req, res, next) => {
 
     const [broadcaster, restrictedUsers, commentTree, emoteMap] = await Promise.all([
       profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
-      // Only fetched for the admin-only "restricted commenters" panel - a regular visitor never
+      // Only fetched for the moderators' "restricted commenters" panel - a regular visitor never
       // needs this list, so skip the query entirely for them.
-      isAdmin ? newsCommentBansRepo.listForChannel(channel.channelLogin) : Promise.resolve([]),
-      loadCommentTree(post, channel, req, isAdmin, commentSort),
+      canModerate ? newsCommentBansRepo.listForChannel(channel.channelLogin) : Promise.resolve([]),
+      loadCommentTree(post, channel, req, commentSort),
       // Re-fetched here (on top of the one loadCommentTree() already did internally) so the
       // comment box's client-side autocomplete/preview (public/js/emoteMatch.js) has the same
       // name -> image list the server just used to render existing comments - twitch/emoteImages.js
@@ -318,26 +363,22 @@ router.get("/:channel/news/:id", async (req, res, next) => {
     };
 
     res.render("newsPost", {
-      channel,
+      ...threadLocals(req, res, channel, post, commentSort),
       broadcaster,
       channelNav: buildChannelNav(channel, { permission, active: "news" }),
       post: shapedPost,
-      // Only the first page of ROOT threads renders server-side - public/js/news-comments.js
+      // Only the first page of ROOT threads renders server-side - public/js/comment-thread.js
       // fetches the rest (COMMENTS_PAGE_SIZE at a time) from GET .../comments.json on demand.
       commentTree: commentTree.slice(0, COMMENTS_PAGE_SIZE),
       hasMoreComments: commentTree.length > COMMENTS_PAGE_SIZE,
       nextCommentOffset: COMMENTS_PAGE_SIZE,
-      maxCommentDepth: MAX_DEPTH,
-      maxCommentBodyLength: MAX_BODY_LENGTH,
       // [{name, url}], only entries with a resolved image - inlined once for the comment box's
-      // autocomplete/live-preview (public/js/emoteMatch.js + news-comments.js).
+      // autocomplete/live-preview (public/js/emoteMatch.js + comment-thread.js).
       emoteList: [...emoteMap].filter(([, url]) => url).map(([name, url]) => ({ name, url })),
-      commentSort,
       commentSortModes: COMMENT_SORT_MODES,
-      isAdmin,
       isRestricted,
       restrictedUsers,
-      newsDisabledPreview: !channel.newsEnabled,
+      newsDisabledPreview: res.locals.sectionPreview,
       commentError: typeof req.query.error === "string" ? req.query.error : null,
     });
   } catch (err) {
@@ -349,42 +390,26 @@ router.get("/:channel/news/:id", async (req, res, next) => {
 // COMMENTS_PAGE_SIZE above) and renders them through the very same partial the initial page
 // uses, so a loaded-in-later thread is byte-for-byte identical to one rendered on first paint.
 // Public GET, same visibility rule as the permalink page itself (off + non-admin -> 404).
-router.get("/:channel/news/:id/comments.json", async (req, res, next) => {
+router.get("/:channel/news/:id/comments.json", newsJson, async (req, res, next) => {
   try {
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel) return res.status(404).json({ ok: false, error: "not_found" });
-
-    const permission = await computePermission(req.user?.userId ?? null, channel.channelLogin);
-    const isAdmin = permission === 0;
-    if (!channel.newsEnabled && !isAdmin) return res.status(404).json({ ok: false, error: "not_found" });
-
+    const { channel } = req;
     const post = await newsRepo.getById(req.params.id);
     if (!post || post.channelLogin !== channel.channelLogin) {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
 
     // Same sort the visitor had active on the permalink page - the "load more" button's own
-    // dataset carries it through (views/newsPost.ejs / public/js/news-comments.js), so paging
+    // dataset carries it through (views/newsPost.ejs / public/js/comment-thread.js), so paging
     // through a "Newest" or "Oldest" thread list keeps that ordering instead of silently
     // reverting to the score default partway through.
     const commentSort = resolveCommentSort(req.query.sort);
-    const commentTree = await loadCommentTree(post, channel, req, isAdmin, commentSort);
+    const commentTree = await loadCommentTree(post, channel, req, commentSort);
     const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
     const page = commentTree.slice(skip, skip + COMMENTS_PAGE_SIZE);
 
     res.render(
       "partials/commentThread",
-      {
-        nodes: page,
-        channel,
-        post: { id: String(post._id) },
-        user: req.user,
-        isAdmin,
-        maxCommentDepth: MAX_DEPTH,
-        maxCommentBodyLength: MAX_BODY_LENGTH,
-        commentSort,
-        csrf: req.user ? res.locals.csrfToken : "",
-      },
+      { nodes: page, ...threadLocals(req, res, channel, post, commentSort) },
       (err, html) => {
         if (err) return next(err);
         res.json({ ok: true, html, hasMore: skip + COMMENTS_PAGE_SIZE < commentTree.length });
@@ -395,11 +420,9 @@ router.get("/:channel/news/:id/comments.json", async (req, res, next) => {
   }
 });
 
-router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req, res, next) => {
+router.post("/:channel/news/:id/comments", requireLogin, verifyToken, newsWrite, async (req, res, next) => {
   try {
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel || !channel.newsEnabled) return res.status(404).render("errors/404");
-
+    const { channel } = req;
     const post = await newsRepo.getById(req.params.id);
     if (!post || post.channelLogin !== channel.channelLogin) return res.status(404).render("errors/404");
 
@@ -428,7 +451,7 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
       const parent = await newsCommentsRepo.getById(req.body.parentId);
       // Guards against a tampered parentId pointing at a comment on a DIFFERENT post - a reply
       // must nest under a comment that actually belongs to this thread.
-      if (!parent || String(parent.postId) !== String(post._id)) {
+      if (!parent || newsCommentsRepo.postIdOf(parent) !== String(post._id)) {
         return fail(400, "invalid_parent");
       }
       if (parent.depth + 1 > MAX_DEPTH) return fail(400, "too_deep");
@@ -459,11 +482,10 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
 
     // JS path: render the ONE new comment through the exact same partial the rest of the thread
     // uses (see loadCommentTree() above for the batched equivalent), so
-    // public/js/news-comments.js can splice it straight into the live DOM with no reload at all -
+    // public/js/comment-thread.js can splice it straight into the live DOM with no reload at all -
     // avatar/color/emote-rendering shaped the same way, just for a single comment instead of the
     // whole flat list.
-    const [permission, authorProfile, emoteMap] = await Promise.all([
-      computePermission(req.user.userId, channel.channelLogin),
+    const [authorProfile, emoteMap] = await Promise.all([
       profileCacheRepo.getOrFetchProfile(req.user.userId).catch(() => null),
       emoteImages.getEmoteImageMap(channel.channelId, channel.channelLogin).catch(() => new Map()),
     ]);
@@ -475,22 +497,14 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
       authorAvatarUrl: authorProfile?.avatarUrl || null,
       authorChatColor: authorProfile?.chatColor || null,
       renderedBody: renderCommentBody(created.body, buildEmoteLookup(emoteMap)),
+      // Your own comment: nobody restricts themselves.
+      canRestrict: false,
       children: [],
     };
 
     res.render(
       "partials/commentThread",
-      {
-        nodes: [node],
-        channel,
-        post: { id: String(post._id) },
-        user: req.user,
-        isAdmin: permission === 0,
-        maxCommentDepth: MAX_DEPTH,
-        maxCommentBodyLength: MAX_BODY_LENGTH,
-        commentSort,
-        csrf: res.locals.csrfToken || "",
-      },
+      { nodes: [node], ...threadLocals(req, res, channel, post, commentSort) },
       (err, html) => {
         if (err) return next(err);
         res.json({ ok: true, html, commentId: node.id, parentId: node.parentId });
@@ -501,20 +515,17 @@ router.post("/:channel/news/:id/comments", requireLogin, verifyToken, async (req
   }
 });
 
-router.post("/:channel/news/comments/:commentId/vote", requireLogin, verifyToken, async (req, res, next) => {
+router.post("/:channel/news/comments/:commentId/vote", requireLogin, verifyToken, newsWriteJson, async (req, res, next) => {
   try {
     if (!commentVoteLimiterAllow(req.user.userId)) {
       return res.status(429).json({ ok: false, error: "rate_limited" });
     }
 
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel || !channel.newsEnabled) return res.status(404).json({ ok: false, error: "not_found" });
-
     const direction = parseInt(req.body.direction, 10);
     if (direction !== 1 && direction !== -1) return res.status(400).json({ ok: false, error: "invalid_direction" });
 
     const comment = await newsCommentsRepo.getById(req.params.commentId);
-    if (!comment || comment.channelLogin !== channel.channelLogin) {
+    if (!comment || comment.channelLogin !== req.channel.channelLogin) {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
 
@@ -527,88 +538,79 @@ router.post("/:channel/news/comments/:commentId/vote", requireLogin, verifyToken
   }
 });
 
-// --- Admin moderation (tier-0 only): delete a comment, restrict/unrestrict a commenter ------
-// Deliberately colocated here rather than routes/admin.js - these forms render inline on THIS
-// page (views/partials/commentThread.ejs), so the actions that mutate it live with it too,
-// unlike news POST authoring (routes/admin.js), which has its own separate admin UI.
+// --- Moderation (levels 0-2): delete a comment, restrict/unrestrict a commenter -------------
+// Colocated here rather than in routes/admin.js: these forms render inline on the permalink page
+// (views/partials/commentThread.ejs), so the actions that mutate it live with it too.
+//
+// Each redirects back anchored at what it acted on - `returnTo` can never carry a fragment
+// itself (browsers never send one to the server), so it is appended here.
 
-router.post("/:channel/news/comments/:commentId/delete", requireLevel(0), verifyToken, async (req, res, next) => {
+router.post("/:channel/news/comments/:commentId/delete", newsModerate, verifyToken, async (req, res, next) => {
   try {
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel) return res.status(404).render("errors/404");
-
+    const { channel } = req;
     const comment = await newsCommentsRepo.getById(req.params.commentId);
     if (comment && comment.channelLogin === channel.channelLogin) {
-      await newsCommentsRepo.removeByAdmin(comment._id, req.user.userId);
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "newsComment.delete",
-        target: `${channel.channelLogin}:${comment._id}`,
-      });
+      const removed = await newsCommentsRepo.removeByModerator(comment._id, req.user.userId);
+      if (removed) {
+        await logModeration(req, channel, {
+          action: "delete",
+          adminAction: "newsComment.delete",
+          target: String(comment._id),
+          details: comment.authorLogin,
+        });
+      }
     }
-
-    // Anchored at the comment this action was taken on (views/partials/commentThread.ejs's
-    // id="comment-<id>") rather than reloading to the top of the page - `returnTo` is never able
-    // to carry a fragment itself (browsers never send one to the server), so it has to be
-    // appended here regardless of what page returnTo points at.
     res.redirect(`${sanitizeReturnTo(req.body.returnTo) || `/${channel.channelLogin}/news`}#comment-${req.params.commentId}`);
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/:channel/news/comments/:commentId/restrict", requireLevel(0), verifyToken, async (req, res, next) => {
+router.post("/:channel/news/comments/:commentId/restrict", newsModerate, verifyToken, async (req, res, next) => {
   try {
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel) return res.status(404).render("errors/404");
-
+    const { channel } = req;
     const comment = await newsCommentsRepo.getById(req.params.commentId);
     if (comment && comment.channelLogin === channel.channelLogin) {
-      await newsCommentBansRepo.restrict(
-        channel.channelLogin,
-        comment.authorUserId,
-        comment.authorLogin,
-        req.user.userId
-      );
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "newsComment.restrictUser",
-        target: `${channel.channelLogin}:${comment.authorUserId}`,
-        details: comment.authorDisplayName,
+      // Only someone strictly below the person restricting: a moderator cannot silence another
+      // moderator, the owner or the admin, the owner cannot silence the admin. Their comments can
+      // still be deleted one by one.
+      const authorLevel = await computePermission(comment.authorUserId, channel.channelLogin);
+      if (!canRestrictAuthor(req.permission, authorLevel)) {
+        return res.redirect(`${sanitizeReturnTo(req.body.returnTo) || `/${channel.channelLogin}/news`}#comment-${req.params.commentId}`);
+      }
+      await newsCommentBansRepo.restrict(channel.channelLogin, comment.authorUserId, comment.authorLogin, req.user.userId);
+      await logModeration(req, channel, {
+        action: "restrict",
+        adminAction: "newsComment.restrictUser",
+        target: String(comment.authorUserId),
+        details: comment.authorLogin,
       });
     }
-
-    // Same anchor reasoning as the delete route above - lands back on the comment that was acted
-    // on instead of the top of the page.
     res.redirect(`${sanitizeReturnTo(req.body.returnTo) || `/${channel.channelLogin}/news`}#comment-${req.params.commentId}`);
   } catch (err) {
     next(err);
   }
 });
 
-router.post(
-  "/:channel/news/comment-bans/:userId/unrestrict",
-  requireLevel(0),
-  verifyToken,
-  async (req, res, next) => {
-    try {
-      const channel = await channelsRepo.findByLogin(req.params.channel);
-      if (!channel) return res.status(404).render("errors/404");
-
+router.post("/:channel/news/comment-bans/:userId/unrestrict", newsModerate, verifyToken, async (req, res, next) => {
+  try {
+    const { channel } = req;
+    const bans = await newsCommentBansRepo.listForChannel(channel.channelLogin);
+    const ban = bans.find((b) => String(b.userId) === String(req.params.userId));
+    if (ban) {
       await newsCommentBansRepo.unrestrict(channel.channelLogin, req.params.userId);
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "newsComment.unrestrictUser",
-        target: `${channel.channelLogin}:${req.params.userId}`,
+      await logModeration(req, channel, {
+        action: "unrestrict",
+        adminAction: "newsComment.unrestrictUser",
+        target: String(req.params.userId),
+        details: ban.userLogin,
       });
-
-      // Anchored at the restricted-commenters panel (views/newsPost.ejs's id="restricted-users")
-      // rather than the top of the page - same reasoning as the delete/restrict routes above.
-      res.redirect(`${sanitizeReturnTo(req.body.returnTo) || `/${channel.channelLogin}/news`}#restricted-users`);
-    } catch (err) {
-      next(err);
     }
+    // Anchored at the restricted-commenters panel (views/newsPost.ejs's id="restricted-users").
+    res.redirect(`${sanitizeReturnTo(req.body.returnTo) || `/${channel.channelLogin}/news`}#restricted-users`);
+  } catch (err) {
+    next(err);
   }
-);
+});
 
 module.exports = router;

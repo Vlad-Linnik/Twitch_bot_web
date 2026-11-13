@@ -1,9 +1,13 @@
 <%#
-  Recursive comment tree renderer (Reddit-style nested replies + up/down voting). Expects: nodes
-  (array of {id, authorDisplayName, authorAvatarUrl, authorChatColor, body, renderedBody, removed,
-  score, myVote, depth, children, createdAt}), channel, post ({id}), user (res.locals.user - null
-  when logged out), isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf
-  (real csrfToken when logged in, '' otherwise - see newsPost.ejs), currentUrl.
+  Recursive comment tree renderer (Reddit-style nested replies + up/down voting), shared by every
+  channel section with a discussion. Expects: nodes (array of {id, authorDisplayName,
+  authorAvatarUrl, authorChatColor, body, renderedBody, removed, score, myVote, depth, children,
+  createdAt, canRestrict}), channel, threadBase and actionsBase (lib/discussion.js's threadUrls - every form
+  action here is built from them, never from a section name), user (res.locals.user - null when
+  logged out), canModerate (levels 0-2), maxCommentDepth, maxCommentBodyLength, commentSort, t,
+  locale, csrf (real csrfToken when logged in, '' otherwise - see newsPost.ejs), currentUrl.
+  The vote buttons carry no URL: public/js/comment-thread.js reads actionsBase from the
+  [data-actions-base] element the thread sits in.
 
   Every <li> carries id="comment-<id>" and the reply form carries a hidden `sort` field so
   routes/news.js's comment-post handler can redirect back to `#comment-<newId>&sort=<active>`
@@ -33,10 +37,10 @@
   class computed from `node.depth` needed. `node.depth` is only used to decide whether a Reply
   affordance renders at all (see lib/commentValidation.js's MAX_DEPTH).
 
-  An admin-removed comment (node.removed) is fully invisible to a non-admin viewer - not even a
+  A removed comment (node.removed) is fully invisible to anyone who cannot moderate - not even a
   "[removed]" placeholder, vote score, or Reply affordance - per explicit product decision (a
-  regular user should have no way to tell a removed comment ever existed there). An admin instead
-  sees the real author + content (db/newsCommentsRepo.js's removeByAdmin never blanks either
+  regular user should have no way to tell a removed comment ever existed there). A moderator
+  instead sees the real author + content (db/threadStore.js's removeComment never blanks either
   field, only flips `removed`/`removedBy`/`removedAt`), rendered with a "deleted" badge and muted/
   strikethrough styling instead of a placeholder, so moderation stays reviewable without having to
   guess what was actually said. Either way, REPLIES underneath it stay visible: hiddenFromViewer
@@ -46,20 +50,20 @@
 
   isRoot (optional, defaults falsy - same typeof-guard convention as partials/newsCard.ejs's
   hideCommentsLink): only the OUTERMOST call for a page's top-level thread list passes isRoot: true,
-  so the <ul> gets a stable id for public/js/news-comments.js's "load more comments" handler to
+  so the <ul> gets a stable id for public/js/comment-thread.js's "load more comments" handler to
   append newly-fetched root <li>s into. Every recursive call (children, and the JSON fragment
-  routes/news.js's comments.json endpoint renders for a load-more page) omits it - a per-reply
+  section's comments.json endpoint renders for a load-more page) omits it - a per-reply
   <ul> must never carry that id too, or the page would have duplicate ids.
 %>
 <% const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US'; %>
 <ul class="space-y-4"<% if (typeof isRoot !== 'undefined' && isRoot) { %> id="comment-thread-root"<% } %>>
   <% nodes.forEach(function(node) { %>
-    <% const hiddenFromViewer = node.removed && !isAdmin; %>
+    <% const hiddenFromViewer = node.removed && !canModerate; %>
     <li id="comment-<%= node.id %>">
       <% if (hiddenFromViewer) { %>
         <% if (node.children.length > 0) { %>
           <div class="pl-9">
-            <%- include('commentThread', { nodes: node.children, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
+            <%- include('commentThread', { nodes: node.children, channel, threadBase, actionsBase, user, canModerate, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
           </div>
         <% } %>
       <% } else { %>
@@ -67,7 +71,7 @@
         <div class="flex flex-col items-center gap-0.5 pt-0.5 shrink-0 w-6">
           <button type="button"
                   class="group news-vote-btn text-neutral-600 hover:text-orange-400 data-[voted=1]:text-orange-500 disabled:opacity-30 disabled:cursor-not-allowed"
-                  data-comment-vote data-comment-id="<%= node.id %>" data-channel="<%= channel.channelLogin %>"
+                  data-comment-vote data-comment-id="<%= node.id %>"
                   data-direction="1" data-voted="<%= node.myVote === 1 ? '1' : '0' %>" data-csrf="<%= csrf %>"
                   aria-label="<%= t('comments.upvote') %>" title="<%= t('comments.upvote') %>" <%= node.removed ? 'disabled' : '' %>>
             <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 4l6 7H4l6-7z" /></svg>
@@ -75,7 +79,7 @@
           <span class="news-comment-score text-xs font-semibold tabular-nums text-neutral-300"><%= node.score %></span>
           <button type="button"
                   class="group news-vote-btn text-neutral-600 hover:text-sky-400 data-[voted=1]:text-sky-500 disabled:opacity-30 disabled:cursor-not-allowed"
-                  data-comment-vote data-comment-id="<%= node.id %>" data-channel="<%= channel.channelLogin %>"
+                  data-comment-vote data-comment-id="<%= node.id %>"
                   data-direction="-1" data-voted="<%= node.myVote === -1 ? '1' : '0' %>" data-csrf="<%= csrf %>"
                   aria-label="<%= t('comments.downvote') %>" title="<%= t('comments.downvote') %>" <%= node.removed ? 'disabled' : '' %>>
             <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 16l-6-7h12l-6 7z" /></svg>
@@ -83,8 +87,8 @@
         </div>
 
         <div class="flex-1 min-w-0" data-comment-body>
-          <% /* node.removed only reaches this branch for an admin viewer - hiddenFromViewer
-               above fully hides a removed comment from anyone else. Admins see the real author
+          <% /* node.removed only reaches this branch for a moderator - hiddenFromViewer above
+               fully hides a removed comment from anyone else. Moderators see the real author
                + content, same as a normal comment, just visibly badged as deleted so moderation
                stays reviewable without guessing what was actually said. */ %>
           <div class="flex items-center gap-2 <%= node.removed ? 'opacity-60' : '' %>">
@@ -115,24 +119,28 @@
                 <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-neutral-500 hover:text-neutral-300"><%= t('comments.reply') %></a>
               <% } %>
             <% } %>
-            <% if (isAdmin) { %>
+            <% if (canModerate) { %>
               <% if (!node.removed) { %>
-                <form method="post" action="/<%= channel.channelLogin %>/news/comments/<%= node.id %>/delete" data-transition="instant" class="inline">
+                <form method="post" action="<%= actionsBase %>/comments/<%= node.id %>/delete" data-transition="instant" class="inline">
                   <input type="hidden" name="_csrf" value="<%= csrf %>" />
                   <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
                   <button type="submit" class="text-red-500 hover:text-red-400"><%= t('comments.adminDelete') %></button>
                 </form>
               <% } %>
-              <form method="post" action="/<%= channel.channelLogin %>/news/comments/<%= node.id %>/restrict" data-transition="instant" class="inline">
+              <%# Only where the server would accept it: the author ranks strictly below the
+                  viewer (routes/news.js's loadCommentTree sets canRestrict). %>
+              <% if (node.canRestrict) { %>
+              <form method="post" action="<%= actionsBase %>/comments/<%= node.id %>/restrict" data-transition="instant" class="inline">
                 <input type="hidden" name="_csrf" value="<%= csrf %>" />
                 <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
                 <button type="submit" class="text-amber-500 hover:text-amber-400"><%= t('comments.adminRestrict') %></button>
               </form>
+              <% } %>
             <% } %>
           </div>
 
           <% if (!node.removed && user && node.depth < maxCommentDepth) { %>
-            <form method="post" action="/<%= channel.channelLogin %>/news/<%= post.id %>/comments" data-reply-form data-comment-post-form hidden class="mt-2 flex flex-col gap-2">
+            <form method="post" action="<%= threadBase %>/comments" data-reply-form data-comment-post-form hidden class="mt-2 flex flex-col gap-2">
               <input type="hidden" name="_csrf" value="<%= csrf %>" />
               <input type="hidden" name="parentId" value="<%= node.id %>" />
               <input type="hidden" name="sort" value="<%= commentSort %>" />
@@ -150,7 +158,7 @@
 
           <% if (node.children.length > 0) { %>
             <div class="mt-4 pl-4 border-l border-neutral-800" data-comment-children>
-              <%- include('commentThread', { nodes: node.children, channel, post, user, isAdmin, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
+              <%- include('commentThread', { nodes: node.children, channel, threadBase, actionsBase, user, canModerate, maxCommentDepth, maxCommentBodyLength, commentSort, t, locale, csrf, currentUrl }) %>
             </div>
           <% } %>
         </div>

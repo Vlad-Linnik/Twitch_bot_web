@@ -920,7 +920,7 @@
     "submit": "Comment",
     "reply": "Reply",
     "removed": "[removed by a moderator]",
-    "removedAdminBadge": "Deleted (visible to admins only)",
+    "removedAdminBadge": "Deleted (visible to moderators only)",
     "upvote": "Upvote",
     "downvote": "Downvote",
     "loginToComment": "Log in with Twitch to comment",
@@ -1146,7 +1146,8 @@
       "counter": "Variable",
       "variable": "Variable",
       "long_ban": "Long ban",
-      "unban_request": "Unban appeal"
+      "unban_request": "Unban appeal",
+      "comment": "Discussion"
     },
     "action": {
       "add": "Added",
@@ -1159,7 +1160,9 @@
       "sniper": "Shot fired",
       "grenade": "Grenade thrown",
       "vote": "Chat vote",
-      "takeover": "Shift taken over"
+      "takeover": "Shift taken over",
+      "restrict": "Restricted",
+      "unrestrict": "Unrestricted"
     },
     "colChanges": "What changed",
     "rawDetails": "Raw data",
@@ -1224,6 +1227,9 @@
       "unbanApproved": "Approved the unban appeal from {{target}}",
       "unbanDenied": "Denied the unban appeal from {{target}}",
       "unbanVote": "Started a chat vote on {{target}}'s unban appeal",
+      "commentDeleted": "Deleted a comment by {{target}}",
+      "commenterRestricted": "{{target}} can no longer comment",
+      "commenterUnrestricted": "{{target}} can comment again",
       "unbanSniper": "Fired the Amnesty Bureau's stray bullet",
       "unbanGrenade": "Threw the Amnesty Bureau's grenade"
     }

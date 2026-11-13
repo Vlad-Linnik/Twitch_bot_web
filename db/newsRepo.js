@@ -88,7 +88,7 @@ async function deletePost(id) {
 
 // create() has always defaulted commentCount to 0, but a post written before that default
 // existed (or before the comments feature shipped at all) has no field there whatsoever -
-// db/newsCommentsRepo.js's create()/removeByAdmin() $inc it from that missing state just fine
+// db/threadStore.js's createComment()/removeComment() $inc it from that missing state just fine
 // (Mongo treats a missing numeric field as 0 for $inc), so the FIRST comment/removal silently
 // heals it, but a post that has never had one still reads back as `undefined`, which
 // `<%= post.commentCount %>` in views/newsPost.ejs/partials/newsCard.ejs renders as "" instead

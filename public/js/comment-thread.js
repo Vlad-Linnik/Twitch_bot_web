@@ -9,6 +9,18 @@
 // Content inserted after page load (via "load more", a sort switch, or posting a comment/reply)
 // needs the exact same follow-up wiring a freshly-loaded page gets - see bindCommentSubtree()
 // below, which every insertion point funnels through instead of re-deriving it three times.
+//
+// Section-agnostic: every request URL is built from the thread's own data attributes -
+// data-thread-base (this item's thread) and data-actions-base (the section), set on the element
+// the thread sits in from lib/discussion.js's threadUrls - so the same file serves the news
+// permalink page and any other channel section with a discussion.
+
+// The URL roots of the thread an element belongs to; null outside a thread.
+function commentThreadUrls(el) {
+  const holder = el.closest("[data-thread-base]");
+  if (!holder) return null;
+  return { threadBase: holder.dataset.threadBase, actionsBase: holder.dataset.actionsBase };
+}
 
 // Long-comment collapse: a pure display enhancement, not a data guarantee - lib/commentEmotes.js
 // already rendered the full body into the DOM (data-comment-text), so with JS disabled every
@@ -66,12 +78,15 @@ initReadMore(document);
     const button = event.target.closest("[data-comment-vote]");
     if (!button || button.disabled || button.dataset.busy === "1") return;
 
-    const { commentId, channel, direction, csrf } = button.dataset;
+    const { commentId, direction, csrf } = button.dataset;
     if (!csrf) {
       const returnTo = window.location.pathname + window.location.search;
       window.location.href = `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
       return;
     }
+
+    const urls = commentThreadUrls(button);
+    if (!urls) return;
 
     const pair = document.querySelectorAll(`[data-comment-vote][data-comment-id="${commentId}"]`);
     // Both vote buttons and the score span are siblings in the same vote-column div.
@@ -80,7 +95,7 @@ initReadMore(document);
 
     button.dataset.busy = "1";
     try {
-      const response = await fetch(`/${channel}/news/comments/${commentId}/vote`, {
+      const response = await fetch(`${urls.actionsBase}/comments/${commentId}/vote`, {
         method: "POST",
         body: new URLSearchParams({ direction, _csrf: csrf }),
         headers: { Accept: "application/json" },
@@ -93,7 +108,7 @@ initReadMore(document);
         btn.dataset.voted = body.value === btnDirection ? "1" : "0";
       }
     } catch {
-      // No optimistic flip to roll back here (unlike news-reactions.js) - a vote has three
+      // No optimistic flip to roll back here (unlike reactions.js) - a vote has three
       // possible resulting states depending on what was there before, so this just leaves the
       // UI as-is on failure rather than guessing; the next click retries against the real state.
     } finally {
@@ -405,7 +420,7 @@ function enhanceCommentTextarea(textarea, emoteList, emoteIndex) {
     // Fail-soft: a broken enhancement must never take away the ability to comment at all, so
     // undo the "already bound" flag and leave the plain (still fully functional) textarea alone.
     textarea.dataset.emoteBound = "0";
-    console.error("[news-comments] emote editor enhancement failed:", err);
+    console.error("[comment-thread] emote editor enhancement failed:", err);
   }
 }
 
@@ -430,7 +445,7 @@ let commentEmoteIndex = new Map();
 }
 initEmoteAutocomplete(document, commentEmoteList, commentEmoteIndex);
 
-const LOAD_MORE_PAGE_SIZE = 20; // routes/news.js's COMMENTS_PAGE_SIZE
+const LOAD_MORE_PAGE_SIZE = 20; // the section route's COMMENTS_PAGE_SIZE (routes/news.js)
 
 // Both "load more" and "change sort" fetch routes/news.js's comments.json, which renders through
 // the exact same commentThread.ejs partial the first page used - this pulls the <li>s back out of
@@ -470,13 +485,15 @@ function bindLoadMoreButton(button) {
 
   button.addEventListener("click", async () => {
     if (button.disabled) return;
-    const { channel, post, sort } = button.dataset;
+    const { sort } = button.dataset;
+    const urls = commentThreadUrls(button);
+    if (!urls) return;
     const skip = parseInt(button.dataset.offset, 10) || 0;
 
     button.disabled = true;
     button.textContent = loadingText;
     try {
-      const response = await fetch(`/${channel}/news/${post}/comments.json?skip=${skip}&sort=${encodeURIComponent(sort || "score")}`, {
+      const response = await fetch(`${urls.threadBase}/comments.json?skip=${skip}&sort=${encodeURIComponent(sort || "score")}`, {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) throw new Error(`status ${response.status}`);
@@ -487,7 +504,7 @@ function bindLoadMoreButton(button) {
       for (const li of insertedLis) bindCommentSubtree(li);
 
       if (data.hasMore) {
-        // Must match routes/news.js's COMMENTS_PAGE_SIZE - the server always returns up to that
+        // Must match the section route's COMMENTS_PAGE_SIZE (routes/news.js) - the server always returns up to that
         // many root threads per page regardless of how many actually rendered here, so the next
         // request's skip is this page's start plus the page size, not insertedLis.length.
         button.dataset.offset = String(skip + LOAD_MORE_PAGE_SIZE);
@@ -523,7 +540,8 @@ function bindLoadMoreButton(button) {
   const loadMoreTemplate = document.getElementById("load-more-template");
   if (!group || !list) return;
 
-  const { channel, post } = group.dataset;
+  const urls = commentThreadUrls(group);
+  if (!urls) return;
 
   function setActiveSortStyles(sort) {
     group.dataset.activeSort = sort;
@@ -543,7 +561,7 @@ function bindLoadMoreButton(button) {
     const sort = link.dataset.sort;
 
     try {
-      const response = await fetch(`/${channel}/news/${post}/comments.json?skip=0&sort=${encodeURIComponent(sort)}`, {
+      const response = await fetch(`${urls.threadBase}/comments.json?skip=0&sort=${encodeURIComponent(sort)}`, {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) throw new Error(`status ${response.status}`);

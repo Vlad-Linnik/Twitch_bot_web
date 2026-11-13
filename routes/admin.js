@@ -972,6 +972,8 @@ router.post("/admin/news/:id/delete", settingsWriteLimiter, requireAdmin, verify
   try {
     const deleted = await newsRepo.deletePost(req.params.id);
     if (deleted) {
+      // Hearts, comments and the votes on those comments - before this, a deleted post's comments
+      // and votes stayed behind with nothing left to render them.
       await newsReactionsRepo.deleteAllForPost(String(deleted._id));
       await deleteNewsImage(deleted.imageUrl);
       await adminActionLogsRepo.logAction({
