@@ -1,5 +1,14 @@
 <!doctype html>
-<html lang="<%= locale %>" class="dark scroll-smooth">
+<%# Seasonal theme (lib/seasonalThemes.js picks it, middleware/seasonalTheme.js exposes it).
+    Stamped on <html> in the first byte so the decor is there from the first paint. Never inside
+    the spectator hub's iframe (embedWatch): that frame is a game board, nothing else. %>
+<%
+  const seasonId = typeof seasonalTheme !== "undefined" && seasonalTheme
+    && (typeof locals === "undefined" || !locals.embedWatch) ? seasonalTheme : null;
+  const seasonPref = seasonId && typeof seasonalDecorPref !== "undefined" ? seasonalDecorPref : null;
+  const seasonQuiet = seasonId && typeof seasonalQuiet !== "undefined" && seasonalQuiet;
+%>
+<html lang="<%= locale %>" class="dark scroll-smooth<%= seasonId && seasonPref !== 'off' ? ' season-on' : '' %>"<% if (seasonId) { %> data-season="<%= seasonId %>"<% if (seasonPref) { %> data-season-pref="<%= seasonPref %>"<% } %><% if (seasonQuiet) { %> data-season-quiet<% } %><% } %>>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -112,6 +121,30 @@
       view transition above cannot start until it resolves - re-validating it per navigation
       was costing a round-trip in front of every single slide. %>
   <link rel="stylesheet" href="<%= asset('/css/output.css') %>" />
+  <% if (seasonId) { %>
+  <%# The viewer's own decor choice, resolved BEFORE first paint so a viewer who switched it off
+      never sees it flash in. The server already stamped a logged-in viewer's saved choice
+      (data-season-pref); a guest's lives in localStorage, which only the browser can read.
+      Same rule and same storage key as public/js/seasonal-theme.js - keep the two in sync.
+      Animation defaults to off under prefers-reduced-motion; "full" is the viewer opting in. %>
+  <script nonce="<%= cspNonce %>">
+    (() => {
+      const root = document.documentElement;
+      const PREFS = ["full", "static", "off"];
+      let pref = root.dataset.seasonPref || null;
+      if (!PREFS.includes(pref)) {
+        try { pref = localStorage.getItem("seasonalDecor"); } catch { pref = null; }
+      }
+      if (!PREFS.includes(pref)) pref = null;
+      const decor = pref !== "off";
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      root.classList.toggle("season-on", decor);
+      root.classList.toggle("season-motion", decor && (pref === "full" || (pref === null && !reduced)));
+    })();
+  </script>
+  <%# Only while a theme is on - the rest of the year this file is not requested at all. %>
+  <link rel="stylesheet" href="<%= asset('/css/seasonal.css') %>" />
+  <% } %>
 </head>
 <%# bodyClass is how a page opts into a whole-page skin (currently only the throne theme on
     /<channel>/user/<name>). It has to live on <body> rather than on the page's <main>, because

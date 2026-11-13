@@ -1,0 +1,122 @@
+/* Seasonal site themes - see lib/seasonalThemes.js for when, public/js/seasonal-theme.js for the
+   moving parts. Plain CSS outside Tailwind on purpose: it is linked by views/partials/head.ejs
+   ONLY while a theme is on, so for most of the year the site does not download a byte of it.
+
+   Contract with the markup:
+     html[data-season="<id>"]    - set by the server when a theme is on
+     html.season-on              - the viewer has not switched the decor off (server default,
+                                   corrected for a guest's localStorage before first paint)
+     html.season-motion          - animation allowed (set by script only)
+     html[data-season-quiet]     - a page where cursor, trail and falling snow stay off (games)
+
+   Every layer here is decoration over the existing layout: fixed or absolutely positioned,
+   pointer-events: none, no influence on flow or scrolling. */
+
+/* ---------------------------------------------------------------- shared layers */
+
+.season-backdrop,
+.season-toggle { display: none; }
+
+html.season-on .season-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  /* Behind every in-flow box but above the page canvas (body's background propagates to the
+     canvas, which paints below negative z-index children of the root stacking context). Panels
+     and cards keep their own backgrounds, so the decor only shows in the empty margins. */
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  /* Pinned like the nav: the slide on navigation moves the page, not the wallpaper. */
+  view-transition-name: season-backdrop;
+}
+
+/* A whole-page skin (bodyClass, e.g. the throne hall) paints its own scenery - a second
+   wallpaper under it would only muddy both. The nav decor and the cursor still apply there. */
+body.theme-hall .season-backdrop { display: none !important; }
+
+html.js[data-season] .season-toggle { display: block; }
+
+.season-snowfall,
+.season-trail {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.season-snowfall { position: absolute; }
+/* Above the fixed nav (z-50) so the trail follows the pointer over it too. Modal <dialog>s live
+   in the top layer and stay above this regardless. */
+.season-trail { z-index: 60; }
+
+.season-toggle__panel[hidden] { display: none; }
+.season-toggle__panel input:disabled + span { opacity: 0.45; }
+
+@media print {
+  .season-backdrop,
+  .season-toggle,
+  .season-trail { display: none !important; }
+}
+
+/* ---------------------------------------------------------------- newyear */
+
+html.season-on[data-season="newyear"] nav.site-nav::after {
+  /* A drift of snow lying on the bar's lower edge, icicles hanging off it. Starts exactly on
+     the border line (top:100% of the padding box) so it reads as resting on the bar. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 18px;
+  background: url("/img/seasonal/newyear/snowdrift.svg") 0 0 / 180px 18px repeat-x;
+  pointer-events: none;
+}
+
+html[data-season="newyear"] .season-backdrop__candies {
+  position: absolute;
+  inset: 0;
+  background: url("/img/seasonal/newyear/candies.svg") 0 0 / 320px 320px repeat;
+  opacity: 0.09;
+}
+
+html[data-season="newyear"] .season-backdrop__ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 70px;
+  background: radial-gradient(60% 100% at 12% 100%, rgb(230 240 255 / 0.10), transparent 70%),
+              radial-gradient(60% 100% at 88% 100%, rgb(230 240 255 / 0.10), transparent 70%);
+}
+
+html[data-season="newyear"] .season-backdrop__tree {
+  position: absolute;
+  bottom: -4px;
+  aspect-ratio: 220 / 300;
+  background: url("/img/seasonal/newyear/tree.svg") center bottom / contain no-repeat;
+  opacity: 0.38;
+}
+html[data-season="newyear"] .season-backdrop__tree--left { left: 1.5vw; width: clamp(96px, 15vw, 220px); }
+html[data-season="newyear"] .season-backdrop__tree--left-small { left: calc(1.5vw + clamp(70px, 10.5vw, 160px)); width: clamp(60px, 8vw, 120px); opacity: 0.28; }
+html[data-season="newyear"] .season-backdrop__tree--right { right: 1.5vw; width: clamp(96px, 13vw, 200px); transform: scaleX(-1); }
+
+/* On a phone the content spans the whole width, so whatever the decor sits behind is text. */
+@media (max-width: 767px) {
+  html[data-season="newyear"] .season-backdrop__candies { opacity: 0.06; }
+  html[data-season="newyear"] .season-backdrop__tree { opacity: 0.2; }
+  html[data-season="newyear"] .season-backdrop__tree--left-small { display: none; }
+}
+
+/* The wand: only for a real mouse, and only where nothing is aimed with the pointer. The
+   hotspot (6 6) is the star, which is also where the trail is emitted from. */
+@media (hover: hover) and (pointer: fine) {
+  html.season-on[data-season="newyear"]:not([data-season-quiet]) {
+    cursor: url("/img/seasonal/newyear/wand.svg") 6 6, auto;
+  }
+  /* cursor is inherited, so without this the wand would also replace the text caret in fields. */
+  html.season-on[data-season="newyear"]:not([data-season-quiet]) :is(input, textarea, select, [contenteditable="true"], [contenteditable=""]) {
+    cursor: auto;
+  }
+}

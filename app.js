@@ -9,6 +9,7 @@ const { IMG_SRC_DIRECTIVE } = require("./lib/emoteImageHosts");
 const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
+const seasonalThemeMiddleware = require("./middleware/seasonalTheme");
 const csrf = require("./middleware/csrf");
 const siteVisits = require("./middleware/siteVisits");
 const requestTiming = require("./middleware/requestTiming");
@@ -104,6 +105,7 @@ function createApp(sessionMiddleware) {
   app.use(attachUser);
   app.use(i18nMiddleware);
   app.use(navMenuMiddleware);
+  app.use(seasonalThemeMiddleware);
   app.use(csrf.ensureToken);
   app.use((req, res, next) => {
     res.locals.currentPath = req.path;

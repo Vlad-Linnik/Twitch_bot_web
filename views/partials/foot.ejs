@@ -9,5 +9,8 @@
 </footer>
 <% } %>
 <script src="<%= asset('/js/page-transitions.js') %>" defer></script>
+<% if (typeof seasonalTheme !== "undefined" && seasonalTheme && (typeof locals === "undefined" || !locals.embedWatch)) { %>
+<script src="<%= asset('/js/seasonal-theme.js') %>" defer></script>
+<% } %>
 </body>
 </html>

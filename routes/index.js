@@ -18,6 +18,7 @@ router.use("/", require("./requestBot"));
 router.use("/", require("./admin"));
 router.use("/", require("./adminAi"));
 router.use("/", require("./adminApi"));
+router.use("/", require("./seasonalTheme"));
 
 // Channel-scoped routes go LAST, and channelRedirect goes last of all.
 //

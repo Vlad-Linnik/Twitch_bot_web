@@ -18,6 +18,39 @@
     "admin": "Admin",
     "requestBot": "Get the bot for my channel"
   },
+  "season": {
+    "toggleLabel": "Holiday decorations",
+    "decorLabel": "Decorations",
+    "motionLabel": "Animation",
+    "savedAccount": "Your choice is saved to your account.",
+    "savedBrowser": "Your choice is saved in this browser.",
+    "themes": {
+      "newyear": {
+        "name": "New Year theme",
+        "motionHint": "falling snow and a snowflake trail behind the cursor"
+      }
+    },
+    "admin": {
+      "title": "Seasonal themes",
+      "intro": "A theme switches itself on during its date window. Here you can force it on early to preview it, or switch themes off entirely. Visitors can turn the decorations off for themselves.",
+      "effectiveNow": "On the site now",
+      "calendarNow": "By the calendar",
+      "lastChanged": "Last changed",
+      "none": "no theme",
+      "modeLabel": "Mode",
+      "modeAuto": "Automatic, by date",
+      "modeForce": "Force on: {{theme}}",
+      "modeOff": "Switch all themes off",
+      "modeHint": "A forced theme is shown to every visitor, not just you. Remember to set it back to Automatic.",
+      "save": "Save",
+      "saved": "Saved.",
+      "invalid": "Unknown mode, nothing changed.",
+      "calendarTitle": "Theme calendar",
+      "window": "{{start}} to {{end}}",
+      "nextStart": "next starts {{date}}",
+      "timeZone": "Dates are read in the {{tz}} time zone."
+    }
+  },
   "home": {
     "title": "ChatWizardBot",
     "subtitle": "A Twitch chat bot with moderation and custom commands. Manage settings and view stats for channels below.",
@@ -1906,6 +1939,9 @@
     "colDetails": "Details",
     "actionsEmpty": "No admin actions yet.",
     "action": {
+      "site": {
+        "seasonalTheme": "Seasonal theme changed"
+      },
       "request": {
         "approve": "Request approved",
         "reject": "Request rejected"
@@ -1986,6 +2022,7 @@
       "cancel": "Cancel"
     },
     "tabPageThemes": "Page themes",
+    "tabSeasonalTheme": "Seasonal themes",
     "pageThemes": {
       "title": "User page themes",
       "hint": "A theme replaces the default look of /<channel>/user/<name>. It belongs to the user, not the channel, so it applies on their page in every channel.",
