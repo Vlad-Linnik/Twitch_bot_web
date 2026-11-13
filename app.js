@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const path = require("path");
 const env = require("./config/env");
 const { asset } = require("./lib/assetVersion");
+const { IMG_SRC_DIRECTIVE } = require("./lib/emoteImageHosts");
 const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
@@ -41,14 +42,15 @@ function createApp(sessionMiddleware) {
   // "same-origin" still sends nothing to cross-origin destinations, just
   // restores it for navigation within this site.
   // contentSecurityPolicy: helmet's default img-src is 'self' data:, which blocks
-  // Twitch avatars/emotes (static-cdn.jtvnw.net) and 7TV emotes (cdn.7tv.app) -
-  // allow exactly those two CDNs. script-src gets the per-request nonce instead
+  // Twitch avatars and every emote CDN - img-src is built from lib/emoteImageHosts.js, the
+  // same list twitch/emoteImages.js filters its URLs against, so a provider can't be added to
+  // one without the other. script-src gets the per-request nonce instead
   // of 'unsafe-inline' so head.ejs's inline scripts run without opening CSP up.
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
-          "img-src": ["'self'", "data:", "https://static-cdn.jtvnw.net", "https://cdn.7tv.app"],
+          "img-src": [...IMG_SRC_DIRECTIVE],
           "script-src": ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
         },
       },

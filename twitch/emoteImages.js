@@ -20,16 +20,19 @@ const env = require("../config/env");
 const { ensureAppAccessToken } = require("./appToken");
 const channelsRepo = require("../db/channelsRepo");
 const emoteRegistryRepo = require("../db/emoteRegistryRepo");
+const {
+  isAllowedImageUrl,
+  twitchEmoteUrl,
+  sevenTvEmoteUrl,
+  bttvEmoteUrl,
+} = require("../lib/emoteImageHosts");
 
 const GLOBAL_EMOTES_URL = "https://api.twitch.tv/helix/chat/emotes/global";
 const CHANNEL_EMOTES_URL = "https://api.twitch.tv/helix/chat/emotes";
 const SEVEN_TV_API = "https://7tv.io/v3";
 const BTTV_API = "https://api.betterttv.net/3";
 const FFZ_API = "https://api.frankerfacez.com/v1";
-// Twitch's emote CDN. `default` serves the animated file when the emote has one; the theme
-// only decides which background the transparent edges were baked against.
-const TWITCH_EMOTE_CDN = "https://static-cdn.jtvnw.net/emoticons/v2";
-const bttvUrl = (id) => `https://cdn.betterttv.net/emote/${id}/2x.webp`;
+// CDN url builders live in lib/emoteImageHosts.js, next to the CSP img-src list they must match.
 
 const GLOBAL_TTL_MS = 12 * 60 * 60 * 1000;
 const CHANNEL_TTL_MS = 10 * 60 * 1000;
@@ -141,7 +144,7 @@ async function getSevenTvEmoteImages(broadcasterId) {
   const map = new Map();
   for (const emote of user?.emote_set?.emotes ?? []) {
     // Set-local name (the alias actually typed in chat), matching what the bot whitelists.
-    map.set(emote.name, `https://cdn.7tv.app/emote/${emote.id}/2x.webp`);
+    map.set(emote.name, sevenTvEmoteUrl(emote.id));
   }
   return map;
 }
@@ -166,14 +169,14 @@ async function fetchSevenTvGlobalImages() {
   const { data } = await axios.get(`${SEVEN_TV_API}/emote-sets/global`);
   const map = new Map();
   for (const emote of data?.emotes ?? []) {
-    if (emote.name) map.set(emote.name, `https://cdn.7tv.app/emote/${emote.id}/2x.webp`);
+    if (emote.name) map.set(emote.name, sevenTvEmoteUrl(emote.id));
   }
   return map;
 }
 
 async function fetchBttvGlobalImages() {
   const { data } = await axios.get(`${BTTV_API}/cached/emotes/global`);
-  return new Map((data ?? []).filter((e) => e.code).map((e) => [e.code, bttvUrl(e.id)]));
+  return new Map((data ?? []).filter((e) => e.code).map((e) => [e.code, bttvEmoteUrl(e.id)]));
 }
 
 // 404 = this broadcaster has never opened BTTV. That is "no emotes", not an error, and must not
@@ -182,7 +185,7 @@ async function fetchBttvChannelImages(broadcasterId) {
   try {
     const { data } = await axios.get(`${BTTV_API}/cached/users/twitch/${broadcasterId}`);
     const emotes = [...(data?.channelEmotes ?? []), ...(data?.sharedEmotes ?? [])];
-    return new Map(emotes.filter((e) => e.code).map((e) => [e.code, bttvUrl(e.id)]));
+    return new Map(emotes.filter((e) => e.code).map((e) => [e.code, bttvEmoteUrl(e.id)]));
   } catch (err) {
     if (err.response?.status === 404) return new Map();
     throw err;
@@ -228,7 +231,7 @@ async function fetchFfzChannelImages(broadcasterId) {
 // id has to come from our own row.
 async function fetchExternalEmoteImages(channelLogin) {
   const rows = await emoteRegistryRepo.listExternalEmotes(channelLogin);
-  return new Map(rows.map((row) => [row.word, `${TWITCH_EMOTE_CDN}/${row.emoteId}/default/dark/2.0`]));
+  return new Map(rows.map((row) => [row.word, twitchEmoteUrl(row.emoteId)]));
 }
 
 // One memo per source, so a slow or broken provider is retried on its own schedule instead of
@@ -271,7 +274,28 @@ async function getEmoteImageMap(broadcasterId, channelLogin) {
     getFfzEmoteImages(broadcasterId),
     getSevenTvEmoteImages(broadcasterId),
   ]);
-  return new Map([...external, ...global, ...channel, ...sevenTvGlobal, ...bttv, ...ffz, ...sevenTv]);
+  const merged = new Map([...external, ...global, ...channel, ...sevenTvGlobal, ...bttv, ...ffz, ...sevenTv]);
+  return dropBlockedImages(merged);
+}
+
+// The page's CSP decides which of these pictures a browser will actually fetch, and a refused one
+// renders as a zero-width broken image - worse than the text an unresolved emote falls back to.
+// So a URL whose origin the CSP doesn't allow is treated as "no picture": the name stays out of
+// the map and every caller (clouds, chat text, comments) draws it as text. Logged once per origin,
+// because the only other trace of this is in a viewer's browser console.
+const reportedBlockedOrigins = new Set();
+function dropBlockedImages(map) {
+  for (const [name, url] of map) {
+    if (isAllowedImageUrl(url)) continue;
+    map.delete(name);
+    let origin = String(url);
+    try { origin = new URL(url).origin; } catch { /* keep the raw value */ }
+    if (!reportedBlockedOrigins.has(origin)) {
+      reportedBlockedOrigins.add(origin);
+      console.warn(`[emoteImages] dropping emote images from ${origin}: not in the CSP img-src list (lib/emoteImageHosts.js)`);
+    }
+  }
+  return map;
 }
 
 function getSevenTvGlobalImages() {
