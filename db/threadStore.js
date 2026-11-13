@@ -1,5 +1,5 @@
-// Discussion threads (nested comments + up/down votes) and heart reactions, for anything with an
-// _id that lives on a channel: news posts today, movie and game cards next. One factory, one
+// Discussion threads (nested comments + up/down votes) and, optionally, heart reactions, for
+// anything with an _id that lives on a channel: news posts, movie cards, game cards next. One factory, one
 // set of collections per section - not one shared Comments collection keyed by
 // {targetType, targetId}. That alternative is the same code plus a migration of live NewsComments
 // rows and a window at deploy time where the two disagree, to save one argument in a factory call.
@@ -11,8 +11,15 @@
 //     reactions: "NewsReactions", foreignKey: "postId",
 //   });
 //
-// The ITEM collection is only ever touched through its three counters (commentCount, likeCount,
-// superlikeCount), kept on the item itself so a feed or grid never has to $group per request.
+// The ITEM collection is only ever touched through its counters (commentCount, and likeCount /
+// superlikeCount when reactions are on), kept on the item itself so a feed or grid never has to
+// $group per request.
+//
+// `reactions` is optional. News has its two hearts; movies and games do not - their viewers rate
+// 1-10 instead (db/mediaRatingsRepo.js), and a heart next to a rating would read as a second,
+// competing score. Without a reactions collection the store never touches one: no index is
+// created (which would create the collection itself), toggleReaction refuses, getUserReactions is
+// empty and deleteAllFor skips it.
 //
 // Comments are soft-deleted (`removed: true`, body and author left intact): replies underneath
 // keep a valid parent, and a moderator reviewing the removal still sees what was said. Hiding a
@@ -39,8 +46,8 @@ const REACTION_TYPES = Object.keys(REACTION_COUNT_FIELD);
 const toOid = (id) => (id instanceof ObjectId ? id : ObjectId.isValid(id) ? new ObjectId(id) : null);
 
 function createThreadStore({ items, comments, votes, reactions, foreignKey, connect = connectWeb }) {
-  if (!items || !comments || !votes || !reactions || !foreignKey) {
-    throw new TypeError("createThreadStore: items, comments, votes, reactions and foreignKey are required");
+  if (!items || !comments || !votes || !foreignKey) {
+    throw new TypeError("createThreadStore: items, comments, votes and foreignKey are required");
   }
 
   let handles = null;
@@ -58,14 +65,14 @@ function createThreadStore({ items, comments, votes, reactions, foreignKey, conn
           items: db.collection(items),
           comments: db.collection(comments),
           votes: db.collection(votes),
-          reactions: db.collection(reactions),
+          reactions: reactions ? db.collection(reactions) : null,
         };
         try {
           await Promise.all([
             // The permalink page's read path: every comment on one item, in one query.
             h.comments.createIndex({ [foreignKey]: 1 }),
             h.votes.createIndex({ commentId: 1, userId: 1 }, { unique: true }),
-            h.reactions.createIndex({ [foreignKey]: 1, userId: 1, type: 1 }, { unique: true }),
+            h.reactions ? h.reactions.createIndex({ [foreignKey]: 1, userId: 1, type: 1 }, { unique: true }) : null,
           ]);
         } catch (err) {
           console.error(`[threadStore:${comments}] createIndex failed:`, err.message);
@@ -201,6 +208,7 @@ function createThreadStore({ items, comments, votes, reactions, foreignKey, conn
   // Returns {liked, count} - count is the item's counter for that type, read back from the same
   // atomic $inc, so the route can answer without a second query. null when the item is gone.
   async function toggleReaction(itemId, userId, type) {
+    if (!reactions) throw new Error(`reactions are off for ${items}`);
     const field = REACTION_COUNT_FIELD[type];
     if (!field) throw new Error(`invalid reaction type: ${type}`);
     const oid = toOid(itemId);
@@ -223,7 +231,7 @@ function createThreadStore({ items, comments, votes, reactions, foreignKey, conn
   // Set of "itemId:type" keys for the viewer's own hearts across a page of items, one query.
   async function getUserReactions(itemIds, userId) {
     const oids = itemIds.map(toOid).filter(Boolean);
-    if (!oids.length) return new Set();
+    if (!oids.length || !reactions) return new Set();
     const h = await init();
     const docs = await h.reactions.find({ [foreignKey]: { $in: oids }, userId: String(userId) }).toArray();
     return new Set(docs.map((d) => `${d[foreignKey]}:${d.type}`));
@@ -231,7 +239,7 @@ function createThreadStore({ items, comments, votes, reactions, foreignKey, conn
 
   // --- deleting an item ------------------------------------------------------------------
 
-  // Everything hanging off one item: its reactions, its comments and the votes on those comments.
+  // Everything hanging off one item: its reactions (if any), its comments and the votes on them.
   // Called after the item itself is deleted, so nothing can render the half-deleted state.
   async function deleteAllFor(itemId) {
     const oid = toOid(itemId);
@@ -239,7 +247,7 @@ function createThreadStore({ items, comments, votes, reactions, foreignKey, conn
     const h = await init();
     const commentIds = await h.comments.find({ [foreignKey]: oid }, { projection: { _id: 1 } }).toArray();
     await Promise.all([
-      h.reactions.deleteMany({ [foreignKey]: oid }),
+      h.reactions ? h.reactions.deleteMany({ [foreignKey]: oid }) : null,
       commentIds.length ? h.votes.deleteMany({ commentId: { $in: commentIds.map((c) => c._id) } }) : null,
     ]);
     await h.comments.deleteMany({ [foreignKey]: oid });

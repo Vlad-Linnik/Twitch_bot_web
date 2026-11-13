@@ -45,6 +45,15 @@ async function setRating(itemId, userId, value, counted) {
   );
 }
 
+// Takes one viewer's rating back; returns the removed doc (or null) so the caller can move the
+// card's cache by exactly what it had counted.
+async function removeRating(itemId, userId) {
+  const oid = toOid(itemId);
+  if (!oid || !userId) return null;
+  const col = await ensureInitialized();
+  return col.findOneAndDelete({ itemId: oid, userId: String(userId) });
+}
+
 async function deleteAllFor(itemId) {
   const oid = toOid(itemId);
   if (!oid) return;
@@ -52,4 +61,4 @@ async function deleteAllFor(itemId) {
   await col.deleteMany({ itemId: oid });
 }
 
-module.exports = { getUserRating, setRating, deleteAllFor };
+module.exports = { getUserRating, setRating, removeRating, deleteAllFor };

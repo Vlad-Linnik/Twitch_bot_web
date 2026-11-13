@@ -1,19 +1,31 @@
 <%- include('partials/head', { title: item.title + ' · ' + channel.channelLogin }) %>
 <%- include('partials/nav') %>
 
+<%#
+  A movie card's own page. Its look is the section's own (warm black, amber/gold), not the news
+  post's: a backdrop band made from the poster's blurred copy - lib/mediaImage.js stores one for
+  every poster, so the band costs no extra file and never shows an 18+ cover unblurred - the poster
+  floating over it, the three scores as plates, the review as a signed quote.
+
+  No hearts here. A card is rated 1-10 (the star widget below, MediaRatings); the news feed's
+  like/superlike would read as a second, competing score. The discussion underneath is the shared
+  module with its own comment votes, unchanged.
+%>
 <%
   const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
   const csrf = user ? csrfToken : '';
   const base = '/' + channel.channelLogin + '/movies/' + item.id;
+  const mine = myRating ? myRating.value : 0;
   const badge = (() => {
     const p = item.progress;
     if (!p) return null;
     if (p.unit === 'percent') return t('movies.progressPercent', { done: p.done });
     return p.total ? t('movies.progressEpisodes', { done: p.done, total: p.total }) : t('movies.progressEpisodesOpen', { done: p.done });
   })();
+  const starPath = 'M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z';
 %>
 
-<main class="pt-14 max-w-3xl mx-auto px-6 py-12">
+<main class="pt-14 max-w-4xl mx-auto px-6 py-12">
 
   <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
 
@@ -23,135 +35,158 @@
     </div>
   <% } %>
 
-  <a href="/<%= channel.channelLogin %>/movies" data-transition="backward" class="inline-block mb-4 text-sm text-neutral-500 hover:text-neutral-300">&larr; <%= t('movies.backToGrid') %></a>
+  <a href="/<%= channel.channelLogin %>/movies" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-amber-300/80 hover:text-amber-200">&larr; <%= t('movies.backToGrid') %></a>
 
-  <article class="flex flex-col sm:flex-row gap-6">
-    <div class="w-48 shrink-0 self-center sm:self-start">
-      <div class="relative aspect-[2/3] rounded-md overflow-hidden bg-neutral-900 ring-1 ring-neutral-800">
-        <% if (item.poster) { %>
-          <%# An 18+ cover renders as its blurred copy; the normal one's URL is only in
-              data-full-src, swapped in by public/js/media-item.js on request. The button starts
-              hidden so a no-JS visitor sees only the blurred copy and no dead button. %>
-          <img src="<%= item.gridPosterUrl %>" alt="" width="<%= item.poster.width %>" height="<%= item.poster.height %>"
-               class="absolute inset-0 w-full h-full object-cover<%= item.nsfw ? ' scale-110' : '' %>"
-               <% if (item.nsfw) { %>data-nsfw-poster data-full-src="<%= item.poster.url %>"<% } %> />
-          <% if (item.nsfw) { %>
-            <button type="button" data-nsfw-reveal hidden
-                    class="absolute inset-x-3 bottom-3 px-2 py-1.5 rounded-md bg-neutral-950/85 text-neutral-100 text-xs font-medium hover:bg-neutral-900">
-              <%= t('movies.revealNsfw') %>
-            </button>
+  <article class="relative rounded-2xl overflow-hidden bg-stone-950 ring-1 ring-white/5">
+    <% if (item.poster && item.poster.blurUrl) { %>
+      <img src="<%= item.poster.blurUrl %>" alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover scale-125 opacity-50" />
+      <div class="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/80 to-stone-950/40"></div>
+    <% } else { %>
+      <div class="absolute inset-0 bg-gradient-to-br from-amber-950/40 to-stone-950"></div>
+    <% } %>
+
+    <div class="relative flex flex-col sm:flex-row gap-6 p-5 sm:p-7">
+      <div class="w-44 sm:w-52 shrink-0 self-center sm:self-start">
+        <div class="relative aspect-[2/3] rounded-xl overflow-hidden bg-stone-900 shadow-2xl shadow-black/60 ring-1 ring-white/10">
+          <% if (item.poster) { %>
+            <%# An 18+ cover renders as its blurred copy; the normal one's URL is only in
+                data-full-src, swapped in by public/js/media-item.js on request. The button starts
+                hidden so a no-JS visitor sees only the blurred copy and no dead button. %>
+            <img src="<%= item.gridPosterUrl %>" alt="" width="<%= item.poster.width %>" height="<%= item.poster.height %>"
+                 class="absolute inset-0 w-full h-full object-cover<%= item.nsfw ? ' scale-110' : '' %>"
+                 <% if (item.nsfw) { %>data-nsfw-poster data-full-src="<%= item.poster.url %>"<% } %> />
+            <% if (item.nsfw) { %>
+              <button type="button" data-nsfw-reveal hidden
+                      class="absolute inset-x-3 bottom-3 px-2 py-1.5 rounded-full bg-stone-950/85 text-stone-100 text-xs font-semibold hover:bg-stone-900 ring-1 ring-white/10">
+                <%= t('movies.revealNsfw') %>
+              </button>
+            <% } %>
+          <% } else { %>
+            <span class="absolute inset-0 grid place-items-center text-5xl text-stone-700" aria-hidden="true">🎞</span>
           <% } %>
-        <% } else { %>
-          <span class="absolute inset-0 grid place-items-center p-3 text-center text-sm text-neutral-500"><%= item.title %></span>
-        <% } %>
-        <% if (item.nsfw) { %>
-          <span class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-red-700/90 text-white text-[10px] font-bold">18+</span>
-        <% } %>
+          <% if (item.nsfw) { %>
+            <span class="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-bold">18+</span>
+          <% } %>
+        </div>
       </div>
-    </div>
 
-    <div class="flex-1 min-w-0">
-      <h2 class="text-2xl font-bold text-neutral-100"><%= item.title %></h2>
-      <% if (item.originalTitle) { %><p class="text-sm text-neutral-400"><%= item.originalTitle %></p><% } %>
-      <p class="mt-1 text-sm text-neutral-500">
-        <%= [item.year, item.mediaType ? t('movies.type.' + item.mediaType) : null].filter(Boolean).join(' · ') %>
-        <% if (item.status === 'accepted') { %><span class="ml-2 px-1.5 py-0.5 rounded bg-sky-900/60 text-sky-300 text-xs"><%= t('movies.statusPlanned') %></span><% } %>
-      </p>
+      <div class="flex-1 min-w-0">
+        <h2 class="text-3xl font-extrabold tracking-tight text-white leading-tight"><%= item.title %></h2>
+        <% if (item.originalTitle) { %><p class="mt-0.5 text-sm italic text-stone-400"><%= item.originalTitle %></p><% } %>
 
-      <dl class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
-        <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
-          <dt class="text-[11px] uppercase tracking-wide text-neutral-500"><%= t('movies.ratingStreamer') %></dt>
-          <dd class="text-xl font-semibold tabular-nums <%= item.ratings.streamer ? 'text-amber-400' : 'text-neutral-600' %>">
-            <%= item.ratings.streamer ? item.ratings.streamer + '/10' : '—' %>
-          </dd>
+        <div class="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+          <% [item.year, item.mediaType ? t('movies.type.' + item.mediaType) : null].filter(Boolean).forEach(function(chip) { %>
+            <span class="px-2 py-0.5 rounded-full bg-white/5 text-stone-300 ring-1 ring-white/10"><%= chip %></span>
+          <% }) %>
+          <% if (item.status === 'accepted') { %><span class="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"><%= t('movies.statusPlanned') %></span><% } %>
+          <% if (badge) { %><span class="px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30 tabular-nums"><%= t('movies.watchedLabel') %>: <%= badge %></span><% } %>
         </div>
-        <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
-          <dt class="text-[11px] uppercase tracking-wide text-neutral-500"><%= t('movies.ratingViewers') %></dt>
-          <dd class="text-xl font-semibold tabular-nums <%= item.viewerAverage !== null ? 'text-sky-400' : 'text-neutral-600' %>" data-viewer-average>
-            <%= item.viewerAverage !== null ? item.viewerAverage.toFixed(1) : '—' %>
-          </dd>
-          <dd class="text-[11px] text-neutral-500" data-viewer-count data-template="<%= t('movies.ratingCount', { count: '{{count}}' }) %>">
-            <%= item.viewerCount ? t('movies.ratingCount', { count: item.viewerCount }) : t('movies.ratingNone') %>
-          </dd>
-        </div>
-        <% if (item.imdbRating) { %>
-          <%# IMDb's own figure from the nightly dataset pass (jobs/imdbRatingsSync.js). %>
-          <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
-            <dt class="text-[11px] uppercase tracking-wide text-neutral-500">IMDb</dt>
-            <dd class="text-xl font-semibold tabular-nums text-yellow-500/90"><%= item.imdbRating.value.toFixed(1) %></dd>
-            <dd class="text-[11px] text-neutral-500"><%= t('movies.ratingCount', { count: item.imdbRating.votes.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') }) %></dd>
+
+        <%# Three plates, three different sources - each drawn its own way so they never read as
+            one number repeated: the streamer's gold medal, the viewers' star, IMDb's own yellow. %>
+        <dl class="mt-5 flex flex-wrap gap-3">
+          <div class="flex items-center gap-3 pr-4 rounded-2xl bg-black/30 ring-1 ring-white/10 p-2">
+            <dd class="grid place-items-center w-12 h-12 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-amber-400 text-stone-950 shadow-lg shadow-amber-500/20' : 'bg-stone-800 text-stone-500' %>">
+              <%= item.ratings.streamer || '—' %>
+            </dd>
+            <dt class="text-[11px] leading-tight text-stone-400"><%= t('movies.ratingStreamer') %><br /><span class="text-stone-500"><%= t('movies.outOfTen') %></span></dt>
           </div>
-        <% } %>
-      </dl>
+          <div class="flex items-center gap-3 pr-4 rounded-2xl bg-black/30 ring-1 ring-white/10 p-2">
+            <dd class="flex items-center gap-1.5 pl-2">
+              <svg class="w-6 h-6 <%= item.viewerAverage !== null ? 'text-amber-300' : 'text-stone-700' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-viewer-star><path d="<%= starPath %>"/></svg>
+              <span class="text-2xl font-extrabold tabular-nums <%= item.viewerAverage !== null ? 'text-white' : 'text-stone-600' %>" data-viewer-average><%= item.viewerAverage !== null ? item.viewerAverage.toFixed(1) : '—' %></span>
+            </dd>
+            <dt class="text-[11px] leading-tight text-stone-400"><%= t('movies.ratingViewers') %><br />
+              <span class="text-stone-500" data-viewer-count data-template="<%= t('movies.ratingCount', { count: '{{count}}' }) %>" data-none="<%= t('movies.ratingNone') %>"><%= item.viewerCount ? t('movies.ratingCount', { count: item.viewerCount }) : t('movies.ratingNone') %></span>
+            </dt>
+          </div>
+          <% if (item.imdbRating) { %>
+            <%# IMDb's own figure from the nightly dataset pass (jobs/imdbRatingsSync.js). %>
+            <div class="flex items-center gap-3 pr-4 rounded-2xl bg-black/30 ring-1 ring-white/10 p-2">
+              <dd class="flex items-center gap-2 pl-1">
+                <span class="px-1.5 py-0.5 rounded bg-[#f5c518] text-black text-xs font-black">IMDb</span>
+                <span class="text-2xl font-extrabold tabular-nums text-white"><%= item.imdbRating.value.toFixed(1) %></span>
+              </dd>
+              <dt class="text-[11px] leading-tight text-stone-500"><%= t('movies.ratingCount', { count: item.imdbRating.votes.toLocaleString(dateLocale) }) %></dt>
+            </div>
+          <% } %>
+        </dl>
 
-      <% if (badge) { %><p class="mt-3 text-sm text-neutral-300"><%= t('movies.watchedLabel') %>: <span class="tabular-nums"><%= badge %></span></p><% } %>
-      <% if (item.recordingUrl) { %>
-        <p class="mt-2 text-sm"><a href="<%= item.recordingUrl %>" target="_blank" rel="noopener noreferrer nofollow" class="text-purple-400 hover:text-purple-300"><%= t('movies.recordingLink') %> ↗</a></p>
-      <% } %>
-      <% if (item.external && item.external.imdbId) { %>
-        <p class="mt-1 text-sm"><a href="https://www.imdb.com/title/<%= item.external.imdbId %>/" target="_blank" rel="noopener noreferrer nofollow" class="text-neutral-400 hover:text-neutral-200">IMDb ↗</a></p>
-      <% } %>
-
-      <div class="mt-4 flex items-center gap-5">
-        <% ["like", "superlike"].forEach(function(type) { %>
-          <% const liked = type === "like" ? item.likedByViewer : item.superlikedByViewer; %>
-          <% const count = type === "like" ? item.likeCount : item.superlikeCount; %>
-          <button type="button"
-                  class="group news-heart-btn flex items-center gap-1.5 text-sm text-neutral-400 data-[liked=1]:text-red-400 hover:text-red-300 transition-colors"
-                  data-react data-react-url="<%= base %>/react" data-type="<%= type %>"
-                  data-liked="<%= liked ? '1' : '0' %>" data-csrf="<%= csrf %>" aria-pressed="<%= liked ? 'true' : 'false' %>"
-                  aria-label="<%= t('news.react.' + type) %>" title="<%= t('news.react.' + type) %>">
-            <svg class="w-5 h-5 fill-none group-data-[liked=1]:fill-current" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
-            </svg>
-            <span class="news-heart-count tabular-nums"><%= count %></span>
-          </button>
-        <% }) %>
-      </div>
-
-      <% if (canEdit) { %>
-        <div class="mt-4 flex items-center gap-2">
-          <a href="<%= base %>/edit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs font-medium"><%= t('movies.edit') %></a>
-          <form method="post" action="<%= base %>/delete" data-confirm-delete="<%= t('movies.deleteConfirm') %>" class="inline">
-            <input type="hidden" name="_csrf" value="<%= csrf %>" />
-            <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium"><%= t('movies.delete') %></button>
-          </form>
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+          <% if (item.recordingUrl) { %>
+            <a href="<%= item.recordingUrl %>" target="_blank" rel="noopener noreferrer nofollow"
+               class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-stone-950 text-sm font-semibold hover:bg-amber-300">
+              <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6z"/></svg>
+              <%= t('movies.recordingLink') %>
+            </a>
+          <% } %>
+          <% if (item.external && item.external.imdbId) { %>
+            <a href="https://www.imdb.com/title/<%= item.external.imdbId %>/" target="_blank" rel="noopener noreferrer nofollow"
+               class="px-3 py-1.5 rounded-full text-sm text-stone-300 ring-1 ring-white/15 hover:ring-white/30">IMDb ↗</a>
+          <% } %>
+          <% if (canEdit) { %>
+            <a href="<%= base %>/edit" class="ml-auto px-3 py-1.5 rounded-full text-xs font-medium text-stone-300 ring-1 ring-white/15 hover:ring-amber-400/60 hover:text-amber-200"><%= t('movies.edit') %></a>
+            <form method="post" action="<%= base %>/delete" data-confirm-delete="<%= t('movies.deleteConfirm') %>" class="inline">
+              <input type="hidden" name="_csrf" value="<%= csrf %>" />
+              <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-medium text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10"><%= t('movies.delete') %></button>
+            </form>
+          <% } %>
         </div>
-      <% } %>
+      </div>
     </div>
   </article>
 
   <% if (item.status === 'done') { %>
-    <section id="rating" class="mt-8 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4">
-      <h3 class="text-sm font-semibold text-neutral-200 mb-2"><%= t('movies.yourRating') %></h3>
+    <section id="rating" class="mt-6 rounded-2xl bg-stone-900/60 ring-1 ring-white/5 px-4 sm:px-5 py-4">
+      <h3 class="text-sm font-semibold text-stone-200 mb-2"><%= t('movies.yourRating') %></h3>
       <% if (!user) { %>
-        <p class="text-sm"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-purple-400 hover:text-purple-300"><%= t('movies.loginToRate') %></a></p>
+        <p class="text-sm"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-amber-300 hover:text-amber-200"><%= t('movies.loginToRate') %></a></p>
       <% } else if (!canRate) { %>
-        <p class="text-sm text-neutral-500"><%= t('movies.ownerCannotRate') %></p>
+        <p class="text-sm text-stone-500"><%= t('movies.ownerCannotRate') %></p>
       <% } else { %>
-        <%# Ten submit buttons in one form: works without JS (redirect back to #rating);
-            public/js/media-item.js posts it by fetch and patches the numbers in place. %>
-        <form method="post" action="<%= base %>/rate" data-rate-form class="flex flex-wrap gap-1">
+        <%# Ten stars, each a submit button of one form - so it works without JS: the star you
+            click is the score, and the star of the score you already gave posts "clear", which
+            takes it back (re-clicking your own rating removes it). public/js/media-item.js adds
+            the hover/keyboard preview (roving focus, arrow keys), posts by fetch and patches in
+            place. Lit stars are drawn by the server too, so the score shows before any script. %>
+        <form method="post" action="<%= base %>/rate" data-rate-form data-current="<%= mine || '' %>"
+              data-label-pick="<%= t('movies.starPick', { n: '{{n}}' }) %>" data-label-clear="<%= t('movies.starClear', { n: '{{n}}' }) %>"
+              class="flex flex-wrap items-center gap-x-4 gap-y-2">
           <input type="hidden" name="_csrf" value="<%= csrf %>" />
-          <% for (let n = 1; n <= 10; n++) { %>
-            <button type="submit" name="value" value="<%= n %>" data-rate-value="<%= n %>"
-                    aria-pressed="<%= myRating && myRating.value === n ? 'true' : 'false' %>"
-                    class="w-9 h-9 rounded-md border text-sm tabular-nums transition-colors aria-pressed:border-sky-500 aria-pressed:bg-sky-500/20 aria-pressed:text-sky-200 border-neutral-700 text-neutral-300 hover:border-sky-600"><%= n %></button>
-          <% } %>
+          <div role="radiogroup" aria-label="<%= t('movies.starsLabel') %>" class="flex" data-stars>
+            <% for (let n = 1; n <= 10; n++) { %>
+              <% const label = mine === n ? t('movies.starClear', { n }) : t('movies.starPick', { n }); %>
+              <button type="submit" name="value" value="<%= mine === n ? 'clear' : n %>" data-star="<%= n %>"
+                      role="radio" aria-checked="<%= mine === n ? 'true' : 'false' %>" aria-label="<%= label %>" title="<%= label %>"
+                      data-lit="<%= n <= mine ? '1' : '0' %>"
+                      class="p-0.5 rounded text-stone-700 hover:text-amber-300 data-[lit=1]:text-amber-400 transition-colors focus-visible:outline-2 focus-visible:outline-amber-400">
+                <%# 24 px on a phone: ten stars must fit a 375 px screen inside the panel (measured overflow at 28 px). %>
+                <svg class="w-6 h-6 sm:w-8 sm:h-8" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="<%= starPath %>"/></svg>
+              </button>
+            <% } %>
+          </div>
+          <span class="text-lg font-bold tabular-nums text-amber-200" data-star-readout><%= mine ? mine + '/10' : '' %></span>
         </form>
-        <p class="mt-2 text-xs text-neutral-500" data-rate-note
-           data-note-counted="<%= t('movies.rateCounted') %>" data-note-not-counted="<%= t('movies.rateNotCounted') %>" data-note-error="<%= t('movies.rateError') %>">
-          <% if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= t('movies.rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= t('movies.rateCounted') %><% } else if (ratingFlash) { %><%= t('movies.rateError') %><% } else { %><%= t('movies.rateHint') %><% } %>
+        <p class="mt-2 text-xs text-stone-500" data-rate-note
+           data-note-counted="<%= t('movies.rateCounted') %>" data-note-not-counted="<%= t('movies.rateNotCounted') %>"
+           data-note-cleared="<%= t('movies.rateCleared') %>" data-note-error="<%= t('movies.rateError') %>">
+          <% if (ratingFlash === 'cleared') { %><%= t('movies.rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= t('movies.rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= t('movies.rateCounted') %><% } else if (ratingFlash) { %><%= t('movies.rateError') %><% } else { %><%= t('movies.rateHint') %><% } %>
         </p>
       <% } %>
     </section>
   <% } %>
 
   <% if (item.review) { %>
-    <section class="mt-8">
-      <h3 class="text-lg font-semibold text-neutral-100 mb-2"><%= t('movies.reviewHeading', { login: channel.channelLogin }) %></h3>
-      <div class="prose-news text-neutral-300 text-sm leading-relaxed"><%- item.review.bodyHtml %></div>
-      <% if (item.review.updatedAt) { %><p class="mt-2 text-xs text-neutral-600"><%= new Date(item.review.updatedAt).toLocaleDateString(dateLocale) %></p><% } %>
+    <section class="mt-6">
+      <h3 class="sr-only"><%= t('movies.reviewHeading', { login: channel.channelLogin }) %></h3>
+      <figure class="relative rounded-2xl bg-stone-900/40 px-6 py-5 border-l-4 border-amber-400">
+        <span class="absolute -top-3 left-4 text-5xl leading-none text-amber-400/40 select-none" aria-hidden="true">“</span>
+        <blockquote class="prose-news text-stone-200 text-[15px] leading-relaxed"><%- item.review.bodyHtml %></blockquote>
+        <figcaption class="mt-3 text-xs text-stone-400">
+          — <span class="font-semibold text-amber-200"><%= channel.channelLogin %></span>
+          <% if (item.review.updatedAt) { %><span class="text-stone-600">· <%= new Date(item.review.updatedAt).toLocaleDateString(dateLocale) %></span><% } %>
+        </figcaption>
+      </figure>
     </section>
   <% } %>
 
@@ -160,7 +195,6 @@
   <%- include('partials/mediaAttribution') %>
 </main>
 
-<script src="<%= asset('/js/reactions.js') %>" defer></script>
 <script src="<%= asset('/js/emoteMatch.js') %>" defer></script>
 <script src="<%= asset('/js/comment-thread.js') %>" defer></script>
 <script src="<%= asset('/js/media-item.js') %>" defer></script>

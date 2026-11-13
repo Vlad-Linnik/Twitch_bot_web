@@ -55,14 +55,12 @@ const ITEMS_PER_PORTION = 24;
 // "Back" restore ceiling, as on the news feed.
 const RESTORE_MAX = 240;
 const POSTER_MAX_BYTES = 5 * 1024 * 1024;
-const REACTION_TYPES = ["like", "superlike"];
 // The two grid tabs. "Planned" becomes part of the suggestions tab once viewers can suggest.
 const TABS = { done: "done", planned: "accepted" };
 
 const page = loadChannelSection(SECTION);
 const pageJson = loadChannelSection(SECTION, { json: true });
 const write = loadChannelSection(SECTION, { allowPreview: false });
-const writeJson = loadChannelSection(SECTION, { json: true, allowPreview: false });
 // Editors work in preview too: the admin fills the section before switching it on. Checked before
 // multer reads the body, so an anonymous request never gets a 5 MB upload buffered.
 const edit = [requireSectionEditAccess(EDIT_SECTION), loadChannelSection(SECTION)];
@@ -82,7 +80,6 @@ const discussion = createDiscussionRoutes({
   adminActionPrefix: "mediaComment",
 });
 
-const reactLimiterAllow = createSimpleLimiter({ windowMs: 8 * 1000, max: 8 });
 const rateLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 20 });
 // The search box fires on typing (debounced client-side); this only stops a script.
 const lookupLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 60 });
@@ -175,7 +172,6 @@ function shapeCard(item) {
     imdbRating: item.ratings?.external?.source === "imdb" ? item.ratings.external.value : null,
     excerpt: item.review?.excerpt || null,
     commentCount: item.commentCount || 0,
-    likeCount: item.likeCount || 0,
   };
 }
 
@@ -483,10 +479,9 @@ router.get(`/:channel/${SECTION}/:id`, page, async (req, res, next) => {
     const item = await loadCard(req);
     if (!item) return res.status(404).render("errors/404");
 
-    const [broadcaster, thread, reacted, myRating, editor] = await Promise.all([
+    const [broadcaster, thread, myRating, editor] = await Promise.all([
       profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
       discussion.threadPageLocals(req, res, channel, item),
-      req.user ? mediaThreads.getUserReactions([String(item._id)], req.user.userId) : Promise.resolve(new Set()),
       req.user ? mediaRatingsRepo.getUserRating(item._id, req.user.userId) : Promise.resolve(null),
       req.user ? canEdit(req) : Promise.resolve(false),
     ]);
@@ -502,8 +497,6 @@ router.get(`/:channel/${SECTION}/:id`, page, async (req, res, next) => {
         viewerAverage: media.viewerAverage(item.ratings?.viewers),
         viewerCount: item.ratings?.viewers?.count || 0,
         imdbRating: item.ratings?.external?.source === "imdb" ? item.ratings.external : null,
-        likedByViewer: reacted.has(`${item._id}:like`),
-        superlikedByViewer: reacted.has(`${item._id}:superlike`),
       },
       myRating: myRating ? { value: myRating.value, counted: myRating.counted } : null,
       // The owner has their own score; viewers rate only what was watched.
@@ -529,15 +522,25 @@ router.post(`/:channel/${SECTION}/:id/rate`, requireLogin, verifyToken, write, a
     if (item.status !== "done") return fail(400, "not_watched");
     if (req.permission === 1) return fail(403, "owner");
     if (!rateLimiterAllow(req.user.userId)) return fail(429, "rate_limited");
-    const parsed = media.parseRating(req.body.value);
-    if (parsed.error || parsed.value === null) return fail(400, "rating_invalid");
 
-    const counted = await chatPresenceRepo.hasChatted(channel.channelLogin, req.user.userId);
-    const previous = await mediaRatingsRepo.setRating(item._id, req.user.userId, parsed.value, counted);
-    const delta = media.viewerRatingDelta(previous, parsed.value, counted);
-    await mediaItemsRepo.incViewerRatings(item._id, delta);
+    // "clear" takes the viewer's own rating back - the star widget sends it when the star they
+    // already picked is clicked again (and the no-JS form renders that star with this value).
+    const clearing = req.body.value === "clear";
+    const parsed = clearing ? { value: null } : media.parseRating(req.body.value);
+    if (!clearing && (parsed.error || parsed.value === null)) return fail(400, "rating_invalid");
 
-    if (!wantsJson(req)) return res.redirect(back(counted ? "ok" : "not_counted"));
+    let counted = false;
+    if (clearing) {
+      const previous = await mediaRatingsRepo.removeRating(item._id, req.user.userId);
+      // Leaving the average is the same move as "this rating no longer counts".
+      if (previous) await mediaItemsRepo.incViewerRatings(item._id, media.viewerRatingDelta(previous, 0, false));
+    } else {
+      counted = await chatPresenceRepo.hasChatted(channel.channelLogin, req.user.userId);
+      const previous = await mediaRatingsRepo.setRating(item._id, req.user.userId, parsed.value, counted);
+      await mediaItemsRepo.incViewerRatings(item._id, media.viewerRatingDelta(previous, parsed.value, counted));
+    }
+
+    if (!wantsJson(req)) return res.redirect(back(clearing ? "cleared" : counted ? "ok" : "not_counted"));
     const fresh = await mediaItemsRepo.getById(item._id);
     res.json({
       ok: true,
@@ -546,21 +549,6 @@ router.post(`/:channel/${SECTION}/:id/rate`, requireLogin, verifyToken, write, a
       average: media.viewerAverage(fresh?.ratings?.viewers),
       count: fresh?.ratings?.viewers?.count || 0,
     });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post(`/:channel/${SECTION}/:id/react`, requireLogin, verifyToken, writeJson, async (req, res, next) => {
-  try {
-    if (!reactLimiterAllow(req.user.userId)) return res.status(429).json({ ok: false, error: "rate_limited" });
-    const type = req.body.type;
-    if (!REACTION_TYPES.includes(type)) return res.status(400).json({ ok: false, error: "invalid_type" });
-    const item = await loadCard(req);
-    if (!item) return res.status(404).json({ ok: false, error: "not_found" });
-    const result = await mediaThreads.toggleReaction(item._id, req.user.userId, type);
-    if (!result) return res.status(404).json({ ok: false, error: "not_found" });
-    res.json({ ok: true, liked: result.liked, count: result.count });
   } catch (err) {
     next(err);
   }

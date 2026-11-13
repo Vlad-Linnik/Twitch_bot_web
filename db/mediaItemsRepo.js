@@ -8,7 +8,7 @@
 //  recordingUrl, progress: {done, total, unit} | null,
 //  ratings: {streamer: 1..10|null, viewers: {sum, count}, external: null},
 //  review: {bodyRaw, bodyHtml, excerpt, authorUserId, updatedAt} | null,
-//  likeCount, superlikeCount, commentCount, suggestion: null,
+//  commentCount, suggestion: null,
 //  createdBy: {userId, login, level}, doneAt, createdAt, updatedAt}
 //
 // ratings.viewers is a cache: MediaRatings is the source of truth, and this pair is moved by the
@@ -77,8 +77,6 @@ async function create(doc) {
     progress: doc.progress || null,
     ratings: { streamer: doc.streamerRating ?? null, viewers: { sum: 0, count: 0 }, external: null },
     review: doc.review || null,
-    likeCount: 0,
-    superlikeCount: 0,
     commentCount: 0,
     suggestion: null,
     createdBy: doc.createdBy,

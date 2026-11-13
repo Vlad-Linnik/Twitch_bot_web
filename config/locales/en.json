@@ -958,7 +958,7 @@
     "yourRating": "Your score",
     "loginToRate": "Log in with Twitch to rate",
     "ownerCannotRate": "The streamer has their own score and doesn't add a viewer one.",
-    "rateHint": "1 to 10. The average counts people who have chatted in this channel.",
+    "rateHint": "1 to 10; click your star again to take the score back. The average counts people who have chatted in this channel.",
     "rateCounted": "Saved, and counted in the average.",
     "rateNotCounted": "Saved, but not counted yet: the average only counts people who have chatted in this channel.",
     "rateError": "Couldn't save the score.",
@@ -1031,7 +1031,12 @@
     "attribution": {
       "lead": "Film, series and anime data comes from open sources:",
       "shikimori": "Anime titles by"
-    }
+    },
+    "outOfTen": "out of 10",
+    "starsLabel": "Your score, 1 to 10",
+    "starPick": "Rate {{n}} out of 10",
+    "starClear": "Your score is {{n}}. Click again to remove it",
+    "rateCleared": "Score removed."
   },
   "comments": {
     "backToFeed": "Back to news",
