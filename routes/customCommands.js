@@ -16,7 +16,7 @@ const channelsRepo = require("../db/channelsRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
-const { settingsWriteLimiter } = require("../middleware/rateLimiters");
+const { settingsWriteLimiter, categoryLookupLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const {
   parseCommand,
@@ -31,6 +31,8 @@ const {
   MAX_GROUP_LENGTH,
   ANNOUNCEMENT_COLORS,
 } = require("../lib/commandValidation");
+const { parseCategoryQuery } = require("../lib/categoryLookup");
+const { lookupCategory } = require("../twitch/categoryLookup");
 
 const router = express.Router();
 
@@ -64,6 +66,11 @@ async function buildCommandsView(channelLogin) {
     timerSeconds: toSeconds(c.timer),
     pin: !!c.pin,
     announce: !!c.announce,
+    // When the command was first created - the ObjectId is minted on the first insert (the bot's
+    // insertOne or the panel's upsert) and survives every later update, so it is a creation time
+    // without a field of its own. Drives the list's "newest first" sort
+    // (public/js/commandListOrder.js); 0 for a hand-imported row with a non-ObjectId _id.
+    createdAt: c._id && typeof c._id.getTimestamp === "function" ? c._id.getTimestamp().getTime() : 0,
     announceColor: c.announceColor || "primary",
     enabled: c.enabled !== false,
     categoryTexts: c.categoryTexts || [],
@@ -141,6 +148,33 @@ router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async
     next(err);
   }
 });
+
+// "Is this a real Twitch category?" for the form's per-category text rows
+// (public/js/custom-commands.js asks after each typed name settles). The browser never calls Twitch
+// itself: this route asks Helix with the site's app token, through twitch/categoryLookup.js's cache.
+// What counts as "found" is the bot's own case-insensitive exact comparison - see
+// lib/categoryLookup.js - so a green border promises a match the bot will actually make.
+// A read, so tier-2 like the page itself rather than the edit-access gate; it has its own rate
+// bucket because a keystroke-driven endpoint must not drain the explicit-save budget.
+router.get(
+  "/:channel/settings/custom-commands/category-lookup",
+  requireLevel(2),
+  categoryLookupLimiter,
+  async (req, res) => {
+    const parsed = parseCategoryQuery(req.query.name);
+    if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
+    try {
+      const result = await lookupCategory(parsed.name);
+      res.set("Cache-Control", "private, max-age=300");
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      // Not "not found": an outage must not paint a correct category red. The client shows a
+      // neutral "could not check" and tries again on the next edit.
+      console.error("[categoryLookup] Helix lookup failed:", err.message);
+      return res.status(502).json({ ok: false, status: "unavailable" });
+    }
+  }
+);
 
 router.post(
   "/:channel/settings/custom-commands/commands",
@@ -281,7 +315,12 @@ router.post(
         timerSeconds: req.body.timerSeconds,
         pin: req.body.pin,
         announce: req.body.announce,
-        announceColor: req.body.announceColor,
+        // The form disables the colour select while "announce" is unticked
+        // (public/js/custom-commands.js's syncAnnounceColor), and a disabled field is not
+        // submitted - so an absent colour means "not shown", not "reset". Carry the stored one over,
+        // or editing the text of a non-announcing command would silently drop the colour the mod
+        // picked for when they turn announcing back on.
+        announceColor: req.body.announceColor ?? (before ? before.announceColor : undefined),
         enabled: before ? before.enabled !== false : true,
         categoryTexts,
         modOnly: req.body.modOnly,

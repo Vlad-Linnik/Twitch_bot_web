@@ -41,7 +41,9 @@
           <span class="cc-group-name text-sm font-semibold truncate <%= section.name ? 'text-neutral-300' : 'text-neutral-500 italic' %>">
             <%= section.name || t('customCommands.ungrouped') %>
           </span>
-          <span class="text-neutral-600 text-sm font-normal shrink-0">(<%= section.commands.length %>)</span>
+          <%# data-total is what the search (public/js/custom-commands.js) restores after
+              showing "matches/total" here while a query is typed. %>
+          <span class="cc-group-count text-neutral-600 text-sm font-normal shrink-0" data-total="<%= section.commands.length %>">(<%= section.commands.length %>)</span>
         </span>
         <% if (section.name) { %>
           <%# Group master switch: one request flips every command in this group to the same

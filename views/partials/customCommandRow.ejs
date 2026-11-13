@@ -5,12 +5,15 @@
 
   draggable/data-command/data-group are what public/js/custom-commands.js's drag-and-drop reads to
   move this command into another group; the "..." menu below is the same operation's no-drag (and
-  keyboard-reachable) path, plus edit and delete.
+  keyboard-reachable) path, plus edit and delete. data-enabled/data-created feed the list's
+  client-side sort (public/js/commandListOrder.js); the search reads the edit button's data-*.
 %>
 <li class="cc-row px-4 py-3 flex items-start gap-3"
     draggable="true"
     data-command="<%= c.command %>"
-    data-group="<%= c.group %>">
+    data-group="<%= c.group %>"
+    data-enabled="<%= c.enabled ? '1' : '' %>"
+    data-created="<%= c.createdAt || 0 %>">
   <div class="min-w-0 flex-1">
     <div class="flex items-center gap-2 flex-wrap">
       <code class="text-purple-400 font-medium">!<%= c.command %></code>

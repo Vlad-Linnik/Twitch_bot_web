@@ -129,15 +129,33 @@
           <%= t('customCommands.categoryOverridesHeading') %>
         </label>
         <p class="text-xs text-neutral-600 mb-2"><%= t('customCommands.categoryOverridesHint') %></p>
-        <div class="space-y-2" id="category-rows" data-max="<%= maxCategoryOverrides %>" hidden></div>
+        <div class="space-y-2" id="category-rows" data-max="<%= maxCategoryOverrides %>"
+             data-lookup-url="/<%= channel.channelLogin %>/settings/custom-commands/category-lookup"
+             data-msg-not-found="<%= t('customCommands.categoryCheck.notFound') %>"
+             data-msg-suggest="<%= t('customCommands.categoryCheck.suggest') %>"
+             data-msg-unavailable="<%= t('customCommands.categoryCheck.unavailable') %>"
+             data-msg-found="<%= t('customCommands.categoryCheck.found') %>"
+             hidden></div>
+        <%# Each row's category name is checked against Twitch as it is typed
+            (public/js/custom-commands.js -> routes/customCommands.js's category-lookup): a match
+            the bot will make turns the border green and shows the game's box art inside the
+            field, no match turns it red and says so under the row, with Twitch's closest names
+            as one-click replacements. The check only informs - saving is never blocked by it,
+            since Twitch can be down and a mod may be preparing a category before it exists.
+            The two inputs stay the row's first two <input>s: maybeAddCategoryRow and
+            fillCategoryRows destructure them positionally. %>
         <template id="category-row-template">
-          <div class="grid grid-cols-1 sm:grid-cols-[10rem_minmax(0,1fr)] gap-2">
-            <input type="text" name="categoryName" maxlength="<%= maxCategoryLength %>"
-                   placeholder="<%= t('customCommands.categoryPlaceholder') %>"
-                   class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+          <div class="cc-category-row grid grid-cols-1 sm:grid-cols-[13rem_minmax(0,1fr)] gap-2">
+            <div class="relative">
+              <img class="cc-category-art absolute left-1.5 top-1/2 -translate-y-1/2 w-[21px] h-7 rounded-sm object-cover pointer-events-none" alt="" width="21" height="28" hidden />
+              <input type="text" name="categoryName" maxlength="<%= maxCategoryLength %>" autocomplete="off"
+                     placeholder="<%= t('customCommands.categoryPlaceholder') %>"
+                     class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+            </div>
             <input type="text" name="categoryResult" maxlength="<%= maxResultLength %>"
                    placeholder="<%= t('customCommands.categoryResultPlaceholder') %>"
                    class="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+            <p class="cc-category-status sm:col-span-2 -mt-1 text-xs" aria-live="polite" hidden></p>
           </div>
         </template>
         <%# No-JS fallback: the toggle + one-row-at-a-time behaviour above needs JS to add rows,
@@ -178,10 +196,15 @@
           <input type="checkbox" name="announce" value="on" id="announce" class="accent-purple-600" />
           <%= t('customCommands.announce') %>
         </label>
-        <label class="flex items-center gap-2 text-sm text-neutral-500">
+        <%# The colour only means something for an announcement, so - like the per-category rows
+            above, which stay closed until their checkbox is ticked - it is only usable while
+            "announce" is ticked (public/js/custom-commands.js's syncAnnounceColor). Disabled
+            rather than hidden so the mod can see the option exists; disabled by JS only, so
+            without scripting the select stays usable. %>
+        <label class="flex items-center gap-2 text-sm text-neutral-500 transition-opacity" id="announceColorField">
           <%= t('customCommands.announceColor') %>
           <select name="announceColor" id="announceColor"
-                  class="bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-600">
+                  class="bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-600 disabled:cursor-not-allowed">
             <% announcementColors.forEach(function(color) { %>
               <option value="<%= color %>"><%= t('customCommands.color.' + color) %></option>
             <% }) %>
@@ -204,12 +227,35 @@
   <!-- Existing commands -->
   <%# data-channel keys the per-group collapsed-state memory in localStorage
       (public/js/custom-commands.js) so two channels' command lists don't share it. %>
+  <%# Sort + search over the list below - client-side only (public/js/commandListOrder.js does the
+      ordering and matching, custom-commands.js moves the rows), so it is rendered hidden and shown
+      by that script: without JS there is nothing for these controls to drive. It sits outside
+      #commands-list on purpose - that element's contents are replaced after every save, and the
+      query being typed must survive a save. %>
+  <div id="cc-list-tools" class="flex flex-wrap items-center gap-2 mb-4" hidden>
+    <label for="cc-search" class="sr-only"><%= t('customCommands.searchLabel') %></label>
+    <input type="search" id="cc-search" autocomplete="off"
+           placeholder="<%= t('customCommands.searchPlaceholder') %>"
+           class="min-w-0 flex-1 basis-56 bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600" />
+    <label class="flex items-center gap-2 text-sm text-neutral-500">
+      <%= t('customCommands.sortLabel') %>
+      <select id="cc-sort"
+              class="bg-neutral-950 border border-neutral-800 rounded-md px-2 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-600">
+        <option value="enabled"><%= t('customCommands.sort.enabled') %></option>
+        <option value="newest"><%= t('customCommands.sort.newest') %></option>
+        <option value="name"><%= t('customCommands.sort.name') %></option>
+      </select>
+    </label>
+  </div>
+  <p id="cc-search-empty" class="mb-4 rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-6 text-center text-neutral-600 text-sm" hidden><%= t('customCommands.searchEmpty') %></p>
+
   <section id="commands-list" data-channel="<%= channel.channelLogin %>">
     <%- include('partials/customCommandsList', { commands, sections, groupNames, maxGroupLength, channel }) %>
   </section>
 
 </main>
 
+<script src="<%= asset('/js/commandListOrder.js') %>" defer></script>
 <script src="<%= asset('/js/custom-commands.js') %>" defer></script>
 
 <%- include('partials/foot') %>

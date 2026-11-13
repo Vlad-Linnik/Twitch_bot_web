@@ -1287,6 +1287,21 @@
     "categoryOverridesBadge": "по категориям",
     "categoryPlaceholder": "Категория",
     "categoryResultPlaceholder": "Текст для этой категории",
+    "categoryCheck": {
+      "found": "Категория найдена на Twitch: %s",
+      "notFound": "Такой категории на Twitch нет — бот не узнает её в эфире. Проверьте название.",
+      "suggest": "Возможно, вы имели в виду:",
+      "unavailable": "Не удалось проверить категорию на Twitch, попробуйте позже."
+    },
+    "searchLabel": "Поиск по командам",
+    "searchPlaceholder": "Поиск по названию и тексту…",
+    "searchEmpty": "Ничего не найдено",
+    "sortLabel": "Сортировка",
+    "sort": {
+      "enabled": "Сначала включённые",
+      "newest": "Сначала новые",
+      "name": "По имени"
+    },
     "ungrouped": "Без группы",
     "rowMenu": "Действия с командой",
     "moveToGroup": "Переместить в группу",

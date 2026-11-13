@@ -7,7 +7,9 @@
 // loading a row back into the form to edit it, warning about the timer+pin conflict before the
 // server has to reject it, a delete confirmation, rendering the category-override rows one at a
 // time instead of a fixed block of five, the alias chip-list, remembering which groups were
-// collapsed, and dragging a command from one group into another.
+// collapsed, dragging a command from one group into another, checking each typed category against
+// Twitch, greying out the announcement colour while "announce" is off, and sorting/searching the
+// list (public/js/commandListOrder.js).
 //
 // The one thing that is genuinely JS-only is drag-and-drop, and deliberately so: it's a shortcut
 // for the move form in each row's "..." menu, never the only way to reach it.
@@ -277,6 +279,140 @@
     if (categoryToggle.checked && !categoryRows().length) addCategoryRow();
   });
 
+  // --- Category check: each typed category name is looked up on Twitch through our own endpoint
+  // (routes/customCommands.js's category-lookup - the browser never talks to Twitch), once the
+  // typing settles or the field loses focus. "Found" uses the bot's comparison (case-insensitive,
+  // exact - lib/categoryLookup.js), so a green border means the bot really will pick this text
+  // when the stream is in that category. The result only informs: nothing here blocks a save.
+  const lookupUrl = categoryContainer.dataset.lookupUrl;
+  const LOOKUP_DEBOUNCE_MS = 450;
+  // key -> settled answer. Only definite answers are kept; "unavailable" is retried on next edit.
+  const lookupAnswers = new Map();
+  const lookupTimers = new WeakMap();
+  const NEUTRAL_BORDER = ["border-neutral-800", "focus:border-purple-600"];
+  const STATE_BORDER = { found: "border-green-600", notFound: "border-red-600" };
+
+  const categoryLookupKey = (value) => String(value || "").trim().toLowerCase();
+
+  function categoryParts(row) {
+    return {
+      input: row.querySelector('input[name="categoryName"]'),
+      art: row.querySelector(".cc-category-art"),
+      status: row.querySelector(".cc-category-status"),
+    };
+  }
+
+  // state: "idle" (blank, typing, or checking), "found", "notFound", "unavailable".
+  function paintCategoryState(row, state, answer) {
+    const { input, art, status } = categoryParts(row);
+    if (!input || !art || !status) return;
+    const colored = STATE_BORDER[state];
+    // The focus colour is dropped while a verdict is shown: otherwise the green/red would only
+    // appear once the mod clicks away, and the check fires while they are still in the field.
+    input.classList.remove(...Object.values(STATE_BORDER), ...NEUTRAL_BORDER);
+    input.classList.add(...(colored ? [colored] : NEUTRAL_BORDER));
+    input.setAttribute("aria-invalid", state === "notFound" ? "true" : "false");
+
+    const artUrl = state === "found" && answer && answer.boxArtUrl;
+    art.hidden = !artUrl;
+    if (artUrl) art.src = artUrl;
+    else art.removeAttribute("src");
+    input.classList.toggle("pl-9", !!artUrl);
+    input.title = state === "found" && answer ? answer.name : "";
+
+    status.replaceChildren();
+    status.classList.remove("text-green-500", "text-red-400", "text-neutral-500");
+    if (state === "found" && answer && answer.name !== input.value.trim()) {
+      // Same category, different spelling ("path of exile"): the bot matches it anyway, but the
+      // canonical name is worth showing so nobody "fixes" a correct row.
+      status.textContent = categoryContainer.dataset.msgFound.replace("%s", answer.name);
+      status.classList.add("text-green-500");
+    } else if (state === "notFound") {
+      status.classList.add("text-red-400");
+      status.append(categoryContainer.dataset.msgNotFound);
+      const suggestions = (answer && answer.suggestions) || [];
+      if (suggestions.length) {
+        const line = document.createElement("span");
+        line.className = "flex flex-wrap items-center gap-1.5 mt-1 text-neutral-500";
+        line.append(categoryContainer.dataset.msgSuggest);
+        suggestions.forEach((suggestion) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "px-2 py-0.5 rounded-full border border-neutral-700 bg-neutral-800 text-neutral-200 hover:border-purple-500 transition-colors";
+          chip.textContent = suggestion;
+          chip.addEventListener("click", () => {
+            input.value = suggestion;
+            // Through the normal input path, so the next blank row appears if this one is now
+            // complete, and the replacement gets checked like anything typed.
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.focus();
+          });
+          line.append(chip);
+        });
+        status.append(line);
+      }
+    } else if (state === "unavailable") {
+      status.textContent = categoryContainer.dataset.msgUnavailable;
+      status.classList.add("text-neutral-500");
+    }
+    status.hidden = !status.childNodes.length;
+  }
+
+  async function checkCategoryRow(row) {
+    clearTimeout(lookupTimers.get(row));
+    const { input } = categoryParts(row);
+    if (!input || !lookupUrl) return;
+    const typed = input.value.trim();
+    const key = categoryLookupKey(typed);
+    if (!key) {
+      paintCategoryState(row, "idle");
+      return;
+    }
+    if (lookupAnswers.has(key)) {
+      const answer = lookupAnswers.get(key);
+      paintCategoryState(row, answer.status, answer);
+      return;
+    }
+    let answer;
+    try {
+      const response = await fetch(`${lookupUrl}?name=${encodeURIComponent(typed)}`, {
+        headers: { Accept: "application/json" },
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && data && data.ok && (data.status === "found" || data.status === "notFound")) {
+        answer = data;
+        lookupAnswers.set(key, answer);
+      } else if (response.status === 400) {
+        answer = { status: "idle" };
+      } else {
+        answer = { status: "unavailable" };
+      }
+    } catch {
+      answer = { status: "unavailable" };
+    }
+    // The mod may have kept typing while this was in flight; a verdict about an older value
+    // must not land on the newer one.
+    if (categoryLookupKey(input.value) !== key) return;
+    paintCategoryState(row, answer.status, answer);
+  }
+
+  categoryContainer.addEventListener("input", (event) => {
+    if (event.target.name !== "categoryName") return;
+    const row = event.target.closest(".cc-category-row");
+    if (!row) return;
+    paintCategoryState(row, "idle");
+    clearTimeout(lookupTimers.get(row));
+    lookupTimers.set(row, setTimeout(() => checkCategoryRow(row), LOOKUP_DEBOUNCE_MS));
+  });
+
+  // Leaving the field checks at once instead of waiting out the debounce. `focusout` because
+  // `blur` does not bubble to the container.
+  categoryContainer.addEventListener("focusout", (event) => {
+    if (event.target.name !== "categoryName") return;
+    const row = event.target.closest(".cc-category-row");
+    if (row) checkCategoryRow(row);
+  });
+
   // Fills the rows from an existing command's overrides, plus one trailing blank row to continue
   // adding more (if there's room left under the max).
   function fillCategoryRows(overrides) {
@@ -294,6 +430,10 @@
       const [catInput, textInput] = row.querySelectorAll("input");
       catInput.value = ov.category || "";
       textInput.value = ov.result || "";
+      // A stored row is checked the moment the command is opened for editing - a category that
+      // was renamed on Twitch since it was saved shows up red here instead of silently never
+      // matching on stream.
+      checkCategoryRow(row);
     });
     addCategoryRow();
   }
@@ -318,6 +458,7 @@
     renderAliasChips();
     nameError.hidden = true;
     updateConflict();
+    syncAnnounceColor();
     formSnapshotAtOpen = null;
   }
 
@@ -376,6 +517,21 @@
   timer.addEventListener("input", updateConflict);
   pin.addEventListener("change", updateConflict);
   announce.addEventListener("change", updateConflict);
+
+  // --- The announcement colour is only usable while "announce" is ticked - the same gate the
+  // per-category rows have behind their own checkbox. A disabled <select> is left out of the
+  // submitted form, so a non-announcement saves with the default colour, which is what the server
+  // falls back to anyway. Called from every place that changes `announce` programmatically
+  // (form.reset, loading a row for editing), since those fire no change event.
+  const announceColorField = document.getElementById("announceColorField");
+
+  function syncAnnounceColor() {
+    announceColor.disabled = !announce.checked;
+    if (announceColorField) announceColorField.classList.toggle("opacity-40", !announce.checked);
+  }
+
+  announce.addEventListener("change", syncAnnounceColor);
+  syncAnnounceColor();
 
   // --- Save toast: a small fade-in/fade-out notification (views/customCommands.ejs's #save-toast)
   // instead of the old always-visible top banner. Fires from two places: a landing page load after
@@ -441,6 +597,10 @@
       // `toggle` doesn't bubble, so this can't be delegated onto the container like the drag
       // handlers - it has to be re-attached to each freshly rendered section.
       section.addEventListener("toggle", () => {
+        // While a search is typed, groups holding matches are opened by applyListView() - that is
+        // the search showing its results, not the mod un-collapsing the group, so it must not be
+        // remembered. Clearing the search puts the remembered state back.
+        if (isSearchActive()) return;
         const set = readCollapsed();
         if (section.open) set.delete(section.dataset.group);
         else set.add(section.dataset.group);
@@ -455,6 +615,120 @@
     const set = readCollapsed();
     if (!set.delete(groupName)) return;
     writeCollapsed(set);
+  }
+
+  // --- Sort + search. The order and the matching live in public/js/commandListOrder.js (pure, and
+  // unit-tested); this part only reads the rows into items and moves/hides the <li>s. Rows are
+  // sorted inside their own group - which group a command is in is the mod's own organisation and
+  // stays as the server rendered it. Re-applied after every list swap (applyListHtml), so a save
+  // never undoes the chosen order or the typed query.
+  //
+  // Flipping a row's enable switch updates its data-enabled but does not re-sort on the spot: under
+  // "enabled first" the row would jump away from the pointer that just clicked it. The new state
+  // takes effect at the next sort, search or save.
+  const Order = window.CommandListOrder || null;
+  const listTools = document.getElementById("cc-list-tools");
+  const searchInput = document.getElementById("cc-search");
+  const sortSelect = document.getElementById("cc-sort");
+  const searchEmpty = document.getElementById("cc-search-empty");
+  const SORT_STORAGE_KEY = "cc-sort";
+  const haystacks = new WeakMap(); // row -> search text; rows are new objects after each swap
+
+  function isSearchActive() {
+    return !!(Order && searchInput && Order.normalizeText(searchInput.value));
+  }
+
+  function readSortMode() {
+    try {
+      return Order.parseSortMode(localStorage.getItem(SORT_STORAGE_KEY));
+    } catch {
+      return Order.DEFAULT_SORT;
+    }
+  }
+
+  function writeSortMode(mode) {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, mode);
+    } catch {
+      /* storage unavailable - the sort still applies, it just won't be remembered */
+    }
+  }
+
+  // The search reads what the edit button already carries for loading the row into the form, so
+  // there is one copy of each command's data in the markup, not two.
+  function haystackFor(row) {
+    let hay = haystacks.get(row);
+    if (hay !== undefined) return hay;
+    const edit = row.querySelector(".js-edit");
+    let categoryTexts = [];
+    try {
+      categoryTexts = JSON.parse((edit && edit.dataset.categoryTexts) || "[]");
+    } catch {
+      categoryTexts = [];
+    }
+    hay = Order.buildHaystack({
+      command: row.dataset.command,
+      aliases: ((edit && edit.dataset.aliases) || "").split(",").map((a) => a.trim()).filter(Boolean),
+      result: edit ? edit.dataset.result : "",
+      categoryTexts,
+    });
+    haystacks.set(row, hay);
+    return hay;
+  }
+
+  function applyListView() {
+    if (!Order || !searchInput || !sortSelect) return;
+    const mode = Order.parseSortMode(sortSelect.value);
+    const query = searchInput.value;
+    const searching = isSearchActive();
+    const collapsed = searching ? null : readCollapsed();
+    let rowsTotal = 0;
+    let rowsShown = 0;
+
+    commandsList.querySelectorAll("details.cc-group").forEach((section) => {
+      const list = section.querySelector("ul");
+      if (!list) return;
+      const items = Array.from(list.children)
+        .filter((row) => row.classList.contains("cc-row"))
+        .map((row) => ({
+          row,
+          command: row.dataset.command,
+          enabled: row.dataset.enabled === "1",
+          createdAt: Number(row.dataset.created) || 0,
+        }));
+      Order.sortCommands(items, mode).forEach((item) => list.appendChild(item.row));
+
+      let shown = 0;
+      items.forEach((item) => {
+        const match = Order.matchesQuery(haystackFor(item.row), query);
+        item.row.hidden = !match;
+        if (match) shown += 1;
+      });
+      rowsTotal += items.length;
+      rowsShown += shown;
+
+      section.hidden = searching && shown === 0;
+      const count = section.querySelector(".cc-group-count");
+      if (count) count.textContent = searching ? `(${shown}/${items.length})` : `(${items.length})`;
+      // A match inside a collapsed group would otherwise be found and still invisible.
+      if (searching) {
+        if (shown) section.open = true;
+      } else {
+        section.open = !collapsed.has(section.dataset.group);
+      }
+    });
+
+    if (searchEmpty) searchEmpty.hidden = !(searching && rowsTotal > 0 && rowsShown === 0);
+  }
+
+  if (Order && listTools && searchInput && sortSelect) {
+    sortSelect.value = readSortMode();
+    listTools.hidden = false;
+    searchInput.addEventListener("input", applyListView);
+    sortSelect.addEventListener("change", () => {
+      writeSortMode(Order.parseSortMode(sortSelect.value));
+      applyListView();
+    });
   }
 
   // --- Row "..." menus. They're <details>, so opening/closing is native; this only enforces
@@ -529,6 +803,7 @@
 
         heading.textContent = `${originalHeading} — !${button.dataset.name}`;
         updateConflict();
+        syncAnnounceColor();
 
         snapshotFormState();
         modal.showModal();
@@ -547,6 +822,7 @@
     commandsList.innerHTML = data.html;
     allCommands = data.commandsData || allCommands;
     applyCollapsedState();
+    applyListView();
     wireCommandsList();
     if (moved) bounceRow(moved);
   }
@@ -757,9 +1033,18 @@
     });
   }
 
+  // Keeps the row's data-enabled (what "enabled first" sorts on) in step with its switch.
+  function markRowEnabled(insideRow, enabled) {
+    const row = insideRow.closest(".cc-row");
+    if (row) row.dataset.enabled = enabled ? "1" : "";
+  }
+
   function wireCommandToggles() {
     commandsList.querySelectorAll("form[data-command-toggle]").forEach((toggleForm) => {
-      wireToggleForm(toggleForm, (button, data) => paintToggle(button, data.enabled));
+      wireToggleForm(toggleForm, (button, data) => {
+        paintToggle(button, data.enabled);
+        markRowEnabled(toggleForm, data.enabled);
+      });
     });
   }
 
@@ -773,7 +1058,10 @@
         paintToggle(button, data.enabled);
         const memberGroup = toggleForm.dataset.group;
         commandsList.querySelectorAll(`form[data-command-toggle][data-group="${CSS.escape(memberGroup)}"] button[type="submit"]`)
-          .forEach((memberButton) => paintToggle(memberButton, data.enabled));
+          .forEach((memberButton) => {
+            paintToggle(memberButton, data.enabled);
+            markRowEnabled(memberButton, data.enabled);
+          });
       });
     });
   }
@@ -848,5 +1136,6 @@
   });
 
   applyCollapsedState();
+  applyListView();
   wireCommandsList();
 })();

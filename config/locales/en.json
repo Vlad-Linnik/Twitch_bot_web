@@ -1287,6 +1287,21 @@
     "categoryOverridesBadge": "by category",
     "categoryPlaceholder": "Category",
     "categoryResultPlaceholder": "Text for this category",
+    "categoryCheck": {
+      "found": "Found on Twitch: %s",
+      "notFound": "No such category on Twitch - the bot will not recognise it on stream. Check the name.",
+      "suggest": "Did you mean:",
+      "unavailable": "Could not check the category on Twitch, try again later."
+    },
+    "searchLabel": "Search commands",
+    "searchPlaceholder": "Search by name and text…",
+    "searchEmpty": "Nothing found",
+    "sortLabel": "Sort",
+    "sort": {
+      "enabled": "Enabled first",
+      "newest": "Newest first",
+      "name": "By name"
+    },
     "ungrouped": "Ungrouped",
     "rowMenu": "Command actions",
     "moveToGroup": "Move to group",

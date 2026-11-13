@@ -87,6 +87,18 @@ const searchLimiter = rateLimit({
   skip,
 });
 
+// The custom-command form's "is this a real Twitch category?" check
+// (routes/customCommands.js's category-lookup). The client debounces per keystroke and remembers
+// every answer, and the server caches Helix's, so a mod filling the form makes a handful of
+// requests; this bounds a script hammering the endpoint into our Helix app-token budget.
+const categoryLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip,
+});
+
 // /admin/api/* is bearer-token gated (middleware/adminApiAuth.js), not session-based, so `skip`
 // above never applies here (req.user is never set on this path) - this is the route's only
 // throttle. 30/min per IP is generous for a handful of ad-hoc lookups but bounds brute-forcing
@@ -161,6 +173,7 @@ module.exports = {
   gameScoreSubmitLimiter,
   statsReadLimiter,
   searchLimiter,
+  categoryLookupLimiter,
   adminApiLimiter,
   durakRoomCreateLimiter,
   durakStickerLimiter,
