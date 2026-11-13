@@ -2800,3 +2800,33 @@ body.theme-hall-wide .throne-vitrine__case {
     transform: none;
   }
 }
+
+/* Moderators page tooltip (public/js/moderator-permissions.js): what ticking a section allows.
+   position:fixed because the table scrolls horizontally inside an overflow container. */
+.perm-tip {
+  position: fixed;
+  z-index: 60;
+  max-width: min(22rem, calc(100vw - 16px));
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-neutral-700);
+  border-radius: 0.5rem;
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-300);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  box-shadow: 0 10px 25px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+.perm-tip-title {
+  font-weight: 600;
+  color: var(--color-neutral-100);
+  margin-bottom: 0.25rem;
+}
+.perm-tip-list {
+  list-style: disc;
+  padding-left: 1.1rem;
+}
+.perm-tip-footer {
+  margin-top: 0.375rem;
+  color: var(--color-neutral-500);
+}

@@ -31,7 +31,7 @@
           <tr>
             <% sections.forEach(function(s) { %>
               <th class="text-center font-medium px-2 pb-2 whitespace-nowrap">
-                <span class="cursor-help border-b border-dotted border-neutral-600" title="<%= t(s.hintKey) %>"><%= t(s.labelKey) %></span>
+                <span class="cursor-help border-b border-dotted border-neutral-600" tabindex="0" data-perm-tip="<%= s.key %>" title="<%= t(s.hintKey) %>"><%= t(s.labelKey) %></span>
               </th>
             <% }) %>
           </tr>
@@ -45,7 +45,7 @@
               </td>
               <% sections.forEach(function(s) { %>
                 <td class="px-2 py-2 text-center">
-                  <label class="inline-flex items-center justify-center p-1 cursor-pointer" title="<%= t(s.hintKey) %>">
+                  <label class="inline-flex items-center justify-center p-1 cursor-pointer" data-perm-tip="<%= s.key %>" title="<%= t(s.hintKey) %>">
                     <input type="checkbox"
                            class="w-4 h-4 accent-purple-600 cursor-pointer"
                            name="allow.<%= m.userId %>.<%= s.key %>"
@@ -69,6 +69,37 @@
       <%- include('partials/autosaveStatus') %>
     <% } %>
   </form>
+
+  <%#
+    What each box allows, in full. Shown on the page as well as in the tooltip because a phone has
+    no hover. The tooltip (public/js/moderator-permissions.js) clones the matching <template>;
+    the native title stays as the no-JS hint and is removed once the script runs.
+  %>
+  <details class="mt-8 rounded-lg border border-neutral-800 bg-neutral-900/40" open>
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-neutral-300"><%= t('moderatorPermissions.legend') %></summary>
+    <dl class="px-4 pb-4 grid gap-4 sm:grid-cols-2">
+      <% sections.forEach(function(s) { %>
+        <div>
+          <dt class="text-sm font-semibold text-neutral-200"><%= t(s.labelKey) %></dt>
+          <dd>
+            <ul class="mt-1 list-disc pl-5 text-sm text-neutral-400 space-y-0.5">
+              <% t(s.affectsKey).split('\n').forEach(function(item) { %><li><%= item %></li><% }) %>
+            </ul>
+          </dd>
+        </div>
+      <% }) %>
+    </dl>
+  </details>
+
+  <% sections.forEach(function(s) { %>
+    <template data-perm-tip-content="<%= s.key %>">
+      <p class="perm-tip-title"><%= t(s.labelKey) %> — <%= t('moderatorPermissions.tipTitle') %></p>
+      <ul class="perm-tip-list">
+        <% t(s.affectsKey).split('\n').forEach(function(item) { %><li><%= item %></li><% }) %>
+      </ul>
+      <p class="perm-tip-footer"><%= t('moderatorPermissions.tipFooter') %></p>
+    </template>
+  <% }) %>
 </main>
 
 <script src="<%= asset('/js/moderator-permissions.js') %>" defer></script>

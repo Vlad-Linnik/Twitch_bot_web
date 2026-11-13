@@ -1349,26 +1349,34 @@
     "savedShort": "Saved",
     "saveFailed": "Could not save, the box was reverted",
     "readOnlyNotice": "View only: the channel owner has not allowed you to change this section.",
+    "tipTitle": "Ticked, the moderator may:",
+    "tipFooter": "Unticked, the moderator can only view this section.",
+    "legend": "What each section covers",
     "sections": {
       "settings": {
         "label": "Settings",
-        "hint": "General bot settings: built-in commands, their cooldowns and triggers, bot replies."
+        "hint": "General bot settings: built-in commands, their cooldowns and triggers, bot replies.",
+        "affects": "Chat statistics commands: enable, disable, trigger, cooldown\nChat mini-games: enable, disable, their parameters\nOther commands (bot info, random clip, weather and more)\nEverything else on the settings page that no other section covers"
       },
       "commands": {
         "label": "Commands",
-        "hint": "Custom commands and their timers, pins and announcements, variables and their settings."
+        "hint": "Custom commands and their timers, pins and announcements, variables and their settings.",
+        "affects": "Custom commands: create, edit, delete, enable, disable\nCommand timers, pins and announcements\nVariables: create, change the value, delete, who may change them from chat\nChat commands like !addcommand, !addvar, !delvar: enable, disable, trigger"
       },
       "chatModeration": {
         "label": "Chat moderation",
-        "hint": "Banned words, spam signatures and the ban reasons for them, long bans."
+        "hint": "Banned words, spam signatures and the ban reasons for them, long bans.",
+        "affects": "Banned words: lists, auto-timeout, reason\nSpam signatures and the ban reason for them\nLong bans: issue and lift\nLong-ban chat commands: enable, disable, trigger"
       },
       "bureau": {
         "label": "Amnesty Bureau",
-        "hint": "Decisions on unban requests, chat votes, the AI summary, the stray bullet and the grenade, Bureau settings."
+        "hint": "Decisions on unban requests, chat votes, the AI summary, the stray bullet and the grenade, Bureau settings.",
+        "affects": "Take the shift at the Bureau desk\nDecide unban requests\nChat votes on a request\nAI summary for one case and \"AI summary for everyone\"\nThe stray bullet and the grenade\nBureau settings"
       },
       "discussions": {
         "label": "Discussions",
-        "hint": "Deleting comments, restricting commenters and lifting restrictions, movie cards: add, edit, delete."
+        "hint": "Deleting comments, restricting commenters and lifting restrictions, movie cards: add, edit, delete.",
+        "affects": "Delete comments in news and movies, and see deleted ones\nRestrict commenters and lift restrictions\nMovie cards: add, edit, delete"
       }
     }
   },

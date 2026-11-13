@@ -89,3 +89,56 @@
     save();
   });
 })();
+
+// Tooltip for the section headers and boxes: what exactly ticking that box allows. The native
+// `title` appears only after a delay, never on touch, and holds one line, so it is replaced by one
+// floating element filled from the page's <template data-perm-tip-content>. It is position:fixed
+// on <body> because the table sits in an overflow-x container that would clip anything absolute.
+(() => {
+  const triggers = document.querySelectorAll("[data-perm-tip]");
+  if (triggers.length === 0) return;
+
+  const tip = document.createElement("div");
+  tip.className = "perm-tip";
+  tip.id = "perm-tip";
+  tip.setAttribute("role", "tooltip");
+  tip.hidden = true;
+  document.body.appendChild(tip);
+
+  const GAP = 8;
+  let current = null;
+
+  const show = (trigger) => {
+    const source = document.querySelector(`template[data-perm-tip-content="${trigger.dataset.permTip}"]`);
+    if (!source) return;
+    if (current !== trigger) tip.replaceChildren(source.content.cloneNode(true));
+    current = trigger;
+    tip.hidden = false;
+
+    const rect = trigger.getBoundingClientRect();
+    const box = tip.getBoundingClientRect();
+    let left = rect.left + rect.width / 2 - box.width / 2;
+    left = Math.max(GAP, Math.min(left, window.innerWidth - box.width - GAP));
+    let top = rect.bottom + GAP;
+    if (top + box.height > window.innerHeight - GAP) top = Math.max(GAP, rect.top - box.height - GAP);
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  };
+  const hide = () => {
+    tip.hidden = true;
+    current = null;
+  };
+
+  triggers.forEach((trigger) => {
+    trigger.removeAttribute("title");
+    trigger.setAttribute("aria-describedby", "perm-tip");
+    trigger.addEventListener("mouseenter", () => show(trigger));
+    trigger.addEventListener("mouseleave", hide);
+    trigger.addEventListener("focusin", () => show(trigger));
+    trigger.addEventListener("focusout", hide);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hide();
+  });
+  window.addEventListener("scroll", hide, { passive: true });
+})();
