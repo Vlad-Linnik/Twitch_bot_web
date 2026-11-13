@@ -1,25 +1,18 @@
-// `UnbanExpertOpinions` - the hearing printed on the fourth sheet of the Бюро амнистии desk: the
-// prosecutor's accusation, the advocate's answer, any further speeches the moderator called for, and
-// the moderator's own remarks between them. One document per case, holding an ordered `turns` array.
+// `UnbanExpertOpinions` - what is printed on the fourth sheet of the Бюро амнистии desk. One
+// document per case, in one of two shapes (lib/unbanOpinionsValidation.js's header has both):
+//   - `summary`: the short sheet the desk writes now - one model call, from the sheet's own button
+//     or from the settings page's "ИИ-обзор для всех" (lib/unbanSummaryBatch.js);
+//   - `turns[]` (or the older `prosecutor`/`advocate`): a prosecutor/advocate hearing. No longer
+//     written by the desk; still written by the by-hand admin PUT (routes/adminApi.js, driven by
+//     scripts/local/opinions.js and the V4 agents in ../../.claude/agents/), and still on prod.
+// A write of one shape unsets the other, so a document never carries two answers to "what does this
+// sheet say".
 //
 // WEB-ONLY (connectWeb): the bot never reads this. It is commentary for the moderator at the desk,
 // not moderation state - nothing here reaches Twitch, and a case decides identically whether or not
-// an opinion was ever written. Keeping it out of the shared db is the same call made for
+// a sheet was ever written. Keeping it out of the shared db is the same call made for
 // UnbanBureauShifts: see ../CLAUDE.md's collections table for what does belong in the shared one.
-//
-// THREE THINGS WRITE IT, AND THE SHEET LOOKS THE SAME EITHER WAY. The desk's "заказать разбор"
-// button opens the hearing in-process (lib/unbanOpinionsGenerator.js - free on Gemini, ~2 cents on
-// the Anthropic fallback; each turn stores which vendor wrote it); "передать слово" appends one more
-// speech to it, and the judge's box appends a remark that cost nothing. The fourth path is a person
-// arguing the case by hand against a brief (GET /admin/api/unban-requests/:id/brief) on a stronger
-// model and PUTting the result back through the bearer-token admin API. That by-hand path is the
-// oldest of them and runs its own, fuller prompts (../../.claude/agents/amnesty-*-v4.md) that the
-// button deliberately does not: they ask for a register chosen per case and a longer speech than a
-// paid turn is worth buying. Whichever wrote it, the text arrives through
-// lib/unbanOpinionsValidation.js - see it for the shape, for the field caps, and for why documents
-// written before the turns array are adapted on read rather than migrated.
 const { connectWeb } = require("./connection");
-const { MAX_TURNS } = require("../lib/unbanOpinionsValidation");
 
 let collection;
 
@@ -31,7 +24,7 @@ async function ensureInitialized() {
   // not be able to fail a page render": the handle is cached above, so a throw here would 500 the
   // first request after every restart and silently work on every one after it.
   try {
-    // One hearing per case, enforced rather than assumed: the driver is re-runnable by hand and a
+    // One sheet per case, enforced rather than assumed: the driver is re-runnable by hand and a
     // second run must replace the first sheet, not add a second one the page would pick between
     // arbitrarily.
     await collection.createIndex({ caseId: 1 }, { unique: true });
@@ -59,7 +52,7 @@ async function findByCaseId(caseId) {
 }
 
 /**
- * Writes (or replaces) the whole hearing for a case.
+ * Writes (or replaces) a whole HEARING for a case - the by-hand admin PUT's path.
  *
  * @param {string} caseId   UnbanRequests _id, hex string
  * @param {{channelId: string|number, channelLogin: string}} channel
@@ -88,7 +81,7 @@ async function upsertOpinions(caseId, channel, opinions) {
       // beside the turns it was converted into - a document carrying both would give a future reader
       // two answers to "what does this sheet say", and the adapter's whole point is that there is
       // one.
-      $unset: { prosecutor: "", advocate: "" },
+      $unset: { prosecutor: "", advocate: "", summary: "" },
       $setOnInsert: { caseId: id, firstGeneratedAt: now },
     },
     { upsert: true, returnDocument: "after" }
@@ -98,41 +91,55 @@ async function upsertOpinions(caseId, channel, opinions) {
 }
 
 /**
- * Appends ONE turn to a hearing that already exists - a speech bought with "передать слово", or a
- * remark the moderator typed.
+ * Writes (or replaces) the summary for a case.
  *
- * THE CEILING IS IN THE FILTER, NOT IN AN `if` ABOVE IT. `turns.<MAX-1>` existing means the array is
- * already full, so a document at the cap simply does not match and the update writes nothing. The
- * caller has usually checked the count already, but that check reads and then writes: two presses in
- * flight against one case would both pass it. This is the one that cannot be raced.
+ * Unsets every hearing field on the way: the only caller that reaches an existing document is a
+ * deliberate rewrite, and a document holding a summary AND a transcript would leave the page to pick
+ * between them. The single-case route and the batch both refuse a case that already has a sheet, so
+ * in practice this only ever inserts.
  *
- * A document written under the old two-sided shape has no `turns` array at all, so it is not
- * appendable in place - the caller normalizes it with toTranscript() and rewrites it through
- * upsertOpinions() first. Reported here as `null` rather than fixed silently, because the two paths
- * store different things and guessing between them belongs in the route.
- *
- * @param {string} caseId
- * @param {object} turn  a parsed turn from lib/unbanOpinionsValidation.js
- * @returns {Promise<object|null>} the updated document, or null if it was missing or full
+ * @param {string} caseId   UnbanRequests _id, hex string
+ * @param {{channelId: string|number, channelLogin: string}} channel
+ * @param {object} summary  lib/unbanOpinionsValidation.js's parseSummary().value
+ * @param {{model?: string, effort?: string}} [meta]
  */
-async function appendTurn(caseId, turn) {
+async function upsertSummary(caseId, channel, summary, meta = {}) {
   const id = normalizeCaseId(caseId);
   if (!id) throw new Error("caseId required");
   const col = await ensureInitialized();
+  const now = new Date();
   const result = await col.findOneAndUpdate(
+    { caseId: id },
     {
-      caseId: id,
-      turns: { $type: "array" },
-      [`turns.${MAX_TURNS - 1}`]: { $exists: false },
+      $set: {
+        channelId: String(channel.channelId),
+        channelLogin: channel.channelLogin,
+        summary,
+        model: meta.model || summary.model || null,
+        effort: meta.effort || null,
+        generatedAt: now,
+      },
+      $unset: { turns: "", decision: "", prosecutor: "", advocate: "" },
+      $setOnInsert: { caseId: id, firstGeneratedAt: now },
     },
-    {
-      $push: { turns: turn },
-      $set: { generatedAt: new Date() },
-    },
-    { returnDocument: "after" }
+    { upsert: true, returnDocument: "after" }
   );
-  const doc = result && result.value !== undefined ? result.value : result;
-  return doc || null;
+  return result && result.value !== undefined ? result.value : result;
+}
+
+/**
+ * Which of these cases already have a sheet of either shape - the batch's "what is left to do".
+ * One indexed query (the unique caseId index) instead of one findOne per queued case.
+ *
+ * @param {string[]} caseIds
+ * @returns {Promise<Set<string>>}
+ */
+async function findCaseIdsWithSheets(caseIds) {
+  const ids = [...new Set((caseIds || []).map(normalizeCaseId).filter(Boolean))];
+  if (!ids.length) return new Set();
+  const col = await ensureInitialized();
+  const rows = await col.find({ caseId: { $in: ids } }, { projection: { caseId: 1 } }).toArray();
+  return new Set(rows.map((row) => row.caseId));
 }
 
 async function deleteByCaseId(caseId) {
@@ -143,4 +150,4 @@ async function deleteByCaseId(caseId) {
   return result.deletedCount > 0;
 }
 
-module.exports = { findByCaseId, upsertOpinions, appendTurn, deleteByCaseId };
+module.exports = { findByCaseId, upsertOpinions, upsertSummary, findCaseIdsWithSheets, deleteByCaseId };

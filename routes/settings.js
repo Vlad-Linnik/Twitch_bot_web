@@ -14,6 +14,7 @@ const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLim
 const { MAX_LIST_ITEMS, sanitizeWord, parseSubmittedConfig } = require("../lib/settingsValidation");
 const { DURATION_PRESETS, PERMANENT, normalizeSignatureEntry, parseSignatureEntry } = require("../lib/spamSignatureValidation");
 const { diffConfig } = require("../lib/settingsDiff");
+const { AI_LOG_MESSAGES_OPTIONS } = require("../lib/unbanBureauValidation");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 const { getSevenTvLinkStatus } = require("../twitch/emoteImages");
 
@@ -141,7 +142,11 @@ registerConfigSubPage("/settings/counters", "channelCountersSettings");
 // "Бюро амнистии" tile jumping straight into the review console. The tile now lands here instead and
 // this page is what offers the console - the settings are a channel-level decision, the console is a
 // shift at a desk, and the grid is a settings grid.
-registerConfigSubPage("/settings/unban-bureau", "channelUnbanBureauSettings");
+// The AI log-window select is rendered from the validator's own list, so the page can only offer
+// values the save accepts.
+registerConfigSubPage("/settings/unban-bureau", "channelUnbanBureauSettings", async () => ({
+  aiLogMessagesOptions: AI_LOG_MESSAGES_OPTIONS,
+}));
 
 // Banned Words and Spam Signatures moved off the main settings page onto
 // their own sub-pages (search + add/edit/delete instead of one big textarea

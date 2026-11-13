@@ -15,7 +15,7 @@
 const { connect } = require("./connection");
 const { withHash, bareLogin, MOD_ACTION_CONTEXT_MAX_TTA_MS } = require("./statsRepo");
 const { getKnownBotIdentifiers } = require("../lib/knownBotIds");
-const { buildCaseBrief, pickLogBudget } = require("../lib/unbanCaseBrief");
+const { buildCaseBrief, resolveLogBudget } = require("../lib/unbanCaseBrief");
 const profileCacheRepo = require("./profileCacheRepo");
 const {
   ACTION_MATCH_WINDOW_MS,
@@ -656,18 +656,21 @@ async function getPunishmentContexts(
   );
 }
 
-// The plain-text brief both readers of this dossier argue from: the admin API's GET .../brief and
-// the moderator-facing "заказать разбор" button. Composed here rather than at either call site so
+// The plain-text brief both readers of this dossier work from: the admin API's GET .../brief and
+// the desk's summary (the sheet's own button and the settings page's "ИИ-обзор для всех"). Composed here rather than at either call site so
 // the two cannot drift - the brief's wording is load-bearing (see lib/unbanCaseBrief.js's header:
 // coverage caveats, three-state fields, the "reason not given is normal" note), and a caller that
 // assembled its own would quietly drop the parts that stop an agent reasoning from a fact the
 // moderator can't see. Lives in the repo rather than in lib/ because it touches Mongo; the
 // formatter it calls stays pure and unit-tested.
-async function getCaseBrief(channelLogin, unbanCase) {
-  // How much log this case gets is decided ONCE, up front, from signals already on unbanCase - no
-  // model asks for more mid-hearing (that would be a paid extra turn per request; see
-  // lib/unbanCaseBrief.js's pickLogBudget for why a flat, pre-decided ceiling was chosen instead).
-  const budget = pickLogBudget(unbanCase);
+//
+// `logMessages` is the channel's own window (unbanBureau.aiLogMessages); absent or 0 means the
+// heuristic. The admin API passes nothing, so the by-hand path keeps the heuristic.
+async function getCaseBrief(channelLogin, unbanCase, { logMessages = 0 } = {}) {
+  // How much log this case gets is decided ONCE, up front - no model asks for more mid-call (that
+  // would be a paid extra turn per request; see lib/unbanCaseBrief.js's pickLogBudget for why a
+  // flat, pre-decided ceiling was chosen instead, and resolveLogBudget for the channel override).
+  const budget = resolveLogBudget(unbanCase, logMessages);
   const [dossier, contexts] = await Promise.all([
     getDossier(channelLogin, unbanCase, { limit: budget.logLimit }),
     getPunishmentContexts(channelLogin, unbanCase, { perAction: budget.perAction, maxActions: budget.maxActions }),

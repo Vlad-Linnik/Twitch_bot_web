@@ -28,23 +28,17 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
 const { parseEffectiveAt } = require("../lib/unbanDecisionValidation");
 const { parseLogCursor } = require("../lib/unbanLogPaging");
+const { toSheet } = require("../lib/unbanOpinionsValidation");
 const {
-  parseOpinions,
-  parseSpeechTurn,
-  parseJudgeTurn,
-  toTranscript,
-  nextSpeaker,
-  countSpoken,
-  MAX_SPOKEN_TURNS,
-  MAX_REMARK_CHARS,
-} = require("../lib/unbanOpinionsValidation");
-const {
-  generateOpinions,
-  generateTurn,
-  buildSpeakers,
+  generateSummary,
+  buildWriters,
   OpinionsGenerationError,
 } = require("../lib/unbanOpinionsGenerator");
-const userProfileService = require("../db/userProfileService");
+const {
+  createSummaryBatches,
+  selectCasesForSummary,
+  DEFAULT_PACE_MS,
+} = require("../lib/unbanSummaryBatch");
 const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
 const {
   settingsWriteLimiter,
@@ -66,12 +60,12 @@ function getAnthropicClient() {
   return anthropicClient;
 }
 
-// Which vendors this deployment can hold a hearing with. The ORDER is the generator's business,
+// Which vendors this deployment can write a summary with. The ORDER is the generator's business,
 // not this route's - all that is decided here is which keys exist, and an empty list is what
 // becomes the 503 below. Rebuilt per press because it is two object literals, and pinning it in a
 // module variable would only cache the answer to "was the key set at boot".
-function hearingSpeakers() {
-  return buildSpeakers({
+function summaryWriters() {
+  return buildWriters({
     google: env.geminiApiKey ? { apiKey: env.geminiApiKey } : null,
     anthropic: env.anthropicApiKey ? getAnthropicClient() : null,
   });
@@ -92,6 +86,10 @@ const SNIPER_REPORT_WINDOW_MS = 2 * 60 * 1000;
 const GRENADE_DEFAULT_COOLDOWN_SEC = unbanBureauValidation.DEFAULTS.grenadeCooldownSec;
 
 const router = express.Router();
+
+// The "ИИ-обзор для всех" jobs, one per channel, for the life of this process. See
+// lib/unbanSummaryBatch.js.
+const summaryBatches = createSummaryBatches();
 
 // Same rationale as routes/statistics.js's own copy: requireLevel() renders an HTML error page,
 // which is useless inside a fetch().
@@ -214,11 +212,6 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
       },
       heartbeatMs: unbanBureauShiftRepo.SHIFT_HEARTBEAT_MS,
       shiftToken,
-      // The judge box enforces its own cap in the browser as well as here, and one constant feeds
-      // both - a maxlength baked into the template drifts from the validator the first time either
-      // moves.
-      maxRemarkChars: MAX_REMARK_CHARS,
-      maxSpokenTurns: MAX_SPOKEN_TURNS,
     });
   } catch (err) {
     next(err);
@@ -273,20 +266,20 @@ router.get(
           .catch((err) => console.error("[unban-bureau] viewer-card request failed:", err));
       }
 
-      // The fourth sheet's two speeches ride along here rather than in the page's `data-cases`
+      // The fourth sheet rides along here rather than in the page's `data-cases`
       // attribute, for the reason unbanRequestsRepo.listPendingForChannel projects twitchModLogs
       // out: everything embedded in that attribute is paid for by every case in the queue on every
-      // page load, and three paragraphs per case is exactly the kind of thing that grew one
+      // page load, and a few paragraphs per case is exactly the kind of thing that grew one
       // channel's markup from 1KB to 25KB last time. Most cases have no opinions at all.
       //
       // Skipped when paging the log (?before= / ?after=): that request only wants more chat lines,
       // and re-sending an unchanged sheet with each page is pure waste.
-      // Normalized on the way out, never on the way in: a sheet stored before the hearing became an
-      // ordered transcript is adapted to one here, so the page has exactly one shape to render. See
-      // lib/unbanOpinionsValidation.js's header for why that is an adapter and not a migration.
+      // Normalized on the way out, never on the way in: a summary arrives as one, an old
+      // prosecutor/advocate hearing (either stored shape) as a transcript, so the page has exactly
+      // two kinds to render and never guesses. See lib/unbanOpinionsValidation.js's toSheet.
       const opinions = paging
         ? undefined
-        : toTranscript(await unbanOpinionsRepo.findByCaseId(String(unbanCase._id)));
+        : toSheet(await unbanOpinionsRepo.findByCaseId(String(unbanCase._id)));
 
       res.json({
         ok: true,
@@ -602,16 +595,50 @@ router.post(
   }
 );
 
-// Fills the desk's fourth sheet: runs the two-turn hearing and stores the result.
+// The channel's own log window for the summary (lib/unbanBureauValidation.js's aiLogMessages,
+// 0 = the heuristic). Read per call rather than cached: settings saved a minute ago must apply to
+// the next summary, and this is one small document next to a model call.
+async function summaryLogMessages(channelLogin) {
+  const config = await channelConfigRepo.getConfig(channelLogin);
+  const value = config.unbanBureau?.aiLogMessages;
+  return Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+class SummarySkipped extends Error {}
+
+// One case, start to finish: brief, model call, validated write. Shared by the sheet's own button
+// and the batch so the two cannot drift - the batch is the same press, repeated.
 //
-// THE ONLY ENDPOINT ON THIS SITE THAT CAN SPEND MONEY. Everything else here writes a document;
-// this one buys two speeches - free on Google, ~2 cents on the Anthropic fallback
-// (lib/unbanOpinionsGenerator.js). Three guards stack, and the middle one is the load-bearing one:
+// The "already has a sheet" check is repeated here, right before the call, rather than trusted from
+// whoever chose the case: the batch picked its list at start, and a moderator may have pressed the
+// sheet's own button on one of those cases since. Throws SummarySkipped for that, and
+// OpinionsGenerationError when neither vendor produced a usable summary.
+async function writeSummary(channel, unbanCase, writers, logMessages) {
+  const caseId = String(unbanCase._id);
+  if (await unbanOpinionsRepo.findByCaseId(caseId)) throw new SummarySkipped("already_generated");
+
+  const brief = await unbanDossierRepo.getCaseBrief(channel.channelLogin, unbanCase, { logMessages });
+  const generated = await generateSummary({ writers, brief });
+
+  return unbanOpinionsRepo.upsertSummary(
+    caseId,
+    { channelId: channel.channelId, channelLogin: channel.channelLogin },
+    generated.summary,
+    { model: generated.model, effort: generated.effort }
+  );
+}
+
+// Fills the desk's fourth sheet for one case: one model call, one short summary.
+//
+// ONE OF TWO ENDPOINTS ON THIS SITE THAT CAN SPEND MONEY (the batch below is the other). Free on
+// Google, about two cents on the Anthropic fallback (lib/unbanOpinionsGenerator.js). Three guards
+// stack, and the middle one is the load-bearing one:
 //   - opinionsGenerateLimiter, per user, exempting nobody - the backstop against a runaway loop.
 //   - a case that already has a sheet is refused. This is what actually bounds the spend: the
 //     button exists to fill a BLANK sheet, so the ceiling is the number of queued appeals, not the
 //     number of times someone can click. It also protects the record - a regeneration would
-//     silently replace a sheet a moderator may already have read and decided from.
+//     silently replace a sheet a moderator may already have read and decided from. That includes a
+//     prosecutor/advocate hearing written before the summary existed: it stays as it is.
 //   - no key at all - neither vendor - answers 503 rather than 500, so the page can say the
 //     feature is off instead of showing a crash for an optional add-on.
 //
@@ -629,8 +656,8 @@ router.post(
       if (!channel) return;
       if (!(await requireShiftJson(req, res))) return;
 
-      const speakers = hearingSpeakers();
-      if (!speakers.length) {
+      const writers = summaryWriters();
+      if (!writers.length) {
         return res.status(503).json({ error: "generation_unavailable" });
       }
       if (!opinionsGenerateLimiter(req.user.userId)) {
@@ -641,190 +668,85 @@ router.post(
       if (!unbanCase || String(unbanCase.channelId) !== String(channel.channelId)) {
         return res.status(404).json({ error: "not_found" });
       }
+      // The batch is writing this very case right now; a second call would pay twice for one sheet.
+      if (summaryBatches.isWriting(channel.channelLogin, unbanCase._id)) {
+        return res.status(409).json({ error: "already_generating" });
+      }
 
-      const existing = await unbanOpinionsRepo.findByCaseId(String(unbanCase._id));
-      if (existing) return res.status(409).json({ error: "already_generated" });
-
-      const brief = await unbanDossierRepo.getCaseBrief(channel.channelLogin, unbanCase);
-
-      let generated;
+      let doc;
       try {
-        generated = await generateOpinions({ speakers, brief });
+        doc = await writeSummary(channel, unbanCase, writers, await summaryLogMessages(channel.channelLogin));
       } catch (err) {
+        if (err instanceof SummarySkipped) return res.status(409).json({ error: "already_generated" });
         if (err instanceof OpinionsGenerationError) {
           // 502: the failure is upstream of us and the moderator can simply press again. The
           // reason travels so the page can distinguish "try again" from "this won't work".
           // Every vendor in the list has already logged its own failure by now; this line is the
           // one that ties them to a case.
-          console.warn(`[opinions] generation failed for ${unbanCase._id}: ${err.reason} - ${err.message}`);
+          console.warn(`[opinions] summary failed for ${unbanCase._id}: ${err.reason} - ${err.message}`);
           return res.status(502).json({ error: "generation_failed", reason: err.reason });
         }
         throw err;
       }
 
-      // Through the same validator the admin API's PUT uses, rather than trusting our own
-      // generator's output: `final` and `decision` are derived there, the length cap lives there,
-      // and a model that ran long must be rejected by the same rule regardless of who called it.
-      const parsed = parseOpinions(generated);
-      if (!parsed.ok) {
-        console.warn(`[opinions] generated text rejected for ${unbanCase._id}: ${parsed.reason}`);
-        return res.status(502).json({ error: "generation_failed", reason: parsed.reason });
-      }
-
-      const doc = await unbanOpinionsRepo.upsertOpinions(
-        String(unbanCase._id),
-        { channelId: channel.channelId, channelLogin: channel.channelLogin },
-        parsed.value
-      );
-
-      res.json({ ok: true, opinions: toTranscript(doc) });
+      res.json({ ok: true, opinions: toSheet(doc) });
     } catch (err) {
       next(err);
     }
   }
 );
 
-// Loads the case and its hearing for the two continuation routes below, answering the request
-// itself on every failure so the caller only has to handle the success.
+// ── "ИИ-обзор для всех" ─────────────────────────────────────────────────────────────────────────
 //
-// It also does the one repair those routes need: a sheet stored under the old two-sided shape has no
-// `turns` array, so there is nothing to append to. Rather than teach the repo to grow one, it is
-// normalized and rewritten once, here, the first time somebody continues such a hearing - after
-// which it is an ordinary document. Doing it lazily rather than in a migration means the rewrite
-// only ever touches sheets a moderator is actually working on, and what it writes is the same text
-// the page was already showing (toTranscript is what rendered them before this write, too).
-async function loadHearing(req, res, channel) {
-  const unbanCase = await unbanRequestsRepo.findById(req.body.id);
-  if (!unbanCase || String(unbanCase.channelId) !== String(channel.channelId)) {
-    res.status(404).json({ error: "not_found" });
-    return null;
-  }
+// The same summary for every queued case of the channel that has no sheet yet, run server-side one
+// case at a time (lib/unbanSummaryBatch.js has the why of the job, its pace and its skip rule).
+// Started and watched from the Bureau's SETTINGS page, not the desk: it is a channel-level chore,
+// and it does not need - or take - the desk's one-moderator shift. Gated exactly like that page's
+// own form: reading at tier 2, writing behind requireSettingsEditAccess + CSRF + the write limiter.
+//
+// No per-moderator generation limiter here, unlike the sheet's own button: the batch bounds itself
+// - one job per channel, a list fixed at start, one call per case per press - and charging thirty
+// queued cases against an hourly allowance of thirty would make the button useless on exactly the
+// channels it exists for.
 
-  const stored = await unbanOpinionsRepo.findByCaseId(String(unbanCase._id));
-  if (!stored) {
-    // There is nothing to continue. The blank sheet's own button is the way in, and it is a
-    // different route because it buys two speeches rather than one.
-    res.status(409).json({ error: "no_hearing" });
-    return null;
-  }
-
-  if (Array.isArray(stored.turns)) return { unbanCase, doc: stored };
-
-  const normalized = toTranscript(stored);
-  const parsed = parseOpinions({
-    turns: normalized.turns,
-    model: stored.model,
-    effort: stored.effort,
-  });
-  if (!parsed.ok) {
-    console.warn("[opinions] legacy sheet " + unbanCase._id + " could not be normalized: " + parsed.reason);
-    res.status(500).json({ error: "hearing_unreadable", reason: parsed.reason });
-    return null;
-  }
-  const doc = await unbanOpinionsRepo.upsertOpinions(
-    String(unbanCase._id),
-    { channelId: channel.channelId, channelLogin: channel.channelLogin },
-    parsed.value
-  );
-  return { unbanCase, doc };
+// Queued cases with no sheet, newest appeal first - the order the desk itself opens them in, so the
+// cases a moderator is most likely to pick up next are the first to be ready.
+async function summaryCandidates(channel) {
+  const cases = await unbanRequestsRepo.listPendingForChannel(channel.channelId, { newestFirst: true });
+  const withSheets = await unbanOpinionsRepo.findCaseIdsWithSheets(cases.map((c) => String(c._id)));
+  return selectCasesForSummary(cases, withSheets);
 }
 
-// POST /:channel/unban-bureau/opinions-turn.json - "передать слово".
-//
-// Buys ONE more speech on a hearing that already exists. WHO speaks is not the caller's to choose:
-// the floor goes to whichever side did not speak last (lib/unbanOpinionsValidation.js's
-// nextSpeaker), skipping past the judge's own remarks, because a hearing where the moderator could
-// call the same side twice in a row is not a hearing - it is a way to buy the answer you wanted.
-//
-// Two ceilings apply and they bound different things. The hourly opinionsGenerateLimiter is the
-// per-moderator spend brake, shared with the opening press. MAX_SPOKEN_TURNS bounds this one case:
-// without it, "the number of queued appeals" stopped being the bound on spend the moment a single
-// case could be argued indefinitely. The repo's append enforces the absolute array cap atomically on
-// top of both - see appendTurn().
-router.post(
-  "/:channel/unban-bureau/opinions-turn.json",
-  settingsWriteLimiter,
-  requireSettingsEditAccess(),
-  verifyToken,
+router.get(
+  "/:channel/unban-bureau/summaries/status.json",
+  statsReadLimiter,
+  requireLevelJson(2),
   async (req, res, next) => {
     try {
       const channel = await loadChannelJson(req, res);
       if (!channel) return;
-      if (!(await requireShiftJson(req, res))) return;
-
-      const speakers = hearingSpeakers();
-      if (!speakers.length) {
-        return res.status(503).json({ error: "generation_unavailable" });
-      }
-      if (!opinionsGenerateLimiter(req.user.userId)) {
-        return res.status(429).json({ error: "too_many_generations" });
-      }
-
-      const loaded = await loadHearing(req, res, channel);
-      if (!loaded) return;
-      const { unbanCase, doc } = loaded;
-
-      if (countSpoken(doc.turns) >= MAX_SPOKEN_TURNS) {
-        return res.status(409).json({ error: "hearing_closed", maxTurns: MAX_SPOKEN_TURNS });
-      }
-
-      const role = nextSpeaker(doc.turns);
-      const brief = await unbanDossierRepo.getCaseBrief(channel.channelLogin, unbanCase);
-
-      let generated;
-      try {
-        generated = await generateTurn({ speakers, brief, turns: doc.turns, role });
-      } catch (err) {
-        if (err instanceof OpinionsGenerationError) {
-          console.warn(
-            "[opinions] " + role + " turn failed for " + unbanCase._id + ": " + err.reason + " - " + err.message
-          );
-          return res.status(502).json({ error: "generation_failed", reason: err.reason });
-        }
-        throw err;
-      }
-
-      // Through the same validator every other writer goes through, rather than trusting our own
-      // generator: the field caps live there, and a model that ran long must be rejected by the same
-      // rule regardless of which button paid for it.
-      const parsed = parseSpeechTurn(generated.turn, {
-        role,
-        n: doc.turns.length + 1,
-        model: generated.model,
-        vendor: generated.vendor,
+      const job = summaryBatches.status(channel.channelLogin);
+      const running = Boolean(job && job.status === "running");
+      res.json({
+        ok: true,
+        available: summaryWriters().length > 0,
+        // Only Anthropic costs money; without its key a Google failure is simply a failed case.
+        paidFallback: Boolean(env.anthropicApiKey),
+        paceSec: Math.round(DEFAULT_PACE_MS / 1000),
+        // What a press would do right now - the number the confirmation shows. Not computed while a
+        // job runs: the page is showing that job's own total then, and this poll fires every few
+        // seconds.
+        eligible: running ? null : (await summaryCandidates(channel)).length,
+        job,
       });
-      if (!parsed.ok) {
-        console.warn("[opinions] generated turn rejected for " + unbanCase._id + ": " + parsed.reason);
-        return res.status(502).json({ error: "generation_failed", reason: parsed.reason });
-      }
-
-      const updated = await unbanOpinionsRepo.appendTurn(String(unbanCase._id), parsed.value);
-      if (!updated) {
-        return res.status(409).json({ error: "hearing_closed", maxTurns: MAX_SPOKEN_TURNS });
-      }
-
-      res.json({ ok: true, opinions: toTranscript(updated) });
     } catch (err) {
       next(err);
     }
   }
 );
 
-// POST /:channel/unban-bureau/opinions-remark.json - the judge speaks.
-//
-// The moderator's own words, into the transcript, under their own name. No model call and no token:
-// this sits on the write limiter like any other form post, NOT on the generation limiter, because
-// rationing what a person may say at their own desk would be rationing the wrong thing. What it does
-// cost is the next turn's prompt, which is why the remark has a length cap and why remarks count
-// against the document's absolute turn ceiling.
-//
-// The author is resolved through db/userProfileService.js - the one owner of "how should this user be
-// displayed", including a custom nick colour where one is set - and stored ON the turn rather than
-// looked up at render time: a desk is worked by whoever holds the shift, so remarks on one sheet are
-// routinely by different people, and a name resolved later is today's name rather than the one they
-// signed with.
 router.post(
-  "/:channel/unban-bureau/opinions-remark.json",
+  "/:channel/unban-bureau/summaries/start.json",
   settingsWriteLimiter,
   requireSettingsEditAccess(),
   verifyToken,
@@ -832,37 +754,62 @@ router.post(
     try {
       const channel = await loadChannelJson(req, res);
       if (!channel) return;
-      if (!(await requireShiftJson(req, res))) return;
 
-      const loaded = await loadHearing(req, res, channel);
-      if (!loaded) return;
-      const { unbanCase, doc } = loaded;
+      const writers = summaryWriters();
+      if (!writers.length) return res.status(503).json({ error: "generation_unavailable" });
 
-      // Fails soft by design (see getDisplayProfile) - a remark must not be lost because a colour
-      // lookup timed out, so an unresolved avatar or colour renders the judge plainly instead.
-      const profile = await userProfileService.getDisplayProfile(req.user.userId);
+      // Fixed for the whole job, like the case list: a window changed mid-run would leave half the
+      // queue summarised from one depth of log and half from another.
+      const logMessages = await summaryLogMessages(channel.channelLogin);
 
-      const parsed = parseJudgeTurn({
-        text: req.body.text,
-        author: {
-          userId: req.user.userId,
-          login: req.user.login,
-          displayName: req.user.displayName,
-          avatarUrl: profile.avatarUrl || req.user.avatarUrl,
-          color: profile.color,
+      const started = await summaryBatches.start(channel.channelLogin, {
+        startedBy: req.user.login || null,
+        listCandidates: () => summaryCandidates(channel),
+        runCase: async (candidate) => {
+          const unbanCase = await unbanRequestsRepo.findById(candidate.id);
+          // Stamped here, or withdrawn or resolved at Twitch, since the list was read: nothing to
+          // summarise. The same two conditions listPendingForChannel() filters on.
+          if (
+            !unbanCase ||
+            String(unbanCase.channelId) !== String(channel.channelId) ||
+            unbanCase.twitchStatus !== "pending" ||
+            unbanCase.resolution?.status === "pending"
+          ) {
+            return "skipped";
+          }
+          try {
+            await writeSummary(channel, unbanCase, writers, logMessages);
+          } catch (err) {
+            if (err instanceof SummarySkipped) return "skipped";
+            throw err;
+          }
+          return "done";
         },
-        n: doc.turns.length + 1,
       });
-      if (!parsed.ok) {
-        return res.status(400).json({ error: "invalid_remark", reason: parsed.reason });
-      }
 
-      const updated = await unbanOpinionsRepo.appendTurn(String(unbanCase._id), parsed.value);
-      if (!updated) {
-        return res.status(409).json({ error: "hearing_closed", maxTurns: MAX_SPOKEN_TURNS });
+      if (!started.ok) {
+        const status = started.reason === "already_running" ? 409 : 400;
+        return res.status(status).json({ error: started.reason, job: started.job || null });
       }
+      res.json({ ok: true, job: started.job });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
-      res.json({ ok: true, opinions: toTranscript(updated) });
+router.post(
+  "/:channel/unban-bureau/summaries/stop.json",
+  settingsWriteLimiter,
+  requireSettingsEditAccess(),
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannelJson(req, res);
+      if (!channel) return;
+      const stopped = summaryBatches.stop(channel.channelLogin);
+      if (!stopped.ok) return res.status(409).json({ error: stopped.reason, job: stopped.job });
+      res.json({ ok: true, job: stopped.job });
     } catch (err) {
       next(err);
     }

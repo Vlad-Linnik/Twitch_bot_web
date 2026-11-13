@@ -287,31 +287,20 @@
         <div id="ub-appeal-date"></div>
       </div>
 
-      <%# The fourth sheet: the prosecutor's and advocate's speeches on this case. Filled either
-          by the button below (routes/unbanBureau.js) or by hand through the admin API
-          (routes/adminApi.js), and stored web-only - the bot never sees them and a verdict is
-          decided identically without them. Every string
-          inside is set from Mongo via textContent by renderOpinions(); nothing here is
-          server-rendered per case. %>
+      <%# The fourth sheet: the AI summary of this case - or, on cases argued before the summary
+          existed, the prosecutor's and advocate's hearing, shown read-only. Filled either by the
+          button below / the settings page's "ИИ-обзор для всех" (routes/unbanBureau.js) or by hand
+          through the admin API (routes/adminApi.js), and stored web-only - the bot never sees it and
+          a verdict is decided identically without it. Every string inside is set from Mongo via
+          textContent by renderOpinions(); nothing here is server-rendered per case. %>
       <div class="ub-paper ub-draggable" id="ub-experts-card">
         <div id="ub-experts-title"><%= t('unbanBureau.expertsHeading') %></div>
         <div id="ub-experts-body"></div>
-        <%# Empty state doubles as the order form: a blank sheet is the only place the hearing can
-            be requested from, which is also the server's rule (a case with a sheet answers 409). %>
+        <%# Empty state doubles as the order form: a blank sheet is the only place a summary can be
+            requested from, which is also the server's rule (a case with a sheet answers 409). %>
         <div id="ub-experts-empty">
           <div id="ub-experts-empty-text"><%= t('unbanBureau.expertsEmpty') %></div>
           <button type="button" id="ub-experts-generate"><%= t('unbanBureau.expertsGenerate') %></button>
-        </div>
-        <%# The bench: what the judge can do about what is on the sheet. Shown only once a hearing
-            exists (.ub-has-opinions in the stylesheet) - on a blank sheet the only control is the
-            order button above. The textarea and the buttons appear in the drag handler's allow-list
-            in the client, or grabbing one of them would drag the whole sheet instead of typing. %>
-        <div id="ub-experts-foot">
-          <textarea id="ub-judge-input" maxlength="<%= maxRemarkChars %>" placeholder="<%= t('unbanBureau.expertRemarkPlaceholder') %>"></textarea>
-          <div id="ub-experts-actions">
-            <button type="button" id="ub-judge-send" class="ub-sheet-btn"><%= t('unbanBureau.expertRemarkSend') %></button>
-            <button type="button" id="ub-floor-next" class="ub-sheet-btn"><%= t('unbanBureau.expertFloorAdvocate') %></button>
-          </div>
         </div>
         <div id="ub-experts-mark"></div>
       </div>
@@ -358,7 +347,6 @@
        data-locale="<%= locale %>"
        data-newest-first="<%= newestFirst ? '1' : '0' %>"
        data-heartbeat-ms="<%= heartbeatMs %>"
-       data-max-spoken-turns="<%= maxSpokenTurns %>"
        <%# Identifies this page load at the desk. Echoed back on the heartbeat and the pagehide
            hand-back so a reload's beacon can't delete the lease the NEW page just took. %>
        data-shift-token="<%= shiftToken %>"
@@ -386,15 +374,14 @@
          expertRewritten: t('unbanBureau.expertRewritten'),
          expertLabelDemand: t('unbanBureau.expertLabelDemand'),
          expertLabelCounter: t('unbanBureau.expertLabelCounter'),
-         expertFloorProsecutor: t('unbanBureau.expertFloorProsecutor'),
-         expertFloorAdvocate: t('unbanBureau.expertFloorAdvocate'),
-         expertFloorWorking: t('unbanBureau.expertFloorWorking'),
-         expertFloorClosed: t('unbanBureau.expertFloorClosed'),
-         expertTurnFailed: t('unbanBureau.expertTurnFailed'),
-         expertRemarkSend: t('unbanBureau.expertRemarkSend'),
-         expertRemarkSending: t('unbanBureau.expertRemarkSending'),
-         expertRemarkFailed: t('unbanBureau.expertRemarkFailed'),
-         expertNoHearing: t('unbanBureau.expertNoHearing'),
+         expertHearingArchived: t('unbanBureau.expertHearingArchived'),
+         summaryReason: t('unbanBureau.summaryReason'),
+         summaryFor: t('unbanBureau.summaryFor'),
+         summaryAgainst: t('unbanBureau.summaryAgainst'),
+         summaryNone: t('unbanBureau.summaryNone'),
+         summaryQuotes: t('unbanBureau.summaryQuotes'),
+         summaryVerdict: t('unbanBureau.summaryVerdict'),
+         summaryPs: t('unbanBureau.summaryPs'),
          expertsGenerate: t('unbanBureau.expertsGenerate'),
          expertsGenerating: t('unbanBureau.expertsGenerating'),
          expertsGenerated: t('unbanBureau.expertsGenerated'),

@@ -1046,12 +1046,13 @@ body.ub-playing footer {
   --ub-ink-muted: #6a5c42;
   --ub-role: #8c2f22;
 }
-/* Set on the turn blocks, and reused by name on the bench button so that "whose
-   turn is next" is the same ink there as on the speech it will produce. These
-   rules set the variable and nothing else, which is what makes that safe. */
-.ub-turn-prosecutor, .ub-role-prosecutor { --ub-role: #8c2f22; }
-.ub-turn-advocate,   .ub-role-advocate   { --ub-role: #26507a; }
-.ub-turn-judge,      .ub-role-judge      { --ub-role: #5b4a7a; }
+/* Set on the turn blocks of an archived hearing. These rules set the variable
+   and nothing else. The summary's two sides reuse the same two inks - the
+   argument for lifting in the advocate's blue, against in the prosecutor's red -
+   so a moderator who knew the old sheets reads the new one without a legend. */
+.ub-turn-prosecutor, .ub-sum-against { --ub-role: #8c2f22; }
+.ub-turn-advocate,   .ub-sum-for     { --ub-role: #26507a; }
+.ub-turn-judge                       { --ub-role: #5b4a7a; }
 
 #ub-experts-title {
   position: absolute;
@@ -1080,15 +1081,77 @@ body.ub-playing footer {
   pointer-events: auto;
   word-break: break-word;
 }
-/* The bench only appears once there is a hearing to address, so the body keeps
-   its full height on a blank sheet. Docked, neither is visible at all. */
-.ub-has-opinions #ub-experts-body { bottom: 104px; }
-.ub-small-experts #ub-experts-body { bottom: 20px; }
 #ub-experts-body::-webkit-scrollbar { width: 6px; }
 #ub-experts-body::-webkit-scrollbar-track { background: transparent; }
 #ub-experts-body::-webkit-scrollbar-thumb { background: rgb(0 0 0 / 0.2); border-radius: 3px; }
 
-/* --- one turn ------------------------------------------------------------- */
+/* --- the summary ---------------------------------------------------------- */
+
+/* Read top to bottom in half a minute: why the ban, the two sides next to each
+   other, the applicant's own lines as evidence, then the impression and the P.S.
+   as the quietest lines on the sheet. The labels are the sheet's own words, in
+   the pixel font; everything the model wrote is in the serif - the same split
+   the hearing's turns make between chrome and prose. */
+.ub-sum { font-family: var(--ub-speech-font); line-height: 1.45; }
+.ub-sum-label {
+  display: block;
+  font-family: "Monocraft", monospace;
+  font-size: 0.72em;
+  letter-spacing: 1px;
+  color: var(--ub-ink-muted);
+  margin-bottom: 2px;
+}
+.ub-sum-reason .ub-sum-text {
+  font-size: 1.05em;
+  font-weight: bold;
+  line-height: 1.35;
+}
+.ub-sum-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+/* Each side is ruled off in its ink, like a hearing turn - which side a line is
+   on is answered before it is read. */
+.ub-sum-side {
+  border-left: 3px solid var(--ub-role);
+  padding-left: 8px;
+  min-width: 0;
+}
+.ub-sum-side .ub-sum-label { color: var(--ub-role); }
+.ub-sum-list {
+  margin: 0;
+  padding-left: 1.05em;
+  list-style: disc;
+}
+.ub-sum-list li { margin-top: 3px; }
+.ub-sum-list li::marker { color: var(--ub-role); }
+.ub-sum-none { color: var(--ub-ink-muted); font-style: italic; font-size: 0.95em; }
+.ub-sum-quotes { margin-top: 12px; }
+.ub-sum-verdict {
+  margin-top: 12px;
+  padding-top: 7px;
+  border-top: 1px dashed rgb(0 0 0 / 0.22);
+  font-style: italic;
+}
+.ub-sum-ps {
+  margin-top: 8px;
+  font-size: 0.92em;
+  color: #4a4034;
+}
+.ub-sum-ps-mark { font-family: "Monocraft", monospace; font-size: 0.85em; color: var(--ub-ink-muted); }
+/* Heads an old prosecutor/advocate hearing, so a sheet in the old form says
+   what it is before its first speech. */
+.ub-sum-archived {
+  font-size: 0.78em;
+  color: #7a6a4d;
+  border-bottom: 1px dashed rgb(0 0 0 / 0.2);
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+/* --- one turn (archived hearings) ----------------------------------------- */
 
 /* Every turn is ruled off on the left in its speaker's colour. That stripe is
    what makes an eight-turn transcript scannable: who is speaking is answered
@@ -1205,7 +1268,7 @@ body.ub-playing footer {
   margin-top: 4px;
 }
 
-/* --- the judge ------------------------------------------------------------ */
+/* --- the judge (archived hearings only) ----------------------------------- */
 
 /* The moderator's own remark, and it has to look like a person rather than a
    third expert: hence the avatar and the nick in the colour they use in chat.
@@ -1230,67 +1293,6 @@ body.ub-playing footer {
   color: var(--ub-role);
 }
 .ub-turn-judge .ub-turn-speech { font-style: italic; }
-
-/* --- the bench: what the judge can do ------------------------------------- */
-
-#ub-experts-foot {
-  position: absolute;
-  left: 24px;
-  right: 22px;
-  bottom: 18px;
-  height: 78px;
-  display: none;
-  flex-direction: column;
-  gap: 5px;
-  pointer-events: auto;
-}
-.ub-has-opinions #ub-experts-foot { display: flex; }
-/* Docked, the sheet is 63px wide and shows nothing but its ink mark. */
-.ub-small-experts #ub-experts-foot { display: none !important; }
-
-#ub-judge-input {
-  width: 100%;
-  height: 42px;
-  resize: none;
-  font-family: "Monocraft", monospace;
-  font-size: 12px;
-  line-height: 1.35;
-  color: #2b2519;
-  background: rgb(0 0 0 / 0.02);
-  border: 1px solid rgb(0 0 0 / 0.22);
-  border-radius: 2px;
-  padding: 5px 7px;
-  outline: none;
-}
-#ub-judge-input:focus { border-color: rgb(0 0 0 / 0.45); background: rgb(0 0 0 / 0.04); }
-#ub-judge-input::placeholder { color: #9a8c73; }
-
-#ub-experts-actions { display: flex; gap: 6px; }
-/* Styled as ink on paper rather than as the desk's dark chrome buttons: they
-   live on the sheet, not on the desktop. Same reasoning as the order button in
-   the empty state below. */
-.ub-sheet-btn {
-  flex: 1;
-  font-family: "Monocraft", monospace;
-  font-size: 11px;
-  color: #5b4f3a;
-  background: rgb(0 0 0 / 0.03);
-  border: 1px dashed #a89878;
-  border-radius: 2px;
-  padding: 5px 8px;
-  cursor: pointer;
-  transition: background 0.1s, color 0.1s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ub-sheet-btn:hover:not(:disabled) { background: rgb(0 0 0 / 0.07); color: #3d3427; }
-.ub-sheet-btn:disabled { cursor: default; opacity: 0.5; }
-/* Whose turn it is next is on the button itself, in that side's colour, so the
-   moderator is choosing "let the advocate answer" rather than pressing a
-   generic "continue". */
-#ub-floor-next { color: var(--ub-role); border-color: var(--ub-role); opacity: 0.9; }
-#ub-floor-next:hover:not(:disabled) { opacity: 1; }
 
 #ub-experts-empty {
   position: absolute;
