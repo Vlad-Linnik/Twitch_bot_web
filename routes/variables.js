@@ -10,6 +10,7 @@ const channelsRepo = require("../db/channelsRepo");
 const variablesRepo = require("../db/variablesRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
+const { settingsNav } = require("../middleware/settingsNav");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const { parseVariable, normalizeName, MAX_VALUE } = require("../lib/variableValidation");
@@ -31,7 +32,7 @@ async function loadChannel(req, res) {
 // old links keep working; see lib/movedPermanently.js for why a POST gets 308 rather than 301.
 router.all("/:channel/counters", movedPermanently((req) => `/${encodeURIComponent(req.params.channel)}/variables`));
 
-router.get("/:channel/variables", requireLevel(2), exposeSectionEditAccess("commands"), async (req, res, next) => {
+router.get("/:channel/variables", requireLevel(2), exposeSectionEditAccess("commands"), settingsNav("variables"), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
     if (!channel) return;

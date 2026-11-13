@@ -1,0 +1,105 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('settingsNav.' + page.navKey) }) %>
+<%- include('partials/nav') %>
+
+<%#
+  One of the settings pages made of the bot's built-in command rows (lib/settingsNav.js's
+  COMMAND_PAGES: chat statistics, fun, the bot itself). All of them save through the same
+  POST /:channel/settings as the rows always did - parseSubmittedConfig only touches the fields a
+  form actually sends, so splitting the old single page into these changes nothing about saving.
+  `returnTo` brings a no-JS save back here instead of to /:channel/settings, which now opens the
+  first page of the catalog.
+%>
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-3xl mx-auto px-6 pt-8 pb-16">
+  <h1 class="settings-heading text-3xl font-bold text-neutral-100 mb-1"><%= t('settingsNav.' + page.navKey) %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('settingsNav.intro.' + page.navKey) %></p>
+
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
+  <% if (saved) { %>
+    <div class="mb-8 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3">
+      <%= t('channelSettings.saved') %>
+    </div>
+  <% } %>
+
+  <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" data-autosave class="space-y-10">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="hidden" name="returnTo" value="<%= returnTo %>" />
+    <fieldset class="contents" <%= canEditSection ? '' : 'disabled' %>>
+
+    <% if (names.length) { %>
+      <section>
+        <%- include('partials/commandTable', { names, config }) %>
+      </section>
+    <% } %>
+
+    <% if (page.key === 'stats') { %>
+      <section>
+        <h2 class="text-lg font-semibold text-neutral-100 mb-3">🟣 <%= t('channelSettings.sevenTvHeading') %></h2>
+        <% if (sevenTvStatus.linked) { %>
+          <p class="text-sm text-green-400">✅ <%= t('channelSettings.sevenTvLinked') %> (<%= sevenTvStatus.emoteCount %>)</p>
+        <% } else { %>
+          <p class="text-sm text-neutral-500">⚠️ <%= t('channelSettings.sevenTvNotLinked') %></p>
+        <% } %>
+      </section>
+    <% } %>
+
+    <% if (page.key === 'bot') { %>
+      <%# What the bot does when someone talks to it rather than to a command: a yes/no answer to a
+          question, a busy line for anything else. Both are commands.* toggles plus a list of
+          phrases, so they sit in this same form. %>
+      <section>
+        <h2 class="text-lg font-semibold text-neutral-100 mb-1">💬 <%= t('settingsNav.mentionsHeading') %></h2>
+        <p class="text-neutral-500 text-sm mb-3"><%= t('settingsNav.mentionsIntro') %></p>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 divide-y divide-neutral-800">
+          <% if (config.commands.question) { %>
+            <div class="px-4 py-3">
+              <div class="flex items-center justify-between gap-4 mb-1">
+                <span class="text-sm font-medium text-neutral-200">❓ <%= t('channelSettings.commandName.question') %></span>
+                <input type="hidden" name="commands.question.present" value="1" />
+                <label class="toggle-switch">
+                  <input type="checkbox" name="commands.question.enabled" <%= config.commands.question.enabled ? 'checked' : '' %> class="sr-only" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+              <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.question') %></p>
+              <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.yesNoResponsesLabel') %></label>
+              <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.yesNoResponsesHint') %></p>
+              <textarea name="yesNoResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.yesNo.join('\n') %></textarea>
+            </div>
+          <% } %>
+          <% if (config.commands.directmsg) { %>
+            <div class="px-4 py-3">
+              <div class="flex items-center justify-between gap-4 mb-1">
+                <span class="text-sm font-medium text-neutral-200">💬 <%= t('channelSettings.commandName.directmsg') %></span>
+                <input type="hidden" name="commands.directmsg.present" value="1" />
+                <label class="toggle-switch">
+                  <input type="checkbox" name="commands.directmsg.enabled" <%= config.commands.directmsg.enabled ? 'checked' : '' %> class="sr-only" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+              <p class="text-neutral-600 text-xs mb-3"><%= t('channelSettings.commandDesc.directmsg') %></p>
+              <label class="block text-sm text-neutral-400 mb-1"><%= t('channelSettings.busyResponsesLabel') %></label>
+              <p class="text-neutral-600 text-xs mb-1"><%= t('channelSettings.busyResponsesHint') %></p>
+              <textarea name="busyResponses" rows="3" class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.responses.busy.join('\n') %></textarea>
+            </div>
+          <% } %>
+        </div>
+      </section>
+
+      <% if (otherNames.length) { %>
+        <section>
+          <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('channelSettings.group.other') %></h2>
+          <p class="text-neutral-500 text-sm mb-3"><%= t('channelSettings.groupIntro.other') %></p>
+          <%- include('partials/commandTable', { names: otherNames, config }) %>
+        </section>
+      <% } %>
+    <% } %>
+
+    <%- include('partials/autosaveStatus') %>
+    </fieldset>
+  </form>
+</main>
+<%- include('partials/settingsShellClose') %>
+
+<script src="<%= asset('/js/autosave.js') %>" defer></script>
+<%- include('partials/foot') %>

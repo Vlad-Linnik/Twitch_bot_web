@@ -42,7 +42,7 @@
 
     <div class="ub-busy-actions">
       <button type="button" id="ub-busy-retry" class="ub-busy-btn"><%= t('unbanBureau.shiftBusyRetryNow') %></button>
-      <a class="ub-busy-btn ub-busy-btn-quiet" href="/<%= channel.channelLogin %>/settings"><%= t('channelSettings.backToSettings') %></a>
+      <a class="ub-busy-btn ub-busy-btn-quiet" href="/<%= channel.channelLogin %>/settings/unban-bureau"><%= t('channelSettings.backToSettings') %></a>
     </div>
 
     <%# Owner/admin only (routes/unbanBureau.js sets canTakeOver) - moderators must not be able to

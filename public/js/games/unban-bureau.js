@@ -242,7 +242,7 @@
 
     var link = document.createElement("a");
     link.className = "ub-busy-btn";
-    link.href = "/" + CHANNEL + "/settings";
+    link.href = "/" + CHANNEL + "/settings/unban-bureau";
     link.textContent = T.backToSettings;
     var actions = el("div", "ub-busy-actions");
     actions.appendChild(link);

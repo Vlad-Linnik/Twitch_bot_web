@@ -1,7 +1,8 @@
 <%- include('partials/head', { title: channel.channelLogin + ' · ' + t('variables.title') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-12">
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
 
   <header class="mb-8">
     <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('variables.title') %></h1>
@@ -139,6 +140,7 @@
   </section>
 
 </main>
+<%- include('partials/settingsShellClose') %>
 
 <script src="<%= asset('/js/variables.js') %>" defer></script>
 

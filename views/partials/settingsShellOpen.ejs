@@ -1,0 +1,72 @@
+<%#
+  Opens the frame every channel settings page sits in: the catalog panel on the left and the
+  page's own content beside it. Closed by partials/settingsShellClose. The panel is built in
+  lib/settingsNav.js and handed over as res.locals.settingsNav (middleware/settingsNav.js).
+
+  Below lg it is a drawer behind the "Sections" button; from lg up it is pinned open unless the
+  visitor unpinned it (a cookie, so the first paint is already right), in which case it is the same
+  drawer. public/js/settings-nav.js does the opening, closing and pinning; without JS the drawer
+  stays shut and every page is still reachable through the page's own links and the site nav.
+
+  Links fade rather than slide (data-transition): the panel carries view-transition-name
+  settings-nav (public/css/input.css), so moving between pages only the content changes.
+%>
+<% const sn = settingsNav; %>
+<div class="settings-shell" data-settings-shell data-pinned="<%= sn.pinned ? '1' : '0' %>" data-pin-cookie="<%= sn.pinCookie %>">
+  <aside id="settings-nav" class="settings-nav" aria-label="<%= t('settingsNav.title') %>">
+    <div class="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
+      <span class="text-xs uppercase tracking-wide text-neutral-500 truncate">
+        <%= t('settingsNav.title') %> · <span class="normal-case tracking-normal text-neutral-400"><%= channel.channelLogin %></span>
+      </span>
+      <span class="flex items-center gap-1 shrink-0">
+        <button type="button" class="settings-nav-pin" data-settings-nav-pin
+                aria-pressed="<%= sn.pinned ? 'true' : 'false' %>"
+                title="<%= t('settingsNav.pin') %>" aria-label="<%= t('settingsNav.pin') %>">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 4h6l-1 6 3 3H7l3-3-1-6Zm3 9v7"/></svg>
+        </button>
+        <button type="button" class="settings-nav-close" data-settings-nav-close aria-label="<%= t('settingsNav.close') %>">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </span>
+    </div>
+    <nav class="px-2 pb-6 space-y-4 text-sm">
+      <% sn.categories.forEach(function(category) { %>
+        <% if (category.items.length === 1) { const item = category.items[0]; %>
+          <a href="<%= item.href %>" data-transition="fade"
+             class="settings-nav-link settings-nav-top <%= item.active ? 'is-active' : '' %>"
+             <%- item.active ? 'aria-current="page"' : '' %>>
+            <span class="w-5 text-center shrink-0" aria-hidden="true"><%= category.icon %></span>
+            <span class="flex-1 min-w-0 truncate"><%= t(category.labelKey) %></span>
+            <% if (item.readOnly) { %><span class="settings-nav-lock" title="<%= t('settingsNav.viewOnly') %>">🔒<span class="sr-only"><%= t('settingsNav.viewOnly') %></span></span><% } %>
+          </a>
+        <% } else { %>
+          <div>
+            <div class="flex items-center gap-2 px-2 py-1 text-neutral-300 font-medium <%= category.active ? 'text-neutral-100' : '' %>">
+              <span class="w-5 text-center shrink-0" aria-hidden="true"><%= category.icon %></span>
+              <span class="truncate"><%= t(category.labelKey) %></span>
+            </div>
+            <ul class="ml-[1.1rem] mt-0.5 border-l border-neutral-800">
+              <% category.items.forEach(function(item) { %>
+                <li>
+                  <a href="<%= item.href %>" data-transition="fade"
+                     class="settings-nav-link settings-nav-sub <%= item.active ? 'is-active' : '' %>"
+                     <%- item.active ? 'aria-current="page"' : '' %>>
+                    <span class="flex-1 min-w-0 truncate"><%= t(item.labelKey) %></span>
+                    <% if (item.readOnly) { %><span class="settings-nav-lock" title="<%= t('settingsNav.viewOnly') %>">🔒<span class="sr-only"><%= t('settingsNav.viewOnly') %></span></span><% } %>
+                  </a>
+                </li>
+              <% }) %>
+            </ul>
+          </div>
+        <% } %>
+      <% }) %>
+    </nav>
+  </aside>
+  <div class="settings-backdrop" data-settings-nav-close hidden></div>
+  <div class="settings-content">
+    <div class="settings-nav-bar">
+      <button type="button" class="settings-nav-open" data-settings-nav-open aria-controls="settings-nav" aria-expanded="false">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4" aria-hidden="true"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span><%= t('settingsNav.open') %></span>
+      </button>
+    </div>

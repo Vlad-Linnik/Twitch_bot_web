@@ -1,9 +1,9 @@
 <%- include('partials/head', { title: channel.channelLogin + ' · ' + t('customCommands.title') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-4xl mx-auto px-6 py-12">
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
 
-  <a href="/<%= channel.channelLogin %>/settings/custom-commands" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('customCommands.backToSettings') %></a>
 
   <header class="mt-2 mb-8 flex items-start justify-between gap-4 flex-wrap">
     <div>
@@ -262,6 +262,7 @@
   </section>
 
 </main>
+<%- include('partials/settingsShellClose') %>
 
 <%# Data for the response editor. Variable names and values are channel data, so they go through
     safeJson like every other server payload inlined into a page. %>

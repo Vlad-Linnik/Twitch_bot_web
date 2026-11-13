@@ -2,15 +2,16 @@ const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
-const variablesRepo = require("../db/variablesRepo");
 const { movedPermanently } = require("../lib/movedPermanently");
-const longBansRepo = require("../db/longBansRepo");
 const modsRepo = require("../db/modsRepo");
 const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
 const moderatorSections = require("../lib/moderatorSections");
+const settingsNavLib = require("../lib/settingsNav");
+const { settingsNav } = require("../middleware/settingsNav");
+const { sanitizeReturnTo } = require("../lib/returnTo");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { MAX_LIST_ITEMS, sanitizeWord, parseSubmittedConfig } = require("../lib/settingsValidation");
@@ -55,34 +56,61 @@ function respondSaved(req, res, redirectTo) {
   res.redirect(redirectTo);
 }
 
-router.get("/:channel/settings", requireLevel(2), exposeSectionEditAccess("settings"), async (req, res, next) => {
+// The bare address opens the first page of the settings catalog (lib/settingsNav.js) - there is
+// no settings front page any more, every page is one click away in the panel. Kept as a route,
+// not dropped, because links, bookmarks and the site nav all point here.
+router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
-
-    const [config, customCommands, variables, longBans, sevenTvStatus] = await Promise.all([
-      channelConfigRepo.getConfig(req.params.channel),
-      customCommandsRepo.list(req.params.channel),
-      variablesRepo.list(req.params.channel),
-      longBansRepo.listActiveForChannel(channel.channelId),
-      // emoteImages.js's getSevenTvLinkStatus is already fail-soft (a 7TV outage resolves to
-      // "not linked" rather than rejecting), so no extra catch needed here.
-      getSevenTvLinkStatus(channel.channelId),
-    ]);
-    res.render("settings", {
-      channel,
-      config,
-      customCommandCount: customCommands.length,
-      variableCount: variables.length,
-      longBanCount: longBans.length,
-      sevenTvStatus,
-      saved: req.query.saved === "1",
-      canManageModerators: req.permissionLevel <= 1,
-    });
+    res.redirect(302, settingsNavLib.firstPagePath(channel.channelLogin));
   } catch (err) {
     next(err);
   }
 });
+
+// The pages made of built-in command rows (lib/settingsNav.js's COMMAND_PAGES). They save through
+// the POST below, like the single page they were split out of.
+for (const [pageKey, page] of Object.entries(settingsNavLib.COMMAND_PAGES)) {
+  router.get(
+    `/:channel/settings/${pageKey}`,
+    requireLevel(2),
+    exposeSectionEditAccess("settings"),
+    settingsNav(page.navKey),
+    async (req, res, next) => {
+      try {
+        const channel = await channelsRepo.findByLogin(req.params.channel);
+        if (!channel) return res.status(404).render("errors/404");
+
+        const config = await channelConfigRepo.getConfig(req.params.channel);
+        const commandNames = Object.keys(config.commands);
+        res.render("channelSettingsCategory", {
+          channel,
+          config,
+          page: { key: pageKey, navKey: page.navKey },
+          names: page.commands.filter((name) => config.commands[name]),
+          otherNames: pageKey === "bot" ? settingsNavLib.unplacedCommands(commandNames) : [],
+          // emoteImages.js's getSevenTvLinkStatus is already fail-soft (a 7TV outage resolves to
+          // "not linked" rather than rejecting), so no extra catch needed here.
+          sevenTvStatus: pageKey === "stats" ? await getSevenTvLinkStatus(channel.channelId) : null,
+          returnTo: `/${channel.channelLogin}/settings/${pageKey}`,
+          saved: req.query.saved === "1",
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+}
+
+// Where a no-JS save of the settings form goes back to: the page that sent it, if it is one of
+// this channel's settings pages, else the catalog's first page.
+function settingsReturnPath(req, channel) {
+  const returnTo = sanitizeReturnTo(req.body.returnTo);
+  const prefix = `/${channel.channelLogin}/settings/`;
+  const path = returnTo && returnTo.startsWith(prefix) ? returnTo.split(/[?#]/)[0] : settingsNavLib.firstPagePath(channel.channelLogin);
+  return `${path}?saved=1`;
+}
 
 router.post("/:channel/settings", autosaveLimiter, requireSectionEditAccess("settings"), verifyToken, async (req, res, next) => {
   try {
@@ -95,7 +123,7 @@ router.post("/:channel/settings", autosaveLimiter, requireSectionEditAccess("set
     await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
     await logConfigChanges(req.params.channel, req.user, existing, parsed);
 
-    respondSaved(req, res, `/${req.params.channel}/settings?saved=1`);
+    respondSaved(req, res, settingsReturnPath(req, channel));
   } catch (err) {
     next(err);
   }
@@ -118,8 +146,8 @@ async function keepToEditableSections(req, channel, existing, parsed) {
 // (custom commands, variables) - each renders a subset of the command rows and POSTs
 // back through the same parseSubmittedConfig, which carries every unrendered field
 // over from the stored config (see lib/settingsValidation.js's partial-form contract).
-function registerConfigSubPage(basePath, section, viewName, getExtras = null) {
-  router.get(`/:channel${basePath}`, requireLevel(2), exposeSectionEditAccess(section), async (req, res, next) => {
+function registerConfigSubPage(basePath, section, navKey, viewName, getExtras = null) {
+  router.get(`/:channel${basePath}`, requireLevel(2), exposeSectionEditAccess(section), settingsNav(navKey), async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -149,10 +177,10 @@ function registerConfigSubPage(basePath, section, viewName, getExtras = null) {
   });
 }
 
-registerConfigSubPage("/settings/custom-commands", "commands", "channelCustomCommandsSettings", async (channelLogin) => ({
+registerConfigSubPage("/settings/custom-commands", "commands", "customCommandsSettings", "channelCustomCommandsSettings", async (channelLogin) => ({
   customCommandCount: (await customCommandsRepo.list(channelLogin)).length,
 }));
-registerConfigSubPage("/settings/variables", "commands", "channelVariablesSettings");
+registerConfigSubPage("/settings/variables", "commands", "variablesSettings", "channelVariablesSettings");
 // The sub-page's address before counters were renamed to variables.
 router.all("/:channel/settings/counters", movedPermanently((req) => `/${encodeURIComponent(req.params.channel)}/settings/variables`));
 // The Amnesty Bureau's knobs used to sit in the main settings form, with the settings grid's own
@@ -161,7 +189,7 @@ router.all("/:channel/settings/counters", movedPermanently((req) => `/${encodeUR
 // shift at a desk, and the grid is a settings grid.
 // The AI log-window select is rendered from the validator's own list, so the page can only offer
 // values the save accepts.
-registerConfigSubPage("/settings/unban-bureau", "bureau", "channelUnbanBureauSettings", async () => ({
+registerConfigSubPage("/settings/unban-bureau", "bureau", "unbanBureau", "channelUnbanBureauSettings", async () => ({
   aiLogMessagesOptions: AI_LOG_MESSAGES_OPTIONS,
 }));
 
@@ -172,8 +200,8 @@ registerConfigSubPage("/settings/unban-bureau", "bureau", "channelUnbanBureauSet
 // targetLabel names the list in SettingsChangeLog entries (e.g. "bannedWords.words") -
 // derived once per registration rather than from basePath, since the two aren't always
 // the same shape as the underlying config field.
-function registerWordListRoutes(basePath, section, viewName, getList, targetLabel) {
-  router.get(`/:channel${basePath}`, requireLevel(2), exposeSectionEditAccess(section), async (req, res, next) => {
+function registerWordListRoutes(basePath, section, navKey, viewName, getList, targetLabel) {
+  router.get(`/:channel${basePath}`, requireLevel(2), exposeSectionEditAccess(section), settingsNav(navKey), async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -269,14 +297,14 @@ function registerWordListRoutes(basePath, section, viewName, getList, targetLabe
   });
 }
 
-registerWordListRoutes("/settings/banned-words", "chatModeration", "channelBannedWords", (config) => config.bannedWords.words, "bannedWords.words");
+registerWordListRoutes("/settings/banned-words", "chatModeration", "bannedWords", "channelBannedWords", (config) => config.bannedWords.words, "bannedWords.words");
 
 // Spam signatures: each entry needs a word PLUS an optional per-signature ban duration (falling
 // back to permanent) and an optional per-signature reason (falling back to the channel's shared
 // spamBanReason at ban time - see TwitchBot/commands/msgHandle.js's spam_protection). That's a
 // richer shape than registerWordListRoutes' plain-string CRUD handles, so this gets its own
 // routes instead of being squeezed through that factory.
-router.get("/:channel/settings/spam-signatures", requireLevel(2), exposeSectionEditAccess("chatModeration"), async (req, res, next) => {
+router.get("/:channel/settings/spam-signatures", requireLevel(2), exposeSectionEditAccess("chatModeration"), settingsNav("spamSignatures"), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -453,7 +481,7 @@ router.post("/:channel/settings/spam-signatures/reason", autosaveLimiter, requir
 // Read-only: who changed what and when (db/settingsChangeLogRepo.js). Any tier <= 2 (owner,
 // admin, or moderator) can view - the moderator identity was already snapshotted at write time,
 // so no extra profile lookups are needed to render it.
-router.get("/:channel/settings/change-log", requireLevel(2), async (req, res, next) => {
+router.get("/:channel/settings/change-log", requireLevel(2), exposeSectionEditAccess("settings"), settingsNav("changeLog"), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -511,7 +539,7 @@ async function loadModeratorRows(channel) {
   return { moderatorIds, overrides, moderators };
 }
 
-router.get("/:channel/settings/moderators", requireLevel(1), async (req, res, next) => {
+router.get("/:channel/settings/moderators", requireLevel(1), exposeSectionEditAccess("settings"), settingsNav("moderators"), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");

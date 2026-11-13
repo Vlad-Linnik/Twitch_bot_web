@@ -81,15 +81,105 @@ article.post-card {
   --sec-radius-lg: 0.5rem;
 }
 
-/* Same shared-element morph, for /<channel>/settings's quick-link cards (views/settings.ejs,
-   data-vt-name="settings-heading" - public/js/page-transitions.js) into whichever sub-page's own
-   heading (channelCustomCommandsSettings.ejs, channelVariablesSettings.ejs, channelSpamSignatures.ejs,
-   channelModeratorPermissions.ejs, channelSettingsChangeLog.ejs, longBans.ejs, channelBannedWords.ejs -
-   all share this one class/name, same as user-header: only ever one such page loaded at a time, so
-   there's no simultaneous-duplicate-name risk despite 7 pages reusing it). */
+/* The settings pages' own headings share one name (views/channelCustomCommandsSettings.ejs,
+   channelVariablesSettings.ejs, channelSpamSignatures.ejs, channelModeratorPermissions.ejs,
+   channelSettingsChangeLog.ejs, longBans.ejs, channelBannedWords.ejs, channelSettingsCategory.ejs) -
+   only one such page is ever loaded, so the name is never duplicated. */
 h1.settings-heading {
   view-transition-name: settings-heading;
   contain: layout;
+}
+
+/* Channel settings catalog panel (views/partials/settingsShellOpen.ejs, public/js/settings-nav.js).
+   A drawer below lg; from lg up pinned open unless [data-pinned="0"]. Named for view transitions so
+   it stays put while the content beside it changes. Sits under the fixed site nav (h-14). */
+.settings-nav {
+  view-transition-name: settings-nav;
+  position: fixed;
+  top: 3.5rem;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: 17rem;
+  max-width: 85vw;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--color-neutral-950);
+  border-right: 1px solid var(--color-neutral-800);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 0.2s ease, visibility 0s linear 0.2s;
+}
+.settings-shell.is-open .settings-nav {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+/* The content column starts under the fixed site nav; the panel button bar sticks just below it. */
+.settings-content { padding-top: 3.5rem; }
+.settings-backdrop {
+  position: fixed;
+  inset: 3.5rem 0 0 0;
+  z-index: 39;
+  background: rgb(0 0 0 / 0.55);
+}
+.settings-nav-bar {
+  position: sticky;
+  top: 3.5rem;
+  z-index: 30;
+  padding: 0.5rem 1.5rem;
+  background: rgb(10 10 10 / 0.9);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--color-neutral-900);
+}
+.settings-nav-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--color-neutral-800);
+  color: var(--color-neutral-300);
+  font-size: 0.875rem;
+}
+.settings-nav-open:hover { border-color: var(--color-neutral-600); color: var(--color-neutral-100); }
+.settings-nav-pin,
+.settings-nav-close {
+  padding: 0.375rem;
+  border-radius: 0.375rem;
+  color: var(--color-neutral-500);
+}
+.settings-nav-pin:hover,
+.settings-nav-close:hover { color: var(--color-neutral-200); background: var(--color-neutral-900); }
+.settings-nav-pin[aria-pressed="true"] { color: var(--color-purple-400); }
+/* Pinning means something only where the panel can sit beside the content. */
+.settings-nav-pin { display: none; }
+.settings-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  color: var(--color-neutral-400);
+  transition: color 0.15s, background-color 0.15s;
+}
+.settings-nav-link:hover { color: var(--color-neutral-100); background: var(--color-neutral-900); }
+.settings-nav-link.is-active { color: var(--color-neutral-100); background: rgb(88 28 135 / 0.35); }
+.settings-nav-top { padding: 0.375rem 0.5rem; color: var(--color-neutral-300); font-weight: 500; }
+.settings-nav-sub { margin-left: -1px; padding: 0.3rem 0.5rem 0.3rem 0.85rem; border-left: 2px solid transparent; border-radius: 0 0.375rem 0.375rem 0; }
+.settings-nav-sub.is-active { border-left-color: var(--color-purple-500); }
+.settings-nav-lock { font-size: 0.7rem; opacity: 0.7; }
+
+@media (min-width: 1024px) {
+  .settings-nav-pin { display: inline-flex; }
+  .settings-shell[data-pinned="1"] .settings-nav {
+    transform: none;
+    visibility: visible;
+    transition: none;
+  }
+  .settings-shell[data-pinned="1"] .settings-content { padding-left: 17rem; }
+  .settings-shell[data-pinned="1"] .settings-nav-bar,
+  .settings-shell[data-pinned="1"] .settings-backdrop,
+  .settings-shell[data-pinned="1"] .settings-nav-close { display: none; }
 }
 
 /* Minimal prose styling for sanitized news-post bodies (views/partials/newsCard.ejs) - no
@@ -405,6 +495,10 @@ input[type="radio"].radio-custom:checked::after {
 /* Toggle switch: a styled track+thumb driven by a visually-hidden checkbox,
    used in place of the native checkbox for command enable/disable. */
 .toggle-switch {
+  /* The containing block for the visually hidden checkbox (.sr-only is position:absolute). Without
+     it the checkbox is positioned against some ancestor outside a horizontally scrolling table,
+     and on a phone it widens the whole page instead of staying inside the table's scroll area. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   cursor: pointer;

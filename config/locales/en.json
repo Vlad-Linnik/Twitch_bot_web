@@ -1503,6 +1503,37 @@
       "mediaPosterRemoved": "Cover of \"{{target}}\" removed"
     }
   },
+  "settingsNav": {
+    "title": "Settings",
+    "open": "Settings sections",
+    "close": "Close panel",
+    "pin": "Pin panel",
+    "viewOnly": "View only: you are not allowed to change this section",
+    "customCommandsList": "Command list",
+    "customCommandsSettings": "Chat commands and timers",
+    "variablesList": "Variable list",
+    "variablesSettings": "Chat commands",
+    "chatStats": "Chat statistics",
+    "fun": "Fun",
+    "bot": "Bot",
+    "mentionsHeading": "When someone talks to the bot",
+    "mentionsIntro": "What the bot replies to a message with its name that is not a command: a yes/no answer to a question, or one of its \"busy\" lines.",
+    "intro": {
+      "chatStats": "Commands that report chat activity and emote usage, and the channel's 7TV link.",
+      "fun": "Commands to entertain chat: a random clip, the weather, the mute duel.",
+      "bot": "The bot's own info command and how it replies when someone talks to it."
+    },
+    "category": {
+      "customCommands": "Custom commands",
+      "variables": "Variables",
+      "chatModeration": "Chat moderation",
+      "unbanBureau": "Amnesty Bureau",
+      "chatStats": "Chat statistics",
+      "fun": "Fun",
+      "bot": "Bot",
+      "management": "Management"
+    }
+  },
   "moderatorPermissions": {
     "title": "Moderator permissions",
     "intro": "Tick what each moderator may change. Moderators can view everything regardless of these boxes. A new moderator may change everything until you untick a box.",

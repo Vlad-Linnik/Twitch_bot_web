@@ -7,8 +7,8 @@
   the server's answer; without JS the Save button posts it and the page comes back. Every row
   carries a hidden `mod` field - the server only touches rows the form actually rendered.
 %>
-<main class="pt-14 max-w-4xl mx-auto px-6 py-16">
-  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
   <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('moderatorPermissions.title') %></h1>
   <p class="text-neutral-500 text-sm mb-8"><%= t('moderatorPermissions.intro') %></p>
 
@@ -101,6 +101,7 @@
     </template>
   <% }) %>
 </main>
+<%- include('partials/settingsShellClose') %>
 
 <script src="<%= asset('/js/moderator-permissions.js') %>" defer></script>
 <%- include('partials/foot') %>

@@ -1,8 +1,8 @@
 <%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.bannedWordsHeading') }) %>
 <%- include('partials/nav') %>
 
-<main class="pt-14 max-w-2xl mx-auto px-6 py-16">
-  <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-2xl mx-auto px-6 pt-8 pb-16">
   <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.bannedWordsHeading') %></h1>
   <p class="text-neutral-500 text-sm mb-8"><%= t('channelSettings.bannedWordsIntro') %></p>
   <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
@@ -55,6 +55,7 @@
     <%- include('partials/wordListEditor', { words: config.bannedWords.words, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/banned-words', editIndex, csrfToken, canEdit: canEditSection }) %>
   </section>
 </main>
+<%- include('partials/settingsShellClose') %>
 
 <script src="<%= asset('/js/autosave.js') %>" defer></script>
 <%- include('partials/foot') %>

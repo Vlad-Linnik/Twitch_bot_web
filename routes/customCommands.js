@@ -18,6 +18,7 @@ const variablesRepo = require("../db/variablesRepo");
 const { buildVariableCatalog } = require("../lib/variableCatalog");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
+const { settingsNav } = require("../middleware/settingsNav");
 const { settingsWriteLimiter, categoryLookupLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const {
@@ -120,7 +121,7 @@ async function listResponse(res, channel) {
   };
 }
 
-router.get("/:channel/settings/custom-commands/commands", requireLevel(2), exposeSectionEditAccess("commands"), async (req, res, next) => {
+router.get("/:channel/settings/custom-commands/commands", requireLevel(2), exposeSectionEditAccess("commands"), settingsNav("customCommands"), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
     if (!channel) return;
