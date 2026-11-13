@@ -1,0 +1,8 @@
+<%#
+  Above the controls of a section a moderator may view but not change (lib/moderatorSections.js,
+  middleware/permissions.js's exposeSectionEditAccess). The page leaves out or disables the
+  controls themselves; this only says why they are missing.
+%>
+<div class="mb-8 rounded-md border border-amber-800 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+  <%= t('moderatorPermissions.readOnlyNotice') %>
+</div>

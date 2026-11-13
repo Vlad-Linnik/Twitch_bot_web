@@ -15,7 +15,7 @@ const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
-const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
+const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter, categoryLookupLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const {
@@ -118,7 +118,7 @@ async function listResponse(res, channel) {
   };
 }
 
-router.get("/:channel/settings/custom-commands/commands", requireLevel(2), async (req, res, next) => {
+router.get("/:channel/settings/custom-commands/commands", requireLevel(2), exposeSectionEditAccess("commands"), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
     if (!channel) return;
@@ -179,7 +179,7 @@ router.get(
 router.post(
   "/:channel/settings/custom-commands/commands",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("commands"),
   verifyToken,
   async (req, res, next) => {
     try {

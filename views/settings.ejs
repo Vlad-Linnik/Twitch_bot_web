@@ -10,6 +10,7 @@
       <%= t('channelSettings.saved') %>
     </div>
   <% } %>
+  <% if (!editableSections.settings) { %><%- include('partials/readOnlyNotice') %><% } %>
   <% if (typeof error !== "undefined" && error) { %>
     <div class="mb-8 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3">
       <%= error %>
@@ -45,6 +46,7 @@
 
   <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" data-autosave id="settings-form" class="space-y-12">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <fieldset class="contents" <%= editableSections.settings ? '' : 'disabled' %>>
 
     <section class="mb-4">
       <a href="/<%= channel.channelLogin %>/settings/custom-commands" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-purple-700/60 hover:border-purple-500 bg-purple-950/30 hover:bg-purple-950/50 px-5 py-4 transition-colors">
@@ -132,6 +134,7 @@
     <% }) %>
 
     <%- include('partials/autosaveStatus') %>
+    </fieldset>
   </form>
 
   <!-- Automatic bot behavior: things the bot does on its own, no chat command involved - banned-
@@ -148,6 +151,7 @@
       <div class="px-4 py-3">
         <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/detection-toggle" data-transition="instant" data-autosave>
           <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <fieldset class="contents" <%= editableSections.chatModeration ? '' : 'disabled' %>>
           <div class="flex items-center justify-between gap-4">
             <div class="min-w-0">
               <span class="text-sm font-medium text-neutral-200">🚫 <%= t('channelSettings.bannedWordsHeading') %></span>
@@ -167,6 +171,7 @@
             </div>
           </div>
           <a href="/<%= channel.channelLogin %>/settings/banned-words" data-vt-name="settings-heading" class="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300"><%= config.bannedWords.words.length %> <%= t('channelSettings.wordCountSuffix') %> →</a>
+          </fieldset>
         </form>
       </div>
 
@@ -176,6 +181,7 @@
            so this form coexisting with the one above is safe). -->
       <form method="post" action="/<%= channel.channelLogin %>/settings" data-transition="instant" data-autosave>
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <fieldset class="contents" <%= editableSections.settings ? '' : 'disabled' %>>
 
         <% if (config.commands.question) { %>
           <div class="px-4 py-3">
@@ -223,6 +229,7 @@
                 class="autosave-status px-2 py-1 rounded-md text-xs font-medium"></span>
           <button type="submit" class="save-fab px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.save') %></button>
         </div>
+        </fieldset>
       </form>
     </div>
   </section>

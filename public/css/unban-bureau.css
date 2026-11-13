@@ -2251,3 +2251,30 @@ body.ub-playing footer {
   padding: 1.25rem;
   background: rgb(0 0 0 / 0.82);
 }
+
+/* View-only desk: a moderator the channel owner has not allowed to change the Bureau
+   (lib/moderatorSections.js). The controls whose routes would refuse them are not drawn at all;
+   public/js/games/unban-bureau.js's READ_ONLY keeps the timers and keys off those routes too. */
+#ub-wrapper.ub-readonly #ub-stamp-toggle,
+#ub-wrapper.ub-readonly #ub-stamp-machine,
+#ub-wrapper.ub-readonly #ub-awp,
+#ub-wrapper.ub-readonly #ub-grenade,
+#ub-wrapper.ub-readonly #ub-grenade-timer,
+#ub-wrapper.ub-readonly #ub-experts-generate {
+  display: none !important;
+}
+#ub-readonly-notice {
+  position: absolute;
+  top: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 900px;
+  background-color: rgb(0 0 0 / 0.7);
+  border: 2px solid #7c5a1e;
+  border-radius: 5px;
+  padding: 6px 18px;
+  font-size: 14px;
+  color: #f0c674;
+  text-align: center;
+  pointer-events: none;
+}

@@ -24,8 +24,11 @@
     // ever undefined if that default is missing the block - fall back rather than crash the page.
     const ub = config.unbanBureau || {};
   %>
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
+
   <form method="post" action="/<%= channel.channelLogin %>/settings/unban-bureau" data-transition="instant" data-autosave class="space-y-6">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <fieldset class="contents" <%= canEditSection ? '' : 'disabled' %>>
 
     <%# The single `.present` marker covers BOTH checkboxes on this page - an unchecked box submits
         nothing, so without it lib/unbanBureauValidation.js can't tell "turned off" from "this form
@@ -138,8 +141,10 @@
     </section>
 
     <%- include('partials/autosaveStatus') %>
+    </fieldset>
   </form>
 
+  <% if (canEditSection) { %>
   <%# "ИИ-обзор для всех" - deliberately OUTSIDE the form: it is not a setting, and the autosave
       form posts every control inside it. Driven by public/js/unbanSummaryBatch.js against
       routes/unbanBureau.js's summaries/*.json; everything below the button is filled from the
@@ -199,6 +204,7 @@
       <ul id="ub-batch-errors-list" class="list-disc pl-5 text-neutral-400"></ul>
     </div>
   </section>
+  <% } %>
 </main>
 
 <script src="<%= asset('/js/autosave.js') %>" defer></script>

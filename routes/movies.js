@@ -4,8 +4,9 @@
 // that, as with news.
 //
 // Who does what:
-//   - creating, editing, deleting a card: levels 0-2, through requireSettingsEditAccess - a
-//     moderator the owner has barred from editing settings is barred here too;
+//   - creating, editing, deleting a card: levels 0-2, through requireSectionEditAccess - a
+//     moderator the owner has not allowed to change "discussions" (lib/moderatorSections.js) is
+//     barred here, as from comment moderation;
 //   - the review and the streamer's score: the owner, or the site admin writing on the owner's
 //     behalf (the signature is always the streamer's - the point is to carry over reviews the
 //     streamer already wrote elsewhere);
@@ -25,13 +26,12 @@ const mediaItemsRepo = require("../db/mediaItemsRepo");
 const mediaRatingsRepo = require("../db/mediaRatingsRepo");
 const mediaThreads = require("../db/mediaThreads");
 const chatPresenceRepo = require("../db/chatPresenceRepo");
-const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
 const requireLogin = require("../middleware/requireLogin");
 const { verifyToken } = require("../middleware/csrf");
-const { requireSettingsEditAccess } = require("../middleware/permissions");
+const { requireSectionEditAccess, canEditSectionAt } = require("../middleware/permissions");
 const { loadChannelSection } = require("../middleware/channelSection");
 const { createSimpleLimiter, settingsWriteLimiter } = require("../middleware/rateLimiters");
 const cursorPaging = require("../lib/cursorPaging");
@@ -44,6 +44,8 @@ const { createDiscussionRoutes } = require("./discussionRoutes");
 const router = express.Router();
 
 const SECTION = "movies";
+// The moderator right that covers this section's cards (lib/moderatorSections.js).
+const EDIT_SECTION = "discussions";
 const KIND = "movie";
 const ITEMS_PER_PORTION = 24;
 // "Back" restore ceiling, as on the news feed.
@@ -59,7 +61,7 @@ const write = loadChannelSection(SECTION, { allowPreview: false });
 const writeJson = loadChannelSection(SECTION, { json: true, allowPreview: false });
 // Editors work in preview too: the admin fills the section before switching it on. Checked before
 // multer reads the body, so an anonymous request never gets a 5 MB upload buffered.
-const edit = [requireSettingsEditAccess(), loadChannelSection(SECTION)];
+const edit = [requireSectionEditAccess(EDIT_SECTION), loadChannelSection(SECTION)];
 
 const discussion = createDiscussionRoutes({
   section: SECTION,
@@ -93,12 +95,9 @@ function uploadPoster(req, res, next) {
 
 const wantsJson = (req) => (req.get("accept") || "").includes("application/json");
 
-// requireSettingsEditAccess's rule, answered without rejecting - for drawing the buttons.
-async function canEdit(req) {
-  if (req.permission <= 1) return true;
-  if (req.permission !== 2) return false;
-  const override = await modPermissionOverridesRepo.get(req.channel.channelId, req.user.userId);
-  return override?.canEditSettings !== false;
+// requireSectionEditAccess's rule, answered without rejecting - for drawing the buttons.
+function canEdit(req) {
+  return canEditSectionAt(req.permission, req.channel.channelId, req.user?.userId, EDIT_SECTION);
 }
 
 // The review and the streamer's score: the owner, or the admin on the owner's behalf.

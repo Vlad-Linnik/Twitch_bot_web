@@ -9,7 +9,8 @@ const modsRepo = require("../db/modsRepo");
 const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
-const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
+const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
+const moderatorSections = require("../lib/moderatorSections");
 const { verifyToken } = require("../middleware/csrf");
 const { settingsWriteLimiter, autosaveLimiter } = require("../middleware/rateLimiters");
 const { MAX_LIST_ITEMS, sanitizeWord, parseSubmittedConfig } = require("../lib/settingsValidation");
@@ -54,7 +55,7 @@ function respondSaved(req, res, redirectTo) {
   res.redirect(redirectTo);
 }
 
-router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
+router.get("/:channel/settings", requireLevel(2), exposeSectionEditAccess("settings"), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -83,13 +84,13 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
   }
 });
 
-router.post("/:channel/settings", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings", autosaveLimiter, requireSectionEditAccess("settings"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
     const existing = await channelConfigRepo.getConfig(req.params.channel);
-    const parsed = parseSubmittedConfig(req.body, existing);
+    const parsed = await keepToEditableSections(req, channel, existing, parseSubmittedConfig(req.body, existing));
 
     await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
     await logConfigChanges(req.params.channel, req.user, existing, parsed);
@@ -100,12 +101,25 @@ router.post("/:channel/settings", autosaveLimiter, requireSettingsEditAccess(), 
   }
 });
 
+// A moderator saves only the sections they may change: every config form posts through the same
+// parseSubmittedConfig, which takes any field present in the body, so the route's own section
+// gate alone would let a forged form reach another section's fields. See
+// lib/moderatorSections.js's restrictConfigToSections. req.permissionLevel is set by the
+// route's requireSectionEditAccess.
+async function keepToEditableSections(req, channel, existing, parsed) {
+  if (req.permissionLevel <= 1) return parsed;
+  const override = await modPermissionOverridesRepo.get(channel.channelId, req.user.userId);
+  return moderatorSections.restrictConfigToSections(existing, parsed, (key) =>
+    moderatorSections.canEditSection(req.permissionLevel, override, key)
+  );
+}
+
 // Command-group settings moved off the main settings page onto their own sub-pages
 // (custom commands, variables) - each renders a subset of the command rows and POSTs
 // back through the same parseSubmittedConfig, which carries every unrendered field
 // over from the stored config (see lib/settingsValidation.js's partial-form contract).
-function registerConfigSubPage(basePath, viewName, getExtras = null) {
-  router.get(`/:channel${basePath}`, requireLevel(2), async (req, res, next) => {
+function registerConfigSubPage(basePath, section, viewName, getExtras = null) {
+  router.get(`/:channel${basePath}`, requireLevel(2), exposeSectionEditAccess(section), async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -118,13 +132,13 @@ function registerConfigSubPage(basePath, viewName, getExtras = null) {
     }
   });
 
-  router.post(`/:channel${basePath}`, autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}`, autosaveLimiter, requireSectionEditAccess(section), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
 
       const existing = await channelConfigRepo.getConfig(req.params.channel);
-      const parsed = parseSubmittedConfig(req.body, existing);
+      const parsed = await keepToEditableSections(req, channel, existing, parseSubmittedConfig(req.body, existing));
       await channelConfigRepo.saveConfig(req.params.channel, parsed, req.user.userId);
       await logConfigChanges(req.params.channel, req.user, existing, parsed);
 
@@ -135,10 +149,10 @@ function registerConfigSubPage(basePath, viewName, getExtras = null) {
   });
 }
 
-registerConfigSubPage("/settings/custom-commands", "channelCustomCommandsSettings", async (channelLogin) => ({
+registerConfigSubPage("/settings/custom-commands", "commands", "channelCustomCommandsSettings", async (channelLogin) => ({
   customCommandCount: (await customCommandsRepo.list(channelLogin)).length,
 }));
-registerConfigSubPage("/settings/variables", "channelVariablesSettings");
+registerConfigSubPage("/settings/variables", "commands", "channelVariablesSettings");
 // The sub-page's address before counters were renamed to variables.
 router.all("/:channel/settings/counters", movedPermanently((req) => `/${encodeURIComponent(req.params.channel)}/settings/variables`));
 // The Amnesty Bureau's knobs used to sit in the main settings form, with the settings grid's own
@@ -147,7 +161,7 @@ router.all("/:channel/settings/counters", movedPermanently((req) => `/${encodeUR
 // shift at a desk, and the grid is a settings grid.
 // The AI log-window select is rendered from the validator's own list, so the page can only offer
 // values the save accepts.
-registerConfigSubPage("/settings/unban-bureau", "channelUnbanBureauSettings", async () => ({
+registerConfigSubPage("/settings/unban-bureau", "bureau", "channelUnbanBureauSettings", async () => ({
   aiLogMessagesOptions: AI_LOG_MESSAGES_OPTIONS,
 }));
 
@@ -158,8 +172,8 @@ registerConfigSubPage("/settings/unban-bureau", "channelUnbanBureauSettings", as
 // targetLabel names the list in SettingsChangeLog entries (e.g. "bannedWords.words") -
 // derived once per registration rather than from basePath, since the two aren't always
 // the same shape as the underlying config field.
-function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
-  router.get(`/:channel${basePath}`, requireLevel(2), async (req, res, next) => {
+function registerWordListRoutes(basePath, section, viewName, getList, targetLabel) {
+  router.get(`/:channel${basePath}`, requireLevel(2), exposeSectionEditAccess(section), async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -175,7 +189,7 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
     }
   });
 
-  router.post(`/:channel${basePath}/add`, settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}/add`, settingsWriteLimiter, requireSectionEditAccess(section), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -201,7 +215,7 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
     }
   });
 
-  router.post(`/:channel${basePath}/edit`, settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}/edit`, settingsWriteLimiter, requireSectionEditAccess(section), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -228,7 +242,7 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
     }
   });
 
-  router.post(`/:channel${basePath}/delete`, settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+  router.post(`/:channel${basePath}/delete`, settingsWriteLimiter, requireSectionEditAccess(section), verifyToken, async (req, res, next) => {
     try {
       const channel = await channelsRepo.findByLogin(req.params.channel);
       if (!channel) return res.status(404).render("errors/404");
@@ -255,14 +269,14 @@ function registerWordListRoutes(basePath, viewName, getList, targetLabel) {
   });
 }
 
-registerWordListRoutes("/settings/banned-words", "channelBannedWords", (config) => config.bannedWords.words, "bannedWords.words");
+registerWordListRoutes("/settings/banned-words", "chatModeration", "channelBannedWords", (config) => config.bannedWords.words, "bannedWords.words");
 
 // Spam signatures: each entry needs a word PLUS an optional per-signature ban duration (falling
 // back to permanent) and an optional per-signature reason (falling back to the channel's shared
 // spamBanReason at ban time - see TwitchBot/commands/msgHandle.js's spam_protection). That's a
 // richer shape than registerWordListRoutes' plain-string CRUD handles, so this gets its own
 // routes instead of being squeezed through that factory.
-router.get("/:channel/settings/spam-signatures", requireLevel(2), async (req, res, next) => {
+router.get("/:channel/settings/spam-signatures", requireLevel(2), exposeSectionEditAccess("chatModeration"), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -281,7 +295,7 @@ router.get("/:channel/settings/spam-signatures", requireLevel(2), async (req, re
   }
 });
 
-router.post("/:channel/settings/spam-signatures/add", settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/spam-signatures/add", settingsWriteLimiter, requireSectionEditAccess("chatModeration"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -309,7 +323,7 @@ router.post("/:channel/settings/spam-signatures/add", settingsWriteLimiter, requ
   }
 });
 
-router.post("/:channel/settings/spam-signatures/edit", settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/spam-signatures/edit", settingsWriteLimiter, requireSectionEditAccess("chatModeration"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -341,7 +355,7 @@ router.post("/:channel/settings/spam-signatures/edit", settingsWriteLimiter, req
   }
 });
 
-router.post("/:channel/settings/spam-signatures/delete", settingsWriteLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/spam-signatures/delete", settingsWriteLimiter, requireSectionEditAccess("chatModeration"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -366,7 +380,7 @@ router.post("/:channel/settings/spam-signatures/delete", settingsWriteLimiter, r
   }
 });
 
-router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, requireSectionEditAccess("chatModeration"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -391,7 +405,7 @@ router.post("/:channel/settings/banned-words/timeout-reason", autosaveLimiter, r
 // The banned-word detection feature switch (the bot's commands.insult.enabled flag). It lives
 // on the Banned Words page, next to the word list it gates, not in the commands table - it has
 // no chat signature and never behaved like a command.
-router.post("/:channel/settings/banned-words/detection-toggle", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/banned-words/detection-toggle", autosaveLimiter, requireSectionEditAccess("chatModeration"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -414,7 +428,7 @@ router.post("/:channel/settings/banned-words/detection-toggle", autosaveLimiter,
 });
 
 // Ban reason shown to users caught by a spam signature - mirrors banned-words' timeout reason.
-router.post("/:channel/settings/spam-signatures/reason", autosaveLimiter, requireSettingsEditAccess(), verifyToken, async (req, res, next) => {
+router.post("/:channel/settings/spam-signatures/reason", autosaveLimiter, requireSectionEditAccess("chatModeration"), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
@@ -457,15 +471,16 @@ router.get("/:channel/settings/change-log", requireLevel(2), async (req, res, ne
   }
 });
 
-// Resolves "moderator-permission:<id>" targets to a display name (falls back to the raw id if
+// Resolves "moderator-permission:<id>[:<section>]" targets to a display name (falls back to the raw id if
 // the profile can't be fetched) and attaches a describeChange() one-liner to every entry, so the
 // view never has to render raw before/after JSON as the primary summary.
 async function describeEntries(entries, t) {
   const moderatorIds = [
     ...new Set(
       entries
-        .filter((e) => e.category === "settings" && e.target.startsWith("moderator-permission:"))
-        .map((e) => e.target.slice("moderator-permission:".length))
+        .filter((e) => e.category === "settings")
+        .map((e) => moderatorSections.parsePermissionTarget(e.target)?.userId)
+        .filter(Boolean)
     ),
   ];
   const moderatorNames = moderatorIds.length
@@ -478,67 +493,73 @@ async function describeEntries(entries, t) {
   return entries.map((e) => ({ ...e, description: describeChange(t, e, { moderatorNames }) }));
 }
 
-// Owner-only: per-moderator toggle for whether that moderator may EDIT settings/commands/
-// counters (db/modPermissionOverridesRepo.js) - viewing is unaffected. requireLevel(1), not (2):
-// only the owner (or admin) should get to reassign another moderator's permissions.
+// Owner-only: per moderator and per section (lib/moderatorSections.js), whether that moderator may
+// CHANGE it - viewing is unaffected. requireLevel(1), not (2): only the owner (or admin) should get
+// to reassign another moderator's permissions.
+async function loadModeratorRows(channel) {
+  const modsListDoc = await modsRepo.getModerators(channel.channelId);
+  const moderatorIds = (modsListDoc?.moderators || []).map(String);
+  const [profiles, overrides] = await Promise.all([
+    profileCacheRepo.getOrFetchProfiles(moderatorIds).catch(() => new Map()),
+    modPermissionOverridesRepo.listForChannel(channel.channelId),
+  ]);
+  const moderators = moderatorIds.map((id) => ({
+    userId: id,
+    userName: profiles.get(id)?.displayName || id,
+    allowed: moderatorSections.allowedMap(overrides.get(id)),
+  }));
+  return { moderatorIds, overrides, moderators };
+}
+
 router.get("/:channel/settings/moderators", requireLevel(1), async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
-    const modsListDoc = await modsRepo.getModerators(channel.channelId);
-    const moderatorIds = modsListDoc?.moderators || [];
-
-    const [profiles, overrides] = await Promise.all([
-      profileCacheRepo.getOrFetchProfiles(moderatorIds).catch(() => new Map()),
-      modPermissionOverridesRepo.listForChannel(channel.channelId),
-    ]);
-
-    const moderators = moderatorIds.map((id) => {
-      const profile = profiles.get(String(id));
-      const override = overrides.get(String(id));
-      return {
-        userId: id,
-        userName: profile?.displayName || id,
-        canEditSettings: override?.canEditSettings !== false,
-      };
+    const { moderators } = await loadModeratorRows(channel);
+    res.render("channelModeratorPermissions", {
+      channel,
+      moderators,
+      sections: moderatorSections.MODERATOR_SECTIONS,
+      saved: req.query.saved === "1",
     });
-
-    res.render("channelModeratorPermissions", { channel, moderators, saved: req.query.saved === "1" });
   } catch (err) {
     next(err);
   }
 });
 
+// Two callers: public/js/moderator-permissions.js posts the whole form on every checkbox change
+// with Accept: application/json and patches the rows from the answer; without JS it is a plain
+// form POST and a redirect back. One SettingsChangeLog row per moderator and section that flipped.
 router.post("/:channel/settings/moderators", settingsWriteLimiter, requireLevel(1), verifyToken, async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
-    const modsListDoc = await modsRepo.getModerators(channel.channelId);
-    const moderatorIds = modsListDoc?.moderators || [];
-    const overrides = await modPermissionOverridesRepo.listForChannel(channel.channelId);
-    const allowedIds = new Set(
-      moderatorIds.filter((id) => req.body[`allow.${id}`] === "on")
-    );
+    const { moderatorIds, overrides } = await loadModeratorRows(channel);
+    const submitted = moderatorSections.parsePermissionsForm(req.body, moderatorIds);
 
-    for (const id of moderatorIds) {
-      const wasAllowed = overrides.get(String(id))?.canEditSettings !== false;
-      const nowAllowed = allowedIds.has(id);
-      if (wasAllowed === nowAllowed) continue;
+    for (const [id, deny] of submitted) {
+      const before = overrides.get(id) || null;
+      const changes = moderatorSections.diffSections(before, { deny });
+      // A legacy row (canEditSettings) whose meaning is unchanged is left alone too: rewriting it
+      // would only change its shape, and the row would be logged as touched for nothing.
+      if (changes.length === 0) continue;
 
-      if (nowAllowed) {
-        await modPermissionOverridesRepo.allow(channel.channelId, id);
-      } else {
-        await modPermissionOverridesRepo.deny(channel.channelId, id, req.user.userId);
+      await modPermissionOverridesRepo.setDenied(channel.channelId, id, deny, req.user.userId);
+      for (const change of changes) {
+        await settingsChangeLogRepo.logChange({
+          channelLogin: req.params.channel, user: req.user, category: "settings",
+          action: "update", target: moderatorSections.permissionTarget(id, change.key),
+          before: change.before, after: change.after,
+        });
       }
-      await settingsChangeLogRepo.logChange({
-        channelLogin: req.params.channel, user: req.user, category: "settings",
-        action: "update", target: `moderator-permission:${id}`,
-        before: wasAllowed, after: nowAllowed,
-      });
     }
 
+    if (wantsJson(req)) {
+      const { moderators } = await loadModeratorRows(channel);
+      return res.json({ ok: true, moderators: moderators.map(({ userId, allowed }) => ({ userId, allowed })) });
+    }
     // Anchored at the table (views/channelModeratorPermissions.ejs's id="moderator-list") rather
     // than the very top of the page - a long moderator roster means the submit button (and the
     // rows the visitor just toggled) can be well below the page heading.

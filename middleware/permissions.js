@@ -2,6 +2,7 @@ const channelsRepo = require("../db/channelsRepo");
 const modsRepo = require("../db/modsRepo");
 const adminAllowlist = require("../db/adminAllowlist");
 const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
+const { SECTION_KEYS, isSectionKey, canEditSection } = require("../lib/moderatorSections");
 
 // Permission levels: 0 = app developer, 1 = channel owner, 2 = channel
 // moderator, 3 = regular user (default / logged out). Lower number = more
@@ -43,13 +44,32 @@ function requireLevel(maxLevel) {
   };
 }
 
-// Same tier-2 gate as requireLevel(2) (admin/owner/moderator, same 401/403 rendering), plus one
-// extra check for moderators specifically: the owner can deny an individual moderator the right
-// to EDIT settings/commands/variables (db/modPermissionOverridesRepo.js) while still letting them
-// view everything - so this middleware is only ever used on mutating routes, never on GETs.
+// Whether someone at `level` may CHANGE section `key` of this channel (lib/moderatorSections.js):
+// levels 0-1 always, level 2 unless the owner denied that moderator this section, everyone else
+// never. The non-rejecting form of requireSectionEditAccess - for deciding which controls a page
+// draws, so a button is only shown where the server would accept it. Fails closed.
+async function canEditSectionAt(level, channelId, userId, key) {
+  if (!isSectionKey(key)) throw new Error(`canEditSectionAt: unknown section ${key}`);
+  if (level <= 1) return canEditSection(level, null, key);
+  if (level !== 2 || !userId) return false;
+  try {
+    const override = await modPermissionOverridesRepo.get(channelId, userId);
+    return canEditSection(level, override, key);
+  } catch (err) {
+    console.error("[permissions] canEditSectionAt failed, failing closed:", err);
+    return false;
+  }
+}
+
+// Same tier-2 gate as requireLevel(2) (admin/owner/moderator, same 401/403 rendering), plus the
+// per-section check for moderators: the owner can deny an individual moderator the right to change
+// one section (db/modPermissionOverridesRepo.js) while still letting them view everything - so this
+// middleware is only ever used on mutating routes, never on GETs.
 // Honors the same Accept: application/json convention settings.js/csrf.js already use for
 // autosave, so a denied moderator's autosave fetch gets a JSON error, not an HTML page.
-function requireSettingsEditAccess() {
+// On success req.permissionLevel is set, as requireLevel does.
+function requireSectionEditAccess(key) {
+  if (!isSectionKey(key)) throw new Error(`requireSectionEditAccess: unknown section ${key}`);
   const gate = requireLevel(2);
   return (req, res, next) => {
     gate(req, res, async () => {
@@ -59,8 +79,7 @@ function requireSettingsEditAccess() {
         const channel = await channelsRepo.findByLogin(req.params.channel);
         if (!channel) return res.status(404).render("errors/404");
 
-        const override = await modPermissionOverridesRepo.get(channel.channelId, req.user.userId);
-        if (override?.canEditSettings === false) {
+        if (!(await canEditSectionAt(req.permissionLevel, channel.channelId, req.user.userId, key))) {
           if ((req.get("accept") || "").includes("application/json")) {
             return res.status(403).json({ ok: false, error: "forbidden" });
           }
@@ -74,4 +93,40 @@ function requireSettingsEditAccess() {
   };
 }
 
-module.exports = { computePermission, requireLevel, requireSettingsEditAccess };
+// For a GET page of tier 2: puts into res.locals what this visitor may change, so the view draws
+// mutating controls only where the server would accept them -
+//   canEditSection    boolean, for this page's own section `key`;
+//   editableSections  { <every section key>: boolean }, for a page that also carries a control of
+//                     another section (the main settings page's banned-word toggle).
+// Runs after requireLevel(2), which has set req.permissionLevel. Fails closed.
+function exposeSectionEditAccess(key) {
+  if (!isSectionKey(key)) throw new Error(`exposeSectionEditAccess: unknown section ${key}`);
+  return async (req, res, next) => {
+    try {
+      const level = req.permissionLevel;
+      let override = null;
+      let known = level <= 1;
+      if (level === 2 && req.user?.userId) {
+        const channel = await channelsRepo.findByLogin(req.params.channel);
+        if (channel) {
+          try {
+            override = await modPermissionOverridesRepo.get(channel.channelId, req.user.userId);
+            known = true;
+          } catch (err) {
+            console.error("[permissions] exposeSectionEditAccess failed, failing closed:", err);
+          }
+        }
+      }
+      const editable = Object.fromEntries(
+        SECTION_KEYS.map((k) => [k, known && canEditSection(level, override, k)])
+      );
+      res.locals.editableSections = editable;
+      res.locals.canEditSection = editable[key];
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+module.exports = { computePermission, requireLevel, requireSectionEditAccess, canEditSectionAt, exposeSectionEditAccess };

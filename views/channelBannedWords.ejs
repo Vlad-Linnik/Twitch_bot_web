@@ -5,11 +5,13 @@
   <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
   <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.bannedWordsHeading') %></h1>
   <p class="text-neutral-500 text-sm mb-8"><%= t('channelSettings.bannedWordsIntro') %></p>
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
 
   <!-- Feature switch (the bot's banned-word detection, formerly the cryptic "insult" command row) -->
   <section class="mb-8">
     <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/detection-toggle" data-transition="instant" data-autosave class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 flex items-center justify-between gap-4">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <fieldset class="contents" <%= canEditSection ? '' : 'disabled' %>>
       <div>
         <p class="text-sm font-medium text-neutral-200"><%= t('channelSettings.detectionToggleLabel') %></p>
         <p class="text-neutral-600 text-xs mt-0.5"><%= t('channelSettings.detectionToggleHint') %></p>
@@ -26,6 +28,7 @@
         </label>
         <button type="submit" class="save-fab px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
       </div>
+      </fieldset>
     </form>
   </section>
 
@@ -35,6 +38,7 @@
     <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.timeoutReasonHint') %></p>
     <form method="post" action="/<%= channel.channelLogin %>/settings/banned-words/timeout-reason" data-transition="instant" data-autosave class="flex gap-2 items-center">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <fieldset class="contents" <%= canEditSection ? '' : 'disabled' %>>
       <input type="text" name="timeoutReason" value="<%= config.bannedWords.timeoutReason %>" class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
       <button type="submit" class="save-fab px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
       <span data-autosave-status aria-live="polite"
@@ -42,12 +46,13 @@
             data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
             data-error-text="<%= t('channelSettings.autosaveError') %>"
             class="autosave-status px-2 py-1 rounded-md text-xs font-medium shrink-0"></span>
+      </fieldset>
     </form>
   </section>
 
   <section>
     <h2 class="text-sm font-semibold text-neutral-300 mb-2 uppercase tracking-wide"><%= t('channelSettings.wordsLabel') %></h2>
-    <%- include('partials/wordListEditor', { words: config.bannedWords.words, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/banned-words', editIndex, csrfToken }) %>
+    <%- include('partials/wordListEditor', { words: config.bannedWords.words, channelLogin: channel.channelLogin, baseAction: '/' + channel.channelLogin + '/settings/banned-words', editIndex, csrfToken, canEdit: canEditSection }) %>
   </section>
 </main>
 

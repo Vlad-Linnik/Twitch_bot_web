@@ -40,7 +40,7 @@ const {
   selectCasesForSummary,
   DEFAULT_PACE_MS,
 } = require("../lib/unbanSummaryBatch");
-const { requireLevel, requireSettingsEditAccess, computePermission } = require("../middleware/permissions");
+const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess, computePermission } = require("../middleware/permissions");
 const {
   settingsWriteLimiter,
   statsReadLimiter,
@@ -149,7 +149,7 @@ async function requireShiftJson(req, res) {
   return false;
 }
 
-router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => {
+router.get("/:channel/unban-bureau", requireLevel(2), exposeSectionEditAccess("bureau"), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
     if (!channel) return;
@@ -164,15 +164,21 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
       return res.status(404).render("errors/404");
     }
 
+    // A moderator the owner has not allowed to change the Bureau reads the desk without sitting at
+    // it: the shift exists so two people don't stamp the same queue, and someone who cannot stamp
+    // must not lock out a colleague who can. Their page renews nothing (READ_ONLY in
+    // public/js/games/unban-bureau.js).
+    const readOnly = !res.locals.canEditSection;
+
     // Identifies THIS page load at the desk, not the moderator - see the repo's release(). Minted
     // server-side because the claim happens here, before any client script has run.
-    const shiftToken = crypto.randomUUID();
+    const shiftToken = readOnly ? "" : crypto.randomUUID();
 
     // Claiming the desk comes before the (much heavier) queue read: a moderator who is being turned
     // away has no use for the cases, and shouldn't pay for assembling them.
-    const shift = await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user, {
-      token: shiftToken,
-    });
+    const shift = readOnly
+      ? { ok: true }
+      : await unbanBureauShiftRepo.acquire(channel.channelLogin, req.user, { token: shiftToken });
     if (!shift.ok) {
       // permissionLevel comes from requireLevel(2) above; the busy page uses it to decide whether
       // to offer the takeover button, which is owner/admin-only (see the takeover route).
@@ -189,7 +195,7 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
     // Nothing to hold the desk for, and the empty state runs no client script - so there'd be
     // nothing renewing the lease either. Give it straight back rather than locking the channel out
     // for a lease's length because someone glanced at an empty queue.
-    if (!cases.length) {
+    if (!cases.length && !readOnly) {
       await unbanBureauShiftRepo.release(channel.channelLogin, req.user.userId, shiftToken);
     }
 
@@ -213,6 +219,7 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
       },
       heartbeatMs: unbanBureauShiftRepo.SHIFT_HEARTBEAT_MS,
       shiftToken,
+      readOnly,
     });
   } catch (err) {
     next(err);
@@ -299,7 +306,7 @@ router.get(
 router.post(
   "/:channel/unban-bureau/shift.json",
   autosaveLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -372,7 +379,7 @@ router.post(
 router.post(
   "/:channel/unban-bureau/release.json",
   autosaveLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -390,7 +397,7 @@ router.post(
 router.post(
   "/:channel/unban-bureau/decide.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -457,7 +464,7 @@ router.post(
 router.post(
   "/:channel/unban-bureau/vote.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -514,7 +521,7 @@ async function logWeapon(channel, user, action) {
 router.post(
   "/:channel/unban-bureau/sniper.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -555,7 +562,7 @@ router.post(
 router.post(
   "/:channel/unban-bureau/grenade.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -649,7 +656,7 @@ async function writeSummary(channel, unbanCase, writers, logMessages) {
 router.post(
   "/:channel/unban-bureau/opinions.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -703,7 +710,7 @@ router.post(
 // case at a time (lib/unbanSummaryBatch.js has the why of the job, its pace and its skip rule).
 // Started and watched from the Bureau's SETTINGS page, not the desk: it is a channel-level chore,
 // and it does not need - or take - the desk's one-moderator shift. Gated exactly like that page's
-// own form: reading at tier 2, writing behind requireSettingsEditAccess + CSRF + the write limiter.
+// own form: reading at tier 2, writing behind requireSectionEditAccess("bureau") + CSRF + the write limiter.
 //
 // No per-moderator generation limiter here, unlike the sheet's own button: the batch bounds itself
 // - one job per channel, a list fixed at start, one call per case per press - and charging thirty
@@ -749,7 +756,7 @@ router.get(
 router.post(
   "/:channel/unban-bureau/summaries/start.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {
@@ -802,7 +809,7 @@ router.post(
 router.post(
   "/:channel/unban-bureau/summaries/stop.json",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("bureau"),
   verifyToken,
   async (req, res, next) => {
     try {

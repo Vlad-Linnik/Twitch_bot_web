@@ -19,7 +19,10 @@
     </p>
   <% } %>
 
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
+
   <!-- Create / edit -->
+  <% if (canEditSection) { %>
   <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
     <h2 class="text-lg font-semibold text-neutral-100 mb-4" id="form-heading"><%= t('variables.create') %></h2>
 
@@ -64,6 +67,7 @@
       </div>
     </form>
   </section>
+  <% } %>
 
   <!-- Existing variables -->
   <section>
@@ -83,6 +87,7 @@
               <% } %>
             </div>
 
+            <% if (canEditSection) { %>
             <div class="flex items-center gap-1 shrink-0">
               <%# Edit is client-side only: it copies the row back into the form above. The form
                   posts an upsert, so "edit" and "create" are the same request. %>
@@ -102,6 +107,7 @@
                         aria-label="<%= t('variables.delete') %>"><%- include('partials/iconTrash') %></button>
               </form>
             </div>
+            <% } %>
           </li>
         <% }) %>
       </ul>

@@ -31,6 +31,7 @@ const { SOLO_GAMES } = require("../lib/gameReplay");
 const gamesCatalog = require("../data/gamesCatalog");
 const { SUPPORTED_LOCALES } = require("../config/i18n");
 const profileCacheRepo = require("../db/profileCacheRepo");
+const { parsePermissionTarget } = require("../lib/moderatorSections");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 const newsRepo = require("../db/newsRepo");
 const newsReactionsRepo = require("../db/newsReactionsRepo");
@@ -233,8 +234,9 @@ async function describeAdminEntries(entries, t) {
   const moderatorIds = [
     ...new Set(
       entries
-        .filter((e) => e.category === "settings" && e.target.startsWith("moderator-permission:"))
-        .map((e) => e.target.slice("moderator-permission:".length))
+        .filter((e) => e.category === "settings")
+        .map((e) => parsePermissionTarget(e.target)?.userId)
+        .filter(Boolean)
     ),
   ];
   const moderatorNames = moderatorIds.length

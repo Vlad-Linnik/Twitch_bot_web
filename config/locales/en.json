@@ -1320,6 +1320,8 @@
       "insultDetectionOff": "Banned-word detection turned off",
       "modPermissionGranted": "{{name}} was allowed to edit settings",
       "modPermissionRevoked": "{{name}} was blocked from editing settings",
+      "modSectionGranted": "{{name}} may now change {{section}}",
+      "modSectionRevoked": "{{name}} may no longer change {{section}}",
       "genericChanged": "Setting changed",
       "noVisibleChange": "No visible change",
       "unbanApproved": "Approved the unban appeal from {{target}}",
@@ -1337,12 +1339,38 @@
   },
   "moderatorPermissions": {
     "title": "Moderator permissions",
-    "intro": "Choose which moderators may edit this channel's bot settings, custom commands, and variables. Everyone can still view them regardless of this setting.",
+    "intro": "Tick what each moderator may change. Moderators can view everything regardless of these boxes. A new moderator may change everything until you untick a box.",
     "colModerator": "Moderator",
-    "colCanEdit": "Can edit settings",
+    "canChange": "May change",
     "empty": "No moderators registered for this channel yet.",
     "save": "Save",
-    "saved": "Permissions updated."
+    "saved": "Permissions updated.",
+    "saving": "Saving…",
+    "savedShort": "Saved",
+    "saveFailed": "Could not save, the box was reverted",
+    "readOnlyNotice": "View only: the channel owner has not allowed you to change this section.",
+    "sections": {
+      "settings": {
+        "label": "Settings",
+        "hint": "General bot settings: built-in commands, their cooldowns and triggers, bot replies."
+      },
+      "commands": {
+        "label": "Commands",
+        "hint": "Custom commands and their timers, pins and announcements, variables and their settings."
+      },
+      "chatModeration": {
+        "label": "Chat moderation",
+        "hint": "Banned words, spam signatures and the ban reasons for them, long bans."
+      },
+      "bureau": {
+        "label": "Amnesty Bureau",
+        "hint": "Decisions on unban requests, chat votes, the AI summary, the stray bullet and the grenade, Bureau settings."
+      },
+      "discussions": {
+        "label": "Discussions",
+        "hint": "Deleting comments, restricting commenters and lifting restrictions, movie cards: add, edit, delete."
+      }
+    }
   },
   "accountSettings": {
     "title": "Settings",

@@ -5,6 +5,7 @@
   <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
   <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.spamSignaturesHeading') %></h1>
   <p class="text-neutral-500 text-sm mb-2"><%= t('channelSettings.spamSignaturesIntro') %></p>
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
   <p class="text-neutral-600 text-sm mb-8 italic"><%= t('channelSettings.spamSignaturesExample') %></p>
 
   <% if (error) { %>
@@ -17,6 +18,7 @@
     <p class="text-neutral-500 text-xs mb-2"><%= t('channelSettings.spamBanReasonHint') %></p>
     <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/reason" data-transition="instant" data-autosave class="flex gap-2 items-center">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <fieldset class="contents" <%= canEditSection ? '' : 'disabled' %>>
       <input type="text" name="spamBanReason" value="<%= config.spamBanReason || '' %>" class="flex-1 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
       <button type="submit" class="save-fab px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('channelSettings.save') %></button>
       <span data-autosave-status aria-live="polite"
@@ -24,6 +26,7 @@
             data-saved-text="<%= t('channelSettings.autosaveSaved') %>"
             data-error-text="<%= t('channelSettings.autosaveError') %>"
             class="autosave-status px-2 py-1 rounded-md text-xs font-medium shrink-0"></span>
+      </fieldset>
     </form>
   </section>
 
@@ -37,6 +40,7 @@
       class="w-full mb-3 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"
     />
 
+    <% if (canEditSection) { %>
     <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/add" data-transition="instant" id="word-add-form" class="hidden mb-4">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <div class="flex items-center gap-2 rounded-md border border-purple-800 bg-purple-950/30 px-3 py-2">
@@ -45,10 +49,11 @@
         <button type="submit" class="px-3 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors"><%= t('channelSettings.wordAdd') %></button>
       </div>
     </form>
+    <% } %>
 
     <div class="rounded-lg border border-neutral-800 divide-y divide-neutral-800" id="word-list">
       <% signatures.forEach(function(sig, index) { %>
-        <% if (editIndex === index) { %>
+        <% if (editIndex === index && canEditSection) { %>
           <form method="post" action="/<%= channel.channelLogin %>/settings/spam-signatures/edit" data-transition="instant" class="px-4 py-3 space-y-2">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
             <input type="hidden" name="index" value="<%= index %>" />
@@ -91,6 +96,7 @@
                 <% } %>
               </div>
             </div>
+            <% if (canEditSection) { %>
             <span class="flex items-center gap-1 shrink-0">
               <a href="/<%= channel.channelLogin %>/settings/spam-signatures?edit=<%= index %>#word-list" class="p-1.5 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors" aria-label="<%= t('channelSettings.wordEdit') %>">
                 <%- include('partials/iconPencil') %>
@@ -103,6 +109,7 @@
                 </button>
               </form>
             </span>
+            <% } %>
           </div>
         <% } %>
       <% }) %>

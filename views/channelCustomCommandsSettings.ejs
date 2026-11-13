@@ -22,8 +22,11 @@
     </div>
   <% } %>
 
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
+
   <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands" data-transition="instant" data-autosave class="space-y-6">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <fieldset class="contents" <%= canEditSection ? '' : 'disabled' %>>
 
     <%
       const names = ['addcommand', 'settimer', 'setpin', 'delcommand'].filter(n => config.commands[n]);
@@ -41,6 +44,7 @@
     <% } %>
 
     <%- include('partials/autosaveStatus') %>
+    </fieldset>
   </form>
 </main>
 

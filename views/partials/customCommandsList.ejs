@@ -45,7 +45,7 @@
               showing "matches/total" here while a query is typed. %>
           <span class="cc-group-count text-neutral-600 text-sm font-normal shrink-0" data-total="<%= section.commands.length %>">(<%= section.commands.length %>)</span>
         </span>
-        <% if (section.name) { %>
+        <% if (section.name && (typeof canEditSection === 'undefined' || canEditSection)) { %>
           <%# Group master switch: one request flips every command in this group to the same
               enabled state (routes/customCommands.js's "toggleGroup" action) - reads "on" as long
               as anything in the group still runs, "off" only once the whole group is off, same

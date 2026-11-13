@@ -12,7 +12,7 @@ const channelsRepo = require("../db/channelsRepo");
 const longBansRepo = require("../db/longBansRepo");
 const unbanRequestsRepo = require("../db/unbanRequestsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
-const { requireLevel, requireSettingsEditAccess } = require("../middleware/permissions");
+const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const { parseLongBanRequest, MAX_UNBAN_YEAR, MAX_REASON_LENGTH } = require("../lib/longBanValidation");
@@ -30,7 +30,7 @@ async function loadChannel(req, res) {
   return channel;
 }
 
-router.get("/:channel/settings/long-bans", requireLevel(2), async (req, res, next) => {
+router.get("/:channel/settings/long-bans", requireLevel(2), exposeSectionEditAccess("chatModeration"), async (req, res, next) => {
   try {
     const channel = await loadChannel(req, res);
     if (!channel) return;
@@ -64,7 +64,7 @@ router.get("/:channel/settings/long-bans", requireLevel(2), async (req, res, nex
 router.post(
   "/:channel/settings/long-bans",
   settingsWriteLimiter,
-  requireSettingsEditAccess(),
+  requireSectionEditAccess("chatModeration"),
   verifyToken,
   async (req, res, next) => {
     try {

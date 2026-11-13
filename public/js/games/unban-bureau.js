@@ -32,6 +32,11 @@
   var newestFirst = config.dataset.newestFirst === "1";
   var HEARTBEAT_MS = parseInt(config.dataset.heartbeatMs, 10) || 25000;
   var SHIFT_TOKEN = config.dataset.shiftToken || "";
+  // A moderator the owner has not allowed to change the Bureau (lib/moderatorSections.js) gets
+  // the desk to read: no shift is taken for them, so nothing here renews or releases one, and every
+  // write below is skipped - the controls for them are not drawn either (unban-bureau.css,
+  // .ub-readonly), this only keeps a key or a timer from reaching a route that would refuse it.
+  var READ_ONLY = config.dataset.readOnly === "1";
   // name -> {name, url}, same channel-wide map the news comments box resolves against
   // (public/js/emoteMatch.js, shared with that page). Used to swap emote names for their real
   // image in the appeal text and chat log - EmoteMatch.tokenizeForPreview does the whole-token
@@ -274,7 +279,7 @@
   // A failed heartbeat is ignored on purpose: the lease is several beats long, so a single blip
   // doesn't cost the shift, and reacting to one would turn a flaky connection into a lockout.
   function sendHeartbeat() {
-    if (shiftEnded) return;
+    if (shiftEnded || READ_ONLY) return;
 
     if (document.hidden) {
       // Stamped here as well as in the visibilitychange handler, because a page opened in a
@@ -893,7 +898,7 @@
   // looked at; otherwise the result is announced and left for the moderator to find when they come
   // back to it (it is already stored server-side by then).
   function requestOpinions() {
-    if (generating) return;
+    if (READ_ONLY || generating) return;
     var c = currentCase();
     if (!c) return;
 
@@ -2078,7 +2083,7 @@
 
   function submitDecision() {
     var c = currentCase();
-    if (!c) return;
+    if (!c || READ_ONLY) return;
     isProcessing = true;
     play("spit");
 
@@ -2234,9 +2239,11 @@
   function disarm() { setWeapon(null); }
 
   $("ub-awp").addEventListener("click", function () {
+    if (READ_ONLY) return;
     setWeapon(armed === "awp" ? null : "awp");
   });
   $("ub-grenade").addEventListener("click", function () {
+    if (READ_ONLY) return;
     setWeapon(armed === "grenade" ? null : "grenade");
   });
   wrapper.addEventListener("contextmenu", function (event) {
@@ -2376,7 +2383,7 @@
 
   function scheduleVote(c) {
     clearTimeout(voteTimer);
-    if (!c || voteRequested[c._id]) return;
+    if (READ_ONLY || !c || voteRequested[c._id]) return;
     voteTimer = setTimeout(function () {
       // Re-check: the moderator may have moved on during the debounce.
       var shown = currentCase();
@@ -2668,7 +2675,7 @@
   $("ub-guide-card").style.display = "block";
   renderStats();
   var liveTimer = setInterval(pollLive, LIVE_POLL_MS);
-  var heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
+  var heartbeatTimer = READ_ONLY ? null : setInterval(sendHeartbeat, HEARTBEAT_MS);
 
   window.addEventListener("pagehide", function () {
     clearInterval(liveTimer);
@@ -2685,7 +2692,7 @@
     // taken - leaving the desk unheld while the page believed it held it, so the next verdict came
     // back "shift_taken" naming nobody. The new page carries a new token, so this now matches
     // nothing and does nothing.
-    if (!shiftEnded && navigator.sendBeacon) {
+    if (!READ_ONLY && !shiftEnded && navigator.sendBeacon) {
       navigator.sendBeacon(
         "/" + CHANNEL + "/unban-bureau/release.json",
         new URLSearchParams({ _csrf: CSRF, shiftToken: SHIFT_TOKEN })

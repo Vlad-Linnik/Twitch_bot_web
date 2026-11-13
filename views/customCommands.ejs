@@ -10,11 +10,15 @@
       <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('customCommands.title') %></h1>
       <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('customCommands.subtitle') %></p>
     </div>
+    <%# Left in the page for a moderator who may not change commands (custom-commands.js binds it
+        unconditionally), but not shown. %>
     <button type="button" id="open-create-modal"
-            class="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
+            class="shrink-0 <%= canEditSection ? 'inline-flex' : 'hidden' %> items-center gap-2 px-4 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
       <span class="text-base leading-none">+</span> <%= t('customCommands.newCommand') %>
     </button>
   </header>
+
+  <% if (!canEditSection) { %><%- include('partials/readOnlyNotice') %><% } %>
 
   <%# Small fade-in/fade-out toast instead of a persistent top banner - shown on page load when
       landing here via a classic redirect (saved=1/deleted, e.g. the no-JS fallback or the toggle

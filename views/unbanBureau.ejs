@@ -29,7 +29,7 @@
   </main>
 <% } else { %>
 
-  <div id="ub-wrapper">
+  <div id="ub-wrapper"<%- readOnly ? ' class="ub-readonly"' : '' %>>
 
     <%# The applicant, behind the booth glass. Parked off-screen until called. %>
     <div id="ub-character-window">
@@ -88,6 +88,10 @@
       <%# Vote emotes in flight from the street to the board. Under the vote bar, so the emote ends
           its flight going INTO the board rather than over it. %>
       <div id="ub-fx-layer"></div>
+
+      <% if (readOnly) { %>
+        <div id="ub-readonly-notice"><%= t('moderatorPermissions.readOnlyNotice') %></div>
+      <% } %>
 
       <a id="ub-exit" class="ub-top-btn" href="/<%= channel.channelLogin %>/settings">&larr; <%= t('channelSettings.backToSettings') %></a>
 
@@ -363,6 +367,7 @@
        <%# Identifies this page load at the desk. Echoed back on the heartbeat and the pagehide
            hand-back so a reload's beacon can't delete the lease the NEW page just took. %>
        data-shift-token="<%= shiftToken %>"
+       data-read-only="<%= readOnly ? '1' : '0' %>"
        data-cases="<%= JSON.stringify(cases) %>"
        data-emotes="<%= JSON.stringify(emoteList) %>"
        data-vote-approve="<%= voteEmotes.approve %>"

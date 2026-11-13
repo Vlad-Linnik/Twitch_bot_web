@@ -26,7 +26,7 @@ const profileCacheRepo = require("../db/profileCacheRepo");
 const emoteImages = require("../twitch/emoteImages");
 const requireLogin = require("../middleware/requireLogin");
 const { verifyToken } = require("../middleware/csrf");
-const { computePermission } = require("../middleware/permissions");
+const { computePermission, canEditSectionAt } = require("../middleware/permissions");
 const { loadChannelSection } = require("../middleware/channelSection");
 const { createSimpleLimiter } = require("../middleware/rateLimiters");
 const { sanitizeReturnTo } = require("../lib/returnTo");
@@ -77,7 +77,30 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
   const readJson = loadChannelSection(section, { json: true });
   const write = loadChannelSection(section, { allowPreview: false });
   const writeJson = loadChannelSection(section, { json: true, allowPreview: false });
-  const moderate = loadChannelSection(section, { maxLevel: 2 });
+  const moderate = [loadChannelSection(section, { maxLevel: 2 }), requireModerationRight];
+
+  // Moderation is levels 0-2 (lib/discussion.js), and for a moderator also the owner's per-section
+  // right "discussions" (lib/moderatorSections.js). Resolved once per request and kept on req: the
+  // tree, the thread locals and the gate all ask, and the answer decides which buttons are drawn,
+  // so a moderator never sees one the server would refuse. Needs req.channel and req.permission
+  // (loadChannelSection).
+  async function resolveModeration(req) {
+    if (req.canModerateDiscussion === undefined) {
+      req.canModerateDiscussion =
+        canModerateDiscussion(req.permission) &&
+        (await canEditSectionAt(req.permission, req.channel.channelId, req.user?.userId, "discussions"));
+    }
+    return req.canModerateDiscussion;
+  }
+
+  async function requireModerationRight(req, res, next) {
+    try {
+      if (await resolveModeration(req)) return next();
+      res.status(403).render("errors/403", { requiredLevel: 1 });
+    } catch (err) {
+      next(err);
+    }
+  }
 
   async function itemOnChannel(id, channel) {
     const item = await getItem(id);
@@ -105,7 +128,7 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
     const emoteLookup = buildEmoteLookup(emoteMap);
 
     const authorLevels = new Map();
-    if (canModerateDiscussion(req.permission)) {
+    if (await resolveModeration(req)) {
       const authorIds = [...new Set(flatComments.map((c) => String(c.authorUserId)))];
       const levels = await Promise.all(authorIds.map((id) => computePermission(id, channel.channelLogin)));
       authorIds.forEach((id, i) => authorLevels.set(id, levels[i]));
@@ -129,12 +152,13 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
   }
 
   // Locals partials/commentThread.ejs needs besides the nodes - one place, so the item page,
-  // comments.json and the single-comment reply cannot drift apart.
+  // comments.json and the single-comment reply cannot drift apart. Every caller has run
+  // resolveModeration first (loadCommentTree does it).
   function threadLocals(req, res, channel, item, commentSort) {
     return {
       channel,
       user: req.user,
-      canModerate: canModerateDiscussion(req.permission),
+      canModerate: Boolean(req.canModerateDiscussion),
       ...threadUrls(section, channel.channelLogin, String(item._id)),
       maxCommentDepth: MAX_DEPTH,
       maxCommentBodyLength: MAX_BODY_LENGTH,
@@ -146,7 +170,7 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
   // What the item page passes to newsPost.ejs-style templates for the thread section.
   async function threadPageLocals(req, res, channel, item) {
     const commentSort = resolveCommentSort(req.query.sort);
-    const canModerate = canModerateDiscussion(req.permission);
+    const canModerate = await resolveModeration(req);
     const [commentTree, restrictedUsers, isRestricted, emoteMap] = await Promise.all([
       loadCommentTree(item, channel, req, commentSort),
       canModerate ? commentBansRepo.listForChannel(channel.channelLogin) : Promise.resolve([]),
@@ -255,6 +279,9 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
       // No JS: back to the new comment's anchor (reliable for a reply and for "Newest"; for a new
       // root under "Top"/"Oldest" it may sit past the first page and the browser just stays put).
       if (!wantsJson(req)) return res.redirect(`${backUrl}#comment-${created._id}`);
+      // The fragment carries the moderation menu like any other comment, so the right is needed
+      // here too - nothing else on this path has asked yet.
+      await resolveModeration(req);
 
       const [authorProfile, emoteMap] = await Promise.all([
         profileCacheRepo.getOrFetchProfile(req.user.userId).catch(() => null),
