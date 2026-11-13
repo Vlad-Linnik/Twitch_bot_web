@@ -315,6 +315,7 @@
   // things you can actually shoot.
 
   var walkers = [];
+  var nextWalkerId = 1;
   var PATH = [
     { x: -50, y: 150 }, { x: 300, y: 150 }, { x: 300, y: 230 },
     { x: 150, y: 250 }, { x: 150, y: 300 }, { x: 430, y: 310 },
@@ -349,6 +350,7 @@
     node.style.animationDelay = "-" + Math.random() * 2 + "s";
     street.appendChild(node);
     walkers.push({
+      id: nextWalkerId++, bubble: null,
       el: node, x: PATH[0].x, y: PATH[0].y, offsetY: offsetY,
       gap: Math.floor(Math.random() * 20) + 30,
       distance: Math.min(initialDistance || 0, PATH_LEN),
@@ -378,6 +380,7 @@
     var top = snapToPixel(w.y + w.offsetY);
     if (left !== w.lastLeft) { w.el.style.left = left + "px"; w.lastLeft = left; }
     if (top !== w.lastTop) { w.el.style.top = top + "px"; w.lastTop = top; }
+    if (w.bubble) placeBubble(w);
   }
 
   // Walking and idling are two different CSS animations (and the idle one also animates transform,
@@ -417,7 +420,7 @@
         w.offsetY *= Math.pow(0.95, dtScale);
         if (w.boothFrames > 80) w.el.style.opacity = Math.max(0, 1 - (w.boothFrames - 80) / 60);
         placeWalker(w);
-        if (w.boothFrames > 150) { w.el.remove(); walkers.splice(i, 1); i -= 1; }
+        if (w.boothFrames > 150) { dropBubble(w); w.el.remove(); walkers.splice(i, 1); i -= 1; }
         continue;
       }
 
@@ -450,6 +453,289 @@
       }
     }
     requestAnimationFrame(stepStreet);
+  }
+
+  // --- the crowd talks ------------------------------------------------------
+  // Live chat, said by the pedestrians: each line the live poll brings is put in a speech bubble
+  // over one walker, and a line that votes on the case at the window throws its emote into that
+  // side's scoreboard. The walkers are anonymous - a bubble says WHAT chat is saying, not who; the
+  // speaker is any free pedestrian on screen. The decisions (who speaks, when, how long the text
+  // may be, what the board shows) are public/js/games/engines/bureauCrowdFx.js's, tested there;
+  // this section only owns the nodes.
+  //
+  // Bounded on every axis, because a vote can stay open through a raid: at most MAX_BUBBLES
+  // bubbles and MAX_FLIGHTS emotes exist at once, every node is removed when its animation ends
+  // (or when its walker dies or leaves), and a line that finds no room is simply not drawn - its
+  // vote still counts, straight onto the board.
+
+  var Fx = window.BureauCrowdFx || null;
+  var REDUCED_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  var VOTE_EMOTES = {
+    approve: config.dataset.voteApprove || "VoteYea",
+    deny: config.dataset.voteDeny || "VoteNay",
+  };
+  var streetTalk = $("ub-street-talk");
+  var fxLayer = $("ub-fx-layer");
+
+  var BUBBLE_MS = 3600;
+  var BUBBLE_FADE_MS = 350;
+  var BUBBLE_CHARS = 40;
+  var MAX_BUBBLES = 6;
+  var MAX_LINES_PER_POLL = 8;
+  var MIN_LINE_SPACING_MS = 250;
+  // How long a vote line's bubble is on screen before its emote leaves it - long enough to read
+  // where it came from.
+  var THROW_DELAY_MS = 450;
+  var MAX_FLIGHTS = 10;
+  var FLIGHT_MS = 950;
+  var FLIGHT_ARC = 150;
+  // Where a walker counts as on screen: the queue enters from x = -50, and a bubble over somebody
+  // still off the edge would point at nobody.
+  var SPEAKER_MIN_X = 20;
+  var SPEAKER_MAX_X = 1080;
+  // Around a talking walker, the box nobody else may start talking in: about a bubble's width,
+  // and its height plus the tail.
+  var BUBBLE_CLEARANCE = { x: 150, y: 55 };
+
+  var bubbleCount = 0;
+  var chatCursor = null;
+
+  function isEmoteToken(token) {
+    return EMOTE_INDEX.has(String(token).toLowerCase());
+  }
+
+  // Anchored above the sprite's head: a walker's left/top is the 20px box that scale(3) blows up
+  // around its bottom centre, so the drawn figure spans roughly 40px above `top`.
+  function bubbleAnchor(w) {
+    return { x: (w.lastLeft != null ? w.lastLeft : w.x) + 10, y: (w.lastTop != null ? w.lastTop : w.y + w.offsetY) - 44 };
+  }
+
+  // Kept inside the street box (BureauCrowdFx.bubbleBox), with the tail still over the head.
+  var STREET_W = 1152;
+  function placeBubble(w) {
+    var at = bubbleAnchor(w);
+    var box = Fx.bubbleBox(at.x, w.bubble.halfWidth, STREET_W, 4);
+    w.bubble.el.style.transform = "translate(" + box.left + "px, " + at.y + "px) translate(0, -100%)";
+    w.bubble.el.style.setProperty("--ub-tail-x", box.tail + "px");
+  }
+
+  function dropBubble(w) {
+    if (!w.bubble) return;
+    clearTimeout(w.bubble.fadeTimer);
+    clearTimeout(w.bubble.removeTimer);
+    clearTimeout(w.bubble.throwTimer);
+    if (w.bubble.onDrop) w.bubble.onDrop();
+    w.bubble.el.remove();
+    w.bubble = null;
+    bubbleCount -= 1;
+  }
+
+  function findWalker(id) {
+    for (var i = 0; i < walkers.length; i += 1) if (walkers[i].id === id) return walkers[i];
+    return null;
+  }
+
+  // One line into one bubble. `onThrow(w)` - present only for a counted vote line - fires once the
+  // bubble has been read; `onDrop` releases the vote if the bubble dies first (walker shot or gone).
+  function sayLine(line, vote) {
+    if (document.hidden || bubbleCount >= MAX_BUBBLES) return false;
+    var candidates = [];
+    for (var i = 0; i < walkers.length; i += 1) {
+      var w = walkers[i];
+      if (w.dead || w.inBooth) continue;
+      candidates.push({ id: w.id, x: w.x, y: w.y + w.offsetY, busy: !!w.bubble });
+    }
+    var speaker = findWalker(Fx.pickSpeaker(candidates, SPEAKER_MIN_X, SPEAKER_MAX_X, null, BUBBLE_CLEARANCE));
+    if (!speaker) return false;
+
+    var node = el("div", "ub-bubble");
+    // Text and <img> nodes only - appendWithEmotes never parses the line as markup.
+    appendWithEmotes(node, Fx.clipBubbleText(line.text, BUBBLE_CHARS, isEmoteToken));
+    streetTalk.appendChild(node);
+    bubbleCount += 1;
+    // offsetWidth is in design px (the wrapper's scale() doesn't touch layout sizes). Measured once:
+    // the text never changes.
+    var bubble = { el: node, halfWidth: node.offsetWidth / 2, fadeTimer: null, removeTimer: null, throwTimer: null, onDrop: null };
+    speaker.bubble = bubble;
+    placeBubble(speaker);
+    // Next frame, so the entry transition has a starting state to run from.
+    requestAnimationFrame(function () { node.classList.add("ub-bubble-in"); });
+
+    if (vote) {
+      bubble.onDrop = vote.release;
+      bubble.throwTimer = setTimeout(function () {
+        bubble.onDrop = null;
+        vote.throwFrom(bubbleAnchor(speaker));
+      }, REDUCED_MOTION ? 0 : THROW_DELAY_MS);
+    }
+    bubble.fadeTimer = setTimeout(function () {
+      node.classList.remove("ub-bubble-in");
+      bubble.removeTimer = setTimeout(function () {
+        if (speaker.bubble === bubble) dropBubble(speaker);
+      }, BUBBLE_FADE_MS);
+    }, BUBBLE_MS);
+    return true;
+  }
+
+  // --- the scoreboard -------------------------------------------------------
+  // Two tallies (BureauCrowdFx's header says why the board counts optimistically), reset whenever
+  // a different case is at the window. `epoch` is bumped on that reset, so a bubble or a flight
+  // still in progress from the previous case lands on nothing.
+
+  var board = { caseId: null, epoch: 0, voters: {}, approve: null, deny: null };
+  var flights = [];
+  var flightFrame = null;
+
+  function resetBoard(caseId, vote) {
+    board.caseId = caseId;
+    board.epoch += 1;
+    board.voters = {};
+    board.approve = Fx ? Fx.createTally(vote && vote.approve) : null;
+    board.deny = Fx ? Fx.createTally(vote && vote.deny) : null;
+    flights.forEach(function (f) { f.el.remove(); });
+    flights = [];
+  }
+
+  function shownVotes(side, vote) {
+    if (Fx && board[side]) return Fx.shownCount(board[side]);
+    return (vote && vote[side]) || 0;
+  }
+
+  // Counts and the gap bar. `gulp` names the side whose board just swallowed an emote.
+  function paintBoard(vote, gulp) {
+    var yea = shownVotes("approve", vote);
+    var nay = shownVotes("deny", vote);
+    $("ub-vote-yea-count").textContent = yea;
+    $("ub-vote-nay-count").textContent = nay;
+    var shares = Fx ? Fx.voteShares(yea, nay) : { approve: 0, deny: 0, lead: 0 };
+    $("ub-vote-gauge-yea").style.transform = "scaleX(" + shares.approve + ")";
+    $("ub-vote-gauge-nay").style.transform = "scaleX(" + shares.deny + ")";
+    var gauge = $("ub-vote-gauge");
+    gauge.classList.toggle("ub-gauge-yea-leads", shares.lead > 0);
+    gauge.classList.toggle("ub-gauge-nay-leads", shares.lead < 0);
+    if (gulp && !REDUCED_MOTION) {
+      var target = $(gulp === "approve" ? "ub-vote-yea" : "ub-vote-nay");
+      // Restarting a CSS animation needs the class off for one style recalc.
+      target.classList.remove("ub-vote-gulp");
+      void target.offsetWidth;
+      target.classList.add("ub-vote-gulp");
+    }
+  }
+
+  function boardVote() {
+    var c = currentCase();
+    return c && c._id === board.caseId ? c.vote : null;
+  }
+
+  function landVote(side, epoch) {
+    if (epoch !== board.epoch || !board[side]) return;
+    Fx.landLocalVote(board[side], Date.now());
+    paintBoard(boardVote(), side);
+  }
+
+  // The scoreboard's centre in design px. Read at launch: the bar is static, but the wrapper's
+  // scale is not.
+  function boardPoint(side) {
+    var target = $(side === "approve" ? "ub-vote-yea" : "ub-vote-nay");
+    var rect = target.getBoundingClientRect();
+    var stage = wrapper.getBoundingClientRect();
+    if (!rect.width || !scale) return null;
+    return {
+      x: (rect.left + rect.width / 2 - stage.left) / scale,
+      y: (rect.top + rect.height / 2 - stage.top) / scale,
+    };
+  }
+
+  function emoteNode(side) {
+    var name = VOTE_EMOTES[side];
+    var hit = EMOTE_INDEX.get(String(name).toLowerCase());
+    if (hit && hit.url) {
+      var img = document.createElement("img");
+      img.src = hit.url;
+      img.alt = name;
+      img.className = "ub-flying-emote";
+      return img;
+    }
+    // No picture for it in this channel's emote map: the name itself flies.
+    return el("span", "ub-flying-emote ub-flying-word ub-flying-" + side, name);
+  }
+
+  function launchFlight(side, epoch, from) {
+    var to = boardPoint(side);
+    if (REDUCED_MOTION || document.hidden || !to || flights.length >= MAX_FLIGHTS) {
+      landVote(side, epoch);
+      return;
+    }
+    var node = emoteNode(side);
+    fxLayer.appendChild(node);
+    flights.push({ el: node, side: side, epoch: epoch, from: from, to: to, start: null });
+    if (flightFrame === null) flightFrame = requestAnimationFrame(stepFlights);
+  }
+
+  // One loop for every emote in the air, and only while there is one.
+  function stepFlights(now) {
+    flightFrame = null;
+    for (var i = flights.length - 1; i >= 0; i -= 1) {
+      var f = flights[i];
+      if (f.start === null) f.start = now;
+      var t = Math.min(1, (now - f.start) / FLIGHT_MS);
+      var at = Fx.flightPoint(f.from, f.to, t, FLIGHT_ARC);
+      // Pops up to full size, then shrinks into the board over the last stretch - the swallow.
+      var size = t < 0.15 ? 0.6 + (t / 0.15) * 0.6 : t > 0.75 ? 1.2 - ((t - 0.75) / 0.25) * 1.0 : 1.2;
+      f.el.style.transform = "translate(" + at.x + "px, " + at.y + "px) translate(-50%, -50%) scale(" + size.toFixed(3) + ")";
+      f.el.style.opacity = t > 0.85 ? String(Math.max(0, 1 - (t - 0.85) / 0.15)) : "1";
+      if (t >= 1) {
+        f.el.remove();
+        flights.splice(i, 1);
+        landVote(f.side, f.epoch);
+      }
+    }
+    if (flights.length) flightFrame = requestAnimationFrame(stepFlights);
+  }
+
+  // Everything one live poll's chat lines do. Runs before the poll's vote counts are applied, so a
+  // vote is on the board's books before the bot's count can cover it (see BureauCrowdFx's header).
+  function ingestChat(lines) {
+    if (!Fx || !lines || !lines.length) return;
+    var c = currentCase();
+    var voteOpen = !!(c && c._id === board.caseId && c.vote && c.vote.status === "active");
+    var approveEmote = (c && c.vote && c.vote.approveEmote) || VOTE_EMOTES.approve;
+    var denyEmote = (c && c.vote && c.vote.denyEmote) || VOTE_EMOTES.deny;
+    var epoch = board.epoch;
+    var now = Date.now();
+
+    // Votes are booked for EVERY line, including those the pacing below drops - those still
+    // count, they just land at once.
+    lines.forEach(function (line) {
+      line.side = null;
+      if (!voteOpen) return;
+      var side = Fx.voteSideOf(line.text, approveEmote, denyEmote);
+      if (!side) return;
+      if (Fx.recordVoter(board.voters, line.userId, side) === "repeat") return;
+      Fx.addLocalVote(board[side], now, false);
+      line.side = side;
+    });
+
+    var paced = Fx.paceLines(lines, LIVE_POLL_MS, MIN_LINE_SPACING_MS, MAX_LINES_PER_POLL);
+    var kept = {};
+    paced.forEach(function (p) { kept[p.line.id] = true; });
+    lines.forEach(function (line) {
+      if (line.side && !kept[line.id]) landVote(line.side, epoch);
+    });
+
+    paced.forEach(function (p) {
+      setTimeout(function () {
+        var line = p.line;
+        var side = line.side;
+        var vote = side && epoch === board.epoch
+          ? {
+            release: function () { landVote(side, epoch); },
+            throwFrom: function (from) { launchFlight(side, epoch, from); },
+          }
+          : null;
+        if (!sayLine(line, vote) && side) landVote(side, epoch);
+      }, p.delay);
+    });
   }
 
   // --- rendering the case --------------------------------------------------
@@ -1576,10 +1862,24 @@
 
   function renderVote(vote) {
     var bar = $("ub-vote-bar");
-    if (!vote || !vote.status) { bar.classList.add("hidden"); return; }
+    var shownCase = currentCase();
+    if (!vote || !vote.status) {
+      bar.classList.add("hidden");
+      // Emotes still flying for the previous case must not land on this one's board.
+      if (!shownCase || shownCase._id !== board.caseId) resetBoard(shownCase ? shownCase._id : null, null);
+      return;
+    }
     bar.classList.remove("hidden");
-    $("ub-vote-yea-count").textContent = vote.approve || 0;
-    $("ub-vote-nay-count").textContent = vote.deny || 0;
+    // A different case at the window starts the board over at the bot's own numbers; the same
+    // case only moves the board's base (see "the scoreboard" above).
+    var caseId = shownCase ? shownCase._id : null;
+    if (caseId !== board.caseId) resetBoard(caseId, vote);
+    else if (Fx && board.approve) {
+      var now = Date.now();
+      Fx.setTallyBase(board.approve, vote.approve, now);
+      Fx.setTallyBase(board.deny, vote.deny, now);
+    }
+    paintBoard(vote, null);
     if (vote.status === "requested") toast(T.voteQueued);
     else if (vote.status === "closed") toast(T.voteClosed);
   }
@@ -1953,6 +2253,7 @@
       if (w.dead || w.inBooth) continue;
       if (Math.hypot(w.x - point.x, w.y + w.offsetY - point.y) >= radius) continue;
       w.dead = true;
+      dropBubble(w);
       w.el.classList.remove("ub-walker", "ub-idler");
       w.el.classList.add("ub-dead");
       w.el.style.zIndex = 1;
@@ -2273,16 +2574,20 @@
     var ids = cases.map(function (c) { return c._id; }).slice(0, 50).join(",");
     // No early return on an empty queue any more: the sniper is fired independently of any case,
     // so its outcome still has to reach the desk when there is nothing to review.
-    fetch("/" + CHANNEL + "/unban-bureau/live.json?ids=" + encodeURIComponent(ids), { headers: { Accept: "application/json" } })
+    var url = "/" + CHANNEL + "/unban-bureau/live.json?ids=" + encodeURIComponent(ids);
+    if (chatCursor !== null) url += "&chatAfter=" + encodeURIComponent(chatCursor);
+    fetch(url, { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
         if (!payload.ok) return;
+        if (payload.chatCursor != null) chatCursor = payload.chatCursor;
         renderSniper(payload.sniper);
         // Channel-wide, so this is also how a page that never threw anything learns the weapon is
         // unavailable - including one opened after somebody else's throw.
         if (typeof payload.grenadeRetryAfterMs === "number") {
           startGrenadeCooldown(payload.grenadeRetryAfterMs);
         }
+        var shownState = null;
         payload.states.forEach(function (state) {
           var c = cases.find(function (item) { return item._id === state.id; });
           if (!c) return;
@@ -2290,12 +2595,17 @@
           c.resolution = state.resolution;
 
           var shown = currentCase();
-          if (!shown || shown._id !== state.id) return;
-          renderVote(state.vote);
-          if (state.resolution && state.resolution.status === "failed") {
-            toast(state.resolution.failureReason || T.decisionFailed);
-          }
+          if (shown && shown._id === state.id) shownState = state;
         });
+        // Chat between the case's state and its counts: the lines need to know whether a vote is
+        // running, and their votes must be booked before the new counts are applied.
+        ingestChat(payload.chat);
+        if (shownState) {
+          renderVote(shownState.vote);
+          if (shownState.resolution && shownState.resolution.status === "failed") {
+            toast(shownState.resolution.failureReason || T.decisionFailed);
+          }
+        }
       })
       .catch(function () { /* a dropped poll is harmless — the next one covers it */ });
   }

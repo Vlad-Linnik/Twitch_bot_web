@@ -1765,6 +1765,137 @@ body.ub-playing footer {
   margin-right: 4px;
 }
 
+/* --- the crowd: chat bubbles, flying vote emotes, the gap bar ---------------
+   Driven by unban-bureau.js's "the crowd talks" / "the scoreboard" sections. Every moving part
+   animates transform/opacity only. */
+
+#ub-vote-bar { flex-wrap: wrap; justify-content: center; row-gap: 6px; }
+#ub-vote-yea,
+#ub-vote-nay { transform-origin: center center; }
+
+/* The swallow: the board bulges for a beat when an emote lands in it. */
+.ub-vote-gulp { animation: ub-vote-gulp 0.32s ease-out; }
+@keyframes ub-vote-gulp {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.28, 0.86); }
+  70% { transform: scale(0.94, 1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Two fills meeting somewhere along one track; the notch is the 50% line, so the gap reads as
+   distance from it. Same flat black-and-grey frame as the bar around it. */
+#ub-vote-gauge {
+  position: relative;
+  flex-basis: 100%;
+  height: 10px;
+  background: #1c1c1c;
+  border: 2px solid #555;
+  overflow: hidden;
+}
+#ub-vote-gauge-yea,
+#ub-vote-gauge-nay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transition: transform 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+#ub-vote-gauge-yea { left: 0; transform-origin: left center; background: #3db83d; }
+#ub-vote-gauge-nay { right: 0; transform-origin: right center; background: #c03535; }
+#ub-vote-gauge-mid {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: #e8e8e8;
+  opacity: 0.55;
+}
+#ub-vote-gauge.ub-gauge-yea-leads #ub-vote-gauge-yea,
+#ub-vote-gauge.ub-gauge-nay-leads #ub-vote-gauge-nay { filter: brightness(1.2); }
+
+/* Same box as #ub-street (and its clip), one layer above it inside #ub-desk. */
+#ub-street-talk {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 350px;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* A paper speech bubble in the booth's palette; positioned by transform from its walker. */
+.ub-bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 230px;
+  width: max-content;
+  padding: 4px 8px;
+  background: #efe6cf;
+  color: #2a211a;
+  border: 2px solid #2a211a;
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 0.35);
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-word;
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
+  will-change: transform, opacity;
+}
+.ub-bubble.ub-bubble-in { opacity: 1; }
+.ub-bubble::after {
+  content: "";
+  position: absolute;
+  /* Over the speaker's head even when the bubble is pushed in from the street's edge. */
+  left: var(--ub-tail-x, 50%);
+  bottom: -8px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top-color: #2a211a;
+  border-bottom: 0;
+}
+.ub-bubble .ub-inline-emote { height: 1.6em; }
+
+#ub-fx-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 99; /* under #ub-vote-bar (100): an emote ends its flight inside the board */
+  pointer-events: none !important;
+  overflow: hidden;
+}
+.ub-flying-emote {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 40px;
+  width: auto;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.5));
+}
+.ub-flying-word {
+  height: auto;
+  font-size: 16px;
+  padding: 2px 6px;
+  background: #000;
+  border: 2px solid #555;
+  border-radius: 4px;
+}
+.ub-flying-approve { color: #3db83d; }
+.ub-flying-deny { color: #c03535; }
+
+/* Reduced motion: no flights (the script lands every vote at once), and the bar and bubbles
+   change without moving. */
+@media (prefers-reduced-motion: reduce) {
+  .ub-vote-gulp { animation: none; }
+  #ub-vote-gauge-yea,
+  #ub-vote-gauge-nay,
+  .ub-bubble { transition: none; }
+}
+
 #ub-exit {
   position: absolute;
   top: 15px;

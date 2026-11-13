@@ -42,6 +42,9 @@
     <%# The booth artwork, plus the things painted onto it. %>
     <div id="ub-desk">
       <div id="ub-street"></div>
+      <%# Chat said by the crowd: speech bubbles over the walkers (unban-bureau.js, "the crowd
+          talks"). The street's own box and clip, one layer up, so a bubble never covers the booth. %>
+      <div id="ub-street-talk"></div>
       <div id="ub-window-zone"></div>
       <div id="ub-appeal-zone"></div>
       <div id="ub-experts-zone"></div>
@@ -74,7 +77,17 @@
       <div id="ub-vote-bar" class="hidden">
         <div id="ub-vote-yea"><span class="ub-vote-label"><%= voteEmotes.approve %></span> <span id="ub-vote-yea-count">0</span></div>
         <div id="ub-vote-nay"><span class="ub-vote-label"><%= voteEmotes.deny %></span> <span id="ub-vote-nay-count">0</span></div>
+        <%# The gap between the two sides at a glance: each fill is scaleX'd to its share, the notch
+            marks the middle. Empty while nobody has voted. %>
+        <div id="ub-vote-gauge" aria-hidden="true">
+          <div id="ub-vote-gauge-yea"></div>
+          <div id="ub-vote-gauge-nay"></div>
+          <div id="ub-vote-gauge-mid"></div>
+        </div>
       </div>
+      <%# Vote emotes in flight from the street to the board. Under the vote bar, so the emote ends
+          its flight going INTO the board rather than over it. %>
+      <div id="ub-fx-layer"></div>
 
       <a id="ub-exit" class="ub-top-btn" href="/<%= channel.channelLogin %>/settings">&larr; <%= t('channelSettings.backToSettings') %></a>
 
@@ -352,6 +365,8 @@
        data-shift-token="<%= shiftToken %>"
        data-cases="<%= JSON.stringify(cases) %>"
        data-emotes="<%= JSON.stringify(emoteList) %>"
+       data-vote-approve="<%= voteEmotes.approve %>"
+       data-vote-deny="<%= voteEmotes.deny %>"
        data-i18n="<%= JSON.stringify({
          allDone: t('unbanBureau.allDone'),
          notFollowing: t('unbanBureau.notFollowing'),
@@ -467,6 +482,7 @@
   <%# The speech tokenizer, before the page script that calls it. Lives under js/games/engines/
       because this repo has no bundler and lib/ never reaches the browser - see that file's header. %>
   <script src="<%= asset('/js/games/engines/speechMarkup.js') %>" defer></script>
+  <script src="<%= asset('/js/games/engines/bureauCrowdFx.js') %>" defer></script>
   <script src="<%= asset('/js/games/unban-bureau.js') %>" defer></script>
 <% } %>
 

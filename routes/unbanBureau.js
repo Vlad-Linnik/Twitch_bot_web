@@ -23,6 +23,7 @@ const unbanDossierRepo = require("../db/unbanDossierRepo");
 const unbanBureauShiftRepo = require("../db/unbanBureauShiftRepo");
 const unbanOpinionsRepo = require("../db/unbanOpinionsRepo");
 const sniperShotsRepo = require("../db/sniperShotsRepo");
+const bureauChatRepo = require("../db/bureauChatRepo");
 const unbanBureauValidation = require("../lib/unbanBureauValidation");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
@@ -816,7 +817,8 @@ router.post(
   }
 );
 
-// Polled by the page for the moving vote bar and for "has the bot applied my decision yet".
+// Polled by the page for the moving vote bar, for "has the bot applied my decision yet", and for
+// the chat lines the street's crowd says (db/bureauChatRepo.js).
 router.get(
   "/:channel/unban-bureau/live.json",
   statsReadLimiter,
@@ -830,7 +832,7 @@ router.get(
       const config = await channelConfigRepo.getConfig(channel.channelLogin);
       const cooldownMs =
         (config.unbanBureau?.grenadeCooldownSec || GRENADE_DEFAULT_COOLDOWN_SEC) * 1000;
-      const [states, shot, grenadeReadyAt] = await Promise.all([
+      const [states, shot, grenadeReadyAt, chat] = await Promise.all([
         unbanRequestsRepo.getLiveState(channel.channelId, ids),
         // Channel-level, not per case: a shot is fired whenever the moderator feels like it and is
         // not tied to an appeal. See db/sniperShotsRepo.js's findLatestResolved for why this reads
@@ -839,6 +841,12 @@ router.get(
         // So the desk can grey the grenade out for a moderator who has just opened the page, rather
         // than only after they have thrown one and been refused.
         sniperShotsRepo.grenadeReadyAt(channel.channelId, cooldownMs),
+        // The street's speech bubbles and flying vote emotes. Decoration: a failed read is an empty
+        // street for one poll, never a failed poll - the vote bar and the decision status ride on
+        // this same response.
+        bureauChatRepo
+          .readChatSince(channel.channelLogin, req.query.chatAfter)
+          .catch(() => ({ lines: [], cursor: null })),
       ]);
       res.json({
         ok: true,
@@ -865,6 +873,9 @@ router.get(
             failureReason: shot.failureReason || null,
           }
           : null,
+        chat: chat.lines,
+        // Echoed back as ?chatAfter= on the next poll; null means "keep the one you have".
+        chatCursor: chat.cursor,
         grenadeRetryAfterMs: grenadeReadyAt
           ? Math.max(0, grenadeReadyAt.getTime() - Date.now())
           : 0,
