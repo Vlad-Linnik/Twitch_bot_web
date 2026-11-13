@@ -23,6 +23,7 @@ const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters"
 const limits = require("../config/statsLimits");
 const { isKnownBotName } = require("../config/knownBots");
 const { buildModSummary, summaryIds, buildModStatsPageModel } = require("../lib/modStatsSummary");
+const { buildChannelNav } = require("../lib/channelNav");
 
 const router = express.Router();
 
@@ -299,6 +300,7 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
       wordCloud,
       emoteCloud: { period: emoteCloud.period, emotes },
       canModerate: permission <= 2,
+      channelNav: buildChannelNav(channel, { permission, active: "statistics" }),
       tab: "chat",
       sessions: sessionList,
       streamChart,
@@ -346,6 +348,7 @@ router.get("/:channel/statistics/mod", async (req, res, next) => {
       broadcaster,
       period,
       periods: limits.PERIODS,
+      channelNav: buildChannelNav(channel, { permission, active: "statistics" }),
       tab: "mod",
     };
 

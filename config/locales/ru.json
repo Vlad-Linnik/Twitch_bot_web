@@ -820,7 +820,6 @@
     "titleSuffix": "статистика",
     "tabChat": "Чат",
     "tabMod": "Модераторы",
-    "newsLink": "Новости",
     "uniqueChatters": "Уникальных пользователей чата",
     "totalMessages": "Всего сообщений",
     "topChatters": "Топ чаттеров",
@@ -892,10 +891,22 @@
       "secondsSuffix": "с"
     }
   },
+  "channelNav": {
+    "label": "Разделы канала",
+    "statistics": "Статистика",
+    "news": "Новости",
+    "movies": "Фильмы",
+    "games": "Игры",
+    "preview": "превью"
+  },
   "news": {
     "titleSuffix": "новости",
     "previewNotice": "Эта лента отключена для всех остальных — вы видите её, потому что вы администратор.",
     "empty": "Пока нет новостей.",
+    "create": "Создать новость",
+    "loadMore": "Показать ещё",
+    "loading": "Загрузка…",
+    "loadFailed": "Не загрузилось — повторить",
     "react": {
       "like": "Нравится",
       "superlike": "Очень нравится"
@@ -1243,6 +1254,9 @@
     "loginRequiredMessage": "Чтобы увидеть эту страницу, нужно",
     "loginRequiredLink": "войти через Twitch",
     "loginRequiredSuffix": ".",
+    "badRequestTitle": "Неверный запрос",
+    "badRequestMessage": "Ссылка повреждена или устарела.",
+    "backToPage": "Открыть заново",
     "notFoundTitle": "Страница не найдена",
     "notFoundMessage": "Страница или канал, который вы ищете, не существует.",
     "serverErrorTitle": "Что-то пошло не так",

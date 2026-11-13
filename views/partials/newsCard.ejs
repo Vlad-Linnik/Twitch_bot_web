@@ -25,7 +25,7 @@
   // (public/js/page-transitions.js finds it as the clicked comments-link's ancestor); on the
   // permalink page it's the single, always-present DESTINATION, pinned statically via the
   // post-card class (public/css/input.css) - same forward-only pairing as home's channel cards
-  // into stats-header. Never both on the same render: a static pin AND a dynamic per-click name
+  // into channel-header. Never both on the same render: a static pin AND a dynamic per-click name
   // could collide if this ever rendered twice on one page.
   const isPermalink = typeof hideCommentsLink !== 'undefined';
 %>
@@ -66,9 +66,8 @@
           on a separate page - see routes/news.js's GET /:channel/news/:id.
 
           hideCommentsLink is read via typeof, not referenced directly - views/news.ejs's feed
-          loop never passes it at all (same reason partials/statsHeader.ejs reads hideNewsLink
-          this way: EJS throws ReferenceError on a local that was never passed, unlike a plain
-          property lookup that would just be undefined). %>
+          loop never passes it at all (EJS throws ReferenceError on a local that was never
+          passed, unlike a plain property lookup that would just be undefined). %>
       <% if (typeof hideCommentsLink === 'undefined') { %>
         <%# #comments lands the permalink page scrolled straight to the thread (views/newsPost.ejs's
             <section id="comments">) instead of its top - clicking "comments" from the feed means

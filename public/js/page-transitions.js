@@ -11,7 +11,7 @@
 const STORAGE_KEY = "pageTransitionType";
 
 // Shared-element morph for list -> detail navigations: home's channel cards
-// (data-vt-name="stats-header"), the statistics page's Top Chatters/search rows
+// (data-vt-name="channel-header"), the statistics page's Top Chatters/search rows
 // (data-vt-name="user-header"), and the news feed's post cards (data-vt-name="post-card",
 // on the <article> - an ancestor of the actual "comments" link that gets clicked, hence
 // closest() rather than reading the clicked link's own dataset). Each name matches a static

@@ -15,15 +15,16 @@ nav.site-nav {
   contain: layout;
 }
 
-/* Same pinning for the streamer header (avatar + nick) and the Chat/Moderators tab bar on the
-   /:channel/statistics pages (views/partials/statsHeader.ejs / statsTabs.ejs): when navigating
-   between the two statistics sub-pages they stay put instead of sliding with the page. On a
-   navigation where only one side has them they fade, like the nav - except home -> statistics
-   via a channel card, where public/js/page-transitions.js tags the clicked card itself with
-   view-transition-name: stats-header (views/home.ejs's data-vt-name), so the card morphs into
+/* Same pinning for the channel header (avatar + nick + channel navbar,
+   views/partials/channelHeader.ejs) on every channel section page, and for the Chat/Moderators
+   tab bar under it on the statistics pages (views/partials/statsTabs.ejs): moving between
+   sections or sub-pages they stay put instead of sliding with the page. On a navigation where
+   only one side has them they fade, like the nav - except home -> statistics via a channel card,
+   where public/js/page-transitions.js tags the clicked card itself with
+   view-transition-name: channel-header (views/home.ejs's data-vt-name), so the card morphs into
    this header instead of fading. */
-header.stats-header {
-  view-transition-name: stats-header;
+header.channel-header {
+  view-transition-name: channel-header;
   contain: layout;
 }
 nav.stats-tabs {

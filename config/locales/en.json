@@ -820,7 +820,6 @@
     "titleSuffix": "statistics",
     "tabChat": "Chat",
     "tabMod": "Moderators",
-    "newsLink": "News",
     "uniqueChatters": "Unique chatters",
     "totalMessages": "Total messages",
     "topChatters": "Top chatters",
@@ -892,10 +891,22 @@
       "secondsSuffix": "s"
     }
   },
+  "channelNav": {
+    "label": "Channel sections",
+    "statistics": "Statistics",
+    "news": "News",
+    "movies": "Movies",
+    "games": "Games",
+    "preview": "preview"
+  },
   "news": {
     "titleSuffix": "news",
     "previewNotice": "This feed is off for everyone else - you're seeing it because you're an admin.",
     "empty": "No news posts yet.",
+    "create": "Create post",
+    "loadMore": "Show more",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load - retry",
     "react": {
       "like": "Like",
       "superlike": "Super Like"
@@ -1243,6 +1254,9 @@
     "loginRequiredMessage": "You need to",
     "loginRequiredLink": "log in with Twitch",
     "loginRequiredSuffix": " to view this page.",
+    "badRequestTitle": "Bad request",
+    "badRequestMessage": "The link is damaged or out of date.",
+    "backToPage": "Open it again",
     "notFoundTitle": "Page not found",
     "notFoundMessage": "The page or channel you're looking for doesn't exist.",
     "serverErrorTitle": "Something went wrong",

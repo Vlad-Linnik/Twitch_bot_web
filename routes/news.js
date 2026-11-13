@@ -17,6 +17,8 @@ const { verifyToken } = require("../middleware/csrf");
 const { computePermission, requireLevel } = require("../middleware/permissions");
 const { createSimpleLimiter } = require("../middleware/rateLimiters");
 const { sanitizeReturnTo } = require("../lib/returnTo");
+const cursorPaging = require("../lib/cursorPaging");
+const { buildChannelNav } = require("../lib/channelNav");
 const {
   MAX_DEPTH,
   MAX_BODY_LENGTH,
@@ -31,6 +33,7 @@ const { renderCommentBody, buildEmoteLookup } = require("../lib/commentEmotes");
 
 const router = express.Router();
 
+// One feed portion. Posts render in full (body and image), so a portion stays small.
 const POSTS_PER_PAGE = 10;
 // Root-level (top-level) comment threads shown before a "Load more comments" click is needed -
 // see loadCommentTree()'s comment for why pagination happens on ROOTS rather than the flat list.
@@ -102,43 +105,138 @@ const commentPostLimiterAllow = createSimpleLimiter({ windowMs: 5 * 60 * 1000, m
 // Same reasoning as reactLimiterAllow - voting is even lower-stakes than reacting.
 const commentVoteLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 30 });
 
+// The feed loads in portions by cursor (lib/cursorPaging.js), not by page number: a post
+// published while someone is scrolling would otherwise shift every offset by one and repeat a
+// card at the seam. The HTML page and list.json take the same `?cursor=`, so the page's plain
+// "show more" link is a complete no-JS fallback and public/js/infinite-list.js only fetches the
+// same portions in place. A stale `?page=N` link from before is simply ignored - page numbers do
+// not exist in this model - and lands on the first portion.
+//
+// "Back" restore: list.json?through=<id> reloads everything from the top down to that post (and
+// one portion past it), so the reader returns to the card they left from even if newer posts
+// appeared above it. Capped (RESTORE_MAX) - past that the client keeps the ordinary first
+// portion it already has.
+const RESTORE_MAX = 240;
+
+// Visibility shared by the feed and list.json: unknown channel or a channel with the feature
+// off both read as "not found", except for a tier-0 admin previewing before the toggle is
+// flipped on.
+async function loadFeedChannel(req) {
+  const channel = await channelsRepo.findByLogin(req.params.channel);
+  if (!channel) return null;
+  const permission = await computePermission(req.user?.userId ?? null, channel.channelLogin);
+  if (!channel.newsEnabled && permission > 0) return null;
+  return { channel, permission };
+}
+
+async function shapeFeedPosts(posts, req) {
+  let reacted = new Set();
+  if (req.user && posts.length > 0) {
+    reacted = await newsReactionsRepo.getUserReactions(
+      posts.map((p) => String(p._id)),
+      req.user.userId
+    );
+  }
+  return posts.map((p) => ({
+    ...p,
+    id: String(p._id),
+    likedByViewer: reacted.has(`${p._id}:like`),
+    superlikedByViewer: reacted.has(`${p._id}:superlike`),
+  }));
+}
+
 router.get("/:channel/news", async (req, res, next) => {
   try {
-    const channel = await channelsRepo.findByLogin(req.params.channel);
-    if (!channel) return res.status(404).render("errors/404");
+    const found = await loadFeedChannel(req);
+    if (!found) return res.status(404).render("errors/404");
+    const { channel, permission } = found;
 
-    const permission = await computePermission(req.user?.userId ?? null, channel.channelLogin);
-    if (!channel.newsEnabled && permission > 0) return res.status(404).render("errors/404");
+    const parsed = cursorPaging.parseCursor(newsRepo.FEED_SORT, req.query.cursor);
+    if (parsed.error) {
+      return res.status(400).render("errors/400", { backHref: `/${channel.channelLogin}/news` });
+    }
 
-    const requestedPage = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const [{ posts, totalPages, page }, broadcaster] = await Promise.all([
-      newsRepo.listByChannel(channel.channelLogin, { page: requestedPage, limit: POSTS_PER_PAGE }),
+    const [{ posts, nextCursor }, broadcaster] = await Promise.all([
+      newsRepo.listPortion(channel.channelLogin, { cursor: parsed.cursor, limit: POSTS_PER_PAGE }),
       // Same fail-soft avatar/chat-color lookup the statistics header uses.
       profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
     ]);
 
-    let reacted = new Set();
-    if (req.user) {
-      reacted = await newsReactionsRepo.getUserReactions(
-        posts.map((p) => String(p._id)),
-        req.user.userId
-      );
-    }
-
-    const shaped = posts.map((p) => ({
-      ...p,
-      id: String(p._id),
-      likedByViewer: reacted.has(`${p._id}:like`),
-      superlikedByViewer: reacted.has(`${p._id}:superlike`),
-    }));
-
     res.render("news", {
       channel,
       broadcaster,
-      posts: shaped,
-      page,
-      totalPages,
+      channelNav: buildChannelNav(channel, { permission, active: "news" }),
+      posts: await shapeFeedPosts(posts, req),
+      nextCursor,
+      // Restoring a scroll position only makes sense for the feed read from the top; a
+      // `?cursor=` page is the no-JS fallback, and JS readers never land on one.
+      isFeedTop: !parsed.cursor,
+      // Authorship stays with the site admin (routes/admin.js's /admin/news). The button only
+      // shortens the way there; GET /:channel/news/new opens the same form.
+      canCreate: permission === 0 && Boolean(channel.newsEnabled),
       newsDisabledPreview: !channel.newsEnabled, // true only when a tier-0 admin is previewing
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// One portion of feed cards as HTML, rendered by the same partial as the first paint, plus the
+// cursor of the next portion (null at the end). Declared before /:channel/news/:id, which would
+// otherwise read "list.json" as a post id.
+router.get("/:channel/news/list.json", async (req, res, next) => {
+  try {
+    const found = await loadFeedChannel(req);
+    if (!found) return res.status(404).json({ ok: false, error: "not_found" });
+    const { channel } = found;
+
+    let portion;
+    let restored = false;
+    if (req.query.through !== undefined) {
+      portion = await newsRepo.listThrough(channel.channelLogin, String(req.query.through), {
+        max: RESTORE_MAX,
+        limit: POSTS_PER_PAGE,
+      });
+      // Anchor deleted, moved to another channel, or deeper than RESTORE_MAX: the client keeps
+      // the first portion it already rendered.
+      if (!portion) return res.json({ ok: true, restored: false });
+      restored = true;
+    } else {
+      const parsed = cursorPaging.parseCursor(newsRepo.FEED_SORT, req.query.cursor);
+      if (parsed.error) return res.status(400).json({ ok: false, error: parsed.error });
+      portion = await newsRepo.listPortion(channel.channelLogin, { cursor: parsed.cursor, limit: POSTS_PER_PAGE });
+    }
+
+    res.render(
+      "partials/newsCards",
+      { posts: await shapeFeedPosts(portion.posts, req), channel },
+      (err, html) => {
+        if (err) return next(err);
+        res.json({ ok: true, html, nextCursor: portion.nextCursor, restored });
+      }
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// "Create news" from the feed itself. Same form and same POST handler as /admin/news/new - only
+// the channel is preselected and the form returns here afterwards. Declared before
+// /:channel/news/:id for the same reason as list.json.
+router.get("/:channel/news/new", requireLevel(0), async (req, res, next) => {
+  try {
+    const channel = await channelsRepo.findByLogin(req.params.channel);
+    // The admin form only offers (and its POST only accepts) channels with the feed on.
+    if (!channel || !channel.newsEnabled) return res.status(404).render("errors/404");
+    const channels = (await channelsRepo.listAll()).filter((c) => c.newsEnabled);
+    res.render("adminNewsForm", {
+      tab: "news",
+      post: { channelLogin: channel.channelLogin },
+      channels,
+      error: null,
+      isEdit: false,
+      postId: null,
+      returnTo: `/${channel.channelLogin}/news`,
     });
   } catch (err) {
     next(err);
@@ -174,7 +272,7 @@ router.post("/:channel/news/:id/react", requireLogin, verifyToken, async (req, r
 // --- Permalink page: one post + its full nested comment thread ----------------------------
 // The feed (GET /:channel/news above) only shows reactions - a post's comments live on its own
 // page, same as Reddit's own /r/x/comments/:id/ split, so a heavily-discussed post doesn't bloat
-// the 10-posts-per-page feed with potentially hundreds of nested replies.
+// the 10-posts-per-portion feed with potentially hundreds of nested replies.
 router.get("/:channel/news/:id", async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
@@ -222,6 +320,7 @@ router.get("/:channel/news/:id", async (req, res, next) => {
     res.render("newsPost", {
       channel,
       broadcaster,
+      channelNav: buildChannelNav(channel, { permission, active: "news" }),
       post: shapedPost,
       // Only the first page of ROOT threads renders server-side - public/js/news-comments.js
       // fetches the rest (COMMENTS_PAGE_SIZE at a time) from GET .../comments.json on demand.

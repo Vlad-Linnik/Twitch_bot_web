@@ -44,8 +44,8 @@
   (guarded by a plain <li> + matching indent so the nesting depth doesn't visually collapse when
   the hidden parent's row disappears).
 
-  isRoot (optional, defaults falsy - same typeof-guard convention as partials/statsHeader.ejs's
-  hideNewsLink): only the OUTERMOST call for a page's top-level thread list passes isRoot: true,
+  isRoot (optional, defaults falsy - same typeof-guard convention as partials/newsCard.ejs's
+  hideCommentsLink): only the OUTERMOST call for a page's top-level thread list passes isRoot: true,
   so the <ul> gets a stable id for public/js/news-comments.js's "load more comments" handler to
   append newly-fetched root <li>s into. Every recursive call (children, and the JSON fragment
   routes/news.js's comments.json endpoint renders for a load-more page) omits it - a per-reply

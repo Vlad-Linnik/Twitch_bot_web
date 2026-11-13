@@ -1,5 +1,8 @@
 <%- include('partials/head', { title: t('admin.title') + ' · ' + t(isEdit ? 'admin.news.editPost' : 'admin.news.newPost') }) %>
 <%- include('partials/nav') %>
+<%# returnTo is passed only when the form was opened from a channel's feed
+    (GET /:channel/news/new) - typeof, because the /admin/news renders never pass it. %>
+<% const formReturnTo = typeof returnTo === 'string' && returnTo ? returnTo : null; %>
 
 <main class="pt-14 max-w-2xl mx-auto px-6 py-16">
   <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t(isEdit ? 'admin.news.editPost' : 'admin.news.newPost') %></h1>
@@ -11,6 +14,7 @@
 
   <form method="post" action="<%= isEdit ? `/admin/news/${postId}` : '/admin/news' %>" enctype="multipart/form-data" class="space-y-6">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <% if (formReturnTo) { %><input type="hidden" name="returnTo" value="<%= formReturnTo %>" /><% } %>
 
     <div>
       <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.news.fieldChannel') %></label>
@@ -84,7 +88,7 @@
 
     <div class="flex items-center gap-2">
       <button type="submit" class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"><%= t('admin.news.save') %></button>
-      <a href="/admin/news" class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= t('admin.news.cancel') %></a>
+      <a href="<%= formReturnTo || '/admin/news' %>"<% if (formReturnTo) { %> data-transition="backward"<% } %> class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= t('admin.news.cancel') %></a>
     </div>
   </form>
 </main>

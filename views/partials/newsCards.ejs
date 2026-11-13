@@ -1,0 +1,12 @@
+<%#
+  A run of feed cards - the first portion on views/news.ejs and every later portion that
+  routes/news.js's list.json returns, so a card loaded on scroll is the same markup as one
+  rendered on first paint. Each card sits in a [data-list-item] wrapper carrying the post id:
+  public/js/infinite-list.js uses it as the anchor for returning to the same card on "back".
+  Expects: posts (shaped as partials/newsCard.ejs expects), channel.
+%>
+<% posts.forEach(function(post) { %>
+  <div data-list-item="<%= post.id %>">
+    <%- include('newsCard', { post, channel, user, locale, t }) %>
+  </div>
+<% }) %>

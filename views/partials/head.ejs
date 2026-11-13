@@ -49,7 +49,7 @@
         const from = document.referrer ? new URL(document.referrer) : null;
 
         // Shared-element morph, reverse direction: leaving a channel's statistics/news page
-        // for home morphs its stats-header (public/css/input.css) back down into the matching
+        // for home morphs its channel-header (public/css/input.css) back down into the matching
         // card instead of fading. The forward direction (home -> statistics) is handled in
         // public/js/page-transitions.js by tagging the clicked card on click - there's no click
         // to hook on the way back in, so the referrer this handler already parses for slide

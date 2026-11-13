@@ -3,7 +3,7 @@
 
 <main class="pt-14 max-w-2xl mx-auto px-6 py-12">
 
-  <%- include('partials/statsHeader', { channel, broadcaster, hideNewsLink: true }) %>
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
 
   <% if (newsDisabledPreview) { %>
     <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
@@ -11,31 +11,44 @@
     </div>
   <% } %>
 
+  <% if (canCreate) { %>
+    <div class="flex justify-end mb-6">
+      <a href="/<%= channel.channelLogin %>/news/new"
+         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+        </svg>
+        <%= t('news.create') %>
+      </a>
+    </div>
+  <% } %>
+
   <% if (posts.length === 0) { %>
     <p class="text-center text-neutral-500 text-sm py-16"><%= t('news.empty') %></p>
   <% } else { %>
-    <% posts.forEach(function(post) { %>
-      <%- include('partials/newsCard', { post, channel, user, locale, t }) %>
-    <% }) %>
+    <%# data-src is list.json without a cursor; public/js/infinite-list.js takes each next
+        cursor from the "show more" link below, so the link stays the single source of where
+        the feed continues - with or without JS. data-restore is set only on the top of the
+        feed (see routes/news.js's isFeedTop). %>
+    <div id="news-feed" data-infinite-list
+         data-src="/<%= channel.channelLogin %>/news/list.json"
+         <% if (isFeedTop) { %>data-restore="news:<%= channel.channelLogin %>"<% } %>>
+      <%- include('partials/newsCards', { posts, channel }) %>
+    </div>
   <% } %>
 
-  <% if (totalPages > 1) { %>
-    <nav class="flex items-center justify-center gap-3 mt-4 text-xs">
-      <% if (page > 1) { %>
-        <a href="?page=<%= page - 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pagePrev') %></a>
-      <% } else { %>
-        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pagePrev') %></span>
-      <% } %>
-      <span class="text-neutral-500 tabular-nums"><%= t('statistics.pageLabel') %> <%= page %> / <%= totalPages %></span>
-      <% if (page < totalPages) { %>
-        <a href="?page=<%= page + 1 %>" class="px-3 py-1.5 rounded-md border border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors"><%= t('statistics.pageNext') %></a>
-      <% } else { %>
-        <span class="px-3 py-1.5 rounded-md border border-neutral-900 text-neutral-700 select-none"><%= t('statistics.pageNext') %></span>
-      <% } %>
-    </nav>
+  <% if (nextCursor) { %>
+    <div class="flex justify-center mt-2">
+      <a href="?cursor=<%= encodeURIComponent(nextCursor) %>" data-infinite-more="news-feed" data-transition="instant"
+         data-retry-label="<%= t('news.loadFailed') %>" data-loading-label="<%= t('news.loading') %>"
+         class="px-4 py-2 rounded-md border border-neutral-800 text-sm text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors">
+        <%= t('news.loadMore') %>
+      </a>
+    </div>
   <% } %>
 </main>
 
 <script src="<%= asset('/js/news-reactions.js') %>" defer></script>
+<script src="<%= asset('/js/infinite-list.js') %>" defer></script>
 
 <%- include('partials/foot') %>

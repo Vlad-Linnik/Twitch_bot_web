@@ -33,7 +33,7 @@
 
 <main class="pt-14 max-w-5xl mx-auto px-6 py-12">
 
-  <%- include('partials/statsHeader', { channel, broadcaster }) %>
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
 
   <%# Chat/Moderators switcher for everyone: the mod page's summary is public. %>
   <%- include('partials/statsTabs', { channel, tab }) %>

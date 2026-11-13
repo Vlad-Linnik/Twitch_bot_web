@@ -1,0 +1,46 @@
+<%#
+  Channel identity + channel navbar, at the top of every channel section page (statistics chat
+  and mod, the news feed and a single post). Pinned via view-transition-name: channel-header
+  (public/css/input.css) so it stays put while the page below it slides - same technique as the
+  site nav (partials/nav.ejs) - and home's channel cards morph into it.
+
+  Left: avatar + nick, linking to the streamer's Twitch channel, the nick in their real chat
+  color. Right, on the same row: the sections from lib/channelNav.js's buildChannelNav. On a
+  narrow screen the bar drops to its own row under the nick and scrolls sideways instead of
+  wrapping, so the items keep their order and size.
+
+  Expects: channel, broadcaster ({avatarUrl, chatColor} | null - fail-soft to a monogram and the
+  default text color), channelNav (buildChannelNav's output).
+%>
+<header class="channel-header flex flex-wrap items-center gap-x-6 gap-y-3 mb-8">
+  <a href="https://twitch.tv/<%= channel.channelLogin %>" target="_blank" rel="noopener noreferrer"
+     class="flex items-center gap-4 group min-w-0">
+    <% if (broadcaster && broadcaster.avatarUrl) { %>
+      <img src="<%= broadcaster.avatarUrl %>" alt="" width="56" height="56"
+           class="w-14 h-14 rounded-full ring-1 ring-neutral-700 group-hover:ring-neutral-500 transition-shadow shrink-0" />
+    <% } else { %>
+      <span class="w-14 h-14 rounded-full grid place-items-center bg-neutral-800 text-neutral-300 text-xl font-semibold ring-1 ring-neutral-700 shrink-0"><%= channel.channelLogin.charAt(0).toUpperCase() %></span>
+    <% } %>
+    <h1 class="text-3xl font-bold truncate group-hover:underline decoration-2 underline-offset-4 <%= broadcaster && broadcaster.chatColor ? '' : 'text-neutral-100' %>"
+        <% if (broadcaster && broadcaster.chatColor) { %>style="color: <%= broadcaster.chatColor %>"<% } %>><%= channel.channelLogin %></h1>
+  </a>
+
+  <% if (channelNav.length > 1) { %>
+    <nav aria-label="<%= t('channelNav.label') %>"
+         class="channel-nav w-full sm:w-auto sm:ml-auto flex gap-1 overflow-x-auto whitespace-nowrap -mx-1 px-1">
+      <% channelNav.forEach(function(item) { %>
+        <a href="<%= item.href %>"<% if (item.transition) { %> data-transition="<%= item.transition %>"<% } %>
+           <% if (item.active) { %>aria-current="page"<% } %>
+           class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm transition-colors <%=
+             item.active
+               ? 'border-purple-600 bg-purple-600/15 text-neutral-100'
+               : item.preview
+                 ? 'border-dashed border-neutral-800 text-neutral-600 hover:text-neutral-400'
+                 : 'border-neutral-800 text-neutral-300 hover:border-purple-600 hover:text-neutral-100' %>">
+          <%= t('channelNav.' + item.key) %>
+          <% if (item.preview) { %><span class="text-[10px] uppercase tracking-wide text-amber-500/80"><%= t('channelNav.preview') %></span><% } %>
+        </a>
+      <% }) %>
+    </nav>
+  <% } %>
+</header>

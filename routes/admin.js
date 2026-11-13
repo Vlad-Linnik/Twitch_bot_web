@@ -36,6 +36,7 @@ const newsRepo = require("../db/newsRepo");
 const newsReactionsRepo = require("../db/newsReactionsRepo");
 const { saveNewsImage, deleteNewsImage } = require("../lib/newsImage");
 const newsValidation = require("../lib/newsValidation");
+const { sanitizeReturnTo } = require("../lib/returnTo");
 const pageThemesRepo = require("../db/pageThemesRepo");
 const userStatsRepo = require("../db/userStatsRepo");
 const pageThemeValidation = require("../lib/pageThemeValidation");
@@ -851,6 +852,9 @@ router.post(
       const title = newsValidation.sanitizeTitle(req.body.title);
       const bodyFormat = req.body.bodyFormat;
       const bodyRaw = newsValidation.sanitizeBodyRaw(req.body.bodyRaw);
+      // Set when the form was opened from a channel's feed (routes/news.js's
+      // GET /:channel/news/new): the author goes back to that feed rather than to /admin/news.
+      const returnTo = sanitizeReturnTo(req.body.returnTo);
 
       if (!channel || !title || !newsValidation.isValidBodyFormat(bodyFormat) || !bodyRaw || !req.file || req.newsImageUploadError) {
         return res.status(400).render("adminNewsForm", {
@@ -860,6 +864,7 @@ router.post(
           error: res.locals.t("admin.news.formError"),
           isEdit: false,
           postId: null,
+          returnTo,
         });
       }
 
@@ -886,7 +891,7 @@ router.post(
         details: title,
       });
 
-      res.redirect("/admin/news?flash=created");
+      res.redirect(returnTo || "/admin/news?flash=created");
     } catch (err) {
       next(err);
     }
