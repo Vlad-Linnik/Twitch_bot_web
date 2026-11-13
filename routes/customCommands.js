@@ -14,6 +14,7 @@
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
+const variablesRepo = require("../db/variablesRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter, categoryLookupLimiter } = require("../middleware/rateLimiters");
@@ -330,10 +331,14 @@ router.post(
         // a command's text/timer/pin must not silently drop it out of its group. Carry it over
         // from the existing row; a brand-new command starts ungrouped and gets moved afterwards.
         group: before ? before.group || "" : "",
+        variableNames: (await variablesRepo.list(channel.channelLogin)).map((v) => v.name),
       });
       if (!parsed.ok) {
-        if (wantsJson(req)) return res.status(400).json({ ok: false, error: parsed.error });
-        return res.redirect(`${back}?error=${parsed.error}`);
+        if (wantsJson(req)) return res.status(400).json({ ok: false, error: parsed.error, variable: parsed.variable });
+        // variable_params_invalid names the offending "#name(...)" through the same "%s" slot the
+        // banner already fills for alias/name conflicts.
+        const detail = parsed.variable ? `&conflictsWith=${encodeURIComponent(parsed.variable)}` : "";
+        return res.redirect(`${back}?error=${parsed.error}${detail}`);
       }
 
       // A name/alias can't collide with another command's name or alias in this channel - the

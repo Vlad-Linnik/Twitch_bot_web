@@ -1590,7 +1590,7 @@
       "purple": "Purple"
     },
     "every": "every",
-    "variablesHint": "Use #variableName to insert a variable's current value",
+    "variablesHint": "Your own variable: #name. Built-in: #username (who called it), #touser (first word after the command, else the @-target, else the caller), #argument1…#argument9 and #args (words after the command), #rand(1-100), #pick(rock|paper|scissors), #channel, #game, #time, #date. Fallback text for an empty value goes in parentheses: #argument1(everyone). Glued to text — empty parentheses: #deaths()times. To keep # as plain text — \\#name.",
     "categoryOverridesHeading": "Text by stream category",
     "categoryOverridesHint": "Optional: different text for different categories (e.g. \"Dota 2\"). The name must exactly match the stream's Twitch category. Blank rows are ignored.",
     "categoryOverridesBadge": "by category",
@@ -1647,6 +1647,7 @@
       "alias_too_long": "Alias is too long",
       "aliases_too_many": "Too many aliases",
       "alias_matches_name": "An alias can't be the same as the command's own name",
+      "variable_params_invalid": "The variable %s has parameters it does not take. Examples: #rand(1-100), #pick(a|b|c), #argument1(everyone); your own variables, #channel, #time and #date take no parentheses (or empty ones)",
       "alias_conflict": "That alias is already taken by !%s on this channel",
       "name_conflict": "That name is already taken as an alias of !%s on this channel"
     }
@@ -1732,6 +1733,7 @@
       "name_required": "Variable name is required",
       "name_invalid": "Only lowercase letters and digits, no spaces or symbols",
       "name_too_long": "Variable name is too long",
+      "name_reserved": "That is a built-in variable's name — choose another one",
       "value_invalid": "Value must be a whole number",
       "access_invalid": "Unknown access level"
     }
