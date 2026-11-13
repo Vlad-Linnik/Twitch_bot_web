@@ -511,22 +511,21 @@
     renderStats();
     scheduleVote(c);
 
-    $("ub-chat-logs").textContent = "";
+    // Started over before the fetch, so neither a scroll landing mid-load nor a response still in
+    // flight for the previous applicant can add to this one's log - see resetLog().
+    resetLog(c._id);
     $("ub-mod-comments").textContent = "";
     $("ub-actions").textContent = "";
     $("ub-log-msg-count").textContent = "";
     // Cleared before the fetch like the panes above: the sheet must never show the previous
     // applicant's speeches during the round-trip, and most cases have none at all.
     renderOpinions(null);
-    // Reset before the fetch, so a scroll landing mid-load can't page the previous applicant's log.
-    logState.hasMore = false;
-    logState.oldest = null;
     // Covered from the moment the case switches, not from the first response: the five stat boxes
     // still hold the PREVIOUS applicant's counts until the dossier lands, which is the same
     // misreading this screen exists to prevent. The CSS delay means a mirrored case - answered from
     // Mongo in about 100ms - drops the cover again before it is ever visible.
     showPreparing(true);
-    loadDossier(c, null);
+    loadDossier(c);
 
     dealPapers();
   }
@@ -988,96 +987,245 @@
     return el("span", className, (c && (c.userDisplayName || c.userLogin)) || "—");
   }
 
-  function renderLog(dossier, prepend) {
-    var container = $("ub-chat-logs");
-    var fragment = document.createDocumentFragment();
-    var lastDay = null;
-
-    // Prepending older messages pushes everything down by the height of what was added, so the
-    // line the moderator was reading would jump off screen. Measured before the insert and
-    // corrected after, which is what makes the auto-load feel like the list simply got longer
-    // upwards instead of teleporting.
-    var heightBefore = container.scrollHeight;
-    var scrollBefore = container.scrollTop;
-
-    dossier.log.entries.forEach(function (entry) {
-      var day = fmtDay(entry.timestamp);
-      if (day !== lastDay) { fragment.appendChild(el("div", "ub-log-day", day)); lastDay = day; }
-
-      // Every action row in this log used to be red-tinted, which was fine while the only rows were
-      // punishments. It is not fine for a lifting: "vlad_261 снял бан" drawn in the ban colour reads
-      // as another strike against the applicant, which is the exact misreading these rows exist to
-      // prevent. The applicant's own entries are neutral for the same reason.
-      var rowClass = "ub-log-message";
-      if (entry.type === "action") {
-        rowClass = "ub-log-modaction";
-        if (LIFTING_ACTIONS[entry.action]) rowClass += " ub-log-lifted";
-        else if (entry.selfActed) rowClass += " ub-log-selfacted";
-      }
-      var row = el("div", rowClass);
-      row.appendChild(el("span", "ub-log-time", fmtTime(entry.timestamp)));
-
-      if (entry.type === "action") {
-        var body = el("span", "ub-log-modaction-text");
-        body.appendChild(entry.selfActed ? applicantLabel("ub-log-user") : modLabel(dossier, entry.modId));
-        body.appendChild(document.createTextNode(" " + actionLabel(entry.action)));
-        if (entry.reason) body.appendChild(document.createTextNode(" — " + entry.reason));
-        row.appendChild(body);
-      } else {
-        // A line written in a partner channel while the two chats were merged (Twitch shared
-        // chat). It goes BEFORE the text, like the timestamp: it says where the applicant was
-        // standing, and a mark at the end of a long message is read after the message has already
-        // been judged. Deliberately not in the flagged colour - this is provenance, not an
-        // accusation.
-        //
-        // Absence proves nothing: the bot only started recording the source channel in
-        // 2026-09, and Twitch's own mirrored history carries no such field at all.
-        if (entry.sourceChannelId) {
-          var source = (dossier.sourceChannels || {})[entry.sourceChannelId] || {};
-          row.appendChild(el(
-            "span",
-            "ub-log-source",
-            T.logSharedChat.replace("{{channel}}", source.displayName || source.login || entry.sourceChannelId)
-          ));
-        }
-        var textSpan = el("span", null, null);
-        appendWithEmotes(textSpan, entry.text);
-        row.appendChild(textSpan);
-        if (entry.probableCause) {
-          row.classList.add("ub-log-flagged");
-          row.appendChild(el("span", "ub-log-badge", T.probableCause));
-        }
-      }
-      fragment.appendChild(row);
-    });
-
-    if (prepend) container.insertBefore(fragment, container.firstChild);
-    else container.appendChild(fragment);
-
-    if (!container.childNodes.length) container.appendChild(el("div", "ub-log-system", T.logEmpty));
-
-    if (prepend) container.scrollTop = scrollBefore + (container.scrollHeight - heightBefore);
-
-    // What the scroll handler needs to fetch the next page back. There is no button any more -
-    // scrolling to the top of the pane is the trigger.
-    logState.hasMore = Boolean(dossier.log.hasMore);
-    logState.oldest = dossier.log.oldestTimestamp || null;
-  }
-
-  // Auto-loads the previous page when the moderator reaches the top of the log. Bound once, to the
-  // pane rather than to any row, so it survives every re-render.
+  // --- chat log ---------------------------------------------------------------
   //
-  // The guard is `logState.loading`: a scroll event fires many times per gesture, and without it a
-  // single flick would launch a dozen identical requests and prepend each of them.
-  var logState = { hasMore: false, oldest: null, loading: false };
+  // The log is a WINDOW onto the applicant's history, made of pages the server cut
+  // (lib/unbanLogPaging.js). Each page is a time interval and carries the two cursors leading out
+  // of it; adjacent pages share an edge, so walking from the top page's `olderCursor` or the bottom
+  // page's `newerCursor` can never fetch a line that is already on screen. The window holds at most
+  // LOG_MAX_PAGES pages: past that, the page at the far end is dropped, and scrolling back to it
+  // simply fetches it again through the same cursors - that is what makes the log scrollable in
+  // both directions without the pane growing without bound.
+  //
+  // Every page is appended only to the log it was requested for. `gen` changes whenever the log is
+  // started over (another case, or this case's log replaced by a different source), and a response
+  // that left under an older `gen` is dropped on arrival. Without that, a response that outlives
+  // its case lands in the next applicant's log - and the "Подготовка дела" re-poll, which re-reads
+  // the newest page every 1.5s, used to append that same page each time: the copies of whole days
+  // of chat that a short log showed over and over.
   var LOG_LOAD_TRIGGER_PX = 60;
+  var LOG_MAX_PAGES = 6;
+  var logState = {
+    gen: 0,
+    caseId: null,
+    // What the shown log was built from - see logSignature().
+    signature: null,
+    // Top to bottom: { id, hasOlder, olderCursor, hasNewer, newerCursor }.
+    pages: [],
+    nextPageId: 1,
+    loadingOlder: false,
+    loadingNewer: false,
+  };
   var lastDossier = null; // re-render target for the actions tab's "hide bots" toggle
 
-  $("ub-chat-logs").addEventListener("scroll", function () {
-    if (logState.loading || !logState.hasMore || !logState.oldest) return;
-    if (this.scrollTop > LOG_LOAD_TRIGGER_PX) return;
+  function resetLog(caseId) {
+    logState.gen += 1;
+    logState.caseId = caseId ? String(caseId) : null;
+    logState.signature = null;
+    logState.pages = [];
+    logState.loadingOlder = false;
+    logState.loadingNewer = false;
+    $("ub-chat-logs").textContent = "";
+  }
+
+  // Two loads of the same case show the same log exactly when they read the same source and the
+  // same amount of it. The one change that happens while a case is open is Twitch's mirror arriving
+  // - a thin log then switches from ours to Twitch's, a deep one gains history below ours - and both
+  // move this value. Anything else is the same log, and must not be drawn a second time.
+  function logSignature(log) {
+    return (log.source || "") + ":" + (log.messageCount || 0);
+  }
+
+  function logRow(dossier, entry, pageId) {
+    // Every action row in this log used to be red-tinted, which was fine while the only rows were
+    // punishments. It is not fine for a lifting: "vlad_261 снял бан" drawn in the ban colour reads
+    // as another strike against the applicant, which is the exact misreading these rows exist to
+    // prevent. The applicant's own entries are neutral for the same reason.
+    var rowClass = "ub-log-message";
+    if (entry.type === "action") {
+      rowClass = "ub-log-modaction";
+      if (LIFTING_ACTIONS[entry.action]) rowClass += " ub-log-lifted";
+      else if (entry.selfActed) rowClass += " ub-log-selfacted";
+    }
+    var row = el("div", rowClass);
+    row.setAttribute("data-page", String(pageId));
+    row.setAttribute("data-day", fmtDay(entry.timestamp));
+    row.appendChild(el("span", "ub-log-time", fmtTime(entry.timestamp)));
+
+    if (entry.type === "action") {
+      var body = el("span", "ub-log-modaction-text");
+      body.appendChild(entry.selfActed ? applicantLabel("ub-log-user") : modLabel(dossier, entry.modId));
+      body.appendChild(document.createTextNode(" " + actionLabel(entry.action)));
+      if (entry.reason) body.appendChild(document.createTextNode(" — " + entry.reason));
+      row.appendChild(body);
+      return row;
+    }
+
+    // A line written in a partner channel while the two chats were merged (Twitch shared chat). It
+    // goes BEFORE the text, like the timestamp: it says where the applicant was standing, and a mark
+    // at the end of a long message is read after the message has already been judged. Deliberately
+    // not in the flagged colour - this is provenance, not an accusation.
+    //
+    // Absence proves nothing: the bot only started recording the source channel in 2026-09, and
+    // Twitch's own mirrored history carries no such field at all.
+    if (entry.sourceChannelId) {
+      var source = (dossier.sourceChannels || {})[entry.sourceChannelId] || {};
+      row.appendChild(el(
+        "span",
+        "ub-log-source",
+        T.logSharedChat.replace("{{channel}}", source.displayName || source.login || entry.sourceChannelId)
+      ));
+    }
+    var textSpan = el("span", null, null);
+    appendWithEmotes(textSpan, entry.text);
+    row.appendChild(textSpan);
+    if (entry.probableCause) {
+      row.classList.add("ub-log-flagged");
+      row.appendChild(el("span", "ub-log-badge", T.probableCause));
+    }
+    return row;
+  }
+
+  // Day separators are derived from the rows rather than emitted per page: a page boundary falls in
+  // the middle of a day as often as not, and a header per page printed the same date twice in a row
+  // wherever two pages met.
+  function refreshDayHeaders(container) {
+    Array.prototype.forEach.call(container.querySelectorAll(".ub-log-day"), function (h) { h.remove(); });
+    var lastDay = null;
+    Array.prototype.forEach.call(container.querySelectorAll("[data-day]"), function (row) {
+      var day = row.getAttribute("data-day");
+      if (day !== lastDay) container.insertBefore(el("div", "ub-log-day", day), row);
+      lastDay = day;
+    });
+  }
+
+  // Keeps the line the moderator is reading where it is while rows are inserted or removed around
+  // it. Measured against the first row still visible, not against scrollHeight, because a load in
+  // one direction can also drop a page at the other end - the height then changes on both sides of
+  // the viewport, and only a fixed reference row tells the two apart.
+  function captureLogAnchor(container) {
+    var top = container.getBoundingClientRect().top;
+    var rows = container.querySelectorAll("[data-page]");
+    for (var i = 0; i < rows.length; i++) {
+      var rect = rows[i].getBoundingClientRect();
+      if (rect.bottom > top) return { node: rows[i], offset: rect.top - top };
+    }
+    return null;
+  }
+
+  function restoreLogAnchor(container, anchor) {
+    if (!anchor || !anchor.node.isConnected) return;
+    var now = anchor.node.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTop += now - anchor.offset;
+  }
+
+  function dropLogPage(container, page) {
+    Array.prototype.forEach.call(
+      container.querySelectorAll('[data-page="' + page.id + '"]'),
+      function (row) { row.remove(); }
+    );
+  }
+
+  // `mode`: "replace" starts the window over with this page, "older" puts it on top, "newer" below.
+  function renderLogPage(dossier, mode) {
+    var container = $("ub-chat-logs");
+    var log = dossier.log;
+    var page = {
+      id: logState.nextPageId++,
+      hasOlder: Boolean(log.hasOlder && log.olderCursor),
+      olderCursor: log.olderCursor || null,
+      hasNewer: Boolean(log.hasNewer && log.newerCursor),
+      newerCursor: log.newerCursor || null,
+    };
+    var anchor = mode === "replace" ? null : captureLogAnchor(container);
+
+    var fragment = document.createDocumentFragment();
+    log.entries.forEach(function (entry) { fragment.appendChild(logRow(dossier, entry, page.id)); });
+
+    var placeholder = container.querySelector(".ub-log-system");
+    if (placeholder) placeholder.remove();
+
+    if (mode === "older") {
+      container.insertBefore(fragment, container.firstChild);
+      logState.pages.unshift(page);
+      while (logState.pages.length > LOG_MAX_PAGES) dropLogPage(container, logState.pages.pop());
+    } else if (mode === "newer") {
+      container.appendChild(fragment);
+      logState.pages.push(page);
+      while (logState.pages.length > LOG_MAX_PAGES) dropLogPage(container, logState.pages.shift());
+    } else {
+      container.appendChild(fragment);
+      logState.pages = [page];
+    }
+
+    refreshDayHeaders(container);
+    if (!container.querySelector("[data-page]")) container.appendChild(el("div", "ub-log-system", T.logEmpty));
+    restoreLogAnchor(container, anchor);
+  }
+
+  // Starts this case's log over from the newest page. Also the re-poll's path, which is why it
+  // checks the signature first: a re-read that brings the same log changes nothing on screen -
+  // neither the rows nor where the moderator has scrolled to.
+  function showLogFrom(c, dossier) {
+    var signature = logSignature(dossier.log);
+    if (logState.caseId === String(c._id) && logState.signature === signature) return;
+    resetLog(c._id);
+    logState.signature = signature;
+    renderLogPage(dossier, "replace");
+    $("ub-chat-logs").scrollTop = $("ub-chat-logs").scrollHeight;
+  }
+
+  // One more page beyond the top (`older`) or the bottom (`newer`) of the window.
+  function loadLogPage(direction, cursor) {
     var c = currentCase();
-    if (c) loadDossier(c, logState.oldest);
+    if (!c || String(c._id) !== logState.caseId || !cursor) return;
+    var flag = direction === "older" ? "loadingOlder" : "loadingNewer";
+    if (logState[flag]) return;
+    logState[flag] = true;
+    var gen = logState.gen;
+    var atBottom = direction === "newer";
+    showLogSpinner(true, atBottom);
+
+    var url = "/" + CHANNEL + "/unban-bureau/dossier.json?id=" + encodeURIComponent(c._id) +
+      "&" + (atBottom ? "after" : "before") + "=" + encodeURIComponent(cursor);
+    fetch(url, { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        if (gen !== logState.gen) return; // another case, or this log started over meanwhile
+        showLogSpinner(false, atBottom);
+        logState[flag] = false;
+        if (!payload.ok) throw new Error(payload.error || "load_failed");
+        // The edge this page was asked for must still be the edge: a load at the other end may have
+        // dropped the page it hangs off, and attaching it anyway would leave a hole in the log.
+        var edge = atBottom ? logState.pages[logState.pages.length - 1] : logState.pages[0];
+        var edgeCursor = edge && (atBottom ? edge.newerCursor : edge.olderCursor);
+        if (edgeCursor !== cursor) return;
+        renderLogPage(payload.dossier, direction);
+      })
+      .catch(function () {
+        if (gen !== logState.gen) return;
+        showLogSpinner(false, atBottom);
+        // Left unlocked on purpose: the next scroll retries, which is the only way back for a
+        // dropped page - there is no button to press.
+        logState[flag] = false;
+        toast(T.loadError);
+      });
+  }
+
+  // Loads the next page when the moderator reaches either end of the pane. Bound once, to the pane
+  // rather than to any row, so it survives every re-render. The per-direction `loading*` flags are
+  // the guard: a scroll event fires many times per gesture, and without them a single flick would
+  // launch a dozen identical requests.
+  $("ub-chat-logs").addEventListener("scroll", function () {
+    var pages = logState.pages;
+    if (!pages.length) return;
+    if (this.scrollTop <= LOG_LOAD_TRIGGER_PX && pages[0].hasOlder) {
+      loadLogPage("older", pages[0].olderCursor);
+    }
+    var bottom = pages[pages.length - 1];
+    if (this.scrollHeight - this.scrollTop - this.clientHeight <= LOG_LOAD_TRIGGER_PX && bottom.hasNewer) {
+      loadLogPage("newer", bottom.newerCursor);
+    }
   });
 
   // Twitch's OWN moderator comments on this user - the notes moderators leave in the viewer card,
@@ -1318,7 +1466,7 @@
             var line = el("div", "ub-context-line" + (message.flagged ? " ub-log-flagged" : ""));
             line.appendChild(el("span", "ub-log-time", fmtTime(message.timestamp)));
             // Same shared-chat mark the main log carries, or the two views would disagree about
-            // the same message - see renderLog().
+            // the same message - see logRow().
             if (message.sourceChannel) {
               line.appendChild(el("span", "ub-log-source", T.logSharedChat.replace("{{channel}}", message.sourceChannel)));
             }
@@ -1379,77 +1527,77 @@
     $("ub-user-card").classList.toggle("ub-preparing", Boolean(on));
   }
 
+  // The whole dossier for the open case: the card, the tabs, and the newest page of the log. Paging
+  // the log further is loadLogPage()'s job, not this one's.
+  //
   // `waitUntil` is set only on the retries this function schedules for itself, so the deadline is
   // measured from the moderator opening the case rather than restarting with every poll.
-  function loadDossier(c, before, waitUntil) {
-    var url = "/" + CHANNEL + "/unban-bureau/dossier.json?id=" + encodeURIComponent(c._id) +
-      (before ? "&before=" + encodeURIComponent(before) : "");
-    logState.loading = true;
-    if (before) showLogSpinner(true);
+  function loadDossier(c, waitUntil) {
+    var url = "/" + CHANNEL + "/unban-bureau/dossier.json?id=" + encodeURIComponent(c._id);
+    // A response is only ever painted onto the log it was asked for. Moving to another case starts
+    // a new one (resetLog), so a slow answer for the case just left is dropped here rather than
+    // painted over the applicant now at the window.
+    var gen = logState.gen;
     return fetch(url, { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
+        if (gen !== logState.gen) return;
         if (!payload.ok) throw new Error(payload.error || "load_failed");
         var d = payload.dossier;
-        // A "load previous" page only extends the log — the counts, the last ban and the comments
-        // tab are whole-history figures that don't change with paging.
-        if (!before) {
-          $("ub-uc-bans").textContent = fmtCount(d.counts.ban, d.counts.truncated);
-          $("ub-uc-timeouts").textContent = fmtCount(d.counts.timeout, d.counts.truncated);
-          $("ub-uc-warns").textContent = fmtCount(d.counts.warn, d.counts.truncated);
-          // Two very different numbers wear the same label: Twitch's lifetime totals for this
-          // channel, or - if the bot couldn't reach Twitch - only what it witnessed since joining,
-          // which for an old account is a small fraction. A moderator judging an appeal has to be
-          // able to tell which one they're looking at.
-          infoRow($("ub-uc-sub"), SVG_SUB, subscriptionLabel(d.subscription));
-          var countsNote = d.counts.source === "twitch" ? T.countsFromTwitch : T.countsFromBot;
-          Array.prototype.forEach.call(
-            document.querySelectorAll("#ub-uc-ban-stats .ub-stat-box"),
-            function (box) { box.title = countsNote; }
-          );
-          // What became of those punishments afterwards. Absent from the bot's own records entirely
-          // (it never recorded a lifting), so these stay silent unless Twitch supplied them.
-          annotateCount("ub-uc-bans", d.counts.unban, T.countsLifted, countsNote);
-          annotateCount("ub-uc-timeouts", d.counts.untimeout, T.countsLifted, countsNote);
-          annotateCount("ub-uc-warns", d.counts.warnAck, T.countsAcked, countsNote);
-          if (d.lastBan) {
-            var mod = d.moderators[d.lastBan.modId] || {};
-            // Twitch ships the moderator's name with the strike; our own rows have only an id to
-            // resolve. The bot mark matters either way: the counts above exclude bot actions while
-            // this deliberately doesn't, so an unmarked bot name over "Bans: 0" would read as a bug.
-            var name = d.lastBan.modDisplayName || mod.displayName || d.lastBan.modId;
-            $("ub-uc-banned-by").textContent = name + (mod.isBot ? " " + T.botMark : "");
-            $("ub-uc-banned-at").textContent = fmtDateTime(d.lastBan.timestamp);
-          } else {
-            $("ub-uc-banned-by").textContent = "—";
-            $("ub-uc-banned-at").textContent = "—";
-          }
-          renderRisk(d.risk, d.counts);
-          renderModComments(d);
-          renderActions(d);
-          // Channel-wide, not per-case - the same list on every applicant from this channel - but
-          // reloaded with every dossier anyway rather than cached, same as everything else here.
-          renderRules(d.channelRules);
-          // Sent only on a first load, not on a ?before= log page - the route omits the field
-          // entirely there rather than re-sending an unchanged sheet with every scroll-back.
-          renderOpinions(payload.opinions || null);
-          $("ub-log-msg-count").textContent = fmtMessageCount(d.log.messageCount);
-          // Newest is at the bottom now, like the log - if the actions tab is what the moderator
-          // was already looking at (the active tab carries over between cases), land on the newest
-          // row rather than the oldest one from years back.
-          if ($("ub-actions").style.display !== "none") {
-            $("ub-actions").scrollTop = $("ub-actions").scrollHeight;
-          }
+        $("ub-uc-bans").textContent = fmtCount(d.counts.ban, d.counts.truncated);
+        $("ub-uc-timeouts").textContent = fmtCount(d.counts.timeout, d.counts.truncated);
+        $("ub-uc-warns").textContent = fmtCount(d.counts.warn, d.counts.truncated);
+        // Two very different numbers wear the same label: Twitch's lifetime totals for this
+        // channel, or - if the bot couldn't reach Twitch - only what it witnessed since joining,
+        // which for an old account is a small fraction. A moderator judging an appeal has to be
+        // able to tell which one they're looking at.
+        infoRow($("ub-uc-sub"), SVG_SUB, subscriptionLabel(d.subscription));
+        var countsNote = d.counts.source === "twitch" ? T.countsFromTwitch : T.countsFromBot;
+        Array.prototype.forEach.call(
+          document.querySelectorAll("#ub-uc-ban-stats .ub-stat-box"),
+          function (box) { box.title = countsNote; }
+        );
+        // What became of those punishments afterwards. Absent from the bot's own records entirely
+        // (it never recorded a lifting), so these stay silent unless Twitch supplied them.
+        annotateCount("ub-uc-bans", d.counts.unban, T.countsLifted, countsNote);
+        annotateCount("ub-uc-timeouts", d.counts.untimeout, T.countsLifted, countsNote);
+        annotateCount("ub-uc-warns", d.counts.warnAck, T.countsAcked, countsNote);
+        if (d.lastBan) {
+          var mod = d.moderators[d.lastBan.modId] || {};
+          // Twitch ships the moderator's name with the strike; our own rows have only an id to
+          // resolve. The bot mark matters either way: the counts above exclude bot actions while
+          // this deliberately doesn't, so an unmarked bot name over "Bans: 0" would read as a bug.
+          var name = d.lastBan.modDisplayName || mod.displayName || d.lastBan.modId;
+          $("ub-uc-banned-by").textContent = name + (mod.isBot ? " " + T.botMark : "");
+          $("ub-uc-banned-at").textContent = fmtDateTime(d.lastBan.timestamp);
+        } else {
+          $("ub-uc-banned-by").textContent = "—";
+          $("ub-uc-banned-at").textContent = "—";
         }
-        showLogSpinner(false);
-        renderLog(d, Boolean(before));
-        if (!before) $("ub-chat-logs").scrollTop = $("ub-chat-logs").scrollHeight;
-        logState.loading = false;
+        renderRisk(d.risk, d.counts);
+        renderModComments(d);
+        renderActions(d);
+        // Channel-wide, not per-case - the same list on every applicant from this channel - but
+        // reloaded with every dossier anyway rather than cached, same as everything else here.
+        renderRules(d.channelRules);
+        // Sent only on a first load, not on a log page - the route omits the field
+        // entirely there rather than re-sending an unchanged sheet with every scroll-back.
+        renderOpinions(payload.opinions || null);
+        $("ub-log-msg-count").textContent = fmtMessageCount(d.log.messageCount);
+        // Newest is at the bottom now, like the log - if the actions tab is what the moderator
+        // was already looking at (the active tab carries over between cases), land on the newest
+        // row rather than the oldest one from years back.
+        if ($("ub-actions").style.display !== "none") {
+          $("ub-actions").scrollTop = $("ub-actions").scrollHeight;
+        }
+        // Replaces the log only when this load brought a different one: the re-poll below re-reads
+        // the newest page every PREPARE_POLL_MS, and drawing it again each time is what used to
+        // stack copies of the same days on top of each other.
+        showLogFrom(c, d);
 
         // Everything above has already painted underneath the cover, so lifting it here shows the
         // finished card in one step - no window in which the bot's own counts are readable and then
         // replaced. `preparing` is only ever true when the case has no Twitch mirror at all.
-        if (before) return;
         var shown = currentCase();
         var stillOpen = shown && String(shown._id) === String(c._id);
         var deadline = waitUntil || Date.now() + PREPARE_MAX_WAIT_MS;
@@ -1459,33 +1607,32 @@
             // Re-checked rather than trusted: the moderator may have moved on during the wait, and
             // reloading a case they have left would paint another applicant's dossier over theirs.
             var open = currentCase();
-            if (open && String(open._id) === String(c._id)) loadDossier(c, null, deadline);
+            if (open && String(open._id) === String(c._id)) loadDossier(c, deadline);
           }, PREPARE_POLL_MS);
         } else {
           showPreparing(false);
         }
       })
       .catch(function () {
-        showLogSpinner(false);
+        if (gen !== logState.gen) return;
         showPreparing(false);
-        // Left unlocked on purpose: the next scroll retries, which is the only way back for a
-        // dropped page now that there is no button to press.
-        logState.loading = false;
         toast(T.loadError);
       });
   }
 
-  // A one-line placeholder pinned to the top of the log while an older page is on its way. Doubles
-  // as the only feedback that scrolling to the top did anything at all.
-  function showLogSpinner(on) {
+  // A one-line placeholder pinned to the end of the log a page is on its way to. Doubles as the only
+  // feedback that scrolling to that end did anything at all. Inserted and removed around the same
+  // anchor the pages use, so the placeholder itself does not nudge the line being read.
+  function showLogSpinner(on, atBottom) {
     var container = $("ub-chat-logs");
-    var existing = container.querySelector(".ub-log-loading");
-    if (!on) {
-      if (existing) existing.remove();
-      return;
-    }
-    if (existing) return;
-    container.insertBefore(el("div", "ub-log-loading", T.contextLoading), container.firstChild);
+    var selector = atBottom ? ".ub-log-loading.ub-log-loading-bottom" : ".ub-log-loading:not(.ub-log-loading-bottom)";
+    var existing = container.querySelector(selector);
+    if (Boolean(existing) === Boolean(on)) return;
+    var anchor = captureLogAnchor(container);
+    if (existing) existing.remove();
+    else if (atBottom) container.appendChild(el("div", "ub-log-loading ub-log-loading-bottom", T.contextLoading));
+    else container.insertBefore(el("div", "ub-log-loading", T.contextLoading), container.firstChild);
+    restoreLogAnchor(container, anchor);
   }
 
   // --- vote + sniper readout -----------------------------------------------

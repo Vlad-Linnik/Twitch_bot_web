@@ -17,39 +17,24 @@ const { withHash, bareLogin, MOD_ACTION_CONTEXT_MAX_TTA_MS } = require("./statsR
 const { getKnownBotIdentifiers } = require("../lib/knownBotIds");
 const { buildCaseBrief, pickLogBudget } = require("../lib/unbanCaseBrief");
 const profileCacheRepo = require("./profileCacheRepo");
+const {
+  ACTION_MATCH_WINDOW_MS,
+  ACTION_TYPE_BY_TWITCH,
+  SELF_ACTED,
+  OLDER,
+  NEWER,
+  parseLogCursor,
+  chooseLogSource,
+  normalizeMirrorMessages,
+  mirrorCandidates,
+  mergeWalk,
+  cutPage,
+  pageWindow,
+  mirroredActionsInWindow,
+  assembleLogEntries,
+} = require("../lib/unbanLogPaging");
 
 const DEFAULT_LOG_LIMIT = 40;
-// Below this many messages of our own, the log is served from Twitch's mirrored copy instead of
-// ours - see getLogPage(). Ours is otherwise the better source (it pages without a ceiling, and it
-// flags the message an action was probably for), but under a hundred lines that advantage is worth
-// less than the years of history Twitch still holds for a user the bot only recently started
-// seeing.
-const THIN_LOG_MESSAGES = 100;
-// How far apart a Twitch action row and one of our own ModeratorActionLogs rows may be and still
-// be the same event. Ours is stamped when the bot's EventSub socket delivered it, Twitch's when it
-// happened, so they differ by network latency - a second or two in practice.
-const ACTION_MATCH_WINDOW_MS = 10 * 1000;
-// Twitch's action type -> the vocabulary our own logs (and the rest of this page) use.
-//
-// The bot's own EventSub records only the first three plus `delete`, so the six below it can only
-// ever arrive from Twitch's mirror - which is the point of them: a channel's 17 bans of which 16
-// were LIFTED told the moderator nothing about the lifting until these were read (verified against
-// the live #vlad_261 case).
-const ACTION_TYPE_BY_TWITCH = {
-  BAN: "ban",
-  TIMEOUT: "timeout",
-  WARN: "warn",
-  UNBAN: "unban",
-  UNTIMEOUT: "untimeout",
-  ACKNOWLEDGE_WARNING: "warnAck",
-  UNBAN_REQUEST_CREATED: "unbanRequest",
-  UNBAN_REQUEST_APPROVED: "unbanApproved",
-  UNBAN_REQUEST_DENIED: "unbanDenied",
-};
-// The two the applicant performs on themselves. Their mirrored row carries no moderator at all (see
-// TwitchBot/twitch/viewerCardModLogs.js's `selfActed`), so the page has to name the applicant as the
-// actor instead of resolving a null id through the profile cache.
-const SELF_ACTED = new Set(["warnAck", "unbanRequest"]);
 // Twitch count key -> the dossier's own. Only the first three have a local equivalent; the rest are
 // simply absent when the mirror is (`countHumanActions` cannot know about them), which is why the
 // page only ever renders them when they're above zero.
@@ -165,221 +150,113 @@ async function countBotIssuedActions(channelLogin, userId) {
   return counts;
 }
 
-// Which UNBAN_REQUEST_CREATED rows in the Twitch mirror were actually decided (a later
-// UNBAN_REQUEST_APPROVED/DENIED for the same user). The request THIS case is reviewing is, by
-// definition, undecided - nobody has ruled on it yet, that's what "pending" means - so this rule
-// alone is what keeps it out of the log: its text already sits on the desk as the case itself, and
-// every case on this page would otherwise end its log with the same non-fact ("filed an appeal"),
-// since the page only ever shows logs for people who did. An older CREATED row that never got a
-// verdict (expired, or the applicant left before it was reviewed) is dropped for the same reason a
-// pending one is - there is nothing decided to show.
-function resolvedAppealIds(twitchRows) {
-  const chronological = [...twitchRows]
-    .filter((row) => row.type === "UNBAN_REQUEST_CREATED" || row.type === "UNBAN_REQUEST_APPROVED" || row.type === "UNBAN_REQUEST_DENIED")
-    .map((row) => ({ id: row.id, type: row.type, timestamp: new Date(row.timestamp) }))
-    .sort((a, b) => a.timestamp - b.timestamp);
-
-  const resolved = new Set();
-  let openId = null;
-  for (const row of chronological) {
-    if (row.type === "UNBAN_REQUEST_CREATED") {
-      openId = row.id;
-    } else if (openId) {
-      resolved.add(openId);
-      openId = null;
-    }
-  }
-  return resolved;
-}
-
 // One page of the merged activity log, oldest-first for display.
 //
 // Paged by MESSAGES (the bulk of the stream), then every moderation action falling inside that
-// page's time range is interleaved - which is what makes the log read as a story ("...user says
-// something, ftk789 bans them..."). Paging both streams independently would need a merge cursor
-// for no real benefit: a user has orders of magnitude more messages than actions.
-async function getLogPage(channelLogin, unbanCase, { before = null, limit = DEFAULT_LOG_LIMIT } = {}) {
+// page's time interval is interleaved - which is what makes the log read as a story ("...user says
+// something, ftk789 bans them..."). Which source a page comes from, where its edges go and how the
+// cursors are formed is all lib/unbanLogPaging.js; this function only does the reads.
+//
+// `before` walks to older lines, `after` to newer ones, neither means the newest page. Both accept
+// a Date or an ISO string - the browser sends back the `olderCursor`/`newerCursor` it was given.
+async function getLogPage(
+  channelLogin,
+  unbanCase,
+  { before = null, after = null, limit = DEFAULT_LOG_LIMIT } = {}
+) {
+  const cursor = parseLogCursor({ before, after });
+  if (!cursor.ok) {
+    const err = new Error(cursor.error);
+    err.status = 400;
+    throw err;
+  }
+  const { direction, at } = cursor;
+
   const { messages, modLogs } = await ensureInitialized();
   const userId = unbanCase.userId;
-  const upperBound = before ? new Date(before) : new Date(8640000000000000);
+  const ownFilter = { channel: withHash(channelLogin), userId: String(userId) };
 
-  const mirrored = unbanCase?.twitchModLogs?.messages || [];
-  const ownTotal = await messages.countDocuments({
-    channel: withHash(channelLogin),
-    userId: String(userId),
-  });
+  const mirror = normalizeMirrorMessages(unbanCase?.twitchModLogs?.messages);
+  const ownTotal = await messages.countDocuments(ownFilter);
+  const source = chooseLogSource({ ownTotal, mirroredCount: mirror.length });
 
-  // Two different jobs for the same mirror, both wanted, each needing a different rule:
-  //
-  //   THIN (fewer than THIN_LOG_MESSAGES of our own) - Twitch's copy REPLACES ours outright. It is
-  //   gap-free: the bot may have been offline for stretches, and a merge would silently skip
-  //   whatever it missed in the middle.
-  //
-  //   DEEP (we have plenty, but the moderator pressed "load previous" past our oldest line) -
-  //   Twitch's copy EXTENDS ours, strictly below the oldest message we hold. That boundary is what
-  //   makes the join safe without de-duplication: the two sources share no message id, and
-  //   matching on timestamp+text would eventually show a moderator the same line twice while they
-  //   decide whether it justified a ban. Below our oldest, by definition, nothing can be a repeat.
-  const useMirrorOnly = ownTotal < THIN_LOG_MESSAGES && mirrored.length > ownTotal;
-
-  let ownDocs = [];
-  if (!useMirrorOnly) {
-    ownDocs = await messages
-      .find({
-        channel: withHash(channelLogin),
-        userId: String(userId),
-        timestamp: { $lt: upperBound },
-      })
-      .sort({ timestamp: -1 })
-      .limit(limit)
-      .toArray();
-    ownDocs.reverse(); // chronological
-  }
-
-  // Where the mirror is allowed to start: below `before` when it is the only source, otherwise
-  // below the oldest line we hold anywhere (not merely on this page).
+  let ownWalk = [];
+  // The exclusive upper edge of the stretch the mirror may cover: nothing when it stands alone,
+  // our oldest line when ours is the source.
   let mirrorCeiling = null;
-  if (useMirrorOnly) {
-    mirrorCeiling = upperBound;
-  } else if (ownDocs.length < limit) {
-    const oldestOwn = await messages.findOne(
-      { channel: withHash(channelLogin), userId: String(userId) },
-      { sort: { timestamp: 1 }, projection: { timestamp: 1 } }
-    );
-    // Our records ran out on this page; anything older than our very oldest is fair game. With no
-    // records at all, `before` is the only bound there is.
-    mirrorCeiling = oldestOwn ? oldestOwn.timestamp : upperBound;
-    if (mirrorCeiling > upperBound) mirrorCeiling = upperBound;
+  let useMirror = mirror.length > 0;
+  if (source === "own") {
+    const timeFilter =
+      direction === OLDER ? { timestamp: { $lt: at } } : direction === NEWER ? { timestamp: { $gte: at } } : {};
+    // One past the page, so cutPage() can tell whether anything lies beyond it. Sorted by the
+    // timestamp alone, which the {channel, userId, timestamp} index serves; a tie at the edge is
+    // cutPage()'s to resolve.
+    ownWalk = await messages
+      .find({ ...ownFilter, ...timeFilter })
+      .sort({ timestamp: direction === NEWER ? 1 : -1 })
+      .limit(limit + 1)
+      .toArray();
+    if (useMirror) {
+      const oldestOwn = await messages.findOne(ownFilter, {
+        sort: { timestamp: 1 },
+        projection: { timestamp: 1 },
+      });
+      // chooseLogSource() returns "own" with a non-empty mirror only when we hold lines of our
+      // own, so there is always an oldest one - but a mirror with no ceiling would overlap ours.
+      if (oldestOwn) mirrorCeiling = oldestOwn.timestamp;
+      else useMirror = false;
+    }
   }
 
-  const olderMirrored = mirrorCeiling
-    ? mirrored
-        .map((message) => ({
-          _id: message.id,
-          timestamp: new Date(message.timestamp),
-          message: message.text,
-          fromTwitch: true,
-        }))
-        .filter((doc) => doc.timestamp < mirrorCeiling)
-        .sort((a, b) => b.timestamp - a.timestamp)
+  const mirrorWalk = useMirror
+    ? mirrorCandidates(mirror, { direction, at, ceiling: mirrorCeiling, limit })
     : [];
+  const page = cutPage(mergeWalk(direction, ownWalk, mirrorWalk), limit, direction);
+  const window = pageWindow({ direction, at, ...page });
 
-  // The page is filled from the top up: Twitch's older lines first, then ours.
-  const mirrorRoom = Math.max(0, limit - ownDocs.length);
-  const mirrorPage = olderMirrored.slice(0, mirrorRoom).reverse();
-  const mirrorRemaining = Math.max(0, olderMirrored.length - mirrorPage.length);
-  const messageDocs = [...mirrorPage, ...ownDocs];
-
-  // No messages left means we've reached the start of their history; actions older than any
-  // surviving message would then have no window to fall into, so the log ends here.
-  const lowerBound = messageDocs.length ? messageDocs[0].timestamp : null;
-  const actionDocs = lowerBound
+  const actionDocs = window.lo
     ? await modLogs
         .find({
           channel: bareLogin(channelLogin),
           userId: String(userId),
-          timestamp: { $gte: lowerBound, $lt: upperBound },
+          timestamp: window.hi ? { $gte: window.lo, $lt: window.hi } : { $gte: window.lo },
         })
         .sort({ timestamp: 1 })
         .toArray()
     : [];
 
-  // Twitch's own mirrored actions falling in the same window - present whenever the bot never
-  // witnessed the action itself (it was offline, or joined the channel after it happened), which
-  // our own modLogs query above has no row for at all. Matched against actionDocs by the same
-  // type+timestamp rule buildActionList uses, so an action both sides recorded doesn't show twice.
-  const resolvedAppeals = resolvedAppealIds(unbanCase?.twitchModLogs?.actions || []);
-  const mirroredActions = lowerBound
-    ? (unbanCase?.twitchModLogs?.actions || [])
-        .map((row) => {
-          const action = ACTION_TYPE_BY_TWITCH[row.type] || null;
-          return {
-            id: row.id,
-            timestamp: new Date(row.timestamp),
-            action,
-            modId: row.modId,
-            selfActed: Boolean(action && SELF_ACTED.has(action)),
-            detail: row.detail || null,
-          };
-        })
-        .filter((row) => row.action && row.timestamp >= lowerBound && row.timestamp < upperBound)
-        // See resolvedAppealIds: an appeal only belongs in the log once it has a verdict - which
-        // also filters out the very appeal this case is reviewing, since that one has none yet.
-        .filter((row) => row.action !== "unbanRequest" || resolvedAppeals.has(row.id))
-        .filter(
-          (row) =>
-            !actionDocs.some(
-              (local) =>
-                local.action === row.action &&
-                Math.abs(local.timestamp.getTime() - row.timestamp.getTime()) <= ACTION_MATCH_WINDOW_MS
-            )
-        )
-    : [];
+  // Twitch's own mirrored actions falling in the same interval - present whenever the bot never
+  // witnessed the action itself (it was offline, or joined the channel after it happened).
+  const mirroredActions = mirroredActionsInWindow(unbanCase?.twitchModLogs?.actions || [], window, actionDocs);
 
   // A message is flagged as the probable reason for an action only when the bot recorded that
   // action within MOD_ACTION_CONTEXT_MAX_TTA_MS of it. `messageId` is a GUESS the bot makes at
   // action time (the user's latest message then), not Twitch ground truth - past that window it
   // is very likely unrelated, and presenting it as the cause would mislead the moderator judging
   // the appeal. Same rule statsRepo.getModActionContext applies.
-  const flagged = new Set(
+  const flaggedIds = new Set(
     actionDocs
       .filter((a) => a.messageId && a.TTA != null && a.TTA < MOD_ACTION_CONTEXT_MAX_TTA_MS)
       .map((a) => String(a.messageId))
   );
 
-  const entries = [
-    ...messageDocs.map((doc) => ({
-      type: "message",
-      id: String(doc._id),
-      timestamp: doc.timestamp,
-      text: doc.message,
-      // Never set on a mirrored line: `probableCause` is the bot's own guess about its own
-      // records, and Twitch's copy carries no equivalent.
-      probableCause: !doc.fromTwitch && flagged.has(String(doc._id)),
-      fromTwitch: Boolean(doc.fromTwitch),
-      // The partner channel this line was written in, during a Twitch shared-chat session - a
-      // numeric channel id, resolved to a name by getDossier(). Null covers three different
-      // things and none of them can be told apart here: sent in this channel, sent before the
-      // bot started recording the tag, or mirrored from Twitch - whose copy of the history
-      // carries no source-channel field at all (probed 2026-09-05: `ViewerCardModLogsChatMessage`
-      // exposes only id/sentAt/sender/content). So the badge marks what IS foreign and never
-      // claims the rest is ours.
-      sourceChannelId: !doc.fromTwitch && doc.sourceRoomId ? String(doc.sourceRoomId) : null,
-    })),
-    ...actionDocs.map((doc) => ({
-      type: "action",
-      id: String(doc._id),
-      timestamp: doc.timestamp,
-      action: doc.action,
-      modId: String(doc.modID),
-      reason: doc.reason || null,
-      durationMs: doc.durationMs ?? null,
-    })),
-    ...mirroredActions.map((row) => ({
-      type: "action",
-      id: "twitch-" + row.id,
-      timestamp: row.timestamp,
-      action: row.action,
-      modId: row.modId,
-      selfActed: row.selfActed,
-      reason: row.detail,
-      durationMs: null,
-    })),
-  ].sort((a, b) => a.timestamp - b.timestamp);
-
   return {
-    entries,
-    // "Load previous" appears while EITHER source still has something older: our own records first,
-    // then whatever of Twitch's snapshot this page didn't reach. It disappears only when both are
-    // exhausted - which, for the mirror, means the 500-line ceiling the bot stored.
-    // The client auto-loads the next page back when this is true and the moderator reaches the top
-    // of the pane, so it is the only thing standing between them and an endless scroll.
-    hasMore: ownDocs.length === limit || mirrorRemaining > 0,
-    oldestTimestamp: lowerBound,
+    entries: assembleLogEntries({ messageDocs: page.docs, actionDocs, mirroredActions, flaggedIds }),
+    // Which source the newest stretch of this log is read from. The page compares it between two
+    // loads of the same case to tell whether the log it is showing is still the right one (the
+    // mirror arriving while the case is open switches a thin log from ours to Twitch's).
+    source,
+    // The two ways out of this page. Each cursor is an edge of the page's interval, so the page it
+    // leads to starts exactly where this one stops. The browser walks the log with these and with
+    // nothing else; `has*` false means that end of the log has been reached.
+    hasOlder: window.hasOlder,
+    olderCursor: window.olderCursor,
+    hasNewer: window.hasNewer,
+    newerCursor: window.newerCursor,
     // The larger of the two sources: our own count (unbounded, but only since the bot joined) and
     // the mirror's (Twitch's real total whenever it fits under the 500-line snapshot the bot took -
     // see ../CLAUDE.md's "Бюро амнистии"). Whichever is bigger is the better lower bound we have.
-    messageCount: Math.max(ownTotal, mirrored.length),
+    messageCount: Math.max(ownTotal, mirror.length),
   };
 }
 
@@ -605,7 +482,11 @@ async function resolveChannelNames(channelIds) {
 //
 // Takes the UnbanRequests document rather than a bare userId because half the dossier now lives on
 // it: the moderator comments and Twitch's own action counts, both mirrored there by the bot.
-async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFAULT_LOG_LIMIT } = {}) {
+async function getDossier(
+  channelLogin,
+  unbanCase,
+  { before = null, after = null, limit = DEFAULT_LOG_LIMIT } = {}
+) {
   const userId = unbanCase.userId;
   // Twitch's counts are this channel's REAL lifetime totals; ours only cover what the bot
   // witnessed since it joined, which for an old account is a small fraction (a user Twitch counts
@@ -620,7 +501,7 @@ async function getDossier(channelLogin, unbanCase, { before = null, limit = DEFA
     twitchCounts ? countBotIssuedActions(channelLogin, userId) : null,
     getKnownBotIdentifiers(),
     findLastBan(channelLogin, userId),
-    getLogPage(channelLogin, unbanCase, { before, limit }),
+    getLogPage(channelLogin, unbanCase, { before, after, limit }),
     buildActionList(channelLogin, unbanCase),
   ]);
   const botSet = new Set([...botIds.ids, ...botIds.logins]);
@@ -739,8 +620,8 @@ const CONTEXTABLE_ACTIONS = new Set(["ban", "timeout", "warn"]);
  * ten lines show that nothing of the sort appears anywhere near the ban.
  *
  * Implemented on top of getLogPage() rather than querying `messages` directly, and that is the
- * whole point: the two sources (ours and Twitch's mirror) may not simply be concatenated - see that
- * function's THIN/DEEP comment - and a second, subtly different merge here is exactly how the two
+ * whole point: the two sources (ours and Twitch's mirror) may not simply be concatenated - see
+ * lib/unbanLogPaging.js's header - and a second, subtly different merge here is exactly how the two
  * would drift. Asking it for `limit` entries ending at the action's timestamp gives the correct
  * window for free, at the cost of one query per action.
  */
@@ -750,7 +631,11 @@ async function getPunishmentContexts(
   { perAction = 10, maxActions = 5 } = {}
 ) {
   const actions = await buildActionList(channelLogin, unbanCase);
-  const punishments = actions.filter((a) => CONTEXTABLE_ACTIONS.has(a.action)).slice(0, maxActions);
+  // A row whose timestamp does not parse has no "just before" - and getLogPage() refuses it as a
+  // cursor, which would sink the whole brief over one bad row.
+  const punishments = actions
+    .filter((a) => CONTEXTABLE_ACTIONS.has(a.action) && !Number.isNaN(new Date(a.timestamp).getTime()))
+    .slice(0, maxActions);
 
   return Promise.all(
     punishments.map(async (action) => {

@@ -27,6 +27,7 @@ const unbanBureauValidation = require("../lib/unbanBureauValidation");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const emoteImages = require("../twitch/emoteImages");
 const { parseEffectiveAt } = require("../lib/unbanDecisionValidation");
+const { parseLogCursor } = require("../lib/unbanLogPaging");
 const {
   parseOpinions,
   parseSpeechTurn,
@@ -225,7 +226,7 @@ router.get("/:channel/unban-bureau", requireLevel(2), async (req, res, next) => 
 });
 
 // The dossier for one case, fetched lazily as the moderator moves between cases (and again with
-// ?before= when they press "load previous" in the log).
+// ?before= / ?after= as they scroll the chat log towards older or newer lines).
 router.get(
   "/:channel/unban-bureau/dossier.json",
   statsReadLimiter,
@@ -242,9 +243,16 @@ router.get(
         return res.status(404).json({ error: "not_found" });
       }
 
-      const dossier = await unbanDossierRepo.getDossier(channel.channelLogin, unbanCase, {
-        before: req.query.before || null,
-      });
+      // `before` / `after` walk the chat log one page older / newer (lib/unbanLogPaging.js). Either
+      // one makes this a paging request: the same case still open, wanting only more log.
+      const before = req.query.before || null;
+      const after = req.query.after || null;
+      const paging = Boolean(before || after);
+      if (paging && !parseLogCursor({ before, after }).ok) {
+        return res.status(400).json({ error: "bad_cursor" });
+      }
+
+      const dossier = await unbanDossierRepo.getDossier(channel.channelLogin, unbanCase, { before, after });
 
       // Opening a case is what makes the bot read Twitch's viewer card for it (see
       // unbanRequestsRepo.requestViewerCard). Skipped when paging the log - a scroll-back is the
@@ -258,7 +266,7 @@ router.get(
       // counts, which a moderator may read and act on, and then silently swapping them for Twitch's
       // two seconds later.
       let preparing = false;
-      if (!req.query.before) {
+      if (!paging) {
         preparing = !unbanCase.twitchModLogs;
         unbanRequestsRepo
           .requestViewerCard(String(unbanCase._id), channel.channelId)
@@ -271,12 +279,12 @@ router.get(
       // page load, and three paragraphs per case is exactly the kind of thing that grew one
       // channel's markup from 1KB to 25KB last time. Most cases have no opinions at all.
       //
-      // Skipped when paging the log (?before=): that request is a scroll-back for more chat lines
+      // Skipped when paging the log (?before= / ?after=): that request only wants more chat lines,
       // and re-sending an unchanged sheet with each page is pure waste.
       // Normalized on the way out, never on the way in: a sheet stored before the hearing became an
       // ordered transcript is adapted to one here, so the page has exactly one shape to render. See
       // lib/unbanOpinionsValidation.js's header for why that is an adapter and not a migration.
-      const opinions = req.query.before
+      const opinions = paging
         ? undefined
         : toTranscript(await unbanOpinionsRepo.findByCaseId(String(unbanCase._id)));
 
