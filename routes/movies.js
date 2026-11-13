@@ -1,5 +1,5 @@
 // /:channel/movies - what the channel has watched on stream: a grid of cards, each with the
-// streamer's score and review, the viewers' average, hearts and a discussion. Off by default per
+// streamer's score and review, the viewers' star average and a discussion. Off by default per
 // channel (Channels.moviesEnabled, switched by the site admin); a tier-0 admin previews it before
 // that, as with news.
 //
@@ -10,9 +10,16 @@
 //   - the review and the streamer's score: the owner, or the site admin writing on the owner's
 //     behalf (the signature is always the streamer's - the point is to carry over reviews the
 //     streamer already wrote elsewhere);
-//   - a viewer's score, hearts, comments: anyone logged in; the score only on a watched card, never
-//     by the owner (they have their own), and only counted in the average for someone who has
-//     chatted in the channel (db/chatPresenceRepo.js).
+//   - a viewer's score and comments: anyone logged in; the score on any card but a rejected one,
+//     never by the owner (they have their own), and only counted in the average for someone who
+//     has chatted in the channel (db/chatPresenceRepo.js);
+//   - suggesting a film: levels 0-2, and any logged-in viewer who has chatted in the channel, at
+//     most three waiting at a time; no duplicates in any status (lib/mediaSuggestions.js). A viewer
+//     may upload a cover, through the barrier in lib/userImageGuard.js, and it stays hidden from
+//     everyone but its author and 0-2 until approved;
+//   - promote / not-now votes on suggestions: anyone logged in, the author included; counted for
+//     people who have chatted. Accepting, rejecting (with a reason) and reopening a suggestion, and
+//     approving or removing a viewer's cover, are behind the same "discussions" right as editing.
 //
 // Writes by the owner or a moderator go to the channel's SettingsChangeLog (category "media");
 // the admin's go to AdminActionLogs, like every other admin action.
@@ -24,6 +31,7 @@ const express = require("express");
 const multer = require("multer");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
 const mediaRatingsRepo = require("../db/mediaRatingsRepo");
+const mediaSuggestionVotesRepo = require("../db/mediaSuggestionVotesRepo");
 const mediaThreads = require("../db/mediaThreads");
 const chatPresenceRepo = require("../db/chatPresenceRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
@@ -38,7 +46,10 @@ const cursorPaging = require("../lib/cursorPaging");
 const { buildChannelNav } = require("../lib/channelNav");
 const { COMMENT_SORT_MODES } = require("../lib/commentValidation");
 const media = require("../lib/mediaValidation");
-const { savePoster, deletePoster, gridPosterUrl } = require("../lib/mediaImage");
+const { savePoster, deletePoster, gridPosterUrl, isPosterVisible } = require("../lib/mediaImage");
+const suggestions = require("../lib/mediaSuggestions");
+const imageGuard = require("../lib/userImageGuard");
+const { sanitizeReturnTo } = require("../lib/returnTo");
 const { createMediaSources } = require("../lib/mediaSources");
 const { fetchAllowedImage } = require("../lib/remoteImage");
 const { isAllowedMediaImageUrl } = require("../lib/mediaImageHosts");
@@ -55,8 +66,16 @@ const ITEMS_PER_PORTION = 24;
 // "Back" restore ceiling, as on the news feed.
 const RESTORE_MAX = 240;
 const POSTER_MAX_BYTES = 5 * 1024 * 1024;
-// The two grid tabs. "Planned" becomes part of the suggestions tab once viewers can suggest.
-const TABS = { done: "done", planned: "accepted" };
+// The grid's tabs. Suggestions holds both the candidates and the accepted ones ("planned"), sorted
+// by votes by default; rejected suggestions are not public - that tab exists for levels 0-2 only.
+const TABS = {
+  done: { statuses: ["done"], defaultSort: "added" },
+  suggestions: { statuses: suggestions.OPEN_STATUSES, defaultSort: "score" },
+  rejected: { statuses: ["rejected"], defaultSort: "added", moderatorsOnly: true },
+};
+// A link from before suggestions existed: "planned" now lives in the suggestions tab.
+const TAB_ALIASES = { planned: "suggestions" };
+const visibleTabs = (permission) => Object.keys(TABS).filter((key) => !TABS[key].moderatorsOnly || permission <= 2);
 
 const page = loadChannelSection(SECTION);
 const pageJson = loadChannelSection(SECTION, { json: true });
@@ -64,7 +83,6 @@ const write = loadChannelSection(SECTION, { allowPreview: false });
 // Editors work in preview too: the admin fills the section before switching it on. Checked before
 // multer reads the body, so an anonymous request never gets a 5 MB upload buffered.
 const edit = [requireSectionEditAccess(EDIT_SECTION), loadChannelSection(SECTION)];
-const editJson = [requireSectionEditAccess(EDIT_SECTION), loadChannelSection(SECTION, { json: true })];
 
 // The search behind the card form (TMDB / Shikimori / the no-key IMDb fallback), one instance and
 // one cache for the process.
@@ -83,6 +101,34 @@ const discussion = createDiscussionRoutes({
 const rateLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 20 });
 // The search box fires on typing (debounced client-side); this only stops a script.
 const lookupLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 60 });
+
+const voteLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 30 });
+const suggestLimiterAllow = createSimpleLimiter({ windowMs: 10 * 60 * 1000, max: 10 });
+// A viewer's cover uploads: 5 an hour and 20 a day per person, on top of the three-open ceiling.
+// In process memory like the site's other limiters - a restart forgets them, which costs at most one
+// extra hour's worth.
+const viewerUploadHourAllow = createSimpleLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
+const viewerUploadDayAllow = createSimpleLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 20 });
+// One viewer upload decoded at a time, three waiting; the rest get 503 (lib/userImageGuard.js).
+const viewerUploadGate = imageGuard.createUploadGate();
+
+// The viewer's form is held to exactly what it has: one file, a handful of fields. Anything more is
+// refused before the body is read further. The file's own name and type are never looked at - the
+// barrier reads its bytes.
+const viewerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: POSTER_MAX_BYTES, files: 1, fields: 20, parts: 21, fieldSize: 8 * 1024 },
+});
+
+function uploadViewerPoster(req, res, next) {
+  viewerUpload.single("poster")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      req.posterUploadError = true;
+      return next();
+    }
+    next(err);
+  });
+}
 
 const posterUpload = multer({
   storage: multer.memoryStorage(),
@@ -110,6 +156,20 @@ function canEdit(req) {
 
 // The review and the streamer's score: the owner, or the admin on the owner's behalf.
 const canWriteStreamerFields = (permission) => permission <= 1;
+
+const viewerOf = (req) => ({ userId: req.user?.userId || null, permission: req.permission });
+
+// The card's poster as THIS viewer may see it: null when it is a viewer's upload still waiting for
+// approval and they are neither its author nor 0-2 - then not even the blurred copy's URL reaches
+// the page.
+const posterFor = (item, viewer) => (isPosterVisible(item, viewer) ? item.poster : null);
+
+// A rejected suggestion is not public: its page answers only 0-2 and the person who suggested it.
+function canSeeCard(item, viewer) {
+  if (item.status !== "rejected") return true;
+  if (viewer.permission <= 2) return true;
+  return Boolean(viewer.userId) && String(viewer.userId) === String(item.suggestion?.userId);
+}
 
 async function loadCard(req) {
   const item = await mediaItemsRepo.getById(req.params.id);
@@ -139,16 +199,21 @@ async function logWrite(req, action, item) {
 
 // --- grid -------------------------------------------------------------------------------
 
-function readGridQuery(query) {
-  const tab = Object.prototype.hasOwnProperty.call(TABS, query.tab) ? query.tab : "done";
-  const sort = media.resolveSort(query.sort);
+function readGridQuery(query, permission) {
+  const asked = TAB_ALIASES[query.tab] || query.tab;
+  const tab = visibleTabs(permission).includes(asked) ? asked : "done";
+  // An explicit sort wins; otherwise the tab's own default (votes on the suggestions tab).
+  const sort = Object.prototype.hasOwnProperty.call(media.SORTS, query.sort) ? query.sort : TABS[tab].defaultSort;
   const q = typeof query.q === "string" ? query.q.slice(0, 100) : "";
   return { tab, sort, q };
 }
 
+// Which sorts a tab offers: the vote score only means something where there are votes.
+const sortsFor = (tab) => Object.keys(media.SORTS).filter((key) => key !== "score" || tab !== "done");
+
 // The whole filtered, sorted list for one grid view; portions are sliced from it.
 async function gridRows(channel, { tab, sort, q }) {
-  const rows = await mediaItemsRepo.listForGrid(channel.channelLogin, KIND, TABS[tab]);
+  const rows = await mediaItemsRepo.listForGrid(channel.channelLogin, KIND, TABS[tab].statuses);
   const spec = media.SORTS[sort];
   return rows
     .filter((r) => media.matchesSearch(r.searchKey, q))
@@ -156,7 +221,8 @@ async function gridRows(channel, { tab, sort, q }) {
     .sort(cursorPaging.compareBySpec(spec));
 }
 
-function shapeCard(item) {
+function shapeCard(item, viewer = {}, myVotes = new Map()) {
+  const poster = posterFor(item, viewer);
   return {
     id: String(item._id),
     title: item.title,
@@ -165,20 +231,41 @@ function shapeCard(item) {
     mediaType: item.mediaType,
     status: item.status,
     nsfw: item.nsfw,
-    posterUrl: gridPosterUrl(item),
+    posterUrl: poster ? gridPosterUrl({ ...item, poster }) : null,
+    // Shown to the author and 0-2 only (the only ones who can see a pending cover at all).
+    posterPending: Boolean(poster && poster.approved === false),
     progress: media.progressBadge(item.progress),
     streamerRating: item.ratings?.streamer ?? null,
     viewerAverage: media.viewerAverage(item.ratings?.viewers),
     imdbRating: item.ratings?.external?.source === "imdb" ? item.ratings.external.value : null,
     excerpt: item.review?.excerpt || null,
     commentCount: item.commentCount || 0,
+    isSuggestion: Boolean(item.suggestion),
+    votable: suggestions.isVotable(item),
+    score: item.votes?.score || 0,
+    myVote: myVotes.get(String(item._id)) || 0,
   };
+}
+
+// The viewer's own votes on the cards of a portion - one query, only where voting is possible.
+async function myVotesFor(items, req) {
+  if (!req.user) return new Map();
+  const votable = items.filter(suggestions.isVotable).map((i) => String(i._id));
+  return votable.length ? mediaSuggestionVotesRepo.getUserVotes(votable, req.user.userId) : new Map();
+}
+
+// Whether this request's person may suggest: 0-2 always, others after chatting in the channel.
+async function suggestAccess(req) {
+  if (!req.user) return { allowed: false, reason: "login" };
+  if (req.permission <= 2) return { allowed: true };
+  const chatted = await chatPresenceRepo.hasChatted(req.channel.channelLogin, req.user.userId);
+  return suggestions.canSuggest({ loggedIn: true, permission: req.permission, chatted }) ? { allowed: true } : { allowed: false, reason: "chat" };
 }
 
 function gridUrl(channel, { tab, sort, q }, extra = {}) {
   const params = new URLSearchParams();
   if (tab !== "done") params.set("tab", tab);
-  if (sort !== media.DEFAULT_SORT) params.set("sort", sort);
+  if (sort !== TABS[tab].defaultSort) params.set("sort", sort);
   if (q) params.set("q", q);
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
   const qs = params.toString();
@@ -188,27 +275,36 @@ function gridUrl(channel, { tab, sort, q }, extra = {}) {
 router.get(`/:channel/${SECTION}`, page, async (req, res, next) => {
   try {
     const { channel, permission } = req;
-    const view = readGridQuery(req.query);
+    const view = readGridQuery(req.query, permission);
     const spec = media.SORTS[view.sort];
     const parsed = cursorPaging.parseCursor(spec, req.query.cursor);
     if (parsed.error) return res.status(400).render("errors/400", { backHref: gridUrl(channel, view) });
 
-    const [rows, counts, broadcaster, editor] = await Promise.all([
+    const [rows, counts, broadcaster, editor, suggest] = await Promise.all([
       gridRows(channel, view),
       mediaItemsRepo.countByStatus(channel.channelLogin, KIND),
       profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
       req.user ? canEdit(req) : Promise.resolve(false),
+      view.tab === "suggestions" ? suggestAccess(req) : Promise.resolve(null),
     ]);
     const { items, nextCursor } = cursorPaging.pageSorted(spec, rows, parsed.cursor, ITEMS_PER_PORTION);
+    const myVotes = await myVotesFor(items, req);
+    const viewer = viewerOf(req);
 
     res.render("movies", {
       channel,
       broadcaster,
       channelNav: buildChannelNav(channel, { permission, active: SECTION }),
-      cards: items.map(shapeCard),
+      cards: items.map((item) => shapeCard(item, viewer, myVotes)),
       view,
-      sorts: Object.keys(media.SORTS),
-      tabs: Object.keys(TABS).map((key) => ({ key, count: counts[TABS[key]] || 0, href: gridUrl(channel, { ...view, tab: key }) })),
+      sorts: sortsFor(view.tab),
+      tabs: visibleTabs(permission).map((key) => ({
+        key,
+        count: TABS[key].statuses.reduce((n, st) => n + (counts[st] || 0), 0),
+        href: gridUrl(channel, { tab: key, sort: TABS[key].defaultSort, q: view.q }),
+      })),
+      suggest,
+      csrf: req.user ? res.locals.csrfToken || "" : "",
       nextHref: nextCursor ? gridUrl(channel, view, { cursor: nextCursor }) : null,
       listSrc: `/${channel.channelLogin}/${SECTION}/list.json?${new URLSearchParams({ tab: view.tab, sort: view.sort, q: view.q })}`,
       restoreKey: parsed.cursor ? null : `movies:${channel.channelLogin}:${view.tab}:${view.sort}:${view.q}`,
@@ -225,7 +321,7 @@ router.get(`/:channel/${SECTION}`, page, async (req, res, next) => {
 router.get(`/:channel/${SECTION}/list.json`, pageJson, async (req, res, next) => {
   try {
     const { channel } = req;
-    const view = readGridQuery(req.query);
+    const view = readGridQuery(req.query, req.permission);
     const spec = media.SORTS[view.sort];
     const rows = await gridRows(channel, view);
 
@@ -246,7 +342,11 @@ router.get(`/:channel/${SECTION}/list.json`, pageJson, async (req, res, next) =>
       portion = cursorPaging.pageSorted(spec, rows, parsed.cursor, ITEMS_PER_PORTION);
     }
 
-    res.render("partials/mediaCards", { cards: portion.items.map(shapeCard), channel, section: SECTION }, (err, html) => {
+    const myVotes = await myVotesFor(portion.items, req);
+    const viewer = viewerOf(req);
+    const cards = portion.items.map((item) => shapeCard(item, viewer, myVotes));
+    const csrf = req.user ? res.locals.csrfToken || "" : "";
+    res.render("partials/mediaCards", { cards, channel, section: SECTION, csrf }, (err, html) => {
       if (err) return next(err);
       res.json({ ok: true, html, nextCursor: portion.nextCursor, restored });
     });
@@ -258,9 +358,12 @@ router.get(`/:channel/${SECTION}/list.json`, pageJson, async (req, res, next) =>
 // --- search in outside sources (the editor's autofill) ----------------------------------
 // ?tab=films|anime&q=...  -> {results: [{ref, title, originalTitle, year, mediaType, previewUrl}]}
 // ?ref=tmdb:movie:27205   -> {details: {..., imdbId, episodes, posterUrl, nsfwHint}}
-// Editors only: it spends other services' quotas on the site's behalf. Declared before /:id.
-router.get(`/:channel/${SECTION}/lookup.json`, editJson, async (req, res, next) => {
+// For people who may write a card: editors, and those who may suggest - it spends other services'
+// quotas on the site's behalf. Declared before /:id.
+router.get(`/:channel/${SECTION}/lookup.json`, requireLogin, pageJson, async (req, res, next) => {
   try {
+    const allowed = (await canEdit(req)) || (await suggestAccess(req)).allowed;
+    if (!allowed) return res.status(403).json({ ok: false, error: "forbidden" });
     if (!lookupLimiterAllow(req.user.userId)) return res.status(429).json({ ok: false, error: "rate_limited" });
     if (typeof req.query.ref === "string") {
       const details = await mediaSources.details(req.query.ref);
@@ -276,7 +379,11 @@ router.get(`/:channel/${SECTION}/lookup.json`, editJson, async (req, res, next) 
 
 // --- create / edit / delete ------------------------------------------------------------
 
-function formModel(req, { item = null, values = null, errors = [] } = {}) {
+// The statuses an edit may set: the editor's two, plus the card's own when it is a suggestion (an
+// editor fixing a typo in a suggestion must not be forced to decide it in the same save).
+const editStatusesFor = (item) => [...new Set([...(item && !media.EDITOR_STATUSES.includes(item.status) ? [item.status] : []), ...media.EDITOR_STATUSES])];
+
+function formModel(req, { item = null, values = null, errors = [], mode = "edit", duplicate = null } = {}) {
   const src = values || (item
     ? {
         title: item.title,
@@ -299,8 +406,13 @@ function formModel(req, { item = null, values = null, errors = [] } = {}) {
     values: src,
     errors,
     mediaTypes: media.MEDIA_TYPES,
-    statuses: media.EDITOR_STATUSES,
-    canWriteStreamerFields: canWriteStreamerFields(req.permission),
+    statuses: editStatusesFor(item),
+    canWriteStreamerFields: mode === "edit" && canWriteStreamerFields(req.permission),
+    mode,
+    duplicate: duplicate
+      ? { href: `/${req.channel.channelLogin}/${SECTION}/${duplicate._id}`, title: duplicate.title, reason: duplicate.rejectReason || null }
+      : null,
+    noteMax: suggestions.NOTE_MAX,
     posterUrl: item?.poster?.url || null,
     lookupSources: mediaSources.describe(),
     lookupUrl: `/${req.channel.channelLogin}/${SECTION}/lookup.json`,
@@ -318,8 +430,8 @@ router.get(`/:channel/${SECTION}/new`, edit, (req, res) => {
 // a poster URL is never read from the form, or the form would be a way to make our server fetch
 // any address. An uploaded file wins over the source's poster. A poster that fails to download
 // does not block the save; the card is stored without one and can get it later.
-async function readForm(req) {
-  const { errors, value } = media.parseMediaForm(req.body, { canWriteStreamerFields: canWriteStreamerFields(req.permission) });
+async function readForm(req, { allowedStatuses } = {}) {
+  const { errors, value } = media.parseMediaForm(req.body, { canWriteStreamerFields: canWriteStreamerFields(req.permission), allowedStatuses });
   if (req.posterUploadError) errors.push("poster_invalid");
 
   let picked = null;
@@ -401,7 +513,7 @@ router.post(`/:channel/${SECTION}/:id/edit`, edit, settingsWriteLimiter, uploadP
     const item = await loadCard(req);
     if (!item) return res.status(404).render("errors/404");
 
-    const { errors, value, poster, picked } = await readForm(req);
+    const { errors, value, poster, picked } = await readForm(req, { allowedStatuses: editStatusesFor(item) });
     if (errors.length) return res.status(400).render("mediaForm", formModel(req, { item, values: req.body, errors }));
 
     const set = {
@@ -457,9 +569,10 @@ router.post(`/:channel/${SECTION}/:id/delete`, edit, settingsWriteLimiter, verif
     if (item) {
       await mediaItemsRepo.deleteItem(item._id);
       // Everything hanging off the card goes after the card itself, so nothing can render a
-      // half-deleted state: ratings, hearts, comments and their votes, the two poster files.
+      // half-deleted state: ratings, suggestion votes, comments and their votes, the poster files.
       await Promise.all([
         mediaRatingsRepo.deleteAllFor(item._id),
+        mediaSuggestionVotesRepo.deleteAllFor(item._id),
         mediaThreads.deleteAllFor(item._id),
         deletePoster(item.poster),
       ]);
@@ -471,20 +584,215 @@ router.post(`/:channel/${SECTION}/:id/delete`, edit, settingsWriteLimiter, verif
   }
 });
 
+// --- viewer suggestions --------------------------------------------------------------------
+// Static tail, before /:id like /new and /list.json.
+
+router.get(`/:channel/${SECTION}/suggest`, requireLogin, page, async (req, res, next) => {
+  try {
+    const access = await suggestAccess(req);
+    if (!access.allowed) return res.status(403).render("errors/403", { requiredLevel: null, message: res.locals.t("movies.suggest.notAllowed") });
+    res.render("mediaForm", formModel(req, { mode: "suggest", values: { mediaType: "film" } }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Stores a viewer's cover through the barrier. Returns {poster} or {error}.
+async function saveViewerPoster(req) {
+  if (req.posterUploadError) return { error: "poster_invalid" };
+  if (!req.file) return {};
+  const trusted = req.permission <= 2;
+  if (!trusted) {
+    if (!viewerUploadHourAllow(req.user.userId) || !viewerUploadDayAllow(req.user.userId)) return { error: "upload_limit" };
+  }
+  try {
+    await imageGuard.inspectUserImage(req.file.buffer);
+    const save = () => savePoster(req.file.buffer, { sharpOptions: imageGuard.STRICT_SHARP_OPTIONS, approved: trusted });
+    return { poster: trusted ? await save() : await viewerUploadGate.run(save) };
+  } catch (err) {
+    if (err.code === "busy") return { error: "busy" };
+    return { error: "poster_invalid" };
+  } finally {
+    // Nothing of the original is kept - not even in memory past this request.
+    req.file.buffer = null;
+  }
+}
+
+router.post(`/:channel/${SECTION}/suggest`, requireLogin, write, uploadViewerPoster, verifyToken, async (req, res, next) => {
+  const reject = (status, errors, extra = {}) =>
+    res.status(status).render("mediaForm", formModel(req, { mode: "suggest", values: req.body, errors, ...extra }));
+  try {
+    const { channel } = req;
+    const access = await suggestAccess(req);
+    if (!access.allowed) return res.status(403).render("errors/403", { requiredLevel: null, message: res.locals.t("movies.suggest.notAllowed") });
+    if (!suggestLimiterAllow(req.user.userId)) return reject(429, ["rate_limited"]);
+    if (req.permission > 2) {
+      const open = await mediaItemsRepo.countOpenSuggestions(channel.channelLogin, KIND, req.user.userId);
+      if (open >= suggestions.MAX_OPEN_SUGGESTIONS) return reject(400, ["too_many_open"]);
+    }
+
+    const { errors, value } = suggestions.parseSuggestionForm(req.body);
+    let picked = null;
+    if (typeof req.body.sourceRef === "string" && req.body.sourceRef) {
+      picked = await mediaSources.details(req.body.sourceRef);
+      if (!picked) errors.push("source_unavailable");
+    }
+    if (errors.length) return reject(400, errors);
+
+    // Duplicates in any status, by external id or by title with year.
+    const external = externalIds(value, picked);
+    const existing = await mediaItemsRepo.listForDuplicateCheck(channel.channelLogin, KIND);
+    const dup = suggestions.findDuplicate({ ...external, title: value.title, originalTitle: value.originalTitle, year: value.year }, existing);
+    if (dup) return reject(400, [`duplicate_${suggestions.duplicateOutcome(dup)}`], { duplicate: dup });
+
+    // The cover: the person's own file through the barrier, else the picked source's poster.
+    let poster = null;
+    if (req.file || req.posterUploadError) {
+      const saved = await saveViewerPoster(req);
+      if (saved.error) return reject(saved.error === "busy" ? 503 : 400, [saved.error]);
+      poster = saved.poster || null;
+    } else if (picked?.posterUrl) {
+      try {
+        const buffer = await fetchAllowedImage(picked.posterUrl, { isAllowed: isAllowedMediaImageUrl });
+        poster = await savePoster(buffer, { source: picked.source });
+      } catch (err) {
+        console.warn(`[movies] suggestion poster from ${picked.source} not saved: ${err.code || err.message}`);
+      }
+    }
+
+    let item;
+    try {
+      item = await mediaItemsRepo.create({
+        channelLogin: channel.channelLogin,
+        kind: KIND,
+        ...value,
+        streamerRating: null,
+        review: null,
+        external,
+        poster,
+        suggestion: {
+          userId: String(req.user.userId),
+          login: req.user.login,
+          displayName: req.user.displayName || req.user.login,
+          note: value.note,
+          createdAt: new Date(),
+        },
+        createdBy: { userId: req.user.userId, login: req.user.login, level: req.permission },
+      });
+    } catch (err) {
+      await deletePoster(poster);
+      // Two people suggesting the same id at once: the index decides, the second gets the first's card.
+      if (isDuplicate(err)) {
+        const again = suggestions.findDuplicate({ ...external, title: value.title, year: value.year }, await mediaItemsRepo.listForDuplicateCheck(channel.channelLogin, KIND));
+        return reject(400, [again ? `duplicate_${suggestions.duplicateOutcome(again)}` : "duplicate"], { duplicate: again });
+      }
+      throw err;
+    }
+    res.redirect(`/${channel.channelLogin}/${SECTION}/${item._id}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Promote (+1) / not now (-1). The same button again takes the vote back; "clear" is what the no-JS
+// form posts for the button already pressed.
+router.post(`/:channel/${SECTION}/:id/vote`, requireLogin, verifyToken, write, async (req, res, next) => {
+  try {
+    const { channel } = req;
+    const item = await loadCard(req);
+    const back = sanitizeReturnTo(req.body.returnTo) || `/${channel.channelLogin}/${SECTION}/${req.params.id}`;
+    const fail = (status, code) => (wantsJson(req) ? res.status(status).json({ ok: false, error: code }) : res.redirect(`${back}#vote-${req.params.id}`));
+    if (!item || !canSeeCard(item, viewerOf(req))) return fail(404, "not_found");
+    if (!suggestions.isVotable(item)) return fail(400, "not_votable");
+    if (!voteLimiterAllow(req.user.userId)) return fail(429, "rate_limited");
+
+    const previous = await mediaSuggestionVotesRepo.getUserVote(item._id, req.user.userId);
+    const value = suggestions.nextVote(previous?.value || 0, req.body.value);
+    if (value === null) return fail(400, "vote_invalid");
+    const counted = value === 0 ? false : await chatPresenceRepo.hasChatted(channel.channelLogin, req.user.userId);
+    const replaced = await mediaSuggestionVotesRepo.setVote(item._id, req.user.userId, value, counted);
+    await mediaItemsRepo.incSuggestionVotes(item._id, suggestions.voteDelta(replaced, value, counted));
+
+    if (!wantsJson(req)) return res.redirect(`${back}#vote-${req.params.id}`);
+    const fresh = await mediaItemsRepo.getById(item._id);
+    res.json({ ok: true, value, counted, score: fresh?.votes?.score || 0, up: fresh?.votes?.up || 0, down: fresh?.votes?.down || 0 });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Deciding on a suggestion: accept (it joins the plan; its cover is approved with it), reject with a
+// reason (the reason is what a later duplicate attempt is shown), reopen a rejected one.
+const DECISIONS = {
+  accept: { from: ["suggested"], to: "accepted", approvePoster: true },
+  reject: { from: ["suggested", "accepted"], to: "rejected" },
+  reopen: { from: ["rejected"], to: "suggested" },
+};
+
+router.post(`/:channel/${SECTION}/:id/decide`, edit, settingsWriteLimiter, verifyToken, async (req, res, next) => {
+  try {
+    const item = await loadCard(req);
+    if (!item) return res.status(404).render("errors/404");
+    const back = `/${req.channel.channelLogin}/${SECTION}/${item._id}`;
+    const decision = DECISIONS[req.body.action];
+    if (!decision || !decision.from.includes(item.status)) return res.redirect(`${back}?decided=stale#decision`);
+    let rejectReason = null;
+    if (req.body.action === "reject") {
+      rejectReason = suggestions.cleanRejectReason(req.body.reason);
+      if (!rejectReason) return res.redirect(`${back}?decided=reason_required#decision`);
+    }
+    const updated = await mediaItemsRepo.decide(item._id, {
+      expect: decision.from,
+      status: decision.to,
+      decidedBy: String(req.user.userId),
+      rejectReason,
+      approvePoster: Boolean(decision.approvePoster && item.poster),
+    });
+    if (!updated) return res.redirect(`${back}?decided=stale#decision`);
+    await logWrite(req, req.body.action, item);
+    res.redirect(`${back}#decision`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A viewer's cover: approve it (visible to everyone) or remove it (files deleted, card keeps no cover).
+router.post(`/:channel/${SECTION}/:id/poster/:op(approve|remove)`, edit, settingsWriteLimiter, verifyToken, async (req, res, next) => {
+  try {
+    const item = await loadCard(req);
+    if (!item) return res.status(404).render("errors/404");
+    if (item.poster) {
+      if (req.params.op === "approve") {
+        await mediaItemsRepo.update(item._id, { "poster.approved": true });
+      } else {
+        await mediaItemsRepo.update(item._id, { poster: null });
+        await deletePoster(item.poster);
+      }
+      await logWrite(req, req.params.op === "approve" ? "approvePoster" : "removePoster", item);
+    }
+    res.redirect(`/${req.channel.channelLogin}/${SECTION}/${item._id}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // --- the card's own page ----------------------------------------------------------------
 
 router.get(`/:channel/${SECTION}/:id`, page, async (req, res, next) => {
   try {
     const { channel, permission } = req;
     const item = await loadCard(req);
-    if (!item) return res.status(404).render("errors/404");
+    const viewer = viewerOf(req);
+    if (!item || !canSeeCard(item, viewer)) return res.status(404).render("errors/404");
 
-    const [broadcaster, thread, myRating, editor] = await Promise.all([
+    const [broadcaster, thread, myRating, editor, myVote] = await Promise.all([
       profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
       discussion.threadPageLocals(req, res, channel, item),
       req.user ? mediaRatingsRepo.getUserRating(item._id, req.user.userId) : Promise.resolve(null),
       req.user ? canEdit(req) : Promise.resolve(false),
+      req.user && suggestions.isVotable(item) ? mediaSuggestionVotesRepo.getUserVote(item._id, req.user.userId) : Promise.resolve(null),
     ]);
+    const poster = posterFor(item, viewer);
 
     res.render("mediaItem", {
       ...thread,
@@ -492,16 +800,25 @@ router.get(`/:channel/${SECTION}/:id`, page, async (req, res, next) => {
       channelNav: buildChannelNav(channel, { permission, active: SECTION }),
       item: {
         ...item,
+        poster,
         id: String(item._id),
-        gridPosterUrl: gridPosterUrl(item),
+        gridPosterUrl: poster ? gridPosterUrl({ ...item, poster }) : null,
+        posterPending: Boolean(poster && poster.approved === false),
+        hasHiddenPoster: Boolean(item.poster && !poster),
+        votable: suggestions.isVotable(item),
+        score: item.votes?.score || 0,
+        myVote: myVote?.value || 0,
         viewerAverage: media.viewerAverage(item.ratings?.viewers),
         viewerCount: item.ratings?.viewers?.count || 0,
         imdbRating: item.ratings?.external?.source === "imdb" ? item.ratings.external : null,
       },
       myRating: myRating ? { value: myRating.value, counted: myRating.counted } : null,
-      // The owner has their own score; viewers rate only what was watched.
-      canRate: Boolean(req.user) && permission !== 1 && item.status === "done",
+      // The owner has their own score; a rejected card is not rated.
+      canRate: Boolean(req.user) && permission !== 1 && suggestions.isRatable(item),
       canEdit: editor,
+      decisions: editor ? Object.keys(DECISIONS).filter((key) => DECISIONS[key].from.includes(item.status)) : [],
+      decidedFlash: typeof req.query.decided === "string" ? req.query.decided : null,
+      csrf: req.user ? res.locals.csrfToken || "" : "",
       commentSortModes: COMMENT_SORT_MODES,
       sectionPreview: res.locals.sectionPreview,
       ratingFlash: typeof req.query.rated === "string" ? req.query.rated : null,
@@ -518,8 +835,8 @@ router.post(`/:channel/${SECTION}/:id/rate`, requireLogin, verifyToken, write, a
     const back = (code) => `/${channel.channelLogin}/${SECTION}/${req.params.id}?rated=${code}#rating`;
     const fail = (status, code) => (wantsJson(req) ? res.status(status).json({ ok: false, error: code }) : res.redirect(back(code)));
 
-    if (!item) return fail(404, "not_found");
-    if (item.status !== "done") return fail(400, "not_watched");
+    if (!item || !canSeeCard(item, viewerOf(req))) return fail(404, "not_found");
+    if (!suggestions.isRatable(item)) return fail(400, "not_ratable");
     if (req.permission === 1) return fail(403, "owner");
     if (!rateLimiterAllow(req.user.userId)) return fail(429, "rate_limited");
 

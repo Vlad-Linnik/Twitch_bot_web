@@ -8,7 +8,10 @@
 //  recordingUrl, progress: {done, total, unit} | null,
 //  ratings: {streamer: 1..10|null, viewers: {sum, count}, external: null},
 //  review: {bodyRaw, bodyHtml, excerpt, authorUserId, updatedAt} | null,
-//  commentCount, suggestion: null,
+//  commentCount,
+//  suggestion: {userId, login, displayName, note, createdAt} | null   (a viewer's suggestion),
+//  votes: {score, up, down}   (counted promote/not-now votes on a suggestion - a cache of
+//                              MediaSuggestionVotes, moved by exact deltas like ratings.viewers),
 //  createdBy: {userId, login, level}, doneAt, createdAt, updatedAt}
 //
 // ratings.viewers is a cache: MediaRatings is the source of truth, and this pair is moved by the
@@ -78,7 +81,8 @@ async function create(doc) {
     ratings: { streamer: doc.streamerRating ?? null, viewers: { sum: 0, count: 0 }, external: null },
     review: doc.review || null,
     commentCount: 0,
-    suggestion: null,
+    suggestion: doc.suggestion || null,
+    votes: { score: 0, up: 0, down: 0 },
     createdBy: doc.createdBy,
     doneAt: doc.status === "done" ? now : null,
     createdAt: now,
@@ -103,12 +107,53 @@ async function getById(id) {
   return col.findOne({ _id: oid });
 }
 
-// Every card of one channel, kind and status, for the grid to filter and sort in memory.
+// Every card of one channel, kind and status (or list of statuses), for the grid to filter and
+// sort in memory.
 async function listForGrid(channelLogin, kind, status) {
   const col = await ensureInitialized();
+  const statusFilter = Array.isArray(status) ? { $in: status } : status;
   return col
-    .find({ channelLogin: channelLogin.toLowerCase(), kind, status }, { projection: GRID_PROJECTION })
+    .find({ channelLogin: channelLogin.toLowerCase(), kind, status: statusFilter }, { projection: GRID_PROJECTION })
     .toArray();
+}
+
+// What a duplicate check compares against: every card of the channel and kind, in every status,
+// with only the fields lib/mediaSuggestions.js's findDuplicate reads.
+async function listForDuplicateCheck(channelLogin, kind) {
+  const col = await ensureInitialized();
+  return col
+    .find(
+      { channelLogin: channelLogin.toLowerCase(), kind },
+      { projection: { title: 1, originalTitle: 1, year: 1, status: 1, external: 1, rejectReason: 1 } }
+    )
+    .toArray();
+}
+
+// One person's suggestions still waiting for a decision - the per-person ceiling.
+async function countOpenSuggestions(channelLogin, kind, userId) {
+  const col = await ensureInitialized();
+  return col.countDocuments({ channelLogin: channelLogin.toLowerCase(), kind, status: "suggested", "suggestion.userId": String(userId) });
+}
+
+// A status change by levels 0-2 (accept / reject / reopen). `expect` is the status the decision was
+// made against: if someone else decided in the meantime, nothing is written and null comes back.
+async function decide(id, { expect, status, decidedBy, rejectReason = null, approvePoster = false }) {
+  const oid = toOid(id);
+  if (!oid) return null;
+  const col = await ensureInitialized();
+  const now = new Date();
+  const set = { status, decidedBy, decidedAt: now, rejectReason, updatedAt: now };
+  if (status === "done") set.doneAt = now;
+  // Accepting a suggestion is also approving the cover its author uploaded.
+  if (approvePoster) set["poster.approved"] = true;
+  return col.findOneAndUpdate({ _id: oid, status: { $in: [].concat(expect) } }, { $set: set }, { returnDocument: "after" });
+}
+
+async function incSuggestionVotes(id, { score, up, down }) {
+  const oid = toOid(id);
+  if (!oid || (score === 0 && up === 0 && down === 0)) return;
+  const col = await ensureInitialized();
+  await col.updateOne({ _id: oid }, { $inc: { "votes.score": score, "votes.up": up, "votes.down": down } });
 }
 
 // How many cards each status tab holds - the counts on the grid's tabs.
@@ -174,6 +219,10 @@ module.exports = {
   countByStatus,
   incViewerRatings,
   deleteItem,
+  listForDuplicateCheck,
+  countOpenSuggestions,
+  decide,
+  incSuggestionVotes,
   distinctImdbIds,
   setImdbRatings,
   sourceStats,

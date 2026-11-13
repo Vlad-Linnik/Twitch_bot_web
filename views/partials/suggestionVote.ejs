@@ -1,0 +1,54 @@
+<%#
+  Promote / not-now on a suggestion - deliberately neither the comment arrows (orange/blue, "I liked
+  this comment") nor the gold stars (a score for the film): two pills, an emerald "promote" and a
+  slate "not now", with the signed score between them. The pressed one is filled, the other is an
+  outline.
+
+  A plain form of two submit buttons, so it works without JS: the pressed button posts "clear"
+  (pressing your vote again takes it back), the other posts its own value (switches it).
+  public/js/suggestion-vote.js posts it by fetch and patches the score and both buttons in place.
+  Only counted votes (people who have chatted in the channel) are in the score.
+
+  Expects: card ({id, score, myVote}), channel, section, csrf, user (null when logged out),
+  size ("sm" in the grid, "md" on the card page).
+%>
+<%
+  const action = '/' + channel.channelLogin + '/' + section + '/' + card.id + '/vote';
+  const big = typeof size !== 'undefined' && size === 'md';
+  // In the grid the row spans the tile and the pills stay compact: two columns on a 375 px phone
+  // leave a tile ~156 px wide, where the full "▲ Promote" + "Not now" pair overflowed or wrapped.
+  // So the grid's promote pill shows only ▲ (its words stay in aria-label and title); the card page
+  // shows both labels in full.
+  const pill = big ? 'px-3.5 py-1.5 text-sm' : 'px-2 py-1 text-[11px]';
+  const row = big ? 'inline-flex items-center gap-1.5' : 'flex w-full items-center justify-between gap-1';
+  const signed = card.score > 0 ? '+' + card.score : String(card.score);
+%>
+<% if (user) { %>
+  <form method="post" action="<%= action %>" data-vote-form class="<%= row %>" id="vote-<%= card.id %>">
+    <input type="hidden" name="_csrf" value="<%= csrf %>" />
+    <input type="hidden" name="returnTo" value="<%= currentUrl %>" />
+    <button type="submit" name="value" value="<%= card.myVote === 1 ? 'clear' : '1' %>" data-vote="1"
+            aria-pressed="<%= card.myVote === 1 ? 'true' : 'false' %>" title="<%= t(card.myVote === 1 ? 'movies.vote.promoteUndo' : 'movies.vote.promote') %>"
+            aria-label="<%= t('movies.vote.promoteShort') %>"
+            class="<%= pill %> inline-flex items-center gap-1 whitespace-nowrap rounded-full font-semibold transition-colors border
+                   border-emerald-500/60 text-emerald-300 hover:bg-emerald-500/15
+                   aria-pressed:bg-emerald-500 aria-pressed:border-emerald-500 aria-pressed:text-stone-950">
+      <span aria-hidden="true">▲</span><span class="<%= big ? '' : 'sr-only' %>"><%= t('movies.vote.promoteShort') %></span>
+    </button>
+    <span data-vote-score class="min-w-[2.5ch] text-center font-bold tabular-nums <%= big ? 'text-base' : 'text-xs' %> <%= card.score > 0 ? 'text-emerald-300' : card.score < 0 ? 'text-slate-400' : 'text-stone-400' %>"
+          title="<%= t('movies.vote.scoreHint') %>"><%= signed %></span>
+    <button type="submit" name="value" value="<%= card.myVote === -1 ? 'clear' : '-1' %>" data-vote="-1"
+            aria-pressed="<%= card.myVote === -1 ? 'true' : 'false' %>" title="<%= t(card.myVote === -1 ? 'movies.vote.notNowUndo' : 'movies.vote.notNow') %>"
+            class="<%= pill %> inline-flex items-center whitespace-nowrap rounded-full font-semibold transition-colors border
+                   border-slate-500/60 text-slate-300 hover:bg-slate-500/15
+                   aria-pressed:bg-slate-500 aria-pressed:border-slate-500 aria-pressed:text-white">
+      <%= t('movies.vote.notNowShort') %>
+    </button>
+  </form>
+<% } else { %>
+  <span class="inline-flex items-center gap-1.5 <%= big ? 'text-sm' : 'text-xs' %>" id="vote-<%= card.id %>">
+    <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>"
+       class="<%= pill %> rounded-full border border-emerald-500/40 text-emerald-300/80 hover:text-emerald-200" title="<%= t('movies.vote.loginToVote') %>"><span aria-hidden="true">▲</span> <%= t('movies.vote.promoteShort') %></a>
+    <span class="font-bold tabular-nums text-stone-400"><%= signed %></span>
+  </span>
+<% } %>

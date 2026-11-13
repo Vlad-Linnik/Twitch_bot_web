@@ -1,7 +1,12 @@
 <%#
   A run of grid tiles (movies now, games later) - the first portion of the grid and every portion
   list.json returns, so a tile loaded on scroll is the same markup as one rendered first.
-  Expects: cards (routes/movies.js's shapeCard), channel, section.
+  Expects: cards (routes/movies.js's shapeCard), channel, section, csrf.
+
+  A suggestion's tile also gets the promote/not-now control (partials/suggestionVote.ejs) under it,
+  outside the link - a form inside an <a> is invalid and would swallow the click. A planned
+  (accepted) suggestion says so on the poster; a viewer's cover still waiting for approval is marked
+  for the only people who can see it (its author and 0-2) - everyone else gets the placeholder.
 
   The look is the section's own, not the news feed's: no bordered box, the poster IS the tile, the
   title sits on it over a dark fade, and the streamer's score is a gold ticket stub in the corner.
@@ -28,9 +33,19 @@
         <%# The fade the title sits on. %>
         <div class="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
 
-        <% if (card.nsfw) { %>
-          <span class="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-bold tracking-wide">18+</span>
-        <% } %>
+        <div class="absolute top-2 left-2 flex flex-col items-start gap-1">
+          <% if (card.nsfw) { %>
+            <span class="px-1.5 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-bold tracking-wide">18+</span>
+          <% } %>
+          <% if (card.status === 'accepted') { %>
+            <span class="px-1.5 py-0.5 rounded-md bg-sky-500 text-stone-950 text-[10px] font-bold"><%= t('movies.statusPlanned') %></span>
+          <% } else if (card.status === 'rejected') { %>
+            <span class="px-1.5 py-0.5 rounded-md bg-stone-700 text-stone-200 text-[10px] font-bold"><%= t('movies.statusRejected') %></span>
+          <% } %>
+          <% if (card.posterPending) { %>
+            <span class="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 text-[10px] font-semibold ring-1 ring-amber-500/40"><%= t('movies.coverPending') %></span>
+          <% } %>
+        </div>
         <% if (card.streamerRating) { %>
           <%# A ticket stub flush to the right edge - the score that is the streamer's own. %>
           <span class="absolute top-2 right-0 flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-l-md bg-amber-400 text-stone-950 text-xs font-extrabold tabular-nums shadow"
@@ -73,5 +88,10 @@
         <p class="mt-1 px-0.5 text-[11px] italic text-stone-400 line-clamp-2">«<%= card.excerpt %>»</p>
       <% } %>
     </a>
+    <% if (card.votable) { %>
+      <div class="mt-2 px-0.5">
+        <%- include('suggestionVote', { card, channel, section, csrf, user, size: 'sm' }) %>
+      </div>
+    <% } %>
   </div>
 <% }) %>

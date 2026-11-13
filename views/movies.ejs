@@ -22,6 +22,21 @@
         </a>
       <% }) %>
     </nav>
+    <% if (view.tab === 'suggestions' && suggest) { %>
+      <%# Suggesting is a viewer action, so it sits on the suggestions tab only - and says why it is
+          not offered rather than just hiding the button. %>
+      <% if (suggest.allowed) { %>
+        <a href="/<%= channel.channelLogin %>/movies/suggest"
+           class="<%= canEdit ? '' : 'ml-auto ' %>inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500 text-stone-950 hover:bg-emerald-400 text-sm font-semibold transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" /></svg>
+          <%= t('movies.suggest.button') %>
+        </a>
+      <% } else if (suggest.reason === 'login') { %>
+        <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-sm text-emerald-300 hover:text-emerald-200"><%= t('movies.suggest.loginToSuggest') %></a>
+      <% } else { %>
+        <span class="text-xs text-stone-500"><%= t('movies.suggest.chatOnly') %></span>
+      <% } %>
+    <% } %>
     <% if (canEdit) { %>
       <a href="/<%= channel.channelLogin %>/movies/new"
          class="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-amber-400/60 text-amber-300 hover:bg-amber-400 hover:text-stone-950 text-sm font-semibold transition-colors">
@@ -56,7 +71,7 @@
     <div id="movies-grid" data-infinite-list data-src="<%= listSrc %>"
          <% if (restoreKey) { %>data-restore="<%= restoreKey %>"<% } %>
          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-6">
-      <%- include('partials/mediaCards', { cards, channel, section: 'movies' }) %>
+      <%- include('partials/mediaCards', { cards, channel, section: 'movies', csrf }) %>
     </div>
   <% } %>
 
@@ -75,5 +90,6 @@
 
 <script src="<%= asset('/js/infinite-list.js') %>" defer></script>
 <script src="<%= asset('/js/media-grid.js') %>" defer></script>
+<script src="<%= asset('/js/suggestion-vote.js') %>" defer></script>
 
 <%- include('partials/foot') %>

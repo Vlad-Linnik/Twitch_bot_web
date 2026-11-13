@@ -918,7 +918,9 @@
     "tabsLabel": "Lists",
     "tab": {
       "done": "Watched",
-      "planned": "Planned"
+      "planned": "Planned",
+      "suggestions": "Suggestions",
+      "rejected": "Rejected"
     },
     "create": "Add a movie",
     "searchPlaceholder": "Title…",
@@ -928,11 +930,14 @@
       "added": "Recently added",
       "streamer": "Streamer's score",
       "viewers": "Viewers' score",
-      "imdb": "IMDb rating"
+      "imdb": "IMDb rating",
+      "score": "By votes"
     },
     "empty": {
       "done": "Nothing watched yet.",
-      "planned": "No plans yet."
+      "planned": "No plans yet.",
+      "suggestions": "No suggestions yet.",
+      "rejected": "No rejected suggestions."
     },
     "emptySearch": "Nothing found.",
     "type": {
@@ -1007,7 +1012,14 @@
         "rating_invalid": "A score is 1 to 10.",
         "poster_invalid": "The poster didn't work: an image up to 5 MB.",
         "duplicate": "This card already exists on the channel: the IMDb, TMDB or Shikimori id matches.",
-        "source_unavailable": "The search source didn't answer just now - pick the result again or fill the fields by hand."
+        "source_unavailable": "The search source didn't answer just now - pick the result again or fill the fields by hand.",
+        "too_many_open": "You already have three suggestions waiting - wait for the moderators to answer.",
+        "duplicate_watched": "This one was already watched on stream:",
+        "duplicate_open": "This one is already suggested - support it with a vote:",
+        "duplicate_rejected": "This one was suggested before and rejected:",
+        "upload_limit": "Too many uploads: at most 5 an hour and 20 a day.",
+        "busy": "Other covers are being processed - try again in a minute.",
+        "rate_limited": "Too often - try again a little later."
       }
     },
     "lookup": {
@@ -1036,7 +1048,51 @@
     "starsLabel": "Your score, 1 to 10",
     "starPick": "Rate {{n}} out of 10",
     "starClear": "Your score is {{n}}. Click again to remove it",
-    "rateCleared": "Score removed."
+    "rateCleared": "Score removed.",
+    "statusSuggested": "suggested",
+    "statusRejected": "rejected",
+    "coverPending": "cover in review",
+    "coverHidden": "cover in review",
+    "coverPendingModerator": "A viewer's cover is waiting for review - until approved only its author and the moderators see it.",
+    "coverPendingAuthor": "Everyone will see your cover once a moderator approves it.",
+    "coverApprove": "Approve cover",
+    "coverRemove": "Remove cover",
+    "coverRemoveConfirm": "Remove this card's cover?",
+    "suggest": {
+      "button": "Suggest a movie",
+      "loginToSuggest": "Log in to suggest a movie",
+      "chatOnly": "Suggestions are open to people who have chatted in this channel.",
+      "notAllowed": "Suggestions are open to people who have chatted in this channel.",
+      "title": "Suggest a movie",
+      "intro": "Find it in the search or fill it in by hand. {{login}}'s moderators decide whether it goes on the plan.",
+      "noteLabel": "Why it is worth watching (optional)",
+      "notePlaceholder": "A line or two - what hooked you.",
+      "noteHint": "Plain text, up to {{max}} characters.",
+      "coverHint": "Your own cover only if the search doesn't have the film. JPEG, PNG or WebP up to 5 MB; everyone sees it after a moderator approves it.",
+      "submit": "Suggest",
+      "by": "Suggested by",
+      "rejectedBecause": "Rejected:"
+    },
+    "vote": {
+      "promote": "Promote - I want this watched",
+      "promoteUndo": "You're for it - click again to take the vote back",
+      "promoteShort": "Promote",
+      "notNow": "Not now - let it wait",
+      "notNowUndo": "You're against it - click again to take the vote back",
+      "notNowShort": "Not now",
+      "scoreHint": "Counts the votes of people who have chatted in this channel.",
+      "loginToVote": "Log in to vote"
+    },
+    "decide": {
+      "accept": "Add to the plan",
+      "reject": "Reject",
+      "reopen": "Reopen",
+      "reasonPlaceholder": "Reason - shown to whoever suggests it again",
+      "flash": {
+        "stale": "This was already decided - the page has been refreshed.",
+        "reason_required": "Write a reason to reject it."
+      }
+    }
   },
   "comments": {
     "backToFeed": "Back to news",
@@ -1289,7 +1345,12 @@
       "vote": "Chat vote",
       "takeover": "Shift taken over",
       "restrict": "Restricted",
-      "unrestrict": "Unrestricted"
+      "unrestrict": "Unrestricted",
+      "accept": "Accepted",
+      "reject": "Rejected",
+      "reopen": "Reopened",
+      "approvePoster": "Cover approved",
+      "removePoster": "Cover removed"
     },
     "colChanges": "What changed",
     "rawDetails": "Raw data",
@@ -1363,7 +1424,12 @@
       "unbanGrenade": "Threw the Amnesty Bureau's grenade",
       "mediaCreated": "Added the card \"{{target}}\"",
       "mediaUpdated": "Edited the card \"{{target}}\"",
-      "mediaDeleted": "Deleted the card \"{{target}}\""
+      "mediaDeleted": "Deleted the card \"{{target}}\"",
+      "mediaAccepted": "Suggestion \"{{target}}\" added to the plan",
+      "mediaRejected": "Suggestion \"{{target}}\" rejected",
+      "mediaReopened": "Suggestion \"{{target}}\" reopened",
+      "mediaPosterApproved": "Cover of \"{{target}}\" approved",
+      "mediaPosterRemoved": "Cover of \"{{target}}\" removed"
     }
   },
   "moderatorPermissions": {
@@ -2179,7 +2245,12 @@
         "create": "Card created",
         "update": "Card updated",
         "delete": "Card deleted",
-        "imdbSync": "IMDb ratings updated by hand"
+        "imdbSync": "IMDb ratings updated by hand",
+        "accept": "Suggestion accepted",
+        "reject": "Suggestion rejected",
+        "reopen": "Suggestion reopened",
+        "approvePoster": "Cover approved",
+        "removePoster": "Cover removed"
       },
       "mediaComment": {
         "delete": "Comment under a card deleted",
