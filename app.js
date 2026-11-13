@@ -6,6 +6,7 @@ const path = require("path");
 const env = require("./config/env");
 const { asset } = require("./lib/assetVersion");
 const { IMG_SRC_DIRECTIVE } = require("./lib/emoteImageHosts");
+const { MEDIA_IMAGE_ORIGINS } = require("./lib/mediaImageHosts");
 const attachUser = require("./middleware/auth");
 const i18nMiddleware = require("./middleware/i18n");
 const navMenuMiddleware = require("./middleware/navMenu");
@@ -55,7 +56,9 @@ function createApp(sessionMiddleware) {
     helmet({
       contentSecurityPolicy: {
         directives: {
-          "img-src": [...IMG_SRC_DIRECTIVE],
+          // + the poster sources, for the previews in a movie card's search dropdown only - a saved
+          // card shows its own copy from /uploads (lib/mediaImageHosts.js).
+          "img-src": [...IMG_SRC_DIRECTIVE, ...MEDIA_IMAGE_ORIGINS],
           "script-src": ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
         },
       },

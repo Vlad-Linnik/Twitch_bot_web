@@ -927,7 +927,8 @@
     "sort": {
       "added": "Recently added",
       "streamer": "Streamer's score",
-      "viewers": "Viewers' score"
+      "viewers": "Viewers' score",
+      "imdb": "IMDb rating"
     },
     "empty": {
       "done": "Nothing watched yet.",
@@ -1005,8 +1006,31 @@
         "progress_invalid": "Check \"how much was watched\": a percentage 0-100, episodes no more than the total.",
         "rating_invalid": "A score is 1 to 10.",
         "poster_invalid": "The poster didn't work: an image up to 5 MB.",
-        "duplicate": "A card with this IMDb id already exists on the channel."
+        "duplicate": "This card already exists on the channel: the IMDb, TMDB or Shikimori id matches.",
+        "source_unavailable": "The search source didn't answer just now - pick the result again or fill the fields by hand."
       }
+    },
+    "lookup": {
+      "heading": "Find and fill in",
+      "tab": {
+        "films": "Films & series",
+        "anime": "Anime"
+      },
+      "source": {
+        "tmdb": "TMDB",
+        "imdb": "IMDb",
+        "shikimori": "Shikimori"
+      },
+      "placeholder": "Title in any language…",
+      "loading": "Searching…",
+      "empty": "Nothing found - you can fill it in by hand.",
+      "unavailable": "The source didn't answer - you can fill it in by hand.",
+      "picked": "Picked:",
+      "clear": "Clear"
+    },
+    "attribution": {
+      "lead": "Film, series and anime data comes from open sources:",
+      "shikimori": "Anime titles by"
     }
   },
   "comments": {
@@ -2149,7 +2173,8 @@
       "media": {
         "create": "Card created",
         "update": "Card updated",
-        "delete": "Card deleted"
+        "delete": "Card deleted",
+        "imdbSync": "IMDb ratings updated by hand"
       },
       "mediaComment": {
         "delete": "Comment under a card deleted",
@@ -2346,7 +2371,36 @@
     },
     "colMovies": "Movies",
     "moviesEnable": "Enable movies",
-    "moviesDisable": "Disable movies"
+    "moviesDisable": "Disable movies",
+    "tabMedia": "Movie sources",
+    "media": {
+      "sourcesHeading": "Card search",
+      "filmsTab": "Films & series",
+      "animeTab": "Anime",
+      "tmdbOn": "TMDB (token set)",
+      "tmdbOff": "IMDb without a key (TMDB_READ_TOKEN not set)",
+      "sourcesHint": "Manual entry always works; a source that doesn't answer simply finds nothing.",
+      "cardsHeading": "Cards",
+      "cardsTotal": "Total",
+      "cardsWithImdb": "With an IMDb id",
+      "cardsWithRating": "With an IMDb rating",
+      "imdbHeading": "IMDb rating",
+      "imdbHint": "Once a day from IMDb's official dataset; only cards with an IMDb id are updated.",
+      "imdbNever": "Hasn't run yet.",
+      "lastRun": "Last run",
+      "result": "Result",
+      "ok": "ok",
+      "failed": "failed",
+      "found": "Found",
+      "duration": "Took",
+      "error": "Error",
+      "runNow": "Update now",
+      "running": "Updating…",
+      "flash": {
+        "imdbSynced": "IMDb ratings updated.",
+        "imdbFailed": "Updating IMDb ratings failed - details below."
+      }
+    }
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",

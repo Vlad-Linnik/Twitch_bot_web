@@ -35,6 +35,18 @@ async function ensureInitialized() {
       { channelLogin: 1, kind: 1, "external.imdbId": 1 },
       { unique: true, partialFilterExpression: { "external.imdbId": { $type: "string" } } }
     );
+    // Same for the search sources' own ids. TMDB numbers films and series separately, so its id
+    // is only unique together with its type.
+    await collection.createIndex(
+      { channelLogin: 1, kind: 1, "external.tmdbType": 1, "external.tmdbId": 1 },
+      { unique: true, partialFilterExpression: { "external.tmdbId": { $type: "number" } } }
+    );
+    await collection.createIndex(
+      { channelLogin: 1, kind: 1, "external.shikimoriId": 1 },
+      { unique: true, partialFilterExpression: { "external.shikimoriId": { $type: "number" } } }
+    );
+    // The nightly IMDb rating sync looks cards up by IMDb id across every channel.
+    await collection.createIndex({ "external.imdbId": 1 }, { partialFilterExpression: { "external.imdbId": { $type: "string" } } });
   } catch (err) {
     console.error("[mediaItemsRepo] createIndex failed:", err.message);
   }
@@ -124,4 +136,47 @@ async function deleteItem(id) {
   return col.findOneAndDelete({ _id: oid });
 }
 
-module.exports = { create, update, getById, listForGrid, countByStatus, incViewerRatings, deleteItem };
+// Every distinct IMDb id on any card - the set the nightly dataset pass keeps lines for.
+async function distinctImdbIds() {
+  const col = await ensureInitialized();
+  return col.distinct("external.imdbId", { "external.imdbId": { $type: "string" } });
+}
+
+// Writes the IMDb ratings found by one dataset pass: Map<tconst, {value, votes}>. One updateMany
+// per id (an id can sit on several channels' cards), batched.
+async function setImdbRatings(ratings, fetchedAt = new Date()) {
+  if (!ratings.size) return 0;
+  const col = await ensureInitialized();
+  const ops = [...ratings].map(([imdbId, { value, votes }]) => ({
+    updateMany: {
+      filter: { "external.imdbId": imdbId },
+      update: { $set: { "ratings.external": { source: "imdb", value, votes, fetchedAt } } },
+    },
+  }));
+  const result = await col.bulkWrite(ops, { ordered: false });
+  return result.modifiedCount;
+}
+
+// /admin/media's counters.
+async function sourceStats() {
+  const col = await ensureInitialized();
+  const [total, withImdb, withRating] = await Promise.all([
+    col.countDocuments({}),
+    col.countDocuments({ "external.imdbId": { $type: "string" } }),
+    col.countDocuments({ "ratings.external.source": "imdb" }),
+  ]);
+  return { total, withImdb, withRating };
+}
+
+module.exports = {
+  create,
+  update,
+  getById,
+  listForGrid,
+  countByStatus,
+  incViewerRatings,
+  deleteItem,
+  distinctImdbIds,
+  setImdbRatings,
+  sourceStats,
+};

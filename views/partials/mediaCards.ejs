@@ -32,6 +32,7 @@
       <p class="mt-1 flex items-center gap-3 text-xs tabular-nums">
         <span class="<%= card.streamerRating ? 'text-amber-400' : 'text-neutral-600' %>" title="<%= t('movies.ratingStreamer') %>">★ <%= card.streamerRating ?? '—' %></span>
         <span class="<%= card.viewerAverage !== null ? 'text-sky-400' : 'text-neutral-600' %>" title="<%= t('movies.ratingViewers') %>">◆ <%= card.viewerAverage !== null ? card.viewerAverage.toFixed(1) : '—' %></span>
+        <% if (card.imdbRating !== null && card.imdbRating !== undefined) { %><span class="text-yellow-500/90" title="IMDb">IMDb <%= card.imdbRating.toFixed(1) %></span><% } %>
         <% if (card.commentCount) { %><span class="text-neutral-500" title="<%= t('comments.heading') %>">💬 <%= card.commentCount %></span><% } %>
       </p>
       <% if (card.excerpt) { %>

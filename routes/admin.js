@@ -43,6 +43,8 @@ const userStatsRepo = require("../db/userStatsRepo");
 const pageThemeValidation = require("../lib/pageThemeValidation");
 const { saveThemeImage, saveRemoteImage, themeImageBytes, deleteThemeImage } = require("../lib/pageThemeAssets");
 const steamShowcase = require("../lib/steamShowcase");
+const mediaItemsRepo = require("../db/mediaItemsRepo");
+const imdbRatingsSync = require("../jobs/imdbRatingsSync");
 
 const REJECT_REASON_MAX_LENGTH = 300;
 // The bot writes a fresh heartbeat doc every 30s (TwitchBot's index.js) - anything older than a
@@ -826,6 +828,43 @@ function uploadNewsImage(req, res, next) {
     next();
   });
 }
+
+// --- Movie sources (/admin/media) -------------------------------------------------------
+// Which outside sources the card search uses, and the nightly IMDb rating pass: when it last ran,
+// what it found, and a button to run it now (e.g. right after adding cards with IMDb ids). Whether
+// the TMDB token is set is shown; the token itself never is.
+router.get("/admin/media", requireAdmin, async (req, res, next) => {
+  try {
+    const [status, stats] = await Promise.all([imdbRatingsSync.getStatus(), mediaItemsRepo.sourceStats()]);
+    res.render("adminMedia", {
+      tab: "media",
+      tmdbConfigured: Boolean(env.tmdbReadToken),
+      imdbStatus: status,
+      imdbRunning: imdbRatingsSync.isRunning(),
+      stats,
+      flash: typeof req.query.flash === "string" ? req.query.flash : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Waits for the run (a few seconds: one ~9 MB download read as a stream) so the page that comes
+// back already shows its result.
+router.post("/admin/media/imdb-sync", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const result = await imdbRatingsSync.runOnce();
+    await adminActionLogsRepo.logAction({
+      admin: req.user,
+      action: "media.imdbSync",
+      target: "imdb",
+      details: result.ok ? `${result.found}/${result.wanted}` : result.error,
+    });
+    res.redirect(`/admin/media?flash=${result.ok ? "imdbSynced" : "imdbFailed"}`);
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/admin/news", requireAdmin, async (req, res, next) => {
   try {

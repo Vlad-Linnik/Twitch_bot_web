@@ -8,6 +8,7 @@ const { startProfileCacheRefreshLoop } = require("./twitch/profileCacheScheduler
 const { startModeratorSyncLoop } = require("./twitch/moderatorSyncScheduler");
 const { startExampleRefreshLoop } = require("./jobs/higherLowerExamples");
 const { startGuessChatterRefreshLoop } = require("./jobs/guessChatter");
+const { startImdbRatingsSync } = require("./jobs/imdbRatingsSync");
 
 async function main() {
   await connect();
@@ -25,6 +26,7 @@ async function main() {
   startModeratorSyncLoop();
   startExampleRefreshLoop();
   startGuessChatterRefreshLoop();
+  startImdbRatingsSync();
 }
 
 main().catch((err) => {

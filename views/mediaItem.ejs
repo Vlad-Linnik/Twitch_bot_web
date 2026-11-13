@@ -58,7 +58,7 @@
         <% if (item.status === 'accepted') { %><span class="ml-2 px-1.5 py-0.5 rounded bg-sky-900/60 text-sky-300 text-xs"><%= t('movies.statusPlanned') %></span><% } %>
       </p>
 
-      <dl class="mt-4 grid grid-cols-2 gap-3 max-w-sm">
+      <dl class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
         <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
           <dt class="text-[11px] uppercase tracking-wide text-neutral-500"><%= t('movies.ratingStreamer') %></dt>
           <dd class="text-xl font-semibold tabular-nums <%= item.ratings.streamer ? 'text-amber-400' : 'text-neutral-600' %>">
@@ -74,6 +74,14 @@
             <%= item.viewerCount ? t('movies.ratingCount', { count: item.viewerCount }) : t('movies.ratingNone') %>
           </dd>
         </div>
+        <% if (item.imdbRating) { %>
+          <%# IMDb's own figure from the nightly dataset pass (jobs/imdbRatingsSync.js). %>
+          <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
+            <dt class="text-[11px] uppercase tracking-wide text-neutral-500">IMDb</dt>
+            <dd class="text-xl font-semibold tabular-nums text-yellow-500/90"><%= item.imdbRating.value.toFixed(1) %></dd>
+            <dd class="text-[11px] text-neutral-500"><%= t('movies.ratingCount', { count: item.imdbRating.votes.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US') }) %></dd>
+          </div>
+        <% } %>
       </dl>
 
       <% if (badge) { %><p class="mt-3 text-sm text-neutral-300"><%= t('movies.watchedLabel') %>: <span class="tabular-nums"><%= badge %></span></p><% } %>
@@ -148,6 +156,8 @@
   <% } %>
 
   <%- include('partials/discussion', { commentCount: item.commentCount || 0 }) %>
+
+  <%- include('partials/mediaAttribution') %>
 </main>
 
 <script src="<%= asset('/js/reactions.js') %>" defer></script>

@@ -25,6 +25,37 @@
 
   <form method="post" action="<%= action %>" enctype="multipart/form-data" class="space-y-6" data-media-form>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <%# Set only by public/js/media-lookup.js when a search result is picked. The server asks the
+        source for that result again and takes the poster from its own answer, never from here. %>
+    <input type="hidden" name="sourceRef" value="<%= typeof values.sourceRef === 'string' ? values.sourceRef : '' %>" data-lookup-ref />
+
+    <%# Search in outside sources: a JS-only helper over the plain form below, which stays the
+        whole feature without JS. Rendered hidden; the script reveals it. %>
+    <section data-lookup hidden data-lookup-url="<%= lookupUrl %>"
+             data-msg-empty="<%= t('movies.lookup.empty') %>" data-msg-unavailable="<%= t('movies.lookup.unavailable') %>"
+             data-msg-loading="<%= t('movies.lookup.loading') %>" data-msg-picked="<%= t('movies.lookup.picked') %>"
+             class="rounded-lg border border-purple-900/60 bg-purple-950/20 p-4">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <span class="text-sm font-medium text-neutral-200"><%= t('movies.lookup.heading') %></span>
+        <div class="flex gap-1 ml-auto" role="tablist">
+          <% ['films', 'anime'].forEach(function(tab, i) { %>
+            <button type="button" role="tab" data-lookup-tab="<%= tab %>" aria-selected="<%= i === 0 ? 'true' : 'false' %>"
+                    class="px-2.5 py-1 rounded-md text-xs border border-neutral-700 text-neutral-400 aria-selected:border-purple-600 aria-selected:text-neutral-100 aria-selected:bg-purple-600/15">
+              <%= t('movies.lookup.tab.' + tab) %> <span class="text-neutral-500">· <%= t('movies.lookup.source.' + lookupSources[tab]) %></span>
+            </button>
+          <% }) %>
+        </div>
+      </div>
+      <input type="search" data-lookup-input autocomplete="off" maxlength="100" placeholder="<%= t('movies.lookup.placeholder') %>"
+             class="w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+      <p data-lookup-status class="mt-2 text-xs text-neutral-500" aria-live="polite"></p>
+      <ul data-lookup-results class="mt-2 grid gap-1 max-h-80 overflow-y-auto"></ul>
+      <div data-lookup-picked hidden class="mt-3 flex items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-2">
+        <img data-lookup-picked-img alt="" class="w-12 h-[72px] object-cover rounded bg-neutral-800" />
+        <p data-lookup-picked-text class="text-xs text-neutral-300 flex-1 min-w-0"></p>
+        <button type="button" data-lookup-clear class="text-xs text-neutral-500 hover:text-neutral-200"><%= t('movies.lookup.clear') %></button>
+      </div>
+    </section>
 
     <div class="grid sm:grid-cols-2 gap-4">
       <label class="block sm:col-span-2">
@@ -96,7 +127,7 @@
       <input type="file" name="poster" accept="image/*"
              class="w-full text-sm text-neutral-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:text-neutral-300 file:text-xs" />
       <label class="mt-3 flex items-center gap-2 text-sm text-neutral-300">
-        <input type="checkbox" name="nsfw" value="1" class="accent-purple-600"<%= nsfwChecked ? ' checked' : '' %> />
+        <input type="checkbox" name="nsfw" value="1" data-nsfw-checkbox class="accent-purple-600"<%= nsfwChecked ? ' checked' : '' %> />
         <%= t('movies.form.nsfw') %>
       </label>
       <p class="mt-1 text-xs text-neutral-600"><%= t('movies.form.nsfwHint') %></p>
@@ -127,8 +158,11 @@
       <a href="<%= back %>" class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= t('movies.form.cancel') %></a>
     </div>
   </form>
+
+  <%- include('partials/mediaAttribution') %>
 </main>
 
 <script src="<%= asset('/js/media-form.js') %>" defer></script>
+<script src="<%= asset('/js/media-lookup.js') %>" defer></script>
 
 <%- include('partials/foot') %>

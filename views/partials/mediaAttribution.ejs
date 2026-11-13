@@ -1,0 +1,13 @@
+<%#
+  The credits the outside data comes with, under every page of the movies section. Two of them are
+  conditions of use, not courtesy: TMDB's API terms require the "not endorsed or certified" line,
+  and the IMDb datasets licence (personal, non-commercial) requires "Information courtesy of IMDb".
+  Both notices are kept in their original English wording in every locale - they are the licence
+  text, not interface copy. Shikimori asks for nothing; it is credited because its titles are used.
+%>
+<footer class="mt-16 pt-4 border-t border-neutral-900 text-[11px] leading-relaxed text-neutral-600 space-y-1">
+  <p><%= t('movies.attribution.lead') %></p>
+  <p>This product uses the <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer nofollow" class="underline hover:text-neutral-400">TMDB</a> API but is not endorsed or certified by TMDB.</p>
+  <p>Information courtesy of <a href="https://www.imdb.com/" target="_blank" rel="noopener noreferrer nofollow" class="underline hover:text-neutral-400">IMDb</a> (https://www.imdb.com). Used with permission.</p>
+  <p><%= t('movies.attribution.shikimori') %> <a href="https://shikimori.io/" target="_blank" rel="noopener noreferrer nofollow" class="underline hover:text-neutral-400">Shikimori</a>.</p>
+</footer>

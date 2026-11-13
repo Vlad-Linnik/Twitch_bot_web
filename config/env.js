@@ -78,6 +78,11 @@ const env = {
   // the per-route percentiles regardless; this only decides which ones are worth a closer look.
   slowRequestMs: parseInt(process.env.SLOW_REQUEST_MS, 10) || 1000,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
+
+  // TMDB's v4 "API Read Access Token" for the movie-card search (lib/mediaSources/tmdb.js). Sent as
+  // a Bearer header only, never in a URL. Optional and fail-soft: without it the films tab falls
+  // back to the no-key IMDb suggestion search, and manual entry always works.
+  tmdbReadToken: process.env.TMDB_READ_TOKEN || null,
 };
 
 module.exports = env;

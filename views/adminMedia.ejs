@@ -1,0 +1,76 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabMedia') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const fmt = (d) => (d ? new Date(d).toLocaleString(dateLocale) : '—');
+  const card = 'rounded-lg border border-neutral-800 bg-neutral-900/40 p-4';
+%>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.subtitle') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <% if (flash) { %>
+    <div class="mb-8 rounded-md border <%= flash === 'imdbFailed' ? 'border-red-800 bg-red-950/50 text-red-300' : 'border-green-800 bg-green-950/50 text-green-300' %> text-sm px-4 py-3">
+      <%= t('admin.media.flash.' + flash) %>
+    </div>
+  <% } %>
+
+  <div class="grid gap-4 md:grid-cols-2">
+    <section class="<%= card %>">
+      <h2 class="text-sm font-semibold text-neutral-200 mb-3"><%= t('admin.media.sourcesHeading') %></h2>
+      <dl class="text-sm space-y-2">
+        <div class="flex justify-between gap-4">
+          <dt class="text-neutral-400"><%= t('admin.media.filmsTab') %></dt>
+          <dd class="<%= tmdbConfigured ? 'text-green-400' : 'text-amber-400' %>"><%= tmdbConfigured ? t('admin.media.tmdbOn') : t('admin.media.tmdbOff') %></dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="text-neutral-400"><%= t('admin.media.animeTab') %></dt>
+          <dd class="text-green-400">Shikimori</dd>
+        </div>
+      </dl>
+      <p class="mt-3 text-xs text-neutral-500"><%= t('admin.media.sourcesHint') %></p>
+    </section>
+
+    <section class="<%= card %>">
+      <h2 class="text-sm font-semibold text-neutral-200 mb-3"><%= t('admin.media.cardsHeading') %></h2>
+      <dl class="text-sm space-y-2 tabular-nums">
+        <div class="flex justify-between gap-4"><dt class="text-neutral-400"><%= t('admin.media.cardsTotal') %></dt><dd class="text-neutral-200"><%= stats.total %></dd></div>
+        <div class="flex justify-between gap-4"><dt class="text-neutral-400"><%= t('admin.media.cardsWithImdb') %></dt><dd class="text-neutral-200"><%= stats.withImdb %></dd></div>
+        <div class="flex justify-between gap-4"><dt class="text-neutral-400"><%= t('admin.media.cardsWithRating') %></dt><dd class="text-neutral-200"><%= stats.withRating %></dd></div>
+      </dl>
+    </section>
+
+    <section class="<%= card %> md:col-span-2">
+      <h2 class="text-sm font-semibold text-neutral-200 mb-1"><%= t('admin.media.imdbHeading') %></h2>
+      <p class="text-xs text-neutral-500 mb-3"><%= t('admin.media.imdbHint') %></p>
+      <% if (!imdbStatus) { %>
+        <p class="text-sm text-neutral-400"><%= t('admin.media.imdbNever') %></p>
+      <% } else { %>
+        <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm tabular-nums">
+          <div><dt class="text-xs text-neutral-500"><%= t('admin.media.lastRun') %></dt><dd class="text-neutral-200"><%= fmt(imdbStatus.lastRunAt) %></dd></div>
+          <div><dt class="text-xs text-neutral-500"><%= t('admin.media.result') %></dt>
+            <dd class="<%= imdbStatus.ok ? 'text-green-400' : 'text-red-400' %>"><%= imdbStatus.ok ? t('admin.media.ok') : t('admin.media.failed') %></dd></div>
+          <% if (imdbStatus.ok) { %>
+            <div><dt class="text-xs text-neutral-500"><%= t('admin.media.found') %></dt><dd class="text-neutral-200"><%= imdbStatus.found %> / <%= imdbStatus.wanted %></dd></div>
+            <div><dt class="text-xs text-neutral-500"><%= t('admin.media.duration') %></dt><dd class="text-neutral-200"><%= (imdbStatus.durationMs / 1000).toFixed(1) %> s</dd></div>
+          <% } else { %>
+            <div class="col-span-2"><dt class="text-xs text-neutral-500"><%= t('admin.media.error') %></dt><dd class="text-red-300 break-words"><%= imdbStatus.error %></dd></div>
+          <% } %>
+        </dl>
+      <% } %>
+      <form method="post" action="/admin/media/imdb-sync" data-transition="instant" class="mt-4">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit"<%= imdbRunning ? ' disabled' : '' %>
+                class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs font-medium disabled:opacity-50">
+          <%= imdbRunning ? t('admin.media.running') : t('admin.media.runNow') %>
+        </button>
+      </form>
+    </section>
+  </div>
+</main>
+
+<%- include('partials/foot') %>

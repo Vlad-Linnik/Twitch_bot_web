@@ -39,6 +39,10 @@ const { buildChannelNav } = require("../lib/channelNav");
 const { COMMENT_SORT_MODES } = require("../lib/commentValidation");
 const media = require("../lib/mediaValidation");
 const { savePoster, deletePoster, gridPosterUrl } = require("../lib/mediaImage");
+const { createMediaSources } = require("../lib/mediaSources");
+const { fetchAllowedImage } = require("../lib/remoteImage");
+const { isAllowedMediaImageUrl } = require("../lib/mediaImageHosts");
+const env = require("../config/env");
 const { createDiscussionRoutes } = require("./discussionRoutes");
 
 const router = express.Router();
@@ -62,6 +66,11 @@ const writeJson = loadChannelSection(SECTION, { json: true, allowPreview: false 
 // Editors work in preview too: the admin fills the section before switching it on. Checked before
 // multer reads the body, so an anonymous request never gets a 5 MB upload buffered.
 const edit = [requireSectionEditAccess(EDIT_SECTION), loadChannelSection(SECTION)];
+const editJson = [requireSectionEditAccess(EDIT_SECTION), loadChannelSection(SECTION, { json: true })];
+
+// The search behind the card form (TMDB / Shikimori / the no-key IMDb fallback), one instance and
+// one cache for the process.
+const mediaSources = createMediaSources({ tmdbToken: env.tmdbReadToken });
 
 const discussion = createDiscussionRoutes({
   section: SECTION,
@@ -75,6 +84,8 @@ const discussion = createDiscussionRoutes({
 
 const reactLimiterAllow = createSimpleLimiter({ windowMs: 8 * 1000, max: 8 });
 const rateLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 20 });
+// The search box fires on typing (debounced client-side); this only stops a script.
+const lookupLimiterAllow = createSimpleLimiter({ windowMs: 60 * 1000, max: 60 });
 
 const posterUpload = multer({
   storage: multer.memoryStorage(),
@@ -161,6 +172,7 @@ function shapeCard(item) {
     progress: media.progressBadge(item.progress),
     streamerRating: item.ratings?.streamer ?? null,
     viewerAverage: media.viewerAverage(item.ratings?.viewers),
+    imdbRating: item.ratings?.external?.source === "imdb" ? item.ratings.external.value : null,
     excerpt: item.review?.excerpt || null,
     commentCount: item.commentCount || 0,
     likeCount: item.likeCount || 0,
@@ -247,6 +259,25 @@ router.get(`/:channel/${SECTION}/list.json`, pageJson, async (req, res, next) =>
   }
 });
 
+// --- search in outside sources (the editor's autofill) ----------------------------------
+// ?tab=films|anime&q=...  -> {results: [{ref, title, originalTitle, year, mediaType, previewUrl}]}
+// ?ref=tmdb:movie:27205   -> {details: {..., imdbId, episodes, posterUrl, nsfwHint}}
+// Editors only: it spends other services' quotas on the site's behalf. Declared before /:id.
+router.get(`/:channel/${SECTION}/lookup.json`, editJson, async (req, res, next) => {
+  try {
+    if (!lookupLimiterAllow(req.user.userId)) return res.status(429).json({ ok: false, error: "rate_limited" });
+    if (typeof req.query.ref === "string") {
+      const details = await mediaSources.details(req.query.ref);
+      return res.json({ ok: true, details });
+    }
+    const tab = typeof req.query.tab === "string" ? req.query.tab : "films";
+    const { results, source, unavailable } = await mediaSources.search(tab, req.query.q);
+    res.json({ ok: true, source: source || null, results, unavailable: Boolean(unavailable) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // --- create / edit / delete ------------------------------------------------------------
 
 function formModel(req, { item = null, values = null, errors = [] } = {}) {
@@ -275,6 +306,8 @@ function formModel(req, { item = null, values = null, errors = [] } = {}) {
     statuses: media.EDITOR_STATUSES,
     canWriteStreamerFields: canWriteStreamerFields(req.permission),
     posterUrl: item?.poster?.url || null,
+    lookupSources: mediaSources.describe(),
+    lookupUrl: `/${req.channel.channelLogin}/${SECTION}/lookup.json`,
   };
 }
 
@@ -283,9 +316,22 @@ router.get(`/:channel/${SECTION}/new`, edit, (req, res) => {
 });
 
 // Shared by create and edit: parse, validate, store the poster. Returns {errors} or {value, poster}.
+//
+// A result picked in the search box arrives as `sourceRef` only. Its details - the source's own
+// ids and the poster URL - are asked for again here, by the server, and only that answer is used:
+// a poster URL is never read from the form, or the form would be a way to make our server fetch
+// any address. An uploaded file wins over the source's poster. A poster that fails to download
+// does not block the save; the card is stored without one and can get it later.
 async function readForm(req) {
   const { errors, value } = media.parseMediaForm(req.body, { canWriteStreamerFields: canWriteStreamerFields(req.permission) });
   if (req.posterUploadError) errors.push("poster_invalid");
+
+  let picked = null;
+  if (typeof req.body.sourceRef === "string" && req.body.sourceRef) {
+    picked = await mediaSources.details(req.body.sourceRef);
+    if (!picked) errors.push("source_unavailable");
+  }
+
   let poster = null;
   if (errors.length === 0 && req.file) {
     try {
@@ -293,15 +339,32 @@ async function readForm(req) {
     } catch {
       errors.push("poster_invalid");
     }
+  } else if (errors.length === 0 && picked?.posterUrl) {
+    try {
+      const buffer = await fetchAllowedImage(picked.posterUrl, { isAllowed: isAllowedMediaImageUrl });
+      poster = await savePoster(buffer, { source: picked.source });
+    } catch (err) {
+      console.warn(`[movies] poster from ${picked.source} not saved: ${err.code || err.message}`);
+    }
   }
-  return { errors, value, poster };
+  return { errors, value, poster, picked };
+}
+
+// The card's `external` ids: the IMDb id from the form (typed, or filled from the pick), the
+// search source's own id only from the server-side details.
+function externalIds(value, picked) {
+  const external = {};
+  if (value.imdbId) external.imdbId = value.imdbId;
+  if (picked?.external?.tmdbId) Object.assign(external, { tmdbId: picked.external.tmdbId, tmdbType: picked.external.tmdbType });
+  if (picked?.external?.shikimoriId) external.shikimoriId = picked.external.shikimoriId;
+  return external;
 }
 
 const isDuplicate = (err) => err && err.code === 11000;
 
 router.post(`/:channel/${SECTION}`, edit, settingsWriteLimiter, uploadPoster, verifyToken, async (req, res, next) => {
   try {
-    const { errors, value, poster } = await readForm(req);
+    const { errors, value, poster, picked } = await readForm(req);
     if (errors.length) return res.status(400).render("mediaForm", formModel(req, { values: req.body, errors }));
 
     let item;
@@ -310,7 +373,7 @@ router.post(`/:channel/${SECTION}`, edit, settingsWriteLimiter, uploadPoster, ve
         channelLogin: req.channel.channelLogin,
         kind: KIND,
         ...value,
-        external: value.imdbId ? { imdbId: value.imdbId } : {},
+        external: externalIds(value, picked),
         poster,
         review: value.review ? { ...value.review, authorUserId: req.user.userId, updatedAt: new Date() } : null,
         createdBy: { userId: req.user.userId, login: req.user.login, level: req.permission },
@@ -342,7 +405,7 @@ router.post(`/:channel/${SECTION}/:id/edit`, edit, settingsWriteLimiter, uploadP
     const item = await loadCard(req);
     if (!item) return res.status(404).render("errors/404");
 
-    const { errors, value, poster } = await readForm(req);
+    const { errors, value, poster, picked } = await readForm(req);
     if (errors.length) return res.status(400).render("mediaForm", formModel(req, { item, values: req.body, errors }));
 
     const set = {
@@ -359,6 +422,16 @@ router.post(`/:channel/${SECTION}/:id/edit`, edit, settingsWriteLimiter, uploadP
     };
     if (value.status === "done" && item.status !== "done") set.doneAt = new Date();
     if (poster) set.poster = poster;
+    // A different IMDb id makes the stored IMDb rating someone else's; the nightly pass fills in
+    // the new one.
+    if ((value.imdbId || null) !== (item.external?.imdbId || null)) set["ratings.external"] = null;
+    // A new pick replaces the source ids; no pick leaves them as they were.
+    if (picked) {
+      const ids = externalIds(value, picked);
+      set["external.tmdbId"] = ids.tmdbId ?? null;
+      set["external.tmdbType"] = ids.tmdbType ?? null;
+      set["external.shikimoriId"] = ids.shikimoriId ?? null;
+    }
     if (canWriteStreamerFields(req.permission)) {
       set["ratings.streamer"] = value.streamerRating;
       set.review = value.review
@@ -428,6 +501,7 @@ router.get(`/:channel/${SECTION}/:id`, page, async (req, res, next) => {
         gridPosterUrl: gridPosterUrl(item),
         viewerAverage: media.viewerAverage(item.ratings?.viewers),
         viewerCount: item.ratings?.viewers?.count || 0,
+        imdbRating: item.ratings?.external?.source === "imdb" ? item.ratings.external : null,
         likedByViewer: reacted.has(`${item._id}:like`),
         superlikedByViewer: reacted.has(`${item._id}:superlike`),
       },
