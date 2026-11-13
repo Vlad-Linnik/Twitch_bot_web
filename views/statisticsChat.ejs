@@ -13,6 +13,14 @@
     streamChartLabels: {
       viewers: t('statistics.streamChart.viewers'),
       messages: t('statistics.streamChart.messages'),
+      dayStreamsTpl: t('statistics.streamChart.dayStreamsTpl'),
+      // Keyed by Intl.PluralRules category - i18n.js has no plurals, the browser does.
+      streamCount: {
+        one: t('statistics.streamChart.streamCountOne'),
+        few: t('statistics.streamChart.streamCountFew'),
+        many: t('statistics.streamChart.streamCountMany'),
+        other: t('statistics.streamChart.streamCountOther'),
+      },
     },
     canRace,
     racePool,
@@ -36,7 +44,10 @@
   <section class="mb-12" data-component="streamchart">
     <div class="flex items-center justify-between mb-3 gap-4 flex-wrap">
       <h2 class="text-lg font-semibold text-neutral-100"><%= t('statistics.streamChart.title') %></h2>
-      <div class="flex items-center gap-3">
+      <%# ml-auto keeps this group right-aligned even after the row wraps on a phone - the
+          calendar popover opens leftwards from its right edge and would leave the screen
+          if the group wrapped to the left. %>
+      <div class="flex items-center gap-3 ml-auto">
         <%# Owner/admin only, and only when there is both a track and a field to run on it -
             routes/statistics.js decides, see buildRacePool(). %>
         <% if (canRace) { %>
@@ -49,10 +60,53 @@
               class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
           <%= t('statistics.streamChart.live') %>
         </span>
-        <%# Populated entirely by JS from the boot data, in the visitor's own timezone - no
-            server-rendered <option> would know the visitor's timezone, so this starts empty. %>
-        <select id="stream-session-select" aria-label="<%= t('statistics.streamChart.selectStream') %>"
-                class="bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:border-purple-600"></select>
+        <%# Session picker: a month calendar, each stream day shaded by how long the channel was
+            live that day (the user page's "Chat activity" ramp, same --chart-heat-* tokens).
+            Built entirely by public/js/stream-chart.js from the boot data, in the visitor's own
+            timezone - the server does not know which local day a stream fell on, so nothing
+            here is rendered server-side. A <fieldset> because disabling one disables every
+            control inside it, which is how public/js/stream-race.js locks the picker mid-race. %>
+        <fieldset id="stream-session-picker" class="relative min-w-0 m-0 p-0 border-0">
+          <button type="button" id="stream-picker-toggle"
+                  aria-haspopup="dialog" aria-expanded="false" aria-controls="stream-picker-panel"
+                  class="flex items-center gap-1.5 bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300 hover:border-neutral-700 focus:outline-none focus-visible:border-purple-600 disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg class="w-3.5 h-3.5 shrink-0 text-neutral-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path>
+            </svg>
+            <span id="stream-picker-label" class="tabular-nums"><%= t('statistics.streamChart.selectStream') %></span>
+            <svg class="w-3 h-3 shrink-0 text-neutral-500" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5l3 3 3-3"></path></svg>
+          </button>
+          <div id="stream-picker-panel" role="dialog" aria-label="<%= t('statistics.streamChart.selectStream') %>" hidden
+               class="absolute right-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-neutral-800 bg-neutral-900 p-3 shadow-xl shadow-black/40">
+            <div class="flex items-center justify-between mb-2">
+              <button type="button" id="stream-cal-prev" aria-label="<%= t('statistics.streamChart.prevMonth') %>"
+                      class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-default">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7.5 3l-3 3 3 3"></path></svg>
+              </button>
+              <div id="stream-cal-month" class="text-sm font-medium text-neutral-200 capitalize" aria-live="polite"></div>
+              <button type="button" id="stream-cal-next" aria-label="<%= t('statistics.streamChart.nextMonth') %>"
+                      class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-default">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4.5 3l3 3-3 3"></path></svg>
+              </button>
+            </div>
+            <div id="stream-cal-weekdays" class="grid grid-cols-7 gap-1 mb-1 text-[10px] text-neutral-500 text-center" aria-hidden="true"></div>
+            <div id="stream-cal-grid" role="group" aria-labelledby="stream-cal-month" class="grid grid-cols-7 gap-1"></div>
+            <%# Shown when the picked day had more than one stream - every one of them stays reachable. %>
+            <div id="stream-cal-day" hidden class="mt-3 pt-2 border-t border-neutral-800">
+              <div id="stream-cal-day-title" class="text-[11px] text-neutral-500 mb-1.5"></div>
+              <ul id="stream-cal-day-list" class="space-y-1"></ul>
+            </div>
+            <div class="flex items-center justify-end gap-1 mt-3 text-[10px] text-neutral-600">
+              <%= t('statistics.streamChart.calendarShorter') %>
+              <% ['--chart-heat-1', '--chart-heat-2', '--chart-heat-3', '--chart-heat-4'].forEach(function(token) { %>
+                <span class="inline-block w-2.5 h-2.5 rounded-[2px]" style="background:var(<%= token %>)"></span>
+              <% }) %>
+              <%= t('statistics.streamChart.calendarLonger') %>
+            </div>
+            <div id="stream-cal-tooltip" role="tooltip"
+                 class="hidden absolute z-10 pointer-events-none whitespace-nowrap rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 shadow-lg"></div>
+          </div>
+        </fieldset>
       </div>
     </div>
 
@@ -295,6 +349,7 @@
 <script id="stats-chat-data" type="application/json"><%- safeJson(bootstrap) %></script>
 <script src="<%= asset('/js/cloud-layout.js') %>" defer></script>
 <script src="<%= asset('/js/statistics-chat.js') %>" defer></script>
+<script src="<%= asset('/js/streamCalendar.js') %>" defer></script>
 <script src="<%= asset('/js/stream-chart.js') %>" defer></script>
 <% if (canRace) { %>
   <%# Owner/admin only - not shipped to anyone who has no button to press it with. %>

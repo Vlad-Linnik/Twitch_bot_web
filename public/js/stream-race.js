@@ -47,7 +47,7 @@
   const card = $("stream-chart-wrap");
   const arena = $("stream-race-arena");
   const startBtn = $("stream-race-btn");
-  const select = $("stream-session-select");
+  const picker = $("stream-session-picker");
   const tooltip = $("stream-chart-tooltip");
   const modal = $("stream-race-results");
   const resultsList = $("stream-race-results-list");
@@ -892,7 +892,8 @@
 
   function lockChart(locked) {
     svg.style.pointerEvents = locked ? "none" : "";
-    if (select) select.disabled = locked;
+    // A disabled <fieldset> disables every control inside it - the calendar's toggle and days.
+    if (picker) picker.disabled = locked;
     if (locked && tooltip) tooltip.classList.add("hidden");
   }
 

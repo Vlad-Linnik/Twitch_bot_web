@@ -79,12 +79,14 @@ const MAX_USERNAME_SUGGESTION_CANDIDATES = 500;
 // ~30k docs x ~172B is a few MB of scanning - comfortably inside the budget.
 const MAX_SEARCH_FUZZY_CANDIDATES = 30000;
 
-// Per-stream viewer/message-rate chart on /statistics/chat. The dropdown lists at most this many
-// past sessions (newest first) - ~2 months of daily streaming, comfortably past what anyone
-// would actually scroll to. The chart's message-rate series is bucketed (see
+// Per-stream viewer/message-rate chart on /statistics/chat. The session calendar knows at most
+// this many past sessions (newest first), and every one of them is inlined into the page as
+// {id, startedAt, endedAt} - so the number bounds page weight (~100 bytes a session), not how
+// far anyone would scroll, which a month-by-month calendar no longer asks of them. ~6 months of
+// daily streaming. The chart's message-rate series is bucketed (see
 // lib/streamSessionHelpers.js's messageBucketMs) to stay under this many points regardless of
 // how long a single stream ran, so an "IRL" marathon stream can't blow up the SVG path length.
-const MAX_STREAM_SESSIONS_LISTED = 60;
+const MAX_STREAM_SESSIONS_LISTED = 180;
 const MAX_STREAM_CHART_POINTS = 400;
 
 // How long a computed stats result (cloud, leaderboard, per-user standing/heatmap/mentions...) is

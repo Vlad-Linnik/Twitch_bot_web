@@ -837,7 +837,16 @@
       "live": "В ЭФИРЕ",
       "selectStream": "Выбрать стрим",
       "loading": "Загрузка…",
-      "noSessions": "Данные о стримах пока не собраны — загляните после следующего стрима канала."
+      "noSessions": "Данные о стримах пока не собраны — загляните после следующего стрима канала.",
+      "prevMonth": "Предыдущий месяц",
+      "nextMonth": "Следующий месяц",
+      "dayStreamsTpl": "Стримы {{date}}",
+      "streamCountOne": "{{count}} стрим",
+      "streamCountFew": "{{count}} стрима",
+      "streamCountMany": "{{count}} стримов",
+      "streamCountOther": "{{count}} стрима",
+      "calendarShorter": "Короче",
+      "calendarLonger": "Дольше"
     },
     "streamRace": {
       "start": "Гонка",

@@ -35,7 +35,7 @@
 
   const wrap = $("stream-chart-wrap");
   const emptyEl = $("stream-chart-empty");
-  const select = $("stream-session-select");
+  const picker = $("stream-session-picker");
   const liveBadge = $("stream-live-badge");
   const svg = $("stream-chart");
   const yAxis = $("stream-chart-yaxis");
@@ -46,7 +46,7 @@
 
   // Boot data predates this feature on a page that hasn't been re-rendered, or the markup is
   // missing - stay inert rather than throwing and taking the rest of the page's scripts down.
-  if (!wrap || !select || !svg || !boot.sessions) return;
+  if (!wrap || !picker || !svg || !boot.sessions || !window.StreamCalendar) return;
 
   const sessions = boot.sessions;
   if (sessions.length === 0) {
@@ -84,36 +84,338 @@
   });
 
   // ---------------------------------------------------------------------------------------
-  // Session picker - grouped into <optgroup>s by the LOCAL calendar date of startedAt (not
-  // endedAt, so a stream crossing local midnight has one unambiguous group), giving the
-  // dropdown a small-calendar feel without an actual calendar-grid widget.
+  // Session picker - a month calendar in a popover. A stream belongs to the LOCAL calendar day
+  // it started on (not the one it ended on, so a stream crossing midnight has one unambiguous
+  // day); each such day is shaded by the total time streamed that day on the same ramp as the
+  // user page's "Chat activity" calendar (the --chart-heat-* tokens, so a themed page tints
+  // both alike). The date math and the outlier-resistant shade scale live in
+  // public/js/streamCalendar.js, which tests/streamCalendar.test.js covers.
   // ---------------------------------------------------------------------------------------
-  const localDateKey = (date) =>
-    new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const SC = window.StreamCalendar;
+  const HEAT_TOKENS = ["--chart-heat-1", "--chart-heat-2", "--chart-heat-3", "--chart-heat-4"];
 
-  function populateSessionSelect(selectedId) {
-    select.textContent = "";
-    let group = null;
-    let groupKey = null;
+  const toggle = $("stream-picker-toggle");
+  const toggleLabel = $("stream-picker-label");
+  const panel = $("stream-picker-panel");
+  const monthTitle = $("stream-cal-month");
+  const prevBtn = $("stream-cal-prev");
+  const nextBtn = $("stream-cal-next");
+  const weekdaysEl = $("stream-cal-weekdays");
+  const gridEl = $("stream-cal-grid");
+  const dayBox = $("stream-cal-day");
+  const dayTitle = $("stream-cal-day-title");
+  const dayList = $("stream-cal-day-list");
+  const calTooltip = $("stream-cal-tooltip");
 
-    sessions.forEach((s) => {
-      const started = new Date(s.startedAt);
-      const key = localDateKey(started);
-      if (key !== groupKey) {
-        group = document.createElement("optgroup");
-        group.label = dateFmt.format(started);
-        select.appendChild(group);
-        groupKey = key;
-      }
-      const option = document.createElement("option");
-      option.value = s.id;
-      // A still-open session reads identically to a closed one at the same start time otherwise.
-      option.textContent = s.endedAt ? timeFmt.format(started) : `${timeFmt.format(started)} ●`;
-      if (s.id === selectedId) option.selected = true;
-      group.appendChild(option);
-    });
+  const labels = boot.streamChartLabels || {};
+  const pluralRules = new Intl.PluralRules(boot.locale);
+  const streamCountText = (n) => {
+    const forms = labels.streamCount || {};
+    const tpl = forms[pluralRules.select(n)] || forms.other || "{{count}}";
+    return tpl.replace("{{count}}", String(n));
+  };
+  const hoursFmt = new Intl.NumberFormat(boot.locale, { style: "unit", unit: "hour", unitDisplay: "narrow" });
+  const minutesFmt = new Intl.NumberFormat(boot.locale, { style: "unit", unit: "minute", unitDisplay: "narrow" });
+  const formatDuration = (ms) => {
+    const totalMin = Math.max(1, Math.round(ms / 60000));
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return minutesFmt.format(m);
+    return m === 0 ? hoursFmt.format(h) : `${hoursFmt.format(h)} ${minutesFmt.format(m)}`;
+  };
+  const monthTitleFmt = new Intl.DateTimeFormat(boot.locale, { month: "long", year: "numeric" });
+  const dayFullFmt = new Intl.DateTimeFormat(boot.locale, { day: "numeric", month: "long", year: "numeric" });
+  const weekdayFmt = new Intl.DateTimeFormat(boot.locale, { weekday: "short" });
+
+  // Built once: a live stream's day keeps growing, but only by minutes per page view, and the
+  // chart itself is not live-updating either.
+  const days = SC.groupSessionsByDay(sessions);
+  const dayKeys = [...days.keys()].sort();
+  const scale = SC.buildScale([...days.values()].map((d) => d.totalMs));
+  const range = SC.monthRange(dayKeys);
+  const weekStart = SC.weekStartFor(boot.locale);
+  const todayKey = SC.dayKey(new Date());
+  const sessionDay = new Map();
+  for (const day of days.values()) for (const s of day.sessions) sessionDay.set(s.id, day.key);
+
+  let selectedId = sessions[0].id;
+  let shownMonth = SC.monthOf(SC.dateFromKey(sessionDay.get(selectedId)));
+  // The one day button that is in the Tab order (roving tabindex): the arrow keys move it.
+  let focusKey = sessionDay.get(selectedId);
+
+  // Weekday header, in the visitor's locale and week order. 2026-11-01 is a Sunday; any known
+  // Sunday works, only the weekday names are read from it.
+  for (let i = 0; i < 7; i++) {
+    const span = document.createElement("span");
+    span.textContent = weekdayFmt.format(SC.addDays(new Date(2026, 10, 1), weekStart + i));
+    weekdaysEl.appendChild(span);
   }
 
+  function setToggleLabel() {
+    const s = sessions.find((x) => x.id === selectedId);
+    if (!s) return;
+    const text = dateTimeFmt.format(new Date(s.startedAt));
+    toggleLabel.textContent = s.endedAt ? text : `${text} ●`;
+  }
+
+  function dayDescription(day) {
+    return `${dayFullFmt.format(day.date)} · ${formatDuration(day.totalMs)} · ${streamCountText(day.sessions.length)}`;
+  }
+
+  function renderMonth() {
+    monthTitle.textContent = monthTitleFmt.format(new Date(shownMonth.year, shownMonth.month, 1, 12));
+    prevBtn.disabled = !range || SC.compareMonth(shownMonth, range.first) <= 0;
+    nextBtn.disabled = !range || SC.compareMonth(shownMonth, range.last) >= 0;
+    hideCalTooltip();
+
+    const selectedKey = sessionDay.get(selectedId);
+    // The roving tab stop must be a day that is actually on screen.
+    const inMonth = dayKeys.filter((k) => SC.compareMonth(SC.monthOf(SC.dateFromKey(k)), shownMonth) === 0);
+    if (!inMonth.includes(focusKey)) focusKey = inMonth.includes(selectedKey) ? selectedKey : inMonth[0];
+
+    gridEl.textContent = "";
+    for (const cell of SC.monthGrid(shownMonth.year, shownMonth.month, weekStart).flat()) {
+      if (!cell) {
+        const blank = document.createElement("span");
+        blank.className = "h-8";
+        blank.setAttribute("aria-hidden", "true");
+        gridEl.appendChild(blank);
+        continue;
+      }
+      const day = days.get(cell.key);
+      const isToday = cell.key === todayKey;
+      if (!day) {
+        // No stream: inert, not a button - nothing to pick, nothing to tab to.
+        const span = document.createElement("span");
+        span.className =
+          "h-8 flex items-center justify-center rounded-[3px] text-xs tabular-nums text-neutral-600" +
+          (isToday ? " underline underline-offset-2" : "");
+        span.textContent = cell.day;
+        gridEl.appendChild(span);
+        continue;
+      }
+
+      const level = SC.shadeLevel(day.totalMs, scale);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.key = cell.key;
+      btn.textContent = cell.day;
+      btn.tabIndex = cell.key === focusKey ? 0 : -1;
+      btn.setAttribute("aria-label", dayDescription(day));
+      if (cell.key === selectedKey) btn.setAttribute("aria-current", "date");
+      btn.className =
+        "h-8 flex items-center justify-center rounded-[3px] text-xs font-medium tabular-nums text-white " +
+        "transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 hover:ring-1 hover:ring-white/50" +
+        (cell.key === selectedKey ? " ring-2 ring-white ring-offset-1 ring-offset-neutral-900" : "") +
+        (isToday ? " underline underline-offset-2" : "");
+      btn.style.background = `var(${HEAT_TOKENS[level - 1]})`;
+      // The two lightest shades of the ramp are dark purples on the default palette but pale on
+      // the light skins; a text shadow keeps the white digits legible on either.
+      btn.style.textShadow = "0 1px 2px rgb(0 0 0 / 0.6)";
+      gridEl.appendChild(btn);
+    }
+    renderDayList(null);
+  }
+
+  // The "this day had several streams" list below the grid. null hides it.
+  function renderDayList(day) {
+    dayList.textContent = "";
+    if (!day || day.sessions.length < 2) {
+      dayBox.hidden = true;
+      return;
+    }
+    dayTitle.textContent = (labels.dayStreamsTpl || "{{date}}").replace("{{date}}", dayFullFmt.format(day.date));
+    for (const s of day.sessions) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.sessionId = s.id;
+      const start = new Date(s.startedAt);
+      const span = s.live ? `${timeFmt.format(start)} – ●` : `${timeFmt.format(start)} – ${timeFmt.format(new Date(s.endedAt))}`;
+      btn.className =
+        "w-full flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs text-left tabular-nums " +
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 hover:bg-neutral-800 " +
+        (s.id === selectedId ? "bg-neutral-800 text-neutral-100" : "text-neutral-300");
+      if (s.id === selectedId) btn.setAttribute("aria-current", "true");
+      const left = document.createElement("span");
+      left.textContent = span;
+      const right = document.createElement("span");
+      right.className = "text-neutral-500";
+      right.textContent = formatDuration(s.durationMs);
+      btn.append(left, right);
+      li.appendChild(btn);
+      dayList.appendChild(li);
+    }
+    dayBox.hidden = false;
+  }
+
+  function showCalTooltip(btn) {
+    const day = days.get(btn.dataset.key);
+    if (!day) return;
+    calTooltip.textContent = dayDescription(day);
+    calTooltip.classList.remove("hidden");
+    // Above the cell, centred, clamped inside the panel so it never pokes off a phone screen.
+    const panelRect = panel.getBoundingClientRect();
+    const r = btn.getBoundingClientRect();
+    const tipW = calTooltip.offsetWidth;
+    let left = r.left - panelRect.left + r.width / 2 - tipW / 2;
+    left = Math.max(4, Math.min(panelRect.width - tipW - 4, left));
+    calTooltip.style.left = `${left}px`;
+    calTooltip.style.top = `${r.top - panelRect.top - calTooltip.offsetHeight - 6}px`;
+  }
+  function hideCalTooltip() {
+    calTooltip.classList.add("hidden");
+  }
+
+  function focusDay(key) {
+    if (!key) return;
+    const ym = SC.monthOf(SC.dateFromKey(key));
+    focusKey = key;
+    if (SC.compareMonth(ym, shownMonth) !== 0) {
+      shownMonth = ym;
+      renderMonth();
+    } else {
+      for (const b of gridEl.querySelectorAll("button[data-key]")) b.tabIndex = b.dataset.key === key ? 0 : -1;
+    }
+    const btn = gridEl.querySelector(`button[data-key="${key}"]`);
+    if (btn) btn.focus();
+  }
+
+  function openPanel() {
+    shownMonth = SC.monthOf(SC.dateFromKey(sessionDay.get(selectedId)));
+    focusKey = sessionDay.get(selectedId);
+    renderMonth();
+    panel.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    focusDay(focusKey);
+  }
+  function closePanel(returnFocus) {
+    if (panel.hidden) return;
+    panel.hidden = true;
+    hideCalTooltip();
+    toggle.setAttribute("aria-expanded", "false");
+    if (returnFocus) toggle.focus();
+  }
+
+  function selectSession(id) {
+    closePanel(true);
+    if (id === selectedId) return;
+    selectedId = id;
+    setToggleLabel();
+    loadSession(id);
+  }
+
+  toggle.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel(false)));
+  prevBtn.addEventListener("click", () => {
+    shownMonth = SC.shiftMonth(shownMonth, -1);
+    renderMonth();
+  });
+  nextBtn.addEventListener("click", () => {
+    shownMonth = SC.shiftMonth(shownMonth, 1);
+    renderMonth();
+  });
+
+  gridEl.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-key]");
+    if (!btn) return;
+    const day = days.get(btn.dataset.key);
+    focusKey = btn.dataset.key;
+    if (day.sessions.length === 1) {
+      selectSession(day.sessions[0].id);
+      return;
+    }
+    // Several streams that day: pick between them rather than silently taking one.
+    renderDayList(day);
+    const current = dayList.querySelector('[aria-current="true"]') || dayList.querySelector("button");
+    if (current) current.focus();
+  });
+  dayList.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-session-id]");
+    if (btn) selectSession(btn.dataset.sessionId);
+  });
+
+  gridEl.addEventListener("pointerover", (e) => {
+    const btn = e.target.closest("button[data-key]");
+    if (btn) showCalTooltip(btn);
+    else hideCalTooltip();
+  });
+  gridEl.addEventListener("pointerleave", hideCalTooltip);
+  // Keyboard focus only: opening the panel by click/tap also moves focus into it, and a tooltip
+  // popping up unasked there would cover the row above the selected day.
+  gridEl.addEventListener("focusin", (e) => {
+    const btn = e.target.closest("button[data-key]");
+    if (btn && btn.matches(":focus-visible")) showCalTooltip(btn);
+  });
+  gridEl.addEventListener("focusout", hideCalTooltip);
+
+  // Arrows walk STREAM days (empty days are not stops), crossing months as needed; Up/Down jump
+  // a week and land on the nearest stream day in that direction; Home/End = first/last stream
+  // day of the shown month; PageUp/PageDown = previous/next month.
+  gridEl.addEventListener("keydown", (e) => {
+    const btn = e.target.closest("button[data-key]");
+    if (!btn) return;
+    const key = btn.dataset.key;
+    const inMonth = dayKeys.filter((k) => SC.compareMonth(SC.monthOf(SC.dateFromKey(k)), shownMonth) === 0);
+    let target = null;
+    switch (e.key) {
+      case "ArrowRight":
+        target = SC.adjacentDay(dayKeys, key, 1);
+        break;
+      case "ArrowLeft":
+        target = SC.adjacentDay(dayKeys, key, -1);
+        break;
+      case "ArrowDown": {
+        const weekOn = SC.dayKey(SC.addDays(SC.dateFromKey(key), 7));
+        target = days.has(weekOn) ? weekOn : SC.adjacentDay(dayKeys, weekOn, 1);
+        break;
+      }
+      case "ArrowUp": {
+        const weekBack = SC.dayKey(SC.addDays(SC.dateFromKey(key), -7));
+        target = days.has(weekBack) ? weekBack : SC.adjacentDay(dayKeys, weekBack, -1);
+        break;
+      }
+      case "Home":
+        target = inMonth[0];
+        break;
+      case "End":
+        target = inMonth[inMonth.length - 1];
+        break;
+      case "PageUp":
+      case "PageDown": {
+        const btnNav = e.key === "PageUp" ? prevBtn : nextBtn;
+        if (!btnNav.disabled) {
+          shownMonth = SC.shiftMonth(shownMonth, e.key === "PageUp" ? -1 : 1);
+          renderMonth();
+          focusDay(focusKey);
+        }
+        e.preventDefault();
+        return;
+      }
+      default:
+        return;
+    }
+    e.preventDefault();
+    if (target) focusDay(target);
+  });
+
+  panel.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    if (!dayBox.hidden) {
+      // First Escape backs out of the several-streams list to the day it belongs to.
+      renderDayList(null);
+      focusDay(focusKey);
+    } else {
+      closePanel(true);
+    }
+  });
+  // A click anywhere outside closes it, as does tabbing out of it.
+  document.addEventListener("pointerdown", (e) => {
+    if (!panel.hidden && !picker.contains(e.target)) closePanel(false);
+  });
+  picker.addEventListener("focusout", (e) => {
+    if (!panel.hidden && e.relatedTarget && !picker.contains(e.relatedTarget)) closePanel(false);
+  });
   // ---------------------------------------------------------------------------------------
   // Axes + gridlines
   // ---------------------------------------------------------------------------------------
@@ -480,15 +782,15 @@
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return;
-    render(await res.json());
+    const data = await res.json();
+    // Two quick picks can answer out of order; only the one still selected may paint.
+    if (id === selectedId) render(data);
   }
-
-  select.addEventListener("change", () => loadSession(select.value));
 
   // ---------------------------------------------------------------------------------------
   // First paint - the newest session's data is already server-inlined (boot.streamChart), so
   // opening the page never re-fetches what the server already computed.
   // ---------------------------------------------------------------------------------------
-  populateSessionSelect(sessions[0].id);
+  setToggleLabel();
   if (boot.streamChart) render(boot.streamChart);
 })();

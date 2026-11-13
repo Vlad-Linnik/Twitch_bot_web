@@ -837,7 +837,16 @@
       "live": "LIVE",
       "selectStream": "Select stream",
       "loading": "Loading…",
-      "noSessions": "No stream data collected yet — check back after the channel's next stream."
+      "noSessions": "No stream data collected yet — check back after the channel's next stream.",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "dayStreamsTpl": "Streams on {{date}}",
+      "streamCountOne": "{{count}} stream",
+      "streamCountFew": "{{count}} streams",
+      "streamCountMany": "{{count}} streams",
+      "streamCountOther": "{{count}} streams",
+      "calendarShorter": "Shorter",
+      "calendarLonger": "Longer"
     },
     "streamRace": {
       "start": "Race",
