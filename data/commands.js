@@ -1,6 +1,6 @@
-// Hand-maintained, kept in sync with TwitchBot/COMMANDS.md whenever a
-// command is added/changed there. Deliberately not fetched cross-repo (see
-// PLAN.md) - update both files together when the bot's command set changes.
+// Hand-maintained list of the bot's chat commands, and the only written-down one: the bot repo
+// has no command reference of its own. Deliberately not fetched cross-repo (see PLAN.md) -
+// update it whenever the bot's command set changes.
 //
 // `cooldown` mirrors TwitchBot/config/channelSettings.js's DEFAULT_CHANNEL_SETTINGS
 // cooldownMs (null where the command has no configurable cooldown). `descriptionKey`/
@@ -10,7 +10,7 @@
 // `configKey` names the matching key under ChannelConfig.commands (see
 // config/defaultChannelConfig.json) so lib/commandsView.js can resolve a channel's
 // actual signature/cooldown/enabled state on top of these defaults - omit it for
-// commands with no per-channel override (e.g. !customcommands, !counters). Some
+// commands with no per-channel override (e.g. !customcommands). Some
 // commands share a configKey but read a different field of it (`signatureField`,
 // default "signature") - !remexception reads `exception.remSignature`, !muteaccept
 // reads `muteduel.acceptSignature`. `noCooldownOverride` opts a row out of cooldown
@@ -19,12 +19,12 @@
 // !muteaccept).
 module.exports = [
   {
-    categoryKey: "commands.category.counters",
+    categoryKey: "commands.category.variables",
     commands: [
-      { signature: "!addcounter #name [mod]", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addcounter", useCaseKey: "commands.useCase.addcounter", configKey: "addcounter" },
-      { signature: "!delcounter #name", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.delcounter", useCaseKey: "commands.useCase.delcounter", configKey: "delcounter" },
-      { signature: "!counters", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.counters", useCaseKey: "commands.useCase.counters" },
-      { signature: "#name / #name + N / #name - N", accessKey: "commands.access.allExceptionListed", cooldown: "10s", descriptionKey: "commands.desc.counterUpdate", useCaseKey: "commands.useCase.counterUpdate", configKey: "counterUpdate" },
+      { signature: "!addvar #name [mod]", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addvar", useCaseKey: "commands.useCase.addvar", configKey: "addvar" },
+      { signature: "!delvar #name", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.delvar", useCaseKey: "commands.useCase.delvar", configKey: "delvar" },
+      { signature: "!vars", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.vars", useCaseKey: "commands.useCase.vars", configKey: "vars" },
+      { signature: "#name / #name + N / #name - N", accessKey: "commands.access.allExceptionListed", cooldown: "10s", descriptionKey: "commands.desc.varUpdate", useCaseKey: "commands.useCase.varUpdate", configKey: "varUpdate" },
       { signature: "!addexception username", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addexception", useCaseKey: "commands.useCase.addexception", configKey: "exception", signatureField: "signature" },
       { signature: "!remexception username", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.remexception", useCaseKey: "commands.useCase.remexception", configKey: "exception", signatureField: "remSignature" },
     ],

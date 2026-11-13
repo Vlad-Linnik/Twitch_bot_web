@@ -29,7 +29,7 @@ router.use("/", require("./seasonalTheme"));
 // to /:channel/statistics/chat) and would swallow every static page above it. Keep it the final
 // mount.
 router.use("/", require("./customCommands"));
-router.use("/", require("./counters"));
+router.use("/", require("./variables"));
 router.use("/", require("./longBans"));
 router.use("/", require("./unbanBureau"));
 router.use("/", require("./news"));

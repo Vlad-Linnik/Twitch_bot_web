@@ -4,7 +4,7 @@
 // mirrors Twitch's unban-request queue into it and enriches each doc with the two dossier facts
 // only its token can read (account creation date, follow date).
 //
-// Like LongBans and unlike custom_commands/counters, this app can NEVER execute either side
+// Like LongBans and unlike custom_commands/variables, this app can NEVER execute either side
 // itself: approving or denying needs moderator:manage:unban_requests on a user token, and this
 // app's Twitch app has no moderation scopes at all (twitch/oauthClient.js requests only
 // moderation:read). So this module writes exactly two things - `resolution.status: 'pending'`

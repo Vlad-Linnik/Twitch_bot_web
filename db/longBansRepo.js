@@ -1,7 +1,7 @@
 // CRUD for the `LongBans` collection.
 //
 // OWNERSHIP: TwitchBot/db/longBansRepo.js is the origin of this document shape. Unlike
-// custom_commands/counters, this app can NEVER execute either side of a long-ban itself - it has
+// custom_commands/variables, this app can NEVER execute either side of a long-ban itself - it has
 // no Twitch moderation-action credentials (see ../CLAUDE.md's "Long-bans: written by both repos,
 // executed only by the bot"). So this module only ever writes `status: 'pending'` (a new
 // long-ban request - the target's login->id is already resolved via twitch/helixUsers.js before

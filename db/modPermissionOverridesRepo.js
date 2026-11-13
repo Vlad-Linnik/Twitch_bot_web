@@ -1,4 +1,4 @@
-// Per-moderator override of whether a tier-2 moderator may EDIT bot settings/commands/counters
+// Per-moderator override of whether a tier-2 moderator may EDIT bot settings/commands/variables
 // (viewing is unaffected - this only gates the mutating routes). Web-only collection, entirely
 // separate from ModsList (bot-owned, membership-only) and Channels - this repo doesn't touch
 // either, so no bot-repo changes are needed for this feature.

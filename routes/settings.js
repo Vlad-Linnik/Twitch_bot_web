@@ -2,7 +2,8 @@ const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
-const countersRepo = require("../db/countersRepo");
+const variablesRepo = require("../db/variablesRepo");
+const { movedPermanently } = require("../lib/movedPermanently");
 const longBansRepo = require("../db/longBansRepo");
 const modsRepo = require("../db/modsRepo");
 const modPermissionOverridesRepo = require("../db/modPermissionOverridesRepo");
@@ -58,10 +59,10 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
 
-    const [config, customCommands, counters, longBans, sevenTvStatus] = await Promise.all([
+    const [config, customCommands, variables, longBans, sevenTvStatus] = await Promise.all([
       channelConfigRepo.getConfig(req.params.channel),
       customCommandsRepo.list(req.params.channel),
-      countersRepo.list(req.params.channel),
+      variablesRepo.list(req.params.channel),
       longBansRepo.listActiveForChannel(channel.channelId),
       // emoteImages.js's getSevenTvLinkStatus is already fail-soft (a 7TV outage resolves to
       // "not linked" rather than rejecting), so no extra catch needed here.
@@ -71,7 +72,7 @@ router.get("/:channel/settings", requireLevel(2), async (req, res, next) => {
       channel,
       config,
       customCommandCount: customCommands.length,
-      counterCount: counters.length,
+      variableCount: variables.length,
       longBanCount: longBans.length,
       sevenTvStatus,
       saved: req.query.saved === "1",
@@ -100,7 +101,7 @@ router.post("/:channel/settings", autosaveLimiter, requireSettingsEditAccess(), 
 });
 
 // Command-group settings moved off the main settings page onto their own sub-pages
-// (custom commands, counters) - each renders a subset of the command rows and POSTs
+// (custom commands, variables) - each renders a subset of the command rows and POSTs
 // back through the same parseSubmittedConfig, which carries every unrendered field
 // over from the stored config (see lib/settingsValidation.js's partial-form contract).
 function registerConfigSubPage(basePath, viewName, getExtras = null) {
@@ -137,7 +138,9 @@ function registerConfigSubPage(basePath, viewName, getExtras = null) {
 registerConfigSubPage("/settings/custom-commands", "channelCustomCommandsSettings", async (channelLogin) => ({
   customCommandCount: (await customCommandsRepo.list(channelLogin)).length,
 }));
-registerConfigSubPage("/settings/counters", "channelCountersSettings");
+registerConfigSubPage("/settings/variables", "channelVariablesSettings");
+// The sub-page's address before counters were renamed to variables.
+router.all("/:channel/settings/counters", movedPermanently((req) => `/${encodeURIComponent(req.params.channel)}/settings/variables`));
 // The Amnesty Bureau's knobs used to sit in the main settings form, with the settings grid's own
 // "Бюро амнистии" tile jumping straight into the review console. The tile now lands here instead and
 // this page is what offers the console - the settings are a channel-level decision, the console is a

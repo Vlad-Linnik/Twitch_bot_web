@@ -28,7 +28,7 @@ const settingsWriteLimiter = rateLimit({
 // Settings-type forms autosave on every change (public/js/autosave.js), so they need
 // more headroom than settingsWriteLimiter's 10/min - and a SEPARATE bucket, so a burst
 // of autosaves can't starve the explicit action buttons (add/delete word, command,
-// counter) that stay on settingsWriteLimiter. The client debounces and coalesces
+// variable) that stay on settingsWriteLimiter. The client debounces and coalesces
 // in-flight saves, so 30/min is generous in practice.
 const autosaveLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -40,7 +40,7 @@ const autosaveLimiter = rateLimit({
 
 // Starting a solo-game run and submitting its score get their own buckets
 // rather than sharing settingsWriteLimiter: that one is the explicit-action
-// budget for word/command/counter CRUD, and a player finishing a few games
+// budget for word/command/variable CRUD, and a player finishing a few games
 // should not be able to eat it. Both are per-IP like every other
 // express-rate-limit bucket here, so they bound automation, not legitimate
 // play - the actual anti-cheat is the run token plus server-side replay

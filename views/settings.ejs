@@ -20,19 +20,19 @@
     // The bot's command map, grouped into human sections. Anything in config.commands not
     // claimed here (a future bot command) lands in the trailing "other" group instead of
     // silently disappearing from the form. question/directmsg/insult/customCommandTimer/
-    // counterUpdate are deliberately NOT in these tables - they aren't chat commands, and
+    // varUpdate are deliberately NOT in these tables - they aren't chat commands, and
     // each is rendered next to the setting it actually belongs to (insult lives on the
-    // Banned Words page). The custom-commands and counters command groups moved to their
-    // own sub-pages (channelCustomCommandsSettings / channelCountersSettings), linked from
+    // Banned Words page). The custom-commands and variables command groups moved to their
+    // own sub-pages (channelCustomCommandsSettings / channelVariablesSettings), linked from
     // the cards below - their names stay claimed so they don't resurface under "other".
     const groups = [
       { key: 'chatStats', names: ['topchatters', 'topsmiles', 'countword', 'countmsg', 'countunique', 'update7tv', 'botinfo', 'randomclip', 'weather'] },
       { key: 'miniGames', names: ['muteduel'] },
     ];
     const placedElsewhere = new Set([
-      'question', 'directmsg', 'insult', 'customCommandTimer', 'counterUpdate',
+      'question', 'directmsg', 'insult', 'customCommandTimer', 'varUpdate',
       'addcommand', 'settimer', 'setpin', 'setannounce', 'delcommand',
-      'addcounter', 'delcounter', 'exception',
+      'addvar', 'delvar', 'vars', 'exception',
       'longban', 'cancellongban', 'longbans',
     ]);
     const claimed = new Set(placedElsewhere);
@@ -84,11 +84,11 @@
           <span class="block text-neutral-500 text-sm mt-1"><%= config.spamSignatures.length %> <%= t('channelSettings.wordCountSuffix') %></span>
         </span>
       </a>
-      <a href="/<%= channel.channelLogin %>/settings/counters" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
+      <a href="/<%= channel.channelLogin %>/settings/variables" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">
         <span class="text-xl leading-none">🔢</span>
         <span>
-          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.counters') %></span>
-          <span class="block text-neutral-500 text-sm mt-1"><%= counterCount %> <%= t('channelSettings.counterCountSuffix') %></span>
+          <span class="block text-lg font-semibold text-neutral-100"><%= t('channelSettings.group.variables') %></span>
+          <span class="block text-neutral-500 text-sm mt-1"><%= variableCount %> <%= t('channelSettings.variableCountSuffix') %></span>
         </span>
       </a>
       <a href="/<%= channel.channelLogin %>/settings/change-log" data-vt-name="settings-heading" class="flex items-center gap-3 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900/40 px-4 py-3 transition-colors">

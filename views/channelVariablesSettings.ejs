@@ -1,14 +1,14 @@
-<%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.group.counters') }) %>
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('channelSettings.group.variables') }) %>
 <%- include('partials/nav') %>
 
 <main class="pt-14 max-w-3xl mx-auto px-6 py-16">
   <a href="/<%= channel.channelLogin %>/settings" data-transition="backward" class="text-sm text-purple-400 hover:text-purple-300"><%= t('channelSettings.backToSettings') %></a>
-  <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.group.counters') %></h1>
-  <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.groupIntro.counters') %></p>
+  <h1 class="settings-heading text-3xl font-bold text-neutral-100 mt-2 mb-1"><%= t('channelSettings.group.variables') %></h1>
+  <p class="text-neutral-500 text-sm mb-4"><%= t('channelSettings.groupIntro.variables') %></p>
 
-  <a href="/<%= channel.channelLogin %>/counters"
+  <a href="/<%= channel.channelLogin %>/variables"
      class="inline-flex items-center gap-2 mb-8 px-4 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors">
-    🔢 <%= t('channelSettings.manageCounters') %> →
+    🔢 <%= t('channelSettings.manageVariables') %> →
   </a>
 
   <% if (saved) { %>
@@ -17,20 +17,20 @@
     </div>
   <% } %>
 
-  <form method="post" action="/<%= channel.channelLogin %>/settings/counters" data-transition="instant" data-autosave class="space-y-6">
+  <form method="post" action="/<%= channel.channelLogin %>/settings/variables" data-transition="instant" data-autosave class="space-y-6">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
     <%
-      const names = ['addcounter', 'delcounter', 'exception'].filter(n => config.commands[n]);
+      const names = ['addvar', 'delvar', 'vars', 'exception'].filter(n => config.commands[n]);
     %>
     <%- include('partials/commandTable', { names, config }) %>
 
-    <% if (config.commands.counterUpdate) { %>
+    <% if (config.commands.varUpdate) { %>
       <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-        <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.counterCooldownLabel') %></label>
-        <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.counterCooldownHint') %></p>
-        <input type="number" min="0" max="86400" step="1" name="commands.counterUpdate.cooldownSeconds"
-               value="<%= Math.round(config.commands.counterUpdate.cooldownMs / 1000) %>"
+        <label class="block text-sm text-neutral-300 mb-1"><%= t('channelSettings.varCooldownLabel') %></label>
+        <p class="text-neutral-600 text-xs mb-2"><%= t('channelSettings.varCooldownHint') %></p>
+        <input type="number" min="0" max="86400" step="1" name="commands.varUpdate.cooldownSeconds"
+               value="<%= Math.round(config.commands.varUpdate.cooldownMs / 1000) %>"
                class="w-24 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
       </div>
     <% } %>

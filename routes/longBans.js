@@ -5,7 +5,7 @@
 // TwitchBot/twitch/longBanScheduler.js (polling every ~30s) to actually apply against Twitch.
 //
 // Fully gated at tier <= 2, same as routes/customCommands.js - these are writes to bot behavior,
-// not statistics. Mounted alongside customCommands/counters in routes/index.js (before
+// not statistics. Mounted alongside customCommands/variables in routes/index.js (before
 // channelRedirect, whose bare "/:channel" would otherwise swallow every static page).
 const express = require("express");
 const channelsRepo = require("../db/channelsRepo");

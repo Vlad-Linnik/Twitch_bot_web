@@ -1,6 +1,6 @@
 // Audit trail of who changed what on /<channel>/settings, /<channel>/commands and
-// /<channel>/counters - a new, web-only collection (this app owns it outright, unlike
-// ChannelConfig/custom_commands/counters). Lives in the web-only DB (connectWeb, same
+// /<channel>/variables - a new, web-only collection (this app owns it outright, unlike
+// ChannelConfig/custom_commands/variables). Lives in the web-only DB (connectWeb, same
 // pattern as db/profileCacheRepo.js) since the bot never needs to read it.
 const { ObjectId } = require("mongodb");
 const { connectWeb } = require("./connection");

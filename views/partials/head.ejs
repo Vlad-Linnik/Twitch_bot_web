@@ -60,12 +60,12 @@
           const channelMatch = from.pathname.match(/^\/([^/]+)\/(?:statistics|news)(?:\/|$)/);
           if (channelMatch) {
             const card = document.querySelector(`a[data-channel-login="${CSS.escape(channelMatch[1])}"]`);
-            if (card) card.style.viewTransitionName = "stats-header";
+            if (card) card.style.viewTransitionName = "channel-header";
           }
         }
 
         // Same idea for /<channel>/settings: leaving one of its sub-pages (custom-commands,
-        // long-bans, spam-signatures, counters, change-log, moderators, banned-words) - via
+        // long-bans, spam-signatures, variables, change-log, moderators, banned-words) - via
         // their own "back to settings" link OR the browser's Back button, referrer-based
         // detection doesn't care which - morphs that sub-page's heading (settings-heading,
         // views/settings.ejs / public/css/input.css) back into the matching quick-link card.

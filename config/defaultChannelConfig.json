@@ -55,13 +55,17 @@
       "enabled": true,
       "signature": "!setannounce"
     },
-    "addcounter": {
+    "addvar": {
       "enabled": true,
-      "signature": "!addcounter"
+      "signature": "!addvar"
     },
-    "delcounter": {
+    "delvar": {
       "enabled": true,
-      "signature": "!delcounter"
+      "signature": "!delvar"
+    },
+    "vars": {
+      "enabled": true,
+      "signature": "!vars"
     },
     "exception": {
       "enabled": true,
@@ -117,7 +121,7 @@
     "customCommandTimer": {
       "minMessagesBetween": 10
     },
-    "counterUpdate": {
+    "varUpdate": {
       "cooldownMs": 10000
     }
   },

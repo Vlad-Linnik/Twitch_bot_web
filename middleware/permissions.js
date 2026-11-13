@@ -45,7 +45,7 @@ function requireLevel(maxLevel) {
 
 // Same tier-2 gate as requireLevel(2) (admin/owner/moderator, same 401/403 rendering), plus one
 // extra check for moderators specifically: the owner can deny an individual moderator the right
-// to EDIT settings/commands/counters (db/modPermissionOverridesRepo.js) while still letting them
+// to EDIT settings/commands/variables (db/modPermissionOverridesRepo.js) while still letting them
 // view everything - so this middleware is only ever used on mutating routes, never on GETs.
 // Honors the same Accept: application/json convention settings.js/csrf.js already use for
 // autosave, so a denied moderator's autosave fetch gets a JSON error, not an HTML page.

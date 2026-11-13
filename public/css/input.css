@@ -55,7 +55,7 @@ article.post-card {
 
 /* Same shared-element morph, for /<channel>/settings's quick-link cards (views/settings.ejs,
    data-vt-name="settings-heading" - public/js/page-transitions.js) into whichever sub-page's own
-   heading (channelCustomCommandsSettings.ejs, channelCountersSettings.ejs, channelSpamSignatures.ejs,
+   heading (channelCustomCommandsSettings.ejs, channelVariablesSettings.ejs, channelSpamSignatures.ejs,
    channelModeratorPermissions.ejs, channelSettingsChangeLog.ejs, longBans.ejs, channelBannedWords.ejs -
    all share this one class/name, same as user-header: only ever one such page loaded at a time, so
    there's no simultaneous-duplicate-name risk despite 7 pages reusing it). */

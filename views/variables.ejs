@@ -1,0 +1,115 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('variables.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-4xl mx-auto px-6 py-12">
+
+  <header class="mb-8">
+    <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('variables.title') %></h1>
+    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('variables.subtitle') %></p>
+  </header>
+
+  <% if (saved) { %>
+    <p class="mb-6 rounded-lg border border-green-800/50 bg-green-900/20 text-green-400 px-4 py-2.5 text-sm">
+      <%= saved === 'deleted' ? t('variables.deleted') : t('variables.saved') %>
+    </p>
+  <% } %>
+  <% if (error) { %>
+    <p class="mb-6 rounded-lg border border-red-800/50 bg-red-900/20 text-red-400 px-4 py-2.5 text-sm">
+      <%= t('variables.errors.' + error) %>
+    </p>
+  <% } %>
+
+  <!-- Create / edit -->
+  <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4" id="form-heading"><%= t('variables.create') %></h2>
+
+    <form method="post" action="/<%= channel.channelLogin %>/variables" class="space-y-4" id="variable-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+      <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_8rem_12rem] gap-4">
+        <div>
+          <label for="name" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('variables.name') %></label>
+          <div class="flex items-center">
+            <span class="text-neutral-600 px-2 select-none">#</span>
+            <input type="text" id="name" name="name" required autocomplete="off"
+                   pattern="[a-zа-яё0-9]+"
+                   class="flex-1 bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-600" />
+          </div>
+        </div>
+
+        <div>
+          <label for="value" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('variables.value') %></label>
+          <input type="number" id="value" name="value" step="1" min="-<%= maxValue %>" max="<%= maxValue %>"
+                 placeholder="0"
+                 class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 tabular-nums focus:outline-none focus:border-purple-600" />
+        </div>
+
+        <div>
+          <label for="access" class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('variables.access') %></label>
+          <select id="access" name="access"
+                  class="w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-600">
+            <option value="all"><%= t('variables.accessAll') %></option>
+            <option value="mods"><%= t('variables.accessMods') %></option>
+          </select>
+        </div>
+      </div>
+
+      <p class="text-xs text-neutral-600"><%= t('variables.hint') %></p>
+
+      <div class="flex gap-3 pt-1">
+        <button type="submit"
+                class="px-4 py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"><%= t('variables.save') %></button>
+        <button type="reset" id="cancel-edit" hidden
+                class="px-4 py-2 rounded-md text-neutral-400 hover:text-neutral-100 text-sm transition-colors"><%= t('variables.cancel') %></button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Existing variables -->
+  <section>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('variables.existing') %> <span class="text-neutral-600 text-sm">(<%= variables.length %>)</span></h2>
+
+    <% if (variables.length === 0) { %>
+      <p class="rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-6 text-center text-neutral-600 text-sm"><%= t('variables.none') %></p>
+    <% } else { %>
+      <ul class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+        <% variables.forEach(function(v) { %>
+          <li class="px-4 py-3 flex items-center gap-3">
+            <div class="min-w-0 flex-1 flex items-center gap-3 flex-wrap">
+              <code class="text-purple-400 font-medium">#<%= v.name %></code>
+              <span class="text-sm text-neutral-300 tabular-nums"><%= v.value %></span>
+              <% if (v.access === 'mods') { %>
+                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-600/20 text-amber-500 border border-amber-600/30"><%= t('variables.accessMods') %></span>
+              <% } %>
+            </div>
+
+            <div class="flex items-center gap-1 shrink-0">
+              <%# Edit is client-side only: it copies the row back into the form above. The form
+                  posts an upsert, so "edit" and "create" are the same request. %>
+              <button type="button"
+                      class="p-1.5 rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors js-edit"
+                      data-name="<%= v.name %>"
+                      data-value="<%= v.value %>"
+                      data-access="<%= v.access %>"
+                      aria-label="<%= t('variables.edit') %>"><%- include('partials/iconPencil') %></button>
+
+              <form method="post" action="/<%= channel.channelLogin %>/variables" class="js-delete-form" data-confirm="<%= t('variables.deleteConfirm') %>">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="action" value="delete" />
+                <input type="hidden" name="name" value="<%= v.name %>" />
+                <button type="submit"
+                        class="p-1.5 rounded text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        aria-label="<%= t('variables.delete') %>"><%- include('partials/iconTrash') %></button>
+              </form>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+</main>
+
+<script src="<%= asset('/js/variables.js') %>" defer></script>
+
+<%- include('partials/foot') %>
