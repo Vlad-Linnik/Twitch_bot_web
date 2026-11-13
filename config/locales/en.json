@@ -1800,6 +1800,8 @@
     "deleteConfirm": "Delete this variable?",
     "saved": "Saved — live in chat within a few seconds",
     "deleted": "Variable deleted",
+    "builtinHeading": "Built-in variables",
+    "builtinIntro": "Usable in any command's text. You cannot create your own variable with one of these names.",
     "errors": {
       "name_required": "Variable name is required",
       "name_invalid": "Only lowercase letters and digits, no spaces or symbols",
@@ -2767,5 +2769,87 @@
     "deniedCount": "Denied:",
     "bannedBy": "Banned By",
     "bannedAt": "Banned at"
+  },
+  "variableEditor": {
+    "insertButton": "# Variable",
+    "insertButtonTitle": "Insert a variable",
+    "listLabel": "Variables",
+    "noMatches": "No such variable — it stays text",
+    "escHint": "Esc — keep as text",
+    "chipEdit": "Click to edit",
+    "chipRemove": "Remove the variable",
+    "chipLiteral": "Keep as text",
+    "overrides": "Your variable shares a built-in's name — this channel uses yours",
+    "ownValue": "Your variable, now: {{value}}",
+    "preview": "Example:",
+    "previewEmpty": "empty message — the bot stays silent",
+    "timerWarning": "A timed auto-send has no caller — these will be empty: {{names}}",
+    "length": "{{n}} / {{max}}",
+    "tooLong": "Longer than {{max}} characters — it cannot be saved",
+    "exampleLabel": "Example:",
+    "pickSnippet": "rock|paper|scissors",
+    "invalid": {
+      "user_params": "{{raw}}: your own variables take no parameters — remove the parentheses (empty ones are fine for gluing text on)",
+      "no_params": "{{raw}}: this variable takes no parameters — remove the parentheses",
+      "fallback_too_long": "{{raw}}: the fallback text is longer than 100 characters",
+      "range": "{{raw}}: needs a range of whole numbers, e.g. #rand(1-100) or #rand(-10..10)",
+      "pick": "{{raw}}: needs options separated by |, e.g. #pick(yes|no)",
+      "unknown_grammar": "{{raw}}: invalid parameters"
+    },
+    "group": {
+      "own": "Your variables",
+      "viewer": "About the viewer",
+      "stream": "About the stream",
+      "random": "Random",
+      "args": "Command arguments"
+    },
+    "builtin": {
+      "username": {
+        "desc": "Display name of whoever called the command, without @. Empty in a timed auto-send.",
+        "example": "#username hugs everyone → Vasya hugs everyone"
+      },
+      "touser": {
+        "desc": "Who it is for: the first word after the command (without @), else whoever was called with “@user !command”, else the caller.",
+        "example": "!hug @petya → petya"
+      },
+      "channel": {
+        "desc": "The channel's name.",
+        "example": "#channel → mistercop"
+      },
+      "game": {
+        "desc": "The stream's current category. Offline: empty, or the fallback text in parentheses.",
+        "example": "#game(offline) → Path of Exile"
+      },
+      "time": {
+        "desc": "The time now, by the server's clock.",
+        "example": "#time → 19:51"
+      },
+      "date": {
+        "desc": "Today's date.",
+        "example": "#date → 13 November 2026"
+      },
+      "rand": {
+        "desc": "A random whole number, both ends included. Without parentheses: 1 to 100. Every occurrence is its own roll.",
+        "example": "#rand(1-6) → 4"
+      },
+      "pick": {
+        "desc": "A random option from a list separated by |.",
+        "example": "#pick(yes|no|maybe) → no"
+      },
+      "argumentN": {
+        "desc": "Word {{n}} after the command. No such word: empty, or the fallback text in parentheses.",
+        "example": "!command one two → #argument1 = one; #argument{{n}}(everyone)"
+      },
+      "args": {
+        "desc": "All the words after the command, up to 200 characters. Links and banned words are cut out.",
+        "example": "!echo hi all → hi all"
+      }
+    },
+    "sample": {
+      "username": "Vasya",
+      "touser": "Petya",
+      "args": "one two three",
+      "game": "Path of Exile"
+    }
   }
 }

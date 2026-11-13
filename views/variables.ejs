@@ -114,6 +114,30 @@
     <% } %>
   </section>
 
+  <!-- Built-in variables: read-only reference, the same list the command editor offers -->
+  <section class="mt-10">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('variables.builtinHeading') %></h2>
+    <p class="text-sm text-neutral-500 mb-3"><%= t('variables.builtinIntro') %></p>
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 divide-y divide-neutral-800/70">
+      <% builtinGroups.forEach(function(group) { %>
+        <div class="px-4 py-3">
+          <h3 class="text-xs uppercase tracking-wide text-neutral-500 mb-2"><%= group.label %></h3>
+          <dl class="space-y-2">
+            <% group.items.forEach(function(item) { %>
+              <div class="grid grid-cols-1 sm:grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-0.5">
+                <dt><code class="text-green-300 text-sm"><%= item.label || ('#' + item.name) %></code></dt>
+                <dd class="text-sm text-neutral-300">
+                  <%= item.desc %>
+                  <% if (item.example) { %><span class="block text-xs text-neutral-500 mt-0.5"><%= t('variableEditor.exampleLabel') %> <%= item.example %></span><% } %>
+                </dd>
+              </div>
+            <% }) %>
+          </dl>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
 </main>
 
 <script src="<%= asset('/js/variables.js') %>" defer></script>

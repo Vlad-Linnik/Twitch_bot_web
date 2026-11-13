@@ -15,6 +15,7 @@ const express = require("express");
 const channelsRepo = require("../db/channelsRepo");
 const customCommandsRepo = require("../db/customCommandsRepo");
 const variablesRepo = require("../db/variablesRepo");
+const { buildVariableCatalog } = require("../lib/variableCatalog");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
 const { settingsWriteLimiter, categoryLookupLimiter } = require("../middleware/rateLimiters");
@@ -125,8 +126,13 @@ router.get("/:channel/settings/custom-commands/commands", requireLevel(2), expos
     if (!channel) return;
 
     const { commands, sections, groupNames } = await buildCommandsView(channel.channelLogin);
+    // What the response editor offers after "#" and under its "# Variable" button
+    // (public/js/variable-editor.js): this channel's own variables, then the built-ins.
+    const ownVariables = (await variablesRepo.list(channel.channelLogin)).map((v) => ({ name: v.name, value: v.value }));
+    const variableCatalog = buildVariableCatalog(res.locals.t, { ownVariables, channelLogin: channel.channelLogin });
 
     res.render("customCommands", {
+      variableCatalog,
       channel,
       commands,
       sections,

@@ -14,6 +14,7 @@ const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
 const { parseVariable, normalizeName, MAX_VALUE } = require("../lib/variableValidation");
 const { movedPermanently } = require("../lib/movedPermanently");
+const { buildVariableCatalog } = require("../lib/variableCatalog");
 
 const router = express.Router();
 
@@ -41,9 +42,28 @@ router.get("/:channel/variables", requireLevel(2), exposeSectionEditAccess("comm
       access: v.access === "mods" ? "mods" : "all",
     }));
 
+    // The read-only "Built-in variables" reference under the list: the same catalog the
+    // command editor offers, grouped the same way.
+    const catalog = buildVariableCatalog(res.locals.t, { channelLogin: channel.channelLogin });
+    const builtinGroups = catalog.groups
+      .map((g) => ({
+        label: g.label,
+        // #argument1..#argument9 differ only by the number - one row for all nine.
+        items: catalog.items
+          .filter((i) => !i.own && i.group === g.key && !/^argument[2-9]$/.test(i.name))
+          .map((i) => (i.name === "argument1" ? {
+            ...i,
+            label: "#argument1 … #argument9",
+            desc: res.locals.t("variableEditor.builtin.argumentN.desc", { n: "N" }),
+            example: res.locals.t("variableEditor.builtin.argumentN.example", { n: "N" }),
+          } : i)),
+      }))
+      .filter((g) => g.items.length);
+
     res.render("variables", {
       channel,
       variables,
+      builtinGroups,
       maxValue: MAX_VALUE,
       error: req.query.error || null,
       saved: req.query.saved || null,

@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const path = require("path");
 const env = require("./config/env");
 const { asset } = require("./lib/assetVersion");
+const { sharedScriptsMiddleware } = require("./lib/sharedScripts");
 const { IMG_SRC_DIRECTIVE } = require("./lib/emoteImageHosts");
 const { MEDIA_IMAGE_ORIGINS } = require("./lib/mediaImageHosts");
 const attachUser = require("./middleware/auth");
@@ -81,6 +82,8 @@ function createApp(sessionMiddleware) {
   // arrive unversioned, so those fall to a plain one-hour max-age - still an enormous
   // improvement on the previous max-age=0 (public/sounds alone is 7.2MB, re-validated on every
   // single game load), while staying short enough that an unversioned asset self-heals.
+  // lib/variableTemplate.js, served as-is to the command editor - see lib/sharedScripts.js.
+  app.use(sharedScriptsMiddleware);
   app.use(
     express.static(path.join(__dirname, "public"), {
       setHeaders(res) {
