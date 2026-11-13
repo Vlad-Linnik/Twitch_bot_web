@@ -375,6 +375,16 @@ async function getModeratorSummary(channelId, period = "all") {
     .toArray();
 }
 
+// The same roll-up behind the shared stats cache, for the PUBLIC render of the moderator page:
+// every guest sees the same summary, so a burst of them costs one aggregation per cache window.
+// Moderators keep calling the uncached getModeratorSummary - the page they use for work should
+// not lag the bot by a cache TTL.
+function getModeratorSummaryCached(channelId, period = "all") {
+  return withCache(`modsummary:${String(channelId)}:${period}`, () =>
+    getModeratorSummary(channelId, period)
+  );
+}
+
 // Batch userId -> current display name, for tables that render ids from bot-owned collections
 // (mod action logs, ModsList). Returns a Map; callers fall back to the raw id for users with
 // no UserIdentities row rather than dropping them.
@@ -399,6 +409,7 @@ module.exports = {
   getModUpTime,
   getModStats,
   getModeratorSummary,
+  getModeratorSummaryCached,
   getUserNames,
   // Exported for db/unbanDossierRepo.js, which queries the same two collections and must apply
   // the identical `#`-prefix rules. Re-deriving them there is exactly how the two sides drift.

@@ -27,10 +27,8 @@
 
   <%- include('partials/statsHeader', { channel, broadcaster }) %>
 
-  <%# Chat/Moderators switcher only for visitors who can actually open the mod page. %>
-  <% if (canModerate) { %>
-    <%- include('partials/statsTabs', { channel, tab }) %>
-  <% } %>
+  <%# Chat/Moderators switcher for everyone: the mod page's summary is public. %>
+  <%- include('partials/statsTabs', { channel, tab }) %>
 
   <!-- Stream stats: viewers + chat rate over one stream, category segments along the bottom.
        Independent y-axes: viewers on the left (red), messages on the right (blue) - see

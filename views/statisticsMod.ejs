@@ -89,6 +89,10 @@
   <div id="skill-polygon" hidden
        class="fixed z-50 pointer-events-none rounded-lg border border-neutral-700 bg-neutral-900/95 shadow-xl shadow-black/50 p-3"></div>
 
+  <%# Everything below is moderator-only: the action log names the punished, carries the reasons,
+      and its popup fetches chat text. The route does not even pass these locals to a guest
+      (lib/modStatsSummary.js), so this guard is about markup, not about data. %>
+  <% if (canModerate) { %>
   <!-- Recent moderator actions (ModeratorActionLogs), ids resolved to nicknames.
        Sortable headers + action/moderator filters, all client-side over the rendered rows. -->
   <section>
@@ -257,6 +261,7 @@
        data-label-none="<%= t('statistics.ctxNoMessages') %>"
        data-label-shared="<%= t('statistics.ctxSharedChat') %>"
        class="fixed z-50 pointer-events-none rounded-lg border border-neutral-700 bg-neutral-900/95 shadow-xl shadow-black/50 p-3 w-80 max-w-[90vw]"></div>
+  <% } %>
 </main>
 
 <script src="<%= asset('/js/mod-stats.js') %>" defer></script>

@@ -2,8 +2,9 @@
 // their period toggles and the Universal Log Search fetch against.
 //
 // Gating split: the CHAT page is public (it is the channel's shop window - the home page links
-// straight here), while the MOD page and the log search stay requireLevel(2). The Chat/Moderators
-// tab bar is only rendered for visitors who can actually open the mod page (canModerate).
+// straight here). The MOD page is public only as far as its summary (the per-moderator table and
+// skill pentagon); its recent-actions log, the action-context popup and the log search stay
+// tier 2. The Chat/Moderators tab bar is shown to everyone.
 //
 // The old bare /<channel> dashboard merged into the chat page; routes/channelRedirect.js keeps
 // that URL alive as a redirect.
@@ -17,10 +18,11 @@ const userStatsRepo = require("../db/userStatsRepo");
 const searchRepo = require("../db/searchRepo");
 const streamSessionsRepo = require("../db/streamSessionsRepo");
 const { withEmoteImages } = require("../twitch/emoteImages");
-const { requireLevel, computePermission } = require("../middleware/permissions");
+const { computePermission } = require("../middleware/permissions");
 const { statsReadLimiter, searchLimiter } = require("../middleware/rateLimiters");
 const limits = require("../config/statsLimits");
 const { isKnownBotName } = require("../config/knownBots");
+const { buildModSummary, summaryIds, buildModStatsPageModel } = require("../lib/modStatsSummary");
 
 const router = express.Router();
 
@@ -309,97 +311,85 @@ router.get("/:channel/statistics/chat", async (req, res, next) => {
   }
 });
 
-router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) => {
+// Split by tier. The SUMMARY (per-moderator table + the skill pentagon it drives) is public;
+// the recent-actions log, its filters and the ban-context popup stay tier 2, because they carry
+// the logins of the punished, the reasons and - via the popup - chat text. The split is made
+// here, not in the template: for a guest the action-log queries never run and their results are
+// never handed to res.render, so no amount of template slip can leak them.
+router.get("/:channel/statistics/mod", async (req, res, next) => {
   try {
     const channel = await channelsRepo.findByLogin(req.params.channel);
     if (!channel) return res.status(404).render("errors/404");
+
+    const permission = await computePermission(req.user?.userId ?? null, channel.channelLogin);
+    const canModerate = permission <= 2;
 
     // Period narrows the ModeratorStatistics roll-up. Defaults to "all" (the page's historical
     // behavior) rather than resolvePeriod's own default; the toggle navigates with ?period=,
     // full page reload - the table's markup (sort data-attrs, pentagon hookup) is too rich to
     // duplicate as a client-side template for a page this rarely visited.
     const period = req.query.period ? limits.resolvePeriod(req.query.period) : "all";
+
+    const [rawSummary, modsListDoc, broadcaster] = await Promise.all([
+      // Guests share one cached roll-up; moderators read it live (see getModeratorSummaryCached).
+      canModerate
+        ? statsRepo.getModeratorSummary(channel.channelId, period)
+        : statsRepo.getModeratorSummaryCached(channel.channelId, period),
+      modsRepo.getModerators(channel.channelId),
+      profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+    ]);
+    const modsListIds = modsListDoc?.moderators || [];
+    const summaryInput = { rawSummary, modsListIds, channelId: channel.channelId };
+
+    const base = {
+      channel,
+      broadcaster,
+      period,
+      periods: limits.PERIODS,
+      tab: "mod",
+    };
+
+    if (!canModerate) {
+      // Names + chat colors for the summary rows only - the same batched lookup, a smaller set.
+      const resolve = await buildNameResolver(summaryIds(summaryInput));
+      const summary = buildModSummary({ ...summaryInput, resolve, isBot: isKnownBotName });
+      return res.render("statisticsMod", buildModStatsPageModel({ base, summary, canModerate }));
+    }
+
     const requestedPage = Math.max(1, parseInt(req.query.page, 10) || 1);
     // The server render honors the same filter params the JSON endpoint takes, so a filtered
     // URL survives refresh/bookmarks and works without JS.
     const filters = parseModActionFilters(req.query);
 
-    const [
-      { actions: modActions, totalPages, page },
-      rawSummary,
-      modsListDoc,
-      broadcaster,
-      actionModIds,
-    ] = await Promise.all([
+    const [{ actions: modActions, totalPages, page }, actionModIds] = await Promise.all([
       statsRepo.getRecentModActions(channel.channelLogin, {
         page: requestedPage,
         limit: MOD_ACTIONS_PER_PAGE,
         ...filters,
       }),
-      statsRepo.getModeratorSummary(channel.channelId, period),
-      modsRepo.getModerators(channel.channelId),
-      profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
       // The moderator filter's option list: everyone who ever acted, not just the current
       // ModsList - options built from the rendered page's 25 rows (the old way) made
       // cross-page filtering impossible.
       statsRepo.getModActionModIds(channel.channelLogin),
     ]);
 
-    // A summary row that aggregates to all zeros is "no data" as far as the viewer is
-    // concerned - it belongs behind the toggle with the ModsList-only mods, not in the table
-    // proper. The bot stopped writing all-zero daily rows (and cleanup deleted the old ones),
-    // so this partition is a safety net for anything that slips through (e.g. prod data
-    // before its cleanup runs).
-    const modSummary = rawSummary.filter(
-      (m) => m.chatActivity !== 0 || m.streamPresence !== 0 || m.moderationActivity !== 0
-    );
-    const zeroSummaryIds = rawSummary
-      .filter((m) => !modSummary.includes(m))
-      .map((m) => m.userId);
-
-    // Moderators registered in ModsList but with no ModeratorStatistics rows in the selected
-    // period - shown dimmed behind the "show moderators with no data" toggle. The channel owner
-    // is never in ModsList (Twitch's channel.moderate never grants the broadcaster "mod" status),
-    // so they're unioned in here explicitly - they still moderate their own channel and should
-    // always appear, dimmed until the bot's next activity cycle gives them a real summary row.
-    const withData = new Set(modSummary.map((m) => String(m.userId)));
-    const inactiveIds = [
-      ...(modsListDoc?.moderators || []),
-      String(channel.channelId),
-      ...zeroSummaryIds,
-    ].filter((id, i, arr) => !withData.has(String(id)) && arr.indexOf(id) === i);
-
     // The moderator filter's options: ModsList ∪ everyone in the action log's history.
-    const modOptionIds = [
-      ...new Set([...(modsListDoc?.moderators || []).map(String), ...actionModIds.map(String)]),
-    ];
+    const modOptionIds = [...new Set([...modsListIds.map(String), ...actionModIds.map(String)])];
 
     // Every id the page renders: the summary rows, the inactive mods, both nick columns of
     // the action log, and the filter options. One batch UserIdentities lookup + one batched
     // profile fetch (names, chat colors) - getOrFetchProfiles makes at most one Helix
     // round-trip pair for the misses.
-    const allIds = [
-      ...modSummary.map((m) => m.userId),
-      ...inactiveIds,
-      ...modActions.flatMap((a) => [a.modID, a.userId]),
-      ...modOptionIds,
-    ];
     // Name precedence: UserIdentities (what the rest of the site shows) -> Helix display name
     // (fixes the raw numeric IDs that used to render for users the bot never saw chat from) ->
     // the id itself as a last resort. Color is the user's Twitch chat color, fail-soft.
-    const resolve = await buildNameResolver(allIds);
+    const resolve = await buildNameResolver([
+      ...summaryIds(summaryInput),
+      ...modActions.flatMap((a) => [a.modID, a.userId]),
+      ...modOptionIds,
+    ]);
 
-    // Bot accounts (config/knownBots.js) are not people - they never belong in the moderator
-    // statistics table, active or dimmed. Their recent ACTIONS stay visible below on purpose.
-    const inactiveMods = inactiveIds
-      .map((id) => ({ userId: id, ...resolve(id) }))
-      .filter((m) => !isKnownBotName(m.userName));
-    const moderators = modSummary
-      .map((m) => {
-        const { userName, color } = resolve(m.userId);
-        return { ...m, userName: m.userName || userName, color };
-      })
-      .filter((m) => !isKnownBotName(m.userName));
+    const summary = buildModSummary({ ...summaryInput, resolve, isBot: isKnownBotName });
     const actions = shapeActionRows(modActions, resolve, res.locals.t);
 
     // Sorted by display name so the dropdown reads like a roster, not an id dump.
@@ -407,28 +397,29 @@ router.get("/:channel/statistics/mod", requireLevel(2), async (req, res, next) =
       .map((id) => ({ id, name: resolve(id).userName }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    res.render("statisticsMod", {
-      channel,
-      broadcaster,
-      moderators,
-      inactiveMods,
-      actions,
-      page,
-      totalPages,
-      period,
-      periods: limits.PERIODS,
-      actionTypes: MOD_ACTION_TYPES,
-      modOptions,
-      filterState: filters,
-      tab: "mod",
-    });
+    res.render(
+      "statisticsMod",
+      buildModStatsPageModel({
+        base,
+        summary,
+        canModerate,
+        privateData: {
+          actions,
+          page,
+          totalPages,
+          actionTypes: MOD_ACTION_TYPES,
+          modOptions,
+          filterState: filters,
+        },
+      })
+    );
   } catch (err) {
     next(err);
   }
 });
 
-// The mod-actions table's in-place pagination + filtering. Same tier gate as the page
-// (requireLevel(2) there, JSON body here), same filter parsing, same row shape - the client
+// The mod-actions table's in-place pagination + filtering. Same tier gate as the page's
+// action log (canModerate there, JSON body here), same filter parsing, same row shape - the client
 // rebuilds exactly what the server rendered.
 router.get(
   "/:channel/mod-actions.json",

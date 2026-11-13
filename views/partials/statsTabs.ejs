@@ -1,7 +1,7 @@
 <%#
   Sub-page switcher for /:channel/statistics/{chat,mod}. Expects: channel, tab ("chat"|"mod").
-  Only rendered for visitors who can open the mod page (canModerate) - a visitor who can't
-  moderate sees no tabs at all, since chat is the only page they can reach.
+  Rendered for everyone: the mod page's summary (table + skill pentagon) is public, only its
+  action log is moderator-only.
 
   Pinned via view-transition-name: stats-tabs (public/css/input.css) so it doesn't slide with
   the page. The Chat link opts into the backward slide: from the mod tab, "Chat" reads as going
