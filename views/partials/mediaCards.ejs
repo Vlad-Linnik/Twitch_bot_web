@@ -1,0 +1,42 @@
+<%#
+  A run of grid cards (movies now, games later) - the first portion of the grid and every portion
+  list.json returns, so a card loaded on scroll is the same markup as one rendered first.
+  Expects: cards (routes/movies.js's shapeCard), channel, section.
+
+  posterUrl is already the right copy: for an 18+ card it is the blurred file, never the normal
+  one (lib/mediaImage.js's gridPosterUrl) - the grid's HTML does not contain the normal URL at all.
+  The [data-list-item] wrapper is public/js/infinite-list.js's anchor for "back".
+%>
+<% const typeLabel = (c) => c.mediaType ? t('movies.type.' + c.mediaType) : ''; %>
+<% cards.forEach(function(card) { %>
+  <div data-list-item="<%= card.id %>">
+    <a href="/<%= channel.channelLogin %>/<%= section %>/<%= card.id %>" class="group block">
+      <div class="relative aspect-[2/3] rounded-md overflow-hidden bg-neutral-900 ring-1 ring-neutral-800 group-hover:ring-purple-600 transition-shadow">
+        <% if (card.posterUrl) { %>
+          <img src="<%= card.posterUrl %>" alt="" loading="lazy" decoding="async"
+               class="absolute inset-0 w-full h-full object-cover<%= card.nsfw ? ' scale-110' : '' %>" />
+        <% } else { %>
+          <span class="absolute inset-0 grid place-items-center p-3 text-center text-sm text-neutral-500"><%= card.title %></span>
+        <% } %>
+        <% if (card.nsfw) { %>
+          <span class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-red-700/90 text-white text-[10px] font-bold">18+</span>
+        <% } %>
+        <% if (card.progress) { %>
+          <span class="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-neutral-950/85 text-neutral-200 text-[11px] tabular-nums">
+            <% if (card.progress.kind === 'percent') { %><%= t('movies.progressPercent', { done: card.progress.done }) %><% } else if (card.progress.total) { %><%= t('movies.progressEpisodes', { done: card.progress.done, total: card.progress.total }) %><% } else { %><%= t('movies.progressEpisodesOpen', { done: card.progress.done }) %><% } %>
+          </span>
+        <% } %>
+      </div>
+      <h3 class="mt-2 text-sm font-semibold text-neutral-100 leading-snug line-clamp-2 group-hover:underline decoration-1 underline-offset-2"><%= card.title %></h3>
+      <p class="text-xs text-neutral-500"><%= [card.year, typeLabel(card)].filter(Boolean).join(' · ') %></p>
+      <p class="mt-1 flex items-center gap-3 text-xs tabular-nums">
+        <span class="<%= card.streamerRating ? 'text-amber-400' : 'text-neutral-600' %>" title="<%= t('movies.ratingStreamer') %>">★ <%= card.streamerRating ?? '—' %></span>
+        <span class="<%= card.viewerAverage !== null ? 'text-sky-400' : 'text-neutral-600' %>" title="<%= t('movies.ratingViewers') %>">◆ <%= card.viewerAverage !== null ? card.viewerAverage.toFixed(1) : '—' %></span>
+        <% if (card.commentCount) { %><span class="text-neutral-500" title="<%= t('comments.heading') %>">💬 <%= card.commentCount %></span><% } %>
+      </p>
+      <% if (card.excerpt) { %>
+        <p class="mt-1 text-xs text-neutral-400 line-clamp-2"><%= card.excerpt %></p>
+      <% } %>
+    </a>
+  </div>
+<% }) %>

@@ -912,6 +912,103 @@
       "superlike": "Очень нравится"
     }
   },
+  "movies": {
+    "titleSuffix": "фильмы",
+    "previewNotice": "Раздел выключен для всех остальных — вы видите его, потому что вы администратор.",
+    "tabsLabel": "Списки",
+    "tab": {
+      "done": "Просмотрено",
+      "planned": "В планах"
+    },
+    "create": "Добавить фильм",
+    "searchPlaceholder": "Название…",
+    "searchSubmit": "Найти",
+    "sortLabel": "Сортировка",
+    "sort": {
+      "added": "Недавно добавленные",
+      "streamer": "Оценка стримера",
+      "viewers": "Оценка зрителей"
+    },
+    "empty": {
+      "done": "Пока ничего не посмотрели.",
+      "planned": "Планов пока нет."
+    },
+    "emptySearch": "Ничего не нашлось.",
+    "type": {
+      "film": "Фильм",
+      "series": "Сериал",
+      "anime": "Аниме"
+    },
+    "progressPercent": "{{done}}%",
+    "progressEpisodes": "{{done}} из {{total}} серий",
+    "progressEpisodesOpen": "{{done}} серий",
+    "ratingStreamer": "Оценка стримера",
+    "ratingViewers": "Оценка зрителей",
+    "ratingCount": "оценок: {{count}}",
+    "ratingNone": "нет оценок",
+    "backToGrid": "Все фильмы",
+    "revealNsfw": "Показать (18+)",
+    "statusPlanned": "в планах",
+    "watchedLabel": "Просмотрено",
+    "recordingLink": "Запись стрима",
+    "edit": "Изменить",
+    "delete": "Удалить",
+    "deleteConfirm": "Удалить карточку вместе с оценками и обсуждением? Это необратимо.",
+    "yourRating": "Ваша оценка",
+    "loginToRate": "Войдите через Twitch, чтобы поставить оценку",
+    "ownerCannotRate": "У стримера своя оценка — зрительскую он не ставит.",
+    "rateHint": "От 1 до 10. В среднее входят оценки тех, кто писал в чате канала.",
+    "rateCounted": "Оценка сохранена и входит в среднее.",
+    "rateNotCounted": "Оценка сохранена, но в среднее пока не входит: в среднее идут оценки тех, кто писал в чате канала.",
+    "rateError": "Не удалось сохранить оценку.",
+    "reviewHeading": "Рецензия {{login}}",
+    "form": {
+      "newTitle": "Новый фильм",
+      "editTitle": "Изменить карточку",
+      "back": "Назад",
+      "title": "Название",
+      "originalTitle": "Оригинальное название",
+      "year": "Год",
+      "type": "Тип",
+      "status": "Статус",
+      "statusOption": {
+        "done": "Просмотрено",
+        "accepted": "В планах"
+      },
+      "imdbId": "IMDb (tt… или ссылка)",
+      "progress": "Сколько просмотрено",
+      "progressPercent": "Просмотрено, %",
+      "progressDone": "Просмотрено серий",
+      "progressDoneEither": "Просмотрено (серий, а для фильма — %)",
+      "progressTotal": "Всего серий",
+      "progressHint": "Пусто — значок не показывается. Значок виден, пока что-то осталось.",
+      "recordingUrl": "Ссылка на запись",
+      "recordingHint": "Twitch (videos), YouTube, VK Видео или Rutube.",
+      "poster": "Постер",
+      "posterKeep": "Без нового файла останется текущий.",
+      "nsfw": "18+: размыть обложку",
+      "nsfwHint": "В сетке будет только размытая копия; обычная — на странице карточки по кнопке.",
+      "streamerFields": "От лица стримера ({{login}})",
+      "streamerRating": "Оценка стримера",
+      "noRating": "— нет —",
+      "review": "Рецензия",
+      "reviewHint": "Markdown. Подпись всегда стримера.",
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "error": {
+        "title_required": "Укажите название.",
+        "type_invalid": "Выберите тип.",
+        "status_invalid": "Выберите статус.",
+        "year_invalid": "Год выглядит неправильно.",
+        "imdb_invalid": "IMDb: нужен идентификатор вида tt1375666 или ссылка на imdb.com/title/….",
+        "recording_invalid": "Ссылка на запись: подходят только Twitch (videos), YouTube, VK Видео и Rutube.",
+        "progress_invalid": "Проверьте «сколько просмотрено»: процент от 0 до 100, серии не больше, чем всего.",
+        "rating_invalid": "Оценка — от 1 до 10.",
+        "poster_invalid": "Постер не подошёл: нужна картинка до 5 МБ.",
+        "duplicate": "Карточка с этим IMDb уже есть на канале."
+      }
+    }
+  },
   "comments": {
     "backToFeed": "Назад к новостям",
     "heading": "Комментарии",
@@ -1147,7 +1244,8 @@
       "variable": "Переменная",
       "long_ban": "Long-ban",
       "unban_request": "Заявка на разбан",
-      "comment": "Обсуждение"
+      "comment": "Обсуждение",
+      "media": "Фильмы и игры"
     },
     "action": {
       "add": "Добавлено",
@@ -1231,7 +1329,10 @@
       "commenterRestricted": "{{target}} больше не может комментировать",
       "commenterUnrestricted": "{{target}} снова может комментировать",
       "unbanSniper": "Выстрелил шальной пулей Бюро амнистии",
-      "unbanGrenade": "Бросил гранату Бюро амнистии"
+      "unbanGrenade": "Бросил гранату Бюро амнистии",
+      "mediaCreated": "Добавлена карточка «{{target}}»",
+      "mediaUpdated": "Изменена карточка «{{target}}»",
+      "mediaDeleted": "Удалена карточка «{{target}}»"
     }
   },
   "moderatorPermissions": {
@@ -1889,7 +1990,9 @@
       "homepageHidden": "Канал скрыт с главной страницы.",
       "newsEnabled": "Лента новостей включена для канала.",
       "newsDisabled": "Лента новостей выключена для канала.",
-      "deleted": "Журнал изменений настроек полностью удалён."
+      "deleted": "Журнал изменений настроек полностью удалён.",
+      "moviesEnabled": "Раздел «Фильмы» включён для канала.",
+      "moviesDisabled": "Раздел «Фильмы» выключен для канала."
     },
     "healthHeading": "Состояние сервиса",
     "healthMessages": "Сообщений в базе",
@@ -1975,7 +2078,9 @@
         "homepageShow": "Канал показан на главной",
         "homepageHide": "Канал скрыт с главной",
         "newsEnable": "Лента новостей включена",
-        "newsDisable": "Лента новостей выключена"
+        "newsDisable": "Лента новостей выключена",
+        "moviesEnable": "Раздел «Фильмы» включён",
+        "moviesDisable": "Раздел «Фильмы» выключен"
       },
       "game": {
         "hide": "Игра скрыта",
@@ -2004,6 +2109,16 @@
       "settings-log": {
         "delete-all": "Журнал изменений настроек очищен",
         "delete-one": "Запись журнала изменений настроек удалена"
+      },
+      "media": {
+        "create": "Карточка создана",
+        "update": "Карточка изменена",
+        "delete": "Карточка удалена"
+      },
+      "mediaComment": {
+        "delete": "Комментарий под карточкой удалён",
+        "restrictUser": "Комментатор ограничен",
+        "unrestrictUser": "Ограничение комментатора снято"
       }
     },
     "news": {
@@ -2192,7 +2307,10 @@
       "constantCadence": "Ввод с машинно-ровным интервалом",
       "lowJitter": "Тайминг ввода слишком стабилен для руки",
       "superhumanApm": "Действий в секунду больше, чем выдерживает человек"
-    }
+    },
+    "colMovies": "Фильмы",
+    "moviesEnable": "Включить фильмы",
+    "moviesDisable": "Выключить фильмы"
   },
   "unbanBureau": {
     "title": "Бюро амнистии",

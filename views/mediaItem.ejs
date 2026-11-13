@@ -1,0 +1,159 @@
+<%- include('partials/head', { title: item.title + ' · ' + channel.channelLogin }) %>
+<%- include('partials/nav') %>
+
+<%
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+  const csrf = user ? csrfToken : '';
+  const base = '/' + channel.channelLogin + '/movies/' + item.id;
+  const badge = (() => {
+    const p = item.progress;
+    if (!p) return null;
+    if (p.unit === 'percent') return t('movies.progressPercent', { done: p.done });
+    return p.total ? t('movies.progressEpisodes', { done: p.done, total: p.total }) : t('movies.progressEpisodesOpen', { done: p.done });
+  })();
+%>
+
+<main class="pt-14 max-w-3xl mx-auto px-6 py-12">
+
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
+
+  <% if (sectionPreview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+      <%= t('movies.previewNotice') %>
+    </div>
+  <% } %>
+
+  <a href="/<%= channel.channelLogin %>/movies" data-transition="backward" class="inline-block mb-4 text-sm text-neutral-500 hover:text-neutral-300">&larr; <%= t('movies.backToGrid') %></a>
+
+  <article class="flex flex-col sm:flex-row gap-6">
+    <div class="w-48 shrink-0 self-center sm:self-start">
+      <div class="relative aspect-[2/3] rounded-md overflow-hidden bg-neutral-900 ring-1 ring-neutral-800">
+        <% if (item.poster) { %>
+          <%# An 18+ cover renders as its blurred copy; the normal one's URL is only in
+              data-full-src, swapped in by public/js/media-item.js on request. The button starts
+              hidden so a no-JS visitor sees only the blurred copy and no dead button. %>
+          <img src="<%= item.gridPosterUrl %>" alt="" width="<%= item.poster.width %>" height="<%= item.poster.height %>"
+               class="absolute inset-0 w-full h-full object-cover<%= item.nsfw ? ' scale-110' : '' %>"
+               <% if (item.nsfw) { %>data-nsfw-poster data-full-src="<%= item.poster.url %>"<% } %> />
+          <% if (item.nsfw) { %>
+            <button type="button" data-nsfw-reveal hidden
+                    class="absolute inset-x-3 bottom-3 px-2 py-1.5 rounded-md bg-neutral-950/85 text-neutral-100 text-xs font-medium hover:bg-neutral-900">
+              <%= t('movies.revealNsfw') %>
+            </button>
+          <% } %>
+        <% } else { %>
+          <span class="absolute inset-0 grid place-items-center p-3 text-center text-sm text-neutral-500"><%= item.title %></span>
+        <% } %>
+        <% if (item.nsfw) { %>
+          <span class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-red-700/90 text-white text-[10px] font-bold">18+</span>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="flex-1 min-w-0">
+      <h2 class="text-2xl font-bold text-neutral-100"><%= item.title %></h2>
+      <% if (item.originalTitle) { %><p class="text-sm text-neutral-400"><%= item.originalTitle %></p><% } %>
+      <p class="mt-1 text-sm text-neutral-500">
+        <%= [item.year, item.mediaType ? t('movies.type.' + item.mediaType) : null].filter(Boolean).join(' · ') %>
+        <% if (item.status === 'accepted') { %><span class="ml-2 px-1.5 py-0.5 rounded bg-sky-900/60 text-sky-300 text-xs"><%= t('movies.statusPlanned') %></span><% } %>
+      </p>
+
+      <dl class="mt-4 grid grid-cols-2 gap-3 max-w-sm">
+        <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
+          <dt class="text-[11px] uppercase tracking-wide text-neutral-500"><%= t('movies.ratingStreamer') %></dt>
+          <dd class="text-xl font-semibold tabular-nums <%= item.ratings.streamer ? 'text-amber-400' : 'text-neutral-600' %>">
+            <%= item.ratings.streamer ? item.ratings.streamer + '/10' : '—' %>
+          </dd>
+        </div>
+        <div class="rounded-md border border-neutral-800 bg-neutral-900/60 px-3 py-2">
+          <dt class="text-[11px] uppercase tracking-wide text-neutral-500"><%= t('movies.ratingViewers') %></dt>
+          <dd class="text-xl font-semibold tabular-nums <%= item.viewerAverage !== null ? 'text-sky-400' : 'text-neutral-600' %>" data-viewer-average>
+            <%= item.viewerAverage !== null ? item.viewerAverage.toFixed(1) : '—' %>
+          </dd>
+          <dd class="text-[11px] text-neutral-500" data-viewer-count data-template="<%= t('movies.ratingCount', { count: '{{count}}' }) %>">
+            <%= item.viewerCount ? t('movies.ratingCount', { count: item.viewerCount }) : t('movies.ratingNone') %>
+          </dd>
+        </div>
+      </dl>
+
+      <% if (badge) { %><p class="mt-3 text-sm text-neutral-300"><%= t('movies.watchedLabel') %>: <span class="tabular-nums"><%= badge %></span></p><% } %>
+      <% if (item.recordingUrl) { %>
+        <p class="mt-2 text-sm"><a href="<%= item.recordingUrl %>" target="_blank" rel="noopener noreferrer nofollow" class="text-purple-400 hover:text-purple-300"><%= t('movies.recordingLink') %> ↗</a></p>
+      <% } %>
+      <% if (item.external && item.external.imdbId) { %>
+        <p class="mt-1 text-sm"><a href="https://www.imdb.com/title/<%= item.external.imdbId %>/" target="_blank" rel="noopener noreferrer nofollow" class="text-neutral-400 hover:text-neutral-200">IMDb ↗</a></p>
+      <% } %>
+
+      <div class="mt-4 flex items-center gap-5">
+        <% ["like", "superlike"].forEach(function(type) { %>
+          <% const liked = type === "like" ? item.likedByViewer : item.superlikedByViewer; %>
+          <% const count = type === "like" ? item.likeCount : item.superlikeCount; %>
+          <button type="button"
+                  class="group news-heart-btn flex items-center gap-1.5 text-sm text-neutral-400 data-[liked=1]:text-red-400 hover:text-red-300 transition-colors"
+                  data-react data-react-url="<%= base %>/react" data-type="<%= type %>"
+                  data-liked="<%= liked ? '1' : '0' %>" data-csrf="<%= csrf %>" aria-pressed="<%= liked ? 'true' : 'false' %>"
+                  aria-label="<%= t('news.react.' + type) %>" title="<%= t('news.react.' + type) %>">
+            <svg class="w-5 h-5 fill-none group-data-[liked=1]:fill-current" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+            </svg>
+            <span class="news-heart-count tabular-nums"><%= count %></span>
+          </button>
+        <% }) %>
+      </div>
+
+      <% if (canEdit) { %>
+        <div class="mt-4 flex items-center gap-2">
+          <a href="<%= base %>/edit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-xs font-medium"><%= t('movies.edit') %></a>
+          <form method="post" action="<%= base %>/delete" data-confirm-delete="<%= t('movies.deleteConfirm') %>" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrf %>" />
+            <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium"><%= t('movies.delete') %></button>
+          </form>
+        </div>
+      <% } %>
+    </div>
+  </article>
+
+  <% if (item.status === 'done') { %>
+    <section id="rating" class="mt-8 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4">
+      <h3 class="text-sm font-semibold text-neutral-200 mb-2"><%= t('movies.yourRating') %></h3>
+      <% if (!user) { %>
+        <p class="text-sm"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-purple-400 hover:text-purple-300"><%= t('movies.loginToRate') %></a></p>
+      <% } else if (!canRate) { %>
+        <p class="text-sm text-neutral-500"><%= t('movies.ownerCannotRate') %></p>
+      <% } else { %>
+        <%# Ten submit buttons in one form: works without JS (redirect back to #rating);
+            public/js/media-item.js posts it by fetch and patches the numbers in place. %>
+        <form method="post" action="<%= base %>/rate" data-rate-form class="flex flex-wrap gap-1">
+          <input type="hidden" name="_csrf" value="<%= csrf %>" />
+          <% for (let n = 1; n <= 10; n++) { %>
+            <button type="submit" name="value" value="<%= n %>" data-rate-value="<%= n %>"
+                    aria-pressed="<%= myRating && myRating.value === n ? 'true' : 'false' %>"
+                    class="w-9 h-9 rounded-md border text-sm tabular-nums transition-colors aria-pressed:border-sky-500 aria-pressed:bg-sky-500/20 aria-pressed:text-sky-200 border-neutral-700 text-neutral-300 hover:border-sky-600"><%= n %></button>
+          <% } %>
+        </form>
+        <p class="mt-2 text-xs text-neutral-500" data-rate-note
+           data-note-counted="<%= t('movies.rateCounted') %>" data-note-not-counted="<%= t('movies.rateNotCounted') %>" data-note-error="<%= t('movies.rateError') %>">
+          <% if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= t('movies.rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= t('movies.rateCounted') %><% } else if (ratingFlash) { %><%= t('movies.rateError') %><% } else { %><%= t('movies.rateHint') %><% } %>
+        </p>
+      <% } %>
+    </section>
+  <% } %>
+
+  <% if (item.review) { %>
+    <section class="mt-8">
+      <h3 class="text-lg font-semibold text-neutral-100 mb-2"><%= t('movies.reviewHeading', { login: channel.channelLogin }) %></h3>
+      <div class="prose-news text-neutral-300 text-sm leading-relaxed"><%- item.review.bodyHtml %></div>
+      <% if (item.review.updatedAt) { %><p class="mt-2 text-xs text-neutral-600"><%= new Date(item.review.updatedAt).toLocaleDateString(dateLocale) %></p><% } %>
+    </section>
+  <% } %>
+
+  <%- include('partials/discussion', { commentCount: item.commentCount || 0 }) %>
+</main>
+
+<script src="<%= asset('/js/reactions.js') %>" defer></script>
+<script src="<%= asset('/js/emoteMatch.js') %>" defer></script>
+<script src="<%= asset('/js/comment-thread.js') %>" defer></script>
+<script src="<%= asset('/js/media-item.js') %>" defer></script>
+<script src="<%= asset('/js/confirm-delete.js') %>" defer></script>
+
+<%- include('partials/foot') %>

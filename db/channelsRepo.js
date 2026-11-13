@@ -114,7 +114,20 @@ async function setNewsEnabled(channelLogin, enabled) {
   return result.matchedCount > 0;
 }
 
+// Per-channel section switch (Channels.moviesEnabled / gamesEnabled - see lib/channelNav.js).
+const SECTION_FLAGS = ["moviesEnabled", "gamesEnabled"];
+async function setSectionEnabled(channelLogin, flag, enabled) {
+  if (!SECTION_FLAGS.includes(flag)) throw new Error(`setSectionEnabled: unknown flag ${flag}`);
+  const col = await ensureInitialized();
+  const result = await col.updateOne(
+    { channelLogin: channelLogin.toLowerCase() },
+    { $set: { [flag]: !!enabled, updatedAt: new Date() } }
+  );
+  return result.matchedCount > 0;
+}
+
 module.exports = {
+  setSectionEnabled,
   findByLogin,
   listEnabled,
   listVisibleOnHomepage,

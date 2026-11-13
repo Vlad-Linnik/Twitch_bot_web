@@ -182,6 +182,23 @@ router.post("/admin/channels/:login/toggle-homepage", settingsWriteLimiter, requ
   }
 });
 
+router.post("/admin/channels/:login/toggle-movies", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const enable = req.body.moviesEnabled === "1";
+    const changed = await channelsRepo.setSectionEnabled(req.params.login, "moviesEnabled", enable);
+    if (changed) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: enable ? "channel.moviesEnable" : "channel.moviesDisable",
+        target: req.params.login.toLowerCase(),
+      });
+    }
+    res.redirect(`/admin?flash=${enable ? "moviesEnabled" : "moviesDisabled"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/admin/channels/:login/toggle-news", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
   try {
     const enable = req.body.newsEnabled === "1";

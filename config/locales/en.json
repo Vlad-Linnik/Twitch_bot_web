@@ -912,6 +912,103 @@
       "superlike": "Super Like"
     }
   },
+  "movies": {
+    "titleSuffix": "movies",
+    "previewNotice": "This section is off for everyone else - you're seeing it because you're an admin.",
+    "tabsLabel": "Lists",
+    "tab": {
+      "done": "Watched",
+      "planned": "Planned"
+    },
+    "create": "Add a movie",
+    "searchPlaceholder": "Title…",
+    "searchSubmit": "Search",
+    "sortLabel": "Sort",
+    "sort": {
+      "added": "Recently added",
+      "streamer": "Streamer's score",
+      "viewers": "Viewers' score"
+    },
+    "empty": {
+      "done": "Nothing watched yet.",
+      "planned": "No plans yet."
+    },
+    "emptySearch": "Nothing found.",
+    "type": {
+      "film": "Film",
+      "series": "Series",
+      "anime": "Anime"
+    },
+    "progressPercent": "{{done}}%",
+    "progressEpisodes": "{{done}} of {{total}} episodes",
+    "progressEpisodesOpen": "{{done}} episodes",
+    "ratingStreamer": "Streamer's score",
+    "ratingViewers": "Viewers' score",
+    "ratingCount": "ratings: {{count}}",
+    "ratingNone": "no ratings",
+    "backToGrid": "All movies",
+    "revealNsfw": "Show (18+)",
+    "statusPlanned": "planned",
+    "watchedLabel": "Watched",
+    "recordingLink": "Stream recording",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this card with its ratings and discussion? This cannot be undone.",
+    "yourRating": "Your score",
+    "loginToRate": "Log in with Twitch to rate",
+    "ownerCannotRate": "The streamer has their own score and doesn't add a viewer one.",
+    "rateHint": "1 to 10. The average counts people who have chatted in this channel.",
+    "rateCounted": "Saved, and counted in the average.",
+    "rateNotCounted": "Saved, but not counted yet: the average only counts people who have chatted in this channel.",
+    "rateError": "Couldn't save the score.",
+    "reviewHeading": "Review by {{login}}",
+    "form": {
+      "newTitle": "New movie",
+      "editTitle": "Edit card",
+      "back": "Back",
+      "title": "Title",
+      "originalTitle": "Original title",
+      "year": "Year",
+      "type": "Type",
+      "status": "Status",
+      "statusOption": {
+        "done": "Watched",
+        "accepted": "Planned"
+      },
+      "imdbId": "IMDb (tt… or a link)",
+      "progress": "How much was watched",
+      "progressPercent": "Watched, %",
+      "progressDone": "Episodes watched",
+      "progressDoneEither": "Watched (episodes, or % for a film)",
+      "progressTotal": "Total episodes",
+      "progressHint": "Empty - no badge. The badge shows while something is left.",
+      "recordingUrl": "Recording link",
+      "recordingHint": "Twitch (videos), YouTube, VK Video or Rutube.",
+      "poster": "Poster",
+      "posterKeep": "Without a new file the current one stays.",
+      "nsfw": "18+: blur the cover",
+      "nsfwHint": "The grid shows only a blurred copy; the normal one is on the card's page behind a button.",
+      "streamerFields": "On the streamer's behalf ({{login}})",
+      "streamerRating": "Streamer's score",
+      "noRating": "- none -",
+      "review": "Review",
+      "reviewHint": "Markdown. Always signed as the streamer.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "error": {
+        "title_required": "Enter a title.",
+        "type_invalid": "Pick a type.",
+        "status_invalid": "Pick a status.",
+        "year_invalid": "The year looks wrong.",
+        "imdb_invalid": "IMDb: an id like tt1375666 or an imdb.com/title/… link.",
+        "recording_invalid": "Recording link: only Twitch (videos), YouTube, VK Video and Rutube.",
+        "progress_invalid": "Check \"how much was watched\": a percentage 0-100, episodes no more than the total.",
+        "rating_invalid": "A score is 1 to 10.",
+        "poster_invalid": "The poster didn't work: an image up to 5 MB.",
+        "duplicate": "A card with this IMDb id already exists on the channel."
+      }
+    }
+  },
   "comments": {
     "backToFeed": "Back to news",
     "heading": "Comments",
@@ -1147,7 +1244,8 @@
       "variable": "Variable",
       "long_ban": "Long ban",
       "unban_request": "Unban appeal",
-      "comment": "Discussion"
+      "comment": "Discussion",
+      "media": "Movies & games"
     },
     "action": {
       "add": "Added",
@@ -1231,7 +1329,10 @@
       "commenterRestricted": "{{target}} can no longer comment",
       "commenterUnrestricted": "{{target}} can comment again",
       "unbanSniper": "Fired the Amnesty Bureau's stray bullet",
-      "unbanGrenade": "Threw the Amnesty Bureau's grenade"
+      "unbanGrenade": "Threw the Amnesty Bureau's grenade",
+      "mediaCreated": "Added the card \"{{target}}\"",
+      "mediaUpdated": "Edited the card \"{{target}}\"",
+      "mediaDeleted": "Deleted the card \"{{target}}\""
     }
   },
   "moderatorPermissions": {
@@ -1889,7 +1990,9 @@
       "homepageHidden": "Channel hidden from the home page.",
       "newsEnabled": "News feed enabled for the channel.",
       "newsDisabled": "News feed disabled for the channel.",
-      "deleted": "The entire settings change log has been deleted."
+      "deleted": "The entire settings change log has been deleted.",
+      "moviesEnabled": "Movies section enabled for the channel.",
+      "moviesDisabled": "Movies section disabled for the channel."
     },
     "healthHeading": "Service health",
     "healthMessages": "Messages stored",
@@ -1975,7 +2078,9 @@
         "homepageShow": "Channel shown on home page",
         "homepageHide": "Channel hidden from home page",
         "newsEnable": "News feed enabled",
-        "newsDisable": "News feed disabled"
+        "newsDisable": "News feed disabled",
+        "moviesEnable": "Movies section enabled",
+        "moviesDisable": "Movies section disabled"
       },
       "game": {
         "hide": "Game hidden",
@@ -2004,6 +2109,16 @@
       "settings-log": {
         "delete-all": "Settings change log wiped",
         "delete-one": "Settings change log entry deleted"
+      },
+      "media": {
+        "create": "Card created",
+        "update": "Card updated",
+        "delete": "Card deleted"
+      },
+      "mediaComment": {
+        "delete": "Comment under a card deleted",
+        "restrictUser": "Commenter restricted",
+        "unrestrictUser": "Commenter unrestricted"
       }
     },
     "news": {
@@ -2192,7 +2307,10 @@
       "constantCadence": "Inputs at a machine-regular interval",
       "lowJitter": "Input timing too consistent for a hand",
       "superhumanApm": "More actions per second than a human sustains"
-    }
+    },
+    "colMovies": "Movies",
+    "moviesEnable": "Enable movies",
+    "moviesDisable": "Disable movies"
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",

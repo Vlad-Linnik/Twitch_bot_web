@@ -33,6 +33,7 @@ router.use("/", require("./variables"));
 router.use("/", require("./longBans"));
 router.use("/", require("./unbanBureau"));
 router.use("/", require("./news"));
+router.use("/", require("./movies"));
 router.use("/", require("./userDashboard"));
 router.use("/", require("./channelRedirect"));
 

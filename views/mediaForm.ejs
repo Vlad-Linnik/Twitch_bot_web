@@ -1,0 +1,134 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t(item ? 'movies.form.editTitle' : 'movies.form.newTitle') }) %>
+<%- include('partials/nav') %>
+
+<%
+  const v = values || {};
+  const val = (k) => (v[k] === undefined || v[k] === null ? '' : v[k]);
+  const action = item ? '/' + channel.channelLogin + '/movies/' + item._id + '/edit' : '/' + channel.channelLogin + '/movies';
+  const back = item ? '/' + channel.channelLogin + '/movies/' + item._id : '/' + channel.channelLogin + '/movies';
+  const input = 'w-full rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600';
+  const nsfwChecked = v.nsfw === true || v.nsfw === '1' || v.nsfw === 'on';
+%>
+
+<main class="pt-14 max-w-2xl mx-auto px-6 py-12">
+  <a href="<%= back %>" data-transition="backward" class="inline-block mb-4 text-sm text-neutral-500 hover:text-neutral-300">&larr; <%= t('movies.form.back') %></a>
+  <h1 class="text-2xl font-bold text-neutral-100 mb-1"><%= t(item ? 'movies.form.editTitle' : 'movies.form.newTitle') %></h1>
+  <p class="text-sm text-neutral-500 mb-8"><%= channel.channelLogin %></p>
+
+  <% if (errors.length) { %>
+    <div class="mb-6 rounded-md border border-red-800 bg-red-950/50 text-red-300 text-sm px-4 py-3">
+      <ul class="list-disc pl-4 space-y-0.5">
+        <% errors.forEach(function(code) { %><li><%= t('movies.form.error.' + code) %></li><% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form method="post" action="<%= action %>" enctype="multipart/form-data" class="space-y-6" data-media-form>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <div class="grid sm:grid-cols-2 gap-4">
+      <label class="block sm:col-span-2">
+        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.title') %></span>
+        <input type="text" name="title" required maxlength="200" value="<%= val('title') %>" class="<%= input %>" />
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.originalTitle') %></span>
+        <input type="text" name="originalTitle" maxlength="200" value="<%= val('originalTitle') %>" class="<%= input %>" />
+      </label>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.year') %></span>
+        <input type="number" name="year" min="1870" max="2100" step="1" value="<%= val('year') %>" class="<%= input %>" />
+      </label>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.type') %></span>
+        <select name="mediaType" data-media-type class="<%= input %>">
+          <% mediaTypes.forEach(function(type) { %>
+            <option value="<%= type %>"<%= v.mediaType === type ? ' selected' : '' %>><%= t('movies.type.' + type) %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.status') %></span>
+        <select name="status" class="<%= input %>">
+          <% statuses.forEach(function(s) { %>
+            <option value="<%= s %>"<%= v.status === s ? ' selected' : '' %>><%= t('movies.form.statusOption.' + s) %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label class="block">
+        <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.imdbId') %></span>
+        <input type="text" name="imdbId" maxlength="300" placeholder="tt1375666" value="<%= val('imdbId') %>" class="<%= input %>" />
+      </label>
+    </div>
+
+    <fieldset class="rounded-md border border-neutral-800 p-4">
+      <legend class="px-1 text-xs text-neutral-500"><%= t('movies.form.progress') %></legend>
+      <%# Both inputs render without JS, with a hint saying which applies; public/js/media-form.js
+          hides the episode total for a film and swaps the first label. %>
+      <div class="grid grid-cols-2 gap-4">
+        <label class="block">
+          <span class="block text-xs text-neutral-500 mb-1" data-progress-done-label
+                data-label-film="<%= t('movies.form.progressPercent') %>" data-label-episodes="<%= t('movies.form.progressDone') %>">
+            <%= t('movies.form.progressDoneEither') %>
+          </span>
+          <input type="number" name="progressDone" min="0" max="5000" step="1" value="<%= val('progressDone') %>" class="<%= input %>" />
+        </label>
+        <label class="block" data-progress-total>
+          <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.progressTotal') %></span>
+          <input type="number" name="progressTotal" min="1" max="5000" step="1" value="<%= val('progressTotal') %>" class="<%= input %>" />
+        </label>
+      </div>
+      <p class="mt-2 text-xs text-neutral-600"><%= t('movies.form.progressHint') %></p>
+    </fieldset>
+
+    <label class="block">
+      <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.recordingUrl') %></span>
+      <input type="url" name="recordingUrl" maxlength="500" value="<%= val('recordingUrl') %>" placeholder="https://www.twitch.tv/videos/…" class="<%= input %>" />
+      <span class="block mt-1 text-xs text-neutral-600"><%= t('movies.form.recordingHint') %></span>
+    </label>
+
+    <div>
+      <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.poster') %></span>
+      <% if (posterUrl) { %>
+        <img src="<%= posterUrl %>" alt="" class="mb-2 h-40 rounded-md border border-neutral-800" />
+        <p class="text-xs text-neutral-600 mb-2"><%= t('movies.form.posterKeep') %></p>
+      <% } %>
+      <input type="file" name="poster" accept="image/*"
+             class="w-full text-sm text-neutral-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:text-neutral-300 file:text-xs" />
+      <label class="mt-3 flex items-center gap-2 text-sm text-neutral-300">
+        <input type="checkbox" name="nsfw" value="1" class="accent-purple-600"<%= nsfwChecked ? ' checked' : '' %> />
+        <%= t('movies.form.nsfw') %>
+      </label>
+      <p class="mt-1 text-xs text-neutral-600"><%= t('movies.form.nsfwHint') %></p>
+    </div>
+
+    <% if (canWriteStreamerFields) { %>
+      <fieldset class="rounded-md border border-amber-900/50 p-4 space-y-4">
+        <legend class="px-1 text-xs text-amber-500/80"><%= t('movies.form.streamerFields', { login: channel.channelLogin }) %></legend>
+        <label class="block max-w-[10rem]">
+          <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.streamerRating') %></span>
+          <select name="streamerRating" class="<%= input %>">
+            <option value=""><%= t('movies.form.noRating') %></option>
+            <% for (let n = 10; n >= 1; n--) { %>
+              <option value="<%= n %>"<%= String(val('streamerRating')) === String(n) ? ' selected' : '' %>><%= n %></option>
+            <% } %>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs text-neutral-500 mb-1"><%= t('movies.form.review') %></span>
+          <textarea name="review" rows="8" maxlength="20000" class="<%= input %> font-mono"><%= val('review') %></textarea>
+          <span class="block mt-1 text-xs text-neutral-600"><%= t('movies.form.reviewHint') %></span>
+        </label>
+      </fieldset>
+    <% } %>
+
+    <div class="flex items-center gap-2">
+      <button type="submit" class="px-4 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"><%= t('movies.form.save') %></button>
+      <a href="<%= back %>" class="px-4 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-sm transition-colors"><%= t('movies.form.cancel') %></a>
+    </div>
+  </form>
+</main>
+
+<script src="<%= asset('/js/media-form.js') %>" defer></script>
+
+<%- include('partials/foot') %>

@@ -57,7 +57,7 @@
         // (even when stashed/activation below will short-circuit the rest) since it must apply
         // before the browser captures this page's "new" state either way.
         if (location.pathname === "/" && from) {
-          const channelMatch = from.pathname.match(/^\/([^/]+)\/(?:statistics|news)(?:\/|$)/);
+          const channelMatch = from.pathname.match(/^\/([^/]+)\/(?:statistics|news|movies)(?:\/|$)/);
           if (channelMatch) {
             const card = document.querySelector(`a[data-channel-login="${CSS.escape(channelMatch[1])}"]`);
             if (card) card.style.viewTransitionName = "channel-header";

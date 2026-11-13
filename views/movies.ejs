@@ -1,0 +1,75 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('movies.titleSuffix') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12">
+
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
+
+  <% if (sectionPreview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+      <%= t('movies.previewNotice') %>
+    </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center gap-3 mb-6">
+    <nav class="flex gap-1 border-b border-neutral-800" aria-label="<%= t('movies.tabsLabel') %>">
+      <% tabs.forEach(function(tab) { %>
+        <a href="<%= tab.href %>" data-transition="instant"<% if (tab.key === view.tab) { %> aria-current="page"<% } %>
+           class="px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors <%= tab.key === view.tab ? 'border-purple-500 text-neutral-100' : 'border-transparent text-neutral-500 hover:text-neutral-300' %>">
+          <%= t('movies.tab.' + tab.key) %> <span class="text-xs tabular-nums text-neutral-500"><%= tab.count %></span>
+        </a>
+      <% }) %>
+    </nav>
+    <% if (canEdit) { %>
+      <a href="/<%= channel.channelLogin %>/movies/new"
+         class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" /></svg>
+        <%= t('movies.create') %>
+      </a>
+    <% } %>
+  </div>
+
+  <%# A plain GET form: sort and search work without JS, and the URL is shareable. %>
+  <form method="get" action="/<%= channel.channelLogin %>/movies" data-transition="instant" class="flex flex-wrap items-center gap-2 mb-8">
+    <% if (view.tab !== 'done') { %><input type="hidden" name="tab" value="<%= view.tab %>" /><% } %>
+    <input type="search" name="q" value="<%= view.q %>" maxlength="100" placeholder="<%= t('movies.searchPlaceholder') %>"
+           class="flex-1 min-w-[10rem] rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-3 py-1.5 focus:outline-none focus:border-purple-600" />
+    <label class="flex items-center gap-2 text-sm text-neutral-400">
+      <span class="sr-only sm:not-sr-only"><%= t('movies.sortLabel') %></span>
+      <select name="sort" data-autosubmit
+              class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-2 py-1.5 focus:outline-none focus:border-purple-600">
+        <% sorts.forEach(function(s) { %>
+          <option value="<%= s %>"<%= s === view.sort ? ' selected' : '' %>><%= t('movies.sort.' + s) %></option>
+        <% }) %>
+      </select>
+    </label>
+    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-500/10 text-sm"><%= t('movies.searchSubmit') %></button>
+  </form>
+
+  <% if (cards.length === 0) { %>
+    <p class="text-center text-neutral-500 text-sm py-16"><%= view.q ? t('movies.emptySearch') : t('movies.empty.' + view.tab) %></p>
+  <% } else { %>
+    <%# Same contract as the news feed (public/js/infinite-list.js): data-src without a cursor, the
+        next cursor lives in the "show more" link below. %>
+    <div id="movies-grid" data-infinite-list data-src="<%= listSrc %>"
+         <% if (restoreKey) { %>data-restore="<%= restoreKey %>"<% } %>
+         class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      <%- include('partials/mediaCards', { cards, channel, section: 'movies' }) %>
+    </div>
+  <% } %>
+
+  <% if (nextHref) { %>
+    <div class="flex justify-center mt-8">
+      <a href="<%= nextHref %>" data-infinite-more="movies-grid" data-transition="instant"
+         data-retry-label="<%= t('news.loadFailed') %>" data-loading-label="<%= t('news.loading') %>"
+         class="px-4 py-2 rounded-md border border-neutral-800 text-sm text-neutral-300 hover:border-purple-600 hover:text-neutral-100 transition-colors">
+        <%= t('news.loadMore') %>
+      </a>
+    </div>
+  <% } %>
+</main>
+
+<script src="<%= asset('/js/infinite-list.js') %>" defer></script>
+<script src="<%= asset('/js/media-grid.js') %>" defer></script>
+
+<%- include('partials/foot') %>
