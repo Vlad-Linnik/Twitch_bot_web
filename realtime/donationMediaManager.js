@@ -14,6 +14,7 @@
 // channel. The queue is written to Mongo on every change (debounced), so a restart loses at most
 // the last second, and the listeners are restarted at boot for every configured channel.
 const donationMediaRepo = require("../db/donationMediaRepo");
+const donationMediaNowPlayingRepo = require("../db/donationMediaNowPlayingRepo");
 const channelsRepo = require("../db/channelsRepo");
 const { computePermission, canEditSectionAt } = require("../middleware/permissions");
 const { MediaQueue } = require("../lib/donationMediaQueue");
@@ -27,6 +28,11 @@ const MAX_MESSAGE_BYTES = 4096;
 const RATE_WINDOW_MS = 10 * 1000;
 const RATE_MAX = 40;
 const OEMBED_TIMEOUT_MS = 8000;
+// While a clip plays, the bot's "what is playing" row (db/donationMediaNowPlayingRepo.js) is
+// re-written this often even when nothing about it changed, so the bot can tell a live row from
+// one left behind by a web process that died mid-clip. The bot's staleness limit is a hand-kept
+// multiple of this (TwitchBot commands/nowPlaying.js, STALE_MS).
+const NOW_PLAYING_REFRESH_MS = 60 * 1000;
 
 const sessions = new Map(); // channelId -> Session
 
@@ -40,6 +46,8 @@ class Session {
     this.status = {}; // platform -> { connected, error }
     this.keys = { playerKey: null, panelKey: null };
     this.saveTimer = null;
+    this.published = null; // { key, at, itemId, startedAt } - the last now-playing row written
+    this.publishChain = Promise.resolve();
     this.queue = new MediaQueue({
       send: (target, message) => this.send(target, message),
       onChange: () => this.scheduleSave(),
@@ -53,15 +61,52 @@ class Session {
           if (!item.title) fetchTitle(item.videoId).then((title) => title && this.queue.setTitle(item.id, title));
         }
       })
-      .catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load the queue:`, err.message));
+      .catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load the queue:`, err.message))
+      // Nothing plays right after a load (the clip that was playing went back into the queue), and
+      // a row left by the previous process may still say otherwise.
+      .then(() => this.publishNowPlaying());
   }
 
   send(target, message) {
+    // Every change of what plays, and every second of progress while it plays, is announced to the
+    // panels - so this is the one place the now-playing row is kept in step, instead of a call
+    // after every queue transition.
+    if (target === "panels") this.publishNowPlaying();
     const data = JSON.stringify(message);
     const sockets = target === "players" ? this.players : [...this.panels].map((p) => p.ws);
     for (const ws of sockets) {
       if (ws.readyState === 1) ws.send(data);
     }
+  }
+
+  // Writes the bot's now-playing row when what plays changed, or when the row is due a refresh.
+  // Writes are chained, so a skip right after a start cannot land before it.
+  publishNowPlaying() {
+    const current = this.queue.current;
+    const paused = Boolean(current && this.queue.paused);
+    const key = current ? `${current.id}|${paused ? 1 : 0}|${current.title || ""}` : "none";
+    const now = Date.now();
+    const prev = this.published;
+    if (prev && prev.key === key && (!current || now - prev.at < NOW_PLAYING_REFRESH_MS)) return;
+
+    const startedAt = current && prev && prev.itemId === current.id ? prev.startedAt : new Date(now);
+    this.published = { key, at: now, itemId: current ? current.id : null, startedAt };
+    const item = current
+      ? {
+          videoId: current.videoId,
+          title: current.title || null,
+          donor: current.donor || null,
+          amount: current.amount ? { ...current.amount } : null,
+          platform: current.platform || null,
+          // A clip added from the OBS dock is the streamer's own; "OBS" is not a name to put in chat.
+          addedBy: current.addedBy && current.addedBy !== "OBS" ? current.addedBy : null,
+        }
+      : null;
+    this.publishChain = this.publishChain
+      .then(() => donationMediaNowPlayingRepo.setNowPlaying(this.channelId, this.channelLogin, { item, paused, startedAt }))
+      // Left as is on failure: a playing row is retried by the refresh above, and a stopped one
+      // that failed to land goes stale on the bot's side.
+      .catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not write now-playing:`, err.message));
   }
 
   scheduleSave() {

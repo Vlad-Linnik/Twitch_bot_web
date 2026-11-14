@@ -88,6 +88,11 @@
       "signature": "!weather",
       "defaultCity": ""
     },
+    "track": {
+      "enabled": true,
+      "cooldownMs": 15000,
+      "signature": "!track"
+    },
     "muteduel": {
       "enabled": true,
       "cooldownMs": 50000,
