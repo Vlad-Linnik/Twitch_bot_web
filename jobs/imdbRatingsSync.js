@@ -17,8 +17,17 @@ const RUN_EVERY_MS = 24 * 60 * 60 * 1000;
 const BOOT_DELAY_MS = 5 * 60 * 1000;
 const STATUS_ID = "imdbRatings";
 
+// A card saved with an IMDb id it has no rating for asks for an early run (requestSoon) instead
+// of waiting out the day. Coalesced: a burst of new cards is one download, a little after the
+// last of them, and never closer than SOON_MIN_GAP_MS to the previous run - the file is ~9 MB and
+// IMDb rebuilds it once a day, so running it more often only re-reads the same numbers.
+const SOON_DELAY_MS = 60 * 1000;
+const SOON_MIN_GAP_MS = 10 * 60 * 1000;
+
 let inFlight = null;
 let timer = null;
+let nextRunAt = null;
+let lastRunAt = null;
 
 async function statusCollection() {
   const db = await connectWeb();
@@ -34,6 +43,7 @@ async function runOnce() {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     const startedAt = new Date();
+    lastRunAt = startedAt.getTime();
     const col = await statusCollection();
     try {
       const ids = await mediaItemsRepo.distinctImdbIds();
@@ -67,6 +77,7 @@ async function runOnce() {
 
 function schedule(delay) {
   clearTimeout(timer);
+  nextRunAt = Date.now() + delay;
   timer = setTimeout(async () => {
     await runOnce();
     schedule(RUN_EVERY_MS);
@@ -74,9 +85,18 @@ function schedule(delay) {
   timer.unref();
 }
 
+// An early run for a card that just got an IMDb id. Only ever moves the next run EARLIER; the
+// daily rhythm resumes after it (schedule() re-arms RUN_EVERY_MS once a run finishes).
+function requestSoon() {
+  if (nextRunAt === null) return; // the job was never started (tests, scripts)
+  const earliest = Math.max(Date.now() + SOON_DELAY_MS, (lastRunAt || 0) + SOON_MIN_GAP_MS);
+  if (earliest < nextRunAt) schedule(earliest - Date.now());
+}
+
 async function startImdbRatingsSync() {
   try {
     const status = await getStatus();
+    if (status?.lastRunAt) lastRunAt = new Date(status.lastRunAt).getTime();
     const age = status?.lastRunAt ? Date.now() - new Date(status.lastRunAt).getTime() : Infinity;
     schedule(Math.max(BOOT_DELAY_MS, RUN_EVERY_MS - age));
   } catch (err) {
@@ -85,4 +105,4 @@ async function startImdbRatingsSync() {
   }
 }
 
-module.exports = { startImdbRatingsSync, runOnce, getStatus, isRunning: () => Boolean(inFlight) };
+module.exports = { startImdbRatingsSync, runOnce, getStatus, requestSoon, isRunning: () => Boolean(inFlight) };

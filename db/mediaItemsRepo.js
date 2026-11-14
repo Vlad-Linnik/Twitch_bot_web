@@ -4,7 +4,8 @@
 //
 // {_id, channelLogin (no '#'), kind: 'movie'|'game', status: 'suggested'|'accepted'|'done'|'rejected',
 //  title, originalTitle, year, searchKey, mediaType: 'film'|'series'|'anime'|null,
-//  external: {imdbId?, ...}, poster: {url, blurUrl, width, height, source} | null, nsfw,
+//  external: {imdbId?, ...}, info: lib/mediaInfo.js's block | null (absent = never asked),
+//  poster: {url, blurUrl, width, height, source} | null, nsfw,
 //  recordingUrl, progress: {done, total, unit} | null,
 //  ratings: {streamer: 1..10|null, viewers: {sum, count}, external: null},
 //  review: {bodyRaw, bodyHtml, excerpt, authorUserId, updatedAt} | null,
@@ -83,6 +84,7 @@ async function create(doc) {
     searchKey: doc.searchKey,
     mediaType: doc.mediaType,
     external: doc.external || {},
+    info: doc.info || null,
     poster: doc.poster || null,
     nsfw: Boolean(doc.nsfw),
     recordingUrl: doc.recordingUrl || null,
@@ -108,6 +110,15 @@ async function update(id, set) {
   if (!oid) return null;
   const col = await ensureInitialized();
   return col.findOneAndUpdate({ _id: oid }, { $set: { ...set, updatedAt: new Date() } }, { returnDocument: "after" });
+}
+
+// The lazy fill of a card saved before `info` existed (routes/mediaSection.js's fillInfo): written
+// only while the field is still absent, so it can never overwrite what an edit stored meanwhile.
+async function setInfoIfAbsent(id, info) {
+  const oid = toOid(id);
+  if (!oid) return;
+  const col = await ensureInitialized();
+  await col.updateOne({ _id: oid, info: { $exists: false } }, { $set: { info } });
 }
 
 async function getById(id) {
@@ -245,6 +256,7 @@ async function sourceStats() {
 module.exports = {
   create,
   update,
+  setInfoIfAbsent,
   getById,
   listForGrid,
   countByStatus,

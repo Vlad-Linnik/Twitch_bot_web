@@ -1091,6 +1091,18 @@
         "stale": "Решение уже приняли — страница обновлена.",
         "reason_required": "Чтобы отклонить, напишите причину."
       }
+    },
+    "ratingExternal": "Рейтинг IMDb",
+    "ratingTipNone": "{{label}}: пока нет",
+    "ratingTip": "{{label}}: {{value}}",
+    "imdbPending": "рейтинг IMDb ещё не загружен",
+    "info": {
+      "genres": "Жанр",
+      "directors": "Режиссёр",
+      "cast": "В ролях",
+      "characters": "Главные герои",
+      "overview": "О фильме",
+      "runtime": "{{n}} мин"
     }
   },
   "gamesStream": {
@@ -1163,7 +1175,8 @@
     },
     "vote": {
       "promote": "Продвинуть — хочу, чтобы сыграли"
-    }
+    },
+    "ratingExternal": "Отзывы в Steam"
   },
   "comments": {
     "backToFeed": "Назад к новостям",

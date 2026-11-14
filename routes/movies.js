@@ -10,6 +10,8 @@ const suggestions = require("../lib/mediaSuggestions");
 const { createMediaSources } = require("../lib/mediaSources");
 const env = require("../config/env");
 const { createMediaSectionRouter } = require("./mediaSection");
+const { infoRefOf } = require("../lib/mediaInfo");
+const imdbRatingsSync = require("../jobs/imdbRatingsSync");
 
 // The card's `external` ids: the IMDb id from the form (typed, or filled from the pick), the search
 // source's own id only from the server-side details.
@@ -38,6 +40,13 @@ module.exports = createMediaSectionRouter({
   parseSuggestionForm: (body) => suggestions.parseSuggestionForm(body),
   formValues: (item) => ({ imdbId: item.external?.imdbId || "" }),
   externalIds,
+  // Genres, director, cast and synopsis for a card saved before they were stored.
+  infoRef: (item) => infoRefOf(item.external),
+  // A card with an IMDb id but no rating yet: ask for an early dataset pass instead of leaving
+  // it at "—" until the nightly one.
+  afterSave(item) {
+    if (item?.external?.imdbId && !item.ratings?.external) imdbRatingsSync.requestSoon();
+  },
   editSet(value, item, picked) {
     const set = { "external.imdbId": value.imdbId };
     // A different IMDb id makes the stored IMDb rating someone else's; the nightly pass fills in

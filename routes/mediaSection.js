@@ -528,6 +528,7 @@ function createMediaSectionRouter(cfg) {
           kind: KIND,
           ...value,
           external: externalIds(value, picked),
+          info: picked?.info || null,
           poster,
           review: value.review ? { ...value.review, authorUserId: req.user.userId, updatedAt: new Date() } : null,
           createdBy: { userId: req.user.userId, login: req.user.login, level: req.permission },
@@ -538,6 +539,7 @@ function createMediaSectionRouter(cfg) {
         throw err;
       }
       await logWrite(req, "create", item);
+      if (cfg.afterSave) cfg.afterSave(item);
       res.redirect(`/${req.channel.channelLogin}/${SECTION}/${item._id}`);
     } catch (err) {
       next(err);
@@ -578,6 +580,8 @@ function createMediaSectionRouter(cfg) {
       // The section's own fields and ids (an IMDb or Steam id, a game's state); the config also clears
       // an outside rating that belonged to an id the card no longer has.
       Object.assign(set, cfg.editSet(value, item, picked));
+      // A new pick is possibly another film: its info replaces the old one's.
+      if (picked) set.info = picked.info || null;
       if (canWriteStreamerFields(req.permission)) {
         set["ratings.streamer"] = value.streamerRating;
         set.review = value.review
@@ -595,6 +599,7 @@ function createMediaSectionRouter(cfg) {
       // The old files go only after the new ones are in the document.
       if (poster) await deletePoster(item.poster);
       await logWrite(req, "update", { ...item, title: value.title });
+      if (cfg.afterSave) cfg.afterSave(await mediaItemsRepo.getById(item._id));
       res.redirect(`/${req.channel.channelLogin}/${SECTION}/${item._id}`);
     } catch (err) {
       next(err);
@@ -702,6 +707,7 @@ function createMediaSectionRouter(cfg) {
           streamerRating: null,
           review: null,
           external,
+          info: picked?.info || null,
           poster,
           suggestion: {
             userId: String(req.user.userId),
@@ -721,6 +727,7 @@ function createMediaSectionRouter(cfg) {
         }
         throw err;
       }
+      if (cfg.afterSave) cfg.afterSave(item);
       res.redirect(`/${channel.channelLogin}/${SECTION}/${item._id}`);
     } catch (err) {
       next(err);
@@ -811,6 +818,29 @@ function createMediaSectionRouter(cfg) {
 
   // --- the card's own page ----------------------------------------------------------------
 
+  // A card saved before `info` existed (the field is absent, not null) gets it the first time its
+  // page is opened. A null answer is either "the source has nothing" or "the source is down" -
+  // the registry does not tell them apart - so nothing is written and the card is not asked about
+  // again for INFO_RETRY_MS: a TMDB outage must not turn every page view into a timed-out request.
+  const INFO_RETRY_MS = 60 * 60 * 1000;
+  const infoTried = new Map();
+  async function fillInfo(item) {
+    if (item.info !== undefined || !cfg.infoRef) return item.info || null;
+    const ref = cfg.infoRef(item);
+    if (!ref) return null;
+    const key = String(item._id);
+    if (Date.now() - (infoTried.get(key) || 0) < INFO_RETRY_MS) return null;
+    infoTried.set(key, Date.now());
+    if (infoTried.size > 1000) infoTried.delete(infoTried.keys().next().value);
+    const details = await mediaSources.details(ref);
+    if (!details) return null;
+    const info = details.info || null;
+    // Only where it is still absent: an edit in between wins.
+    await mediaItemsRepo.setInfoIfAbsent(item._id, info);
+    infoTried.delete(key);
+    return info;
+  }
+
   router.get(`/:channel/${SECTION}/:id`, page, async (req, res, next) => {
     try {
       const { channel, permission } = req;
@@ -826,7 +856,10 @@ function createMediaSectionRouter(cfg) {
         req.user && suggestions.isVotable(item) ? mediaSuggestionVotesRepo.getUserVote(item._id, req.user.userId) : Promise.resolve(null),
       ]);
       const poster = posterFor(item, viewer);
-      const [decorated] = cfg.decorateRows ? await cfg.decorateRows(channel, [item]) : [item];
+      const [[decorated], info] = await Promise.all([
+        cfg.decorateRows ? cfg.decorateRows(channel, [item]) : [item],
+        fillInfo(item).catch(() => null),
+      ]);
 
       res.render("mediaItem", {
         ...thread,
@@ -845,6 +878,7 @@ function createMediaSectionRouter(cfg) {
           viewerAverage: media.viewerAverage(item.ratings?.viewers),
           viewerCount: item.ratings?.viewers?.count || 0,
           externalRating: externalRatingOf(item),
+          info,
           extras: cfg.cardExtras ? cfg.cardExtras(decorated) : null,
         },
         myRating: myRating ? { value: myRating.value, counted: myRating.counted } : null,

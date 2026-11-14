@@ -22,6 +22,7 @@
     if (p.unit === 'percent') return st('progressPercent', { done: p.done });
     return p.total ? st('progressEpisodes', { done: p.done, total: p.total }) : st('progressEpisodesOpen', { done: p.done });
   })();
+  const info = item.info || null;
   const starPath = 'M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z';
 %>
 
@@ -78,7 +79,7 @@
         <% if (item.originalTitle) { %><p class="mt-0.5 text-sm italic text-stone-400"><%= item.originalTitle %></p><% } %>
 
         <div class="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
-          <% [item.year, item.mediaType ? st('type.' + item.mediaType) : null].filter(Boolean).forEach(function(chip) { %>
+          <% [item.year, item.mediaType ? st('type.' + item.mediaType) : null, info && info.runtime ? st('info.runtime', { n: info.runtime }) : null].filter(Boolean).forEach(function(chip) { %>
             <span class="px-2 py-0.5 rounded-full bg-white/5 text-stone-300 ring-1 ring-white/10"><%= chip %></span>
           <% }) %>
           <% if (item.status === 'accepted') { %><span class="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"><%= st('statusPlanned') %></span><% } %>
@@ -87,6 +88,24 @@
           <% if (item.extras && item.extras.gameState) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30"><%= st('gameState.' + item.extras.gameState) %></span><% } %>
           <% if (badge) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30 tabular-nums"><%= st('watchedLabel') %>: <%= badge %></span><% } %>
         </div>
+
+        <% if (info && (info.genres.length || info.directors.length || info.cast.length)) { %>
+          <%# What the source says about the film (lib/mediaInfo.js) - plain text, escaped like any other. %>
+          <dl class="mt-4 max-w-xl grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            <% if (info.genres.length) { %>
+              <dt class="text-stone-500"><%= st('info.genres') %></dt>
+              <dd class="text-stone-200"><%= info.genres.join(', ') %></dd>
+            <% } %>
+            <% if (info.directors.length) { %>
+              <dt class="text-stone-500"><%= st('info.directors') %></dt>
+              <dd class="text-stone-200"><%= info.directors.join(', ') %></dd>
+            <% } %>
+            <% if (info.cast.length) { %>
+              <dt class="text-stone-500"><%= st(info.castKind === 'characters' ? 'info.characters' : 'info.cast') %></dt>
+              <dd class="text-stone-200"><%= info.cast.join(', ') %></dd>
+            <% } %>
+          </dl>
+        <% } %>
 
         <% if (item.suggestion) { %>
           <%# Who suggested it and why - the note is plain text (lib/mediaSuggestions.js's cleanNote),
@@ -131,6 +150,16 @@
               <span class="text-stone-500" data-viewer-count data-template="<%= st('ratingCount', { count: '{{count}}' }) %>" data-none="<%= st('ratingNone') %>"><%= item.viewerCount ? st('ratingCount', { count: item.viewerCount }) : st('ratingNone') %></span>
             </dt>
           </div>
+          <% if (!item.externalRating && item.external && item.external.imdbId) { %>
+            <%# The card has an IMDb id but the dataset pass has not reached it yet (a new card asks
+                for an early pass - routes/movies.js's afterSave). %>
+            <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
+              <dd class="flex items-center gap-2 pl-1">
+                <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#f5c518] text-black font-black">IMDb</span><span class="text-2xl font-extrabold tabular-nums text-stone-600">—</span>
+              </dd>
+              <dt class="text-[11px] leading-tight text-stone-500 max-w-[11rem]"><%= st('imdbPending') %></dt>
+            </div>
+          <% } %>
           <% if (item.externalRating) { %>
             <%# The outside figure, from a daily pass: IMDb's own for a film, Steam's share of positive
                 reviews for a game - each drawn in its source's own colours (partials/externalRating). %>
@@ -173,6 +202,13 @@
       </div>
     </div>
   </article>
+
+  <% if (info && info.overview) { %>
+    <section class="mt-6 rounded-(--sec-radius-lg) bg-(--sec-surface)/60 ring-1 ring-white/5 px-4 sm:px-5 py-4">
+      <h3 class="text-sm font-semibold text-stone-200 mb-2"><%= st('info.overview') %></h3>
+      <p class="text-[15px] leading-relaxed text-stone-300"><%= info.overview %></p>
+    </section>
+  <% } %>
 
   <% if (item.posterPending || (canEdit && decisions.length)) { %>
     <%# Moderation of a suggestion: the cover first (a viewer's upload is hidden from everyone else

@@ -1,0 +1,38 @@
+<%#
+  A grid tile's three scores on one line, "5 / 7.0 / 8.9": the streamer's, the viewers' average,
+  the outside one (IMDb for a film, Steam's share of positive reviews for a game). Each carries its
+  own mark so the three never read as one number repeated - Twitch's broadcaster badge, a viewers'
+  silhouette, the source's own logo block - and its own tooltip naming it. A missing score is a
+  dimmed dash rather than a gap, so the three always sit in the same order.
+  Expects: card (routes/mediaSection.js's shapeCard), sec, st.
+%>
+<%
+  const extSource = card.externalRating ? card.externalRating.source : (sec.fields.imdbId ? 'imdb' : 'steam');
+  const extValue = card.externalRating
+    ? (extSource === 'steam' ? Math.round(card.externalRating.value) + '%' : card.externalRating.value.toFixed(1))
+    : null;
+  const parts = [
+    { key: 'streamer', label: st('ratingStreamer'), value: card.streamerRating ? String(card.streamerRating) : null },
+    { key: 'viewers', label: st('ratingViewers'), value: card.viewerAverage !== null ? card.viewerAverage.toFixed(1) : null },
+    { key: 'external', label: st('ratingExternal'), value: extValue },
+  ];
+%>
+<p class="mt-1.5 flex items-center gap-1 text-xs font-bold tabular-nums text-white">
+  <% parts.forEach(function(p, i) { %>
+    <% if (i > 0) { %><span class="text-stone-500 font-normal" aria-hidden="true">/</span><% } %>
+    <span class="inline-flex items-center gap-1<%= p.value === null ? ' text-stone-500' : '' %>"
+          title="<%= p.value === null ? st('ratingTipNone', { label: p.label }) : st('ratingTip', { label: p.label, value: p.value }) %>">
+      <span class="sr-only"><%= p.label %>:</span>
+      <% if (p.key === 'streamer') { %>
+        <img src="https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/2" alt="" width="14" height="14" class="w-3.5 h-3.5 rounded-sm" />
+      <% } else if (p.key === 'viewers') { %>
+        <svg class="w-3.5 h-3.5 text-(--sec-accent-soft)" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 9a3 3 0 100-6 3 3 0 000 6zm7 0a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1 16c0-3 2.7-5 6-5s6 2 6 5v1H1v-1zm13.5-4.9c2.6.2 4.5 1.9 4.5 4.4V17h-4.3v-1c0-1.9-.8-3.5-2.1-4.6.6-.2 1.2-.3 1.9-.3z"/></svg>
+      <% } else if (extSource === 'steam') { %>
+        <span class="px-1 text-[9px] leading-[1.4] rounded-sm bg-[#1b2838] text-[#66c0f4] font-black ring-1 ring-[#66c0f4]/30" aria-hidden="true">Steam</span>
+      <% } else { %>
+        <span class="px-1 text-[9px] leading-[1.4] rounded-sm bg-[#f5c518] text-black font-black" aria-hidden="true">IMDb</span>
+      <% } %>
+      <%= p.value === null ? '—' : p.value %>
+    </span>
+  <% }) %>
+</p>

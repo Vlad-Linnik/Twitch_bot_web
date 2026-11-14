@@ -1091,6 +1091,18 @@
         "stale": "This was already decided - the page has been refreshed.",
         "reason_required": "Write a reason to reject it."
       }
+    },
+    "ratingExternal": "IMDb rating",
+    "ratingTipNone": "{{label}}: none yet",
+    "ratingTip": "{{label}}: {{value}}",
+    "imdbPending": "the IMDb rating is not loaded yet",
+    "info": {
+      "genres": "Genre",
+      "directors": "Director",
+      "cast": "Cast",
+      "characters": "Main characters",
+      "overview": "About",
+      "runtime": "{{n}} min"
     }
   },
   "gamesStream": {
@@ -1163,7 +1175,8 @@
     },
     "vote": {
       "promote": "Promote — I want it played"
-    }
+    },
+    "ratingExternal": "Steam reviews"
   },
   "comments": {
     "backToFeed": "Back to news",

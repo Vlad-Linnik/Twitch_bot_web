@@ -10,7 +10,7 @@
   for the only people who can see it (its author and 0-2) - everyone else gets the placeholder.
 
   The look is the section's own, not the news feed's: no bordered box, the poster IS the tile, the
-  title sits on it over a dark fade, and the streamer's score is a gold ticket stub in the corner.
+  title sits on it over a dark fade with the three scores under it (partials/ratingTrio).
   Amber/gold is this section's accent (news keeps neutral cards and purple).
 
   posterUrl is already the right copy: for an 18+ card it is the blurred file, never the normal one
@@ -47,14 +47,6 @@
             <span class="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 text-[10px] font-semibold ring-1 ring-amber-500/40"><%= st('coverPending') %></span>
           <% } %>
         </div>
-        <% if (card.streamerRating) { %>
-          <%# A ticket stub flush to the right edge - the score that is the streamer's own. %>
-          <span class="absolute top-2 right-0 flex items-center gap-1 pl-2 pr-2.5 py-1 rounded-l-md bg-(--sec-accent) text-stone-950 text-xs font-extrabold tabular-nums shadow"
-                title="<%= st('ratingStreamer') %>">
-            <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z"/></svg>
-            <%= card.streamerRating %>
-          </span>
-        <% } %>
 
         <div class="absolute inset-x-0 bottom-0 p-3">
           <% if (card.extras && card.extras.gameState) { %>
@@ -67,20 +59,13 @@
           <% } %>
           <h3 class="text-sm font-bold text-white leading-snug line-clamp-2 drop-shadow"><%= card.title %></h3>
           <p class="text-[11px] text-stone-300/80"><%= [card.year, typeLabel(card)].filter(Boolean).join(' · ') %></p>
+          <%- include('ratingTrio', { card }) %>
         </div>
       </div>
 
-      <%# Under the poster: the two outside numbers, compact. %>
+      <%# Under the poster: what is not a score - hours on stream (games), the comment count. %>
+      <% if ((card.extras && card.extras.minutes) || card.commentCount) { %>
       <p class="mt-2 px-0.5 flex items-center gap-2 text-[11px] tabular-nums">
-        <span class="inline-flex items-center gap-1 <%= card.viewerAverage !== null ? 'text-(--sec-accent-soft)' : 'text-stone-600' %>" title="<%= st('ratingViewers') %>">
-          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z"/></svg>
-          <%= card.viewerAverage !== null ? card.viewerAverage.toFixed(1) : '—' %>
-        </span>
-        <% if (card.externalRating) { %>
-          <span class="inline-flex items-center gap-1 text-stone-300">
-            <%- include('externalRating', { rating: card.externalRating, size: 'sm' }) %>
-          </span>
-        <% } %>
         <% if (card.extras && card.extras.minutes) { %>
           <span class="inline-flex items-center gap-1 text-(--sec-accent-soft)" title="<%= st('onStream') %>">
             <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 4v3.69l2.53 2.53-1.06 1.06-2.97-2.97V6h1.5z"/></svg>
@@ -94,6 +79,7 @@
           </span>
         <% } %>
       </p>
+      <% } %>
       <% if (card.excerpt) { %>
         <p class="mt-1 px-0.5 text-[11px] italic text-stone-400 line-clamp-2">«<%= card.excerpt %>»</p>
       <% } %>
