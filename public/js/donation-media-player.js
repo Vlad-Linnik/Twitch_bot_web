@@ -2,6 +2,7 @@
 // on a transparent page, and reports back when a clip ends and how far it has got. The queue and
 // every decision live on the server (lib/donationMediaQueue.js); this page only obeys:
 //   { type: "play", item }  { type: "pause" }  { type: "resume" }  { type: "seek", time }  { type: "stop" }
+//   { type: "cover", mode }  null | "hide" | "blur" | "image" - the picture over the clip, sound unchanged
 // and sends { type: "ended", id, error } and, once a second, { type: "progress", id, time, duration, title }.
 //
 // Loaded BEFORE the YouTube IFrame API script, so onYouTubeIframeAPIReady exists when it calls it.
@@ -25,6 +26,11 @@
 
   function show(visible) {
     container.style.display = visible ? "block" : "none";
+  }
+
+  function setCover(mode) {
+    container.classList.remove("cover-hide", "cover-blur", "cover-image");
+    if (mode === "hide" || mode === "blur" || mode === "image") container.classList.add(`cover-${mode}`);
   }
 
   window.onYouTubeIframeAPIReady = function () {
@@ -55,6 +61,7 @@
   function play(item) {
     current = item;
     wantPaused = false;
+    setCover(null);
     if (!item || !item.videoId) {
       finish(true);
       return;
@@ -100,6 +107,9 @@
         break;
       case "stop":
         stop();
+        break;
+      case "cover":
+        setCover(msg.mode);
         break;
       default:
         break;

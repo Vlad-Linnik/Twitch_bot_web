@@ -60,6 +60,9 @@ class Session {
         for (const item of this.queue.queue) {
           if (!item.title) fetchTitle(item.videoId).then((title) => title && this.queue.setTitle(item.id, title));
         }
+        for (const entry of this.queue.playlist) {
+          if (!entry.title) fetchTitle(entry.videoId).then((title) => title && this.queue.setPlaylistTitle(entry.id, title));
+        }
       })
       .catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load the queue:`, err.message))
       // Nothing plays right after a load (the clip that was playing went back into the queue), and
@@ -343,6 +346,21 @@ async function handlePanelCommand(session, ws, principal, msg) {
       return q.move(msg.id, { beforeId: msg.beforeId, index: Number.isInteger(msg.index) ? msg.index : null });
     case "clearHistory":
       return q.clearHistory();
+    case "cover":
+      return q.setCover(typeof msg.mode === "string" ? msg.mode : null);
+    case "autoPlaylist":
+      return q.setAutoPlaylist(msg.on === true);
+    case "playlistRemove":
+      return asId(msg.id) && q.removeFromPlaylist(msg.id);
+    case "playlistAdd": {
+      const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
+      if (!videoId) return reply({ ok: false, reason: "bad" });
+      if (q.playlist.some((p) => p.videoId === videoId)) return reply({ ok: false, reason: "duplicate" });
+      const entry = q.addToPlaylist(videoId);
+      reply(entry ? { ok: true } : { ok: false, reason: "full" });
+      if (entry) fetchTitle(videoId).then((title) => title && q.setPlaylistTitle(entry.id, title));
+      return;
+    }
     case "add": {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       reply({ ok: Boolean(videoId) });

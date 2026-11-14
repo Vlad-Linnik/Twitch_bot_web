@@ -211,3 +211,23 @@
 /* --- the OBS dock page: the panel is the whole page --------------------------------------------- */
 .dm-obs-page { margin: 0; background: #0a0a0a; font-family: "Segoe UI", system-ui, sans-serif; }
 .dm-obs-page .dm { padding: 10px; }
+
+/* --- what viewers see over the current clip --------------------------------------------------- */
+.dm-cover { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--dm-muted); }
+.dm-cover-label { margin-right: 2px; }
+.dm-btn.is-active { background: var(--dm-card-2); border-color: var(--dm-accent); color: var(--dm-text); font-weight: 600; }
+.dm-btn.is-cover.is-active { background: var(--dm-warn); border-color: var(--dm-warn); color: #111; }
+
+/* --- the channel's own playlist ---------------------------------------------------------------- */
+.dm-check { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.dm-check input { width: 16px; height: 16px; accent-color: var(--dm-accent); }
+.dm-check input:disabled + span { opacity: 0.7; }
+.dm-hint { font-size: 12px; color: var(--dm-muted); margin: 4px 0 8px; }
+.dm-hint:empty { display: none; }
+.dm-playlist > summary { cursor: pointer; list-style: none; }
+.dm-playlist > summary::-webkit-details-marker { display: none; }
+.dm-playlist > summary span:first-child::before { content: "▸ "; }
+.dm-playlist[open] > summary span:first-child::before { content: "▾ "; }
+.dm-playlist .dm-note { margin-bottom: 6px; }
+.dm-row.is-playing { border-color: var(--dm-accent); }
+.dm-badge.p-playlist { background: var(--dm-card-2); color: var(--dm-text); border: 1px solid var(--dm-accent); }

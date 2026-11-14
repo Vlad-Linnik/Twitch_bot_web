@@ -64,6 +64,42 @@
   const historyCount = el("span");
   const historyBox = el("div", { class: "dm-list" });
 
+  // The channel's own playlist. Built once and redrawn inside, so the open/closed state of the
+  // <details> survives every state update.
+  const playlistCount = el("span");
+  const autoBox = el("input", { type: "checkbox" });
+  autoBox.addEventListener("change", () => command("autoPlaylist", { on: autoBox.checked }));
+  const autoLabel = el("label", { class: "dm-check" }, autoBox, el("span", { text: t("playlistAuto") }));
+  const autoHint = el("div", { class: "dm-hint", text: t("playlistAutoHint") });
+  const playlistNote = el("div", { class: "dm-note is-warn" });
+  const playlistBox = el("div", { class: "dm-list" });
+  const playlistInput = el("input", { type: "text", placeholder: t("addPlaceholder"), autocomplete: "off", maxlength: "300" });
+  const playlistMsg = el("div", { class: "dm-hint" });
+  const playlistForm = el("form", { class: "dm-add" }, playlistInput, el("button", { class: "dm-btn", type: "submit", text: t("playlistAdd") }));
+  playlistForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const url = playlistInput.value.trim();
+    if (!url) return;
+    command("playlistAdd", { url }, (result) => {
+      playlistInput.classList.toggle("is-bad", !result.ok);
+      playlistMsg.textContent = result.reason === "duplicate" ? t("playlistDuplicate") : result.reason === "full" ? t("playlistFull") : "";
+      if (result.ok) playlistInput.value = "";
+    });
+  });
+  playlistInput.addEventListener("input", () => {
+    playlistInput.classList.remove("is-bad");
+    playlistMsg.textContent = "";
+  });
+  const playlistDetails = el(
+    "details",
+    { class: "dm-playlist" },
+    el("summary", { class: "dm-h" }, el("span", { text: t("playlist") }), playlistCount),
+    playlistNote,
+    playlistBox,
+    playlistForm,
+    playlistMsg
+  );
+
   const addInput = el("input", { type: "text", placeholder: t("addPlaceholder"), autocomplete: "off", maxlength: "300" });
   const addForm = el("form", { class: "dm-add" }, addInput, el("button", { class: "dm-btn", type: "submit", text: t("add") }));
   addForm.addEventListener("submit", (event) => {
@@ -83,6 +119,7 @@
     statusBox,
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("nowPlaying") })), nowBox),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("queue") }), queueCount), queueBox, addForm),
+    el("section", {}, autoLabel, autoHint, playlistDetails),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
   );
 
@@ -129,6 +166,10 @@
   // The line every row leads with: who paid, how much, through which platform.
   function donorLine(item) {
     const line = el("div", { class: "dm-donor-line" });
+    if (item.platform === "playlist") {
+      line.appendChild(el("span", { class: "dm-badge p-playlist", text: t("playlistBadge") }));
+      return line;
+    }
     if (item.platform === "manual") {
       line.appendChild(el("span", { class: "dm-donor is-anon", text: item.addedBy ? `${t("addedBy")} ${item.addedBy}` : t("manual") }));
     } else {
@@ -206,6 +247,31 @@
           el("button", { class: "dm-btn", type: "button", text: `↺ ${t("restart")}`, onclick: () => command("seek", { time: 0 }) })
         )
       );
+      const modes = [
+        [null, t("coverNone")],
+        ["hide", `🙈 ${t("coverHide")}`],
+        ["blur", `🌫 ${t("coverBlur")}`],
+        ["image", `🖼 ${t("coverImage")}`],
+      ];
+      card.appendChild(
+        el(
+          "div",
+          { class: "dm-cover", title: t("coverHint") },
+          el("span", { class: "dm-cover-label", text: t("coverLabel") }),
+          ...modes.map(([mode, label]) =>
+            el("button", {
+              class: "dm-btn is-small" + ((state.cover || null) === mode ? " is-active" : "") + (mode ? " is-cover" : ""),
+              type: "button",
+              text: label,
+              "aria-pressed": (state.cover || null) === mode ? "true" : "false",
+              onclick: () => command("cover", { mode }),
+            })
+          )
+        )
+      );
+    } else if (state.cover) {
+      const names = { hide: t("coverHide"), blur: t("coverBlur"), image: t("coverImage") };
+      card.appendChild(el("div", { class: "dm-cover" }, el("span", { class: "dm-cover-label", text: `${t("coverActive")} ${names[state.cover] || state.cover}` })));
     }
     nowBox.appendChild(card);
     renderProgress();
@@ -396,6 +462,34 @@
     }, 1500);
   }
 
+  function renderPlaylist() {
+    const list = state.playlist || [];
+    autoBox.checked = state.autoPlaylist === true;
+    autoBox.disabled = !canControl;
+    playlistCount.textContent = list.length ? String(list.length) : "";
+    playlistForm.hidden = !canControl;
+    playlistNote.textContent = state.playlistStalled ? t("playlistStalled") : "";
+    playlistNote.hidden = !state.playlistStalled;
+    const playingId = state.current && state.current.fromPlaylist ? state.current.playlistId : null;
+    playlistBox.replaceChildren();
+    if (list.length === 0) {
+      playlistBox.appendChild(el("div", { class: "dm-empty", text: t("playlistEmpty") }));
+      return;
+    }
+    for (const entry of list) {
+      const actions = el("div", { class: "dm-row-actions" });
+      if (canControl) {
+        actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("playlistRemove", { id: entry.id }) }));
+      }
+      const r = row({ id: entry.id, videoId: entry.videoId, title: entry.title, platform: "playlist" }, { actions });
+      r.removeAttribute("data-dm-id");
+      const badge = r.querySelector(".dm-donor-line");
+      if (badge) badge.remove();
+      if (entry.id === playingId) r.classList.add("is-playing");
+      playlistBox.appendChild(r);
+    }
+  }
+
   function renderHistory() {
     historyBox.replaceChildren();
     historyCount.replaceChildren();
@@ -431,6 +525,7 @@
     renderStatus();
     renderNow();
     renderQueue();
+    renderPlaylist();
     renderHistory();
   }
 

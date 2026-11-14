@@ -57,6 +57,9 @@ const PANEL_STRING_KEYS = [
   "queue", "queueEmpty", "moveTop", "dragHint", "remove", "add", "addPlaceholder",
   "history", "historyEmpty", "clearHistory", "requeue", "requeueHint", "playNext", "playNextHint",
   "anonymous", "manual", "addedBy", "replay",
+  "coverLabel", "coverNone", "coverHide", "coverBlur", "coverImage", "coverHint", "coverActive",
+  "playlist", "playlistAuto", "playlistAutoHint", "playlistEmpty", "playlistAdd", "playlistDuplicate",
+  "playlistFull", "playlistStalled", "playlistBadge",
   "status.skipped", "status.removed", "status.error",
 ];
 

@@ -3024,7 +3024,26 @@
         "skipped": "skipped",
         "removed": "removed from the queue",
         "error": "YouTube refused to play it"
-      }
+      },
+      "coverLabel": "What viewers see:",
+      "coverNone": "As is",
+      "coverHide": "Hide",
+      "coverBlur": "Blur",
+      "coverImage": "Placeholder",
+      "coverHint": "The sound goes on - only the picture in OBS changes. Reset for the next clip.",
+      "coverActive": "Viewers see:",
+      "playlist": "Own playlist",
+      "playlistAuto": "Play my own playlist automatically",
+      "playlistAutoHint": "While no donations are queued, the own playlist plays shuffled. A donation cuts the track off at once, and after the donations the track continues from the same spot.",
+      "playlistEmpty": "The playlist is empty - add clips below.",
+      "playlistAdd": "+ To playlist",
+      "playlistDuplicate": "This clip is already in the playlist.",
+      "playlistFull": "The playlist is full.",
+      "playlistStalled": "No playlist track will start (removed or not embeddable) - the playlist has stopped. Change the list to try again.",
+      "playlistBadge": "Playlist"
+    },
+    "player": {
+      "coverText": "Clip hidden"
     }
   }
 }

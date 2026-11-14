@@ -12,11 +12,30 @@
   <title>Donation media · <%= channelLogin %></title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-    #player-container { width: 100%; height: 100%; display: none; }
+    #player-container { position: relative; width: 100%; height: 100%; display: none; }
+    #ytplayer { width: 100%; height: 100%; }
+    /* What a moderator put over the current clip (lib/donationMediaQueue.js's cover). The sound
+       goes on in every mode; only the picture changes. */
+    #player-container.cover-hide #ytplayer { opacity: 0; }
+    #player-container.cover-blur #ytplayer { filter: blur(48px) saturate(0.6); transform: scale(1.35); }
+    #player-container.cover-image #ytplayer { opacity: 0; }
+    #player-cover {
+      display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+      flex-direction: column; gap: 0.4em; background: radial-gradient(circle at 50% 40%, #2b2140, #0d0b12 70%);
+      color: #f4f0ff; font: 600 clamp(18px, 5vw, 64px)/1.2 system-ui, sans-serif; text-align: center;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+    }
+    #player-cover .icon { font-size: 2.2em; }
+    #player-container.cover-image #player-cover { display: flex; }
+    /* blur leaves a hard edge at the frame; the container clips it */
+    #player-container { overflow: hidden; }
   </style>
 </head>
 <body data-key="<%= key %>">
-  <div id="player-container"><div id="ytplayer"></div></div>
+  <div id="player-container">
+    <div id="ytplayer"></div>
+    <div id="player-cover" aria-hidden="true"><span class="icon">🙈</span><span><%= t('donationMedia.player.coverText') %></span></div>
+  </div>
   <script src="<%= asset('/js/donation-media-player.js') %>"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
 </body>
