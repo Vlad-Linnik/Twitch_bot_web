@@ -519,14 +519,15 @@
   announce.addEventListener("change", updateConflict);
 
   // --- The announcement colour is only usable while "announce" is ticked - the same gate the
-  // per-category rows have behind their own checkbox. A disabled <select> is left out of the
+  // per-category rows have behind their own checkbox. A disabled fieldset's radios are left out of the
   // submitted form, so a non-announcement saves with the default colour, which is what the server
   // falls back to anyway. Called from every place that changes `announce` programmatically
   // (form.reset, loading a row for editing), since those fire no change event.
   const announceColorField = document.getElementById("announceColorField");
 
   function syncAnnounceColor() {
-    announceColor.disabled = !announce.checked;
+    // The field is a <fieldset> of radio swatches: disabling it disables every radio inside.
+    announceColorField.disabled = !announce.checked;
     if (announceColorField) announceColorField.classList.toggle("opacity-40", !announce.checked);
   }
 
@@ -787,7 +788,10 @@
         timer.value = button.dataset.timer;
         pin.checked = button.dataset.pin === "1";
         announce.checked = button.dataset.announce === "1";
-        if (button.dataset.announceColor) announceColor.value = button.dataset.announceColor;
+        if (button.dataset.announceColor) {
+          const swatch = announceColor.querySelector(`input[value="${CSS.escape(button.dataset.announceColor)}"]`);
+          if (swatch) swatch.checked = true;
+        }
         modOnly.checked = button.dataset.modOnly === "1";
         // No group field to fill: a command's group is changed from the row's "..." menu or by
         // dragging it, never by loading it into this form (routes/customCommands.js carries the

@@ -208,16 +208,23 @@
             above, which stay closed until their checkbox is ticked - it is only usable while
             "announce" is ticked (public/js/custom-commands.js's syncAnnounceColor). Disabled
             rather than hidden so the mod can see the option exists; disabled by JS only, so
-            without scripting the select stays usable. %>
-        <label class="flex items-center gap-2 text-sm text-neutral-500 transition-opacity" id="announceColorField">
-          <%= t('customCommands.announceColor') %>
-          <select name="announceColor" id="announceColor"
-                  class="bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-600 disabled:cursor-not-allowed">
-            <% announcementColors.forEach(function(color) { %>
-              <option value="<%= color %>"><%= t('customCommands.color.' + color) %></option>
+            without scripting the swatches stay usable.
+            The swatches are plain radios (one name, so arrow keys move between them and a
+            disabled fieldset drops the value from the submission, same as the old <select>),
+            visually hidden behind a painted chip - see .announce-swatch in public/css/input.css.
+            The first colour is pre-checked because it was the <select>'s implicit default. %>
+        <fieldset class="flex items-center gap-2 text-sm text-neutral-500 transition-opacity border-0 p-0 m-0 min-w-0" id="announceColorField">
+          <legend class="float-left mr-2"><%= t('customCommands.announceColor') %></legend>
+          <span class="flex items-center gap-1.5" id="announceColor">
+            <% announcementColors.forEach(function(color, i) { %>
+              <label class="announce-swatch-label" title="<%= t('customCommands.color.' + color) %>">
+                <input type="radio" name="announceColor" value="<%= color %>" class="sr-only"
+                       aria-label="<%= t('customCommands.color.' + color) %>"<%= i === 0 ? ' checked' : '' %> />
+                <span class="announce-swatch announce-swatch--<%= color %>" aria-hidden="true"></span>
+              </label>
             <% }) %>
-          </select>
-        </label>
+          </span>
+        </fieldset>
       </div>
       <%# Announce and pin can't coexist either - an announcement is a self-contained Helix send
           with no message ID to pin (see lib/commandValidation.js). %>
