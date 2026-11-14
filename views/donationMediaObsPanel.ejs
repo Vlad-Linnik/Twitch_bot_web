@@ -1,0 +1,23 @@
+<!doctype html>
+<%#
+  The donation media queue panel as an OBS dock (routes/donationMedia.js): the same panel as the
+  site's settings page (public/js/donation-media-panel.js), with the key from the link instead of
+  a login. Like the player, a page of its own rather than the site layout: a dock is a narrow
+  strip inside OBS, and the site's navigation would take half of it.
+%>
+<html lang="<%= locale %>">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title><%= t('donationMedia.panel.title') %> · <%= channelLogin %></title>
+  <link rel="stylesheet" href="<%= asset('/css/donation-media.css') %>" />
+</head>
+<body class="dm-obs-page">
+  <div id="dm-panel" class="dm"
+       data-ws-query="key=<%= encodeURIComponent(key) %>"
+       data-locale="<%= locale %>"
+       data-i18n="<%= JSON.stringify(panelStrings) %>"></div>
+  <script src="<%= asset('/js/donation-media-panel.js') %>" defer></script>
+</body>
+</html>

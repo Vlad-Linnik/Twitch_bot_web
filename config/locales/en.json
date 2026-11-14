@@ -1416,7 +1416,8 @@
       "long_ban": "Long ban",
       "unban_request": "Unban appeal",
       "comment": "Discussion",
-      "media": "Movies & games"
+      "media": "Movies & games",
+      "donation_media": "Donation media"
     },
     "action": {
       "add": "Added",
@@ -1436,7 +1437,10 @@
       "reject": "Rejected",
       "reopen": "Reopened",
       "approvePoster": "Cover approved",
-      "removePoster": "Cover removed"
+      "removePoster": "Cover removed",
+      "connect": "Connected",
+      "disconnect": "Disconnected",
+      "regenerate": "New links"
     },
     "colChanges": "What changed",
     "rawDetails": "Raw data",
@@ -1515,7 +1519,10 @@
       "mediaRejected": "Suggestion \"{{target}}\" rejected",
       "mediaReopened": "Suggestion \"{{target}}\" reopened",
       "mediaPosterApproved": "Cover of \"{{target}}\" approved",
-      "mediaPosterRemoved": "Cover of \"{{target}}\" removed"
+      "mediaPosterRemoved": "Cover of \"{{target}}\" removed",
+      "donationMediaConnected": "Donation media: connected {{target}}",
+      "donationMediaDisconnected": "Donation media: disconnected {{target}}",
+      "donationMediaRegenerated": "Donation media: issued new OBS links, the old ones no longer work"
     }
   },
   "settingsNav": {
@@ -1546,8 +1553,11 @@
       "chatStats": "Chat statistics",
       "fun": "Fun",
       "bot": "Bot",
-      "management": "Management"
-    }
+      "management": "Management",
+      "donationMedia": "Donation media"
+    },
+    "donationMediaQueue": "Clip queue",
+    "donationMediaSetup": "Setup"
   },
   "moderatorPermissions": {
     "title": "Moderator permissions",
@@ -1589,6 +1599,11 @@
         "label": "Discussions",
         "hint": "Deleting comments, restricting commenters and lifting restrictions, movie cards: add, edit, delete.",
         "affects": "Delete comments in news and movies, and see deleted ones\nRestrict commenters and lift restrictions\nMovie cards: add, edit, delete"
+      },
+      "donationMedia": {
+        "label": "Donation media",
+        "hint": "Controlling the queue of donated clips: pause, skip, order, adding by hand.",
+        "affects": "Pause, resume, seek and skip a clip\nRemove a clip from the queue or move it to the top\nAdd a clip by hand, put a clip from history back"
       }
     }
   },
@@ -2896,6 +2911,115 @@
       "touser": "Petya",
       "args": "one two three",
       "game": "Path of Exile"
+    }
+  },
+  "donationMedia": {
+    "setup": {
+      "title": "Donation media — setup",
+      "subtitle": "clips from DonationAlerts, Donatello and DonatePay donations in one queue",
+      "step1": "Connect the platforms your viewers send clips through: paste the key from their dashboard.",
+      "step2": "Add the player link to OBS as a Browser source, and the panel link as a dock.",
+      "step3": "Clips from every platform join one queue; you and your moderators control it from the panel.",
+      "linksHeading": "OBS links",
+      "linksIntro": "These links are personal — they open the player and the queue controls without logging in.",
+      "playerLink": "Player (Browser source)",
+      "playerHint": "In OBS: Sources → + → Browser, paste the link, size 1920×1080. Turn on \"Control audio via OBS\" and turn off \"Shutdown source when not visible\" — otherwise the clip stops when you switch scenes.",
+      "panelLink": "Control panel (dock)",
+      "panelHint": "In OBS: Docks → Custom Browser Docks, paste the link. The same panel your moderators get on the site.",
+      "moderatorsHint": "Channel moderators control the queue on the site, no links needed:",
+      "moderatorsLink": "clip queue",
+      "secretWarning": "Do not share these links or show them on stream: anyone with the panel link can skip and add clips. If a link leaks, issue new ones.",
+      "regenerate": "Issue new links",
+      "regenerateConfirm": "The old links stop working at once; you will have to paste the player and the dock into OBS again. Continue?",
+      "copy": "Copy",
+      "copied": "Copied",
+      "platformsHeading": "Platforms",
+      "platformsIntro": "Keys are stored encrypted and never shown again — only the last characters, so you can tell which one is saved.",
+      "doublePlayWarning": "Remove the platforms' own media widgets from OBS if you have them, or every clip will play twice.",
+      "storedKey": "saved",
+      "connect": "Connect",
+      "update": "Save",
+      "disconnect": "Disconnect",
+      "disconnectConfirm": "Disconnect this platform? Its clips will stop arriving and the key will be deleted.",
+      "lastError": "Last error",
+      "state": {
+        "off": "not connected",
+        "connected": "connected",
+        "connecting": "connecting…"
+      },
+      "saved": {
+        "connected": "Saved. Connecting to the platform.",
+        "cleared": "Platform disconnected, key deleted.",
+        "links": "New links issued. Paste them into OBS again."
+      },
+      "da": {
+        "token": "Widget link or token",
+        "currency": "Currency",
+        "hint": "DonationAlerts → Widgets → Alerts (or Media): copy the widget link — it contains token=…. The currency is what to show the donation in: DonationAlerts sends the amount in several at once. To change only the currency, leave the key field empty."
+      },
+      "dn": {
+        "userId": "User ID",
+        "widget": "Media widget link or its ID",
+        "hint": "The Donatello user ID and media widget ID are 24-character strings (digits and letters a–f)."
+      },
+      "dp": {
+        "widget": "Media widget link",
+        "hint": "DonatePay → Widgets → Media: a link like https://widget.donatepay.eu/widgets/media/… Amounts are shown in roubles."
+      },
+      "errors": {
+        "empty": "The field is empty.",
+        "daToken": "No DonationAlerts token found: paste the whole widget link (with token=…) or the token itself.",
+        "donatelloUser": "No Donatello user ID found: it is a single 24-character string.",
+        "donatelloWidget": "No Donatello media widget ID found in the link.",
+        "dpHost": "This is not a DonatePay widget link.",
+        "dpToken": "No DonatePay media widget token found in the link."
+      }
+    },
+    "queuePage": {
+      "title": "Clip queue",
+      "subtitle": "donation media",
+      "notConfigured": "No platform is connected yet — donated clips will not arrive here, but you can add a clip by hand.",
+      "goSetup": "Connect platforms",
+      "noscript": "The panel needs JavaScript."
+    },
+    "panel": {
+      "title": "Donation media",
+      "offline": "No connection to the server — reconnecting…",
+      "readOnly": "View only: you are not allowed to control the queue.",
+      "keyReplaced": "This link no longer works — the channel owner issued new ones.",
+      "player": "Player",
+      "playerOff": "The OBS player is not open",
+      "nowPlaying": "Now playing",
+      "nothingPlaying": "Nothing is playing",
+      "waitingForPlayer": "The OBS player is not open — clips are waiting in the queue",
+      "paused": "PAUSED",
+      "pause": "Pause",
+      "resume": "Resume",
+      "skip": "Skip",
+      "restart": "Restart",
+      "seek": "Seek",
+      "queue": "Queue",
+      "queueEmpty": "The queue is empty",
+      "moveTop": "Move to the top of the queue",
+      "remove": "Remove from the queue",
+      "add": "+ Queue",
+      "addPlaceholder": "YouTube link or clip ID",
+      "history": "History",
+      "historyEmpty": "Nothing has played yet",
+      "clearHistory": "clear",
+      "requeue": "Queue",
+      "requeueHint": "Add to the end of the queue",
+      "playNext": "Play next",
+      "playNextHint": "Add to the top of the queue",
+      "anonymous": "Anonymous",
+      "manual": "By hand",
+      "addedBy": "added by",
+      "replay": "replay",
+      "status": {
+        "skipped": "skipped",
+        "removed": "removed from the queue",
+        "error": "YouTube refused to play it"
+      }
     }
   }
 }

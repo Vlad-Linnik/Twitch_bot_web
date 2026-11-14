@@ -12,6 +12,7 @@ const durakRoomManager = require("./durakRoomManager");
 const sunduchkiRoomManager = require("./sunduchkiRoomManager");
 const { createQuickMatchManager } = require("./quickMatchManager");
 const spectatorHubManager = require("./spectatorHubManager");
+const donationMediaManager = require("./donationMediaManager");
 const battleshipEngine = require("../lib/battleshipEngine");
 const pongEngine = require("../lib/pongEngine");
 const connectFourEngine = require("../lib/connectFourEngine");
@@ -42,6 +43,10 @@ function buildHandlers() {
   // match manager above, plus durakRoomManager, publishes its live matches to
   // realtime/liveMatchRegistry.js, which this handler aggregates.
   handlers.set("/ws/spectator-hub", spectatorHubManager);
+  // Donation media (realtime/donationMediaManager.js): the OBS player and panel dock connect here
+  // with the key from their link and no session, so this handler decides admission itself - see
+  // authorizeUpgrade below.
+  handlers.set("/ws/donation-media", donationMediaManager);
   return handlers;
 }
 
@@ -102,19 +107,35 @@ function attachSocketServer(httpServer, sessionMiddleware) {
       return;
     }
 
-    sessionMiddleware(req, makeFakeResponse(), () => {
-      const user = req.session && req.session.user;
-      if (!user || !user.userId) {
-        socket.destroy();
-        return;
-      }
+    const accept = (principal) => {
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.isAlive = true;
         ws.on("pong", () => {
           ws.isAlive = true;
         });
-        handler.handleConnection(ws, user);
+        handler.handleConnection(ws, principal);
       });
+    };
+
+    sessionMiddleware(req, makeFakeResponse(), () => {
+      const user = req.session && req.session.user;
+      // A handler with its own admission rule (authorizeUpgrade(req, sessionUserOrNull) ->
+      // principal | null) may admit a client without a session - the same-origin check above
+      // still applies to it. Every other handler requires a logged-in user, as before.
+      if (typeof handler.authorizeUpgrade === "function") {
+        Promise.resolve(handler.authorizeUpgrade(req, user && user.userId ? user : null))
+          .then((principal) => (principal ? accept(principal) : socket.destroy()))
+          .catch((err) => {
+            console.error("[socketServer] authorizeUpgrade failed:", err);
+            socket.destroy();
+          });
+        return;
+      }
+      if (!user || !user.userId) {
+        socket.destroy();
+        return;
+      }
+      accept(user);
     });
   });
 

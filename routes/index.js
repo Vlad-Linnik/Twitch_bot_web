@@ -31,6 +31,7 @@ router.use("/", require("./seasonalTheme"));
 router.use("/", require("./customCommands"));
 router.use("/", require("./variables"));
 router.use("/", require("./longBans"));
+router.use("/", require("./donationMedia"));
 router.use("/", require("./unbanBureau"));
 router.use("/", require("./news"));
 router.use("/", require("./movies"));

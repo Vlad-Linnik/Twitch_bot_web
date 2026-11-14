@@ -1,0 +1,206 @@
+/* Donation media queue panel (public/js/donation-media-panel.js). One stylesheet for the panel on
+   the site (inside the settings shell) and in the OBS dock (a page of its own, no Tailwind), so the
+   two look the same. Everything is scoped under .dm. */
+
+.dm {
+  --dm-bg: #0a0a0a;
+  --dm-card: #171717;
+  --dm-card-2: #232323;
+  --dm-line: #2e2e2e;
+  --dm-text: #e5e5e5;
+  --dm-muted: #8a8a8a;
+  --dm-accent: #9333ea;
+  --dm-ok: #22c55e;
+  --dm-bad: #ef4444;
+  --dm-warn: #f59e0b;
+  --dm-money: #34d399;
+  --dm-da: #f57d07;
+  --dm-dp: #2fb5d2;
+  --dm-dn: #3579f6;
+  --dm-manual: #6b7280;
+  color: var(--dm-text);
+  font-size: 13px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dm * { box-sizing: border-box; }
+.dm button { font: inherit; color: inherit; cursor: pointer; }
+.dm button:disabled { cursor: default; opacity: 0.5; }
+
+.dm-offline {
+  display: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dm-bad);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
+.dm-offline.is-shown { display: block; }
+.dm-note {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #78350f;
+  background: rgba(120, 53, 15, 0.25);
+  color: #fcd34d;
+}
+
+.dm-status { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--dm-muted); font-size: 12px; }
+.dm-status-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dm-bad); flex: none; }
+.dm-dot.is-on { background: var(--dm-ok); }
+
+.dm-h {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dm-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dm-empty {
+  color: var(--dm-muted);
+  padding: 14px;
+  text-align: center;
+  background: var(--dm-card);
+  border: 1px dashed var(--dm-line);
+  border-radius: 8px;
+}
+
+/* --- who paid: the line every row leads with ---------------------------------------------------- */
+.dm-donor-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.dm-donor { font-weight: 700; color: #fff; overflow-wrap: anywhere; }
+.dm-donor.is-anon { color: var(--dm-muted); font-weight: 500; font-style: italic; }
+.dm-amount {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: var(--dm-money);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dm-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  background: var(--dm-manual);
+}
+.dm-badge.p-DonationAlerts { background: var(--dm-da); }
+.dm-badge.p-DonatePay { background: var(--dm-dp); }
+.dm-badge.p-Donatello { background: var(--dm-dn); }
+.dm-badge.is-replay { background: var(--dm-card-2); color: var(--dm-muted); border: 1px solid var(--dm-line); }
+
+.dm-title { color: var(--dm-muted); overflow-wrap: anywhere; }
+.dm-title a { color: inherit; text-decoration: none; }
+.dm-title a:hover { text-decoration: underline; color: var(--dm-text); }
+.dm-message {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--dm-accent);
+  background: var(--dm-card-2);
+  border-radius: 0 6px 6px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dm-thumb {
+  width: 128px;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  border-radius: 6px;
+  background: #000 center / cover no-repeat;
+}
+
+/* --- now playing ------------------------------------------------------------------------------- */
+.dm-now { background: var(--dm-card); border: 1px solid var(--dm-line); border-radius: 10px; padding: 12px; }
+.dm-now-top { display: flex; gap: 12px; }
+.dm-now-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.dm-now .dm-donor { font-size: 17px; }
+.dm-now .dm-amount { font-size: 15px; padding: 2px 10px; }
+.dm-now .dm-title { font-size: 14px; color: var(--dm-text); }
+
+.dm-bar { margin-top: 12px; height: 8px; border-radius: 4px; background: var(--dm-card-2); overflow: hidden; }
+.dm-bar.is-seekable { cursor: pointer; }
+.dm-bar-fill { height: 100%; width: 0; background: var(--dm-accent); }
+.dm-times {
+  display: flex;
+  justify-content: space-between;
+  color: var(--dm-muted);
+  font-size: 12px;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.dm-paused { color: var(--dm-warn); font-weight: 700; }
+
+.dm-controls { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.dm-btn {
+  background: var(--dm-card-2);
+  border: 1px solid var(--dm-line);
+  border-radius: 6px;
+  padding: 6px 12px;
+  min-height: 30px;
+}
+.dm-btn:hover:not(:disabled) { border-color: var(--dm-accent); }
+.dm-btn.is-primary { background: var(--dm-accent); border-color: var(--dm-accent); color: #fff; font-weight: 600; }
+.dm-btn.is-danger:hover:not(:disabled) { border-color: var(--dm-bad); color: var(--dm-bad); }
+.dm-btn.is-small { padding: 3px 8px; min-height: 26px; font-size: 12px; }
+
+/* --- lists ------------------------------------------------------------------------------------- */
+.dm-list { display: flex; flex-direction: column; gap: 4px; }
+.dm-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--dm-card);
+  border: 1px solid var(--dm-line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.dm-row .dm-num { color: var(--dm-muted); width: 20px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.dm-row .dm-thumb { width: 72px; border-radius: 4px; }
+.dm-row-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.dm-row .dm-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-row .dm-msg-short { font-size: 12px; color: var(--dm-text); opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-row-actions { display: flex; gap: 4px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.dm-st { font-size: 12px; color: var(--dm-muted); }
+.dm-st.s-skipped, .dm-st.s-removed { color: var(--dm-warn); }
+.dm-st.s-error { color: var(--dm-bad); }
+
+.dm-add { display: flex; gap: 6px; margin-top: 8px; }
+.dm-add input {
+  flex: 1;
+  min-width: 0;
+  background: var(--dm-card);
+  border: 1px solid var(--dm-line);
+  border-radius: 6px;
+  color: var(--dm-text);
+  font: inherit;
+  padding: 6px 8px;
+}
+.dm-add input:focus { outline: none; border-color: var(--dm-accent); }
+.dm-add input.is-bad { border-color: var(--dm-bad); }
+
+@media (max-width: 560px) {
+  .dm-now-top { flex-direction: column; }
+  .dm-thumb { width: 100%; }
+  .dm-row { flex-wrap: wrap; }
+  .dm-row .dm-thumb { width: 64px; }
+  .dm-row-actions { width: 100%; }
+}
+
+/* --- the OBS dock page: the panel is the whole page --------------------------------------------- */
+.dm-obs-page { margin: 0; background: #0a0a0a; font-family: "Segoe UI", system-ui, sans-serif; }
+.dm-obs-page .dm { padding: 10px; }

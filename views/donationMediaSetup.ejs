@@ -1,0 +1,179 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('donationMedia.setup.title') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The owner's donation media setup (routes/donationMedia.js): the three platforms' keys and the two
+  OBS links. Stored keys are never sent back to the browser - a connected platform shows a masked
+  tail and a field to paste a replacement.
+%>
+<%
+  const inputClass = 'w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
+  const labelClass = 'block text-xs uppercase tracking-wide text-neutral-500 mb-1';
+  const buttonClass = 'px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium';
+  const ghostButtonClass = 'px-3 py-2 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-sm';
+  const dangerButtonClass = 'px-3 py-2 rounded-md border border-red-900 hover:border-red-700 text-red-400 text-sm';
+  const cards = [
+    { key: 'donationAlerts', name: 'DonationAlerts' },
+    { key: 'donatello', name: 'Donatello' },
+    { key: 'donatePay', name: 'DonatePay' },
+  ];
+%>
+
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
+
+  <header class="mb-8">
+    <h1 class="settings-heading text-3xl font-bold text-neutral-100 mb-1"><%= t('donationMedia.setup.title') %></h1>
+    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('donationMedia.setup.subtitle') %></p>
+  </header>
+
+  <% if (saved) { %>
+    <p class="mb-6 rounded-lg border border-green-800/50 bg-green-900/20 text-green-400 px-4 py-2.5 text-sm">
+      <%= t('donationMedia.setup.saved.' + (['connected', 'cleared', 'links'].includes(saved) ? saved : 'connected')) %>
+    </p>
+  <% } %>
+
+  <ol class="mb-10 space-y-2 text-sm text-neutral-400 list-decimal list-inside">
+    <li><%= t('donationMedia.setup.step1') %></li>
+    <li><%= t('donationMedia.setup.step2') %></li>
+    <li><%= t('donationMedia.setup.step3') %></li>
+  </ol>
+
+  <!-- OBS links -->
+  <section id="links" class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6 scroll-mt-24">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('donationMedia.setup.linksHeading') %></h2>
+    <p class="text-sm text-neutral-500 mb-5"><%= t('donationMedia.setup.linksIntro') %></p>
+
+    <div class="space-y-5">
+      <div>
+        <label for="dm-player-link" class="<%= labelClass %>"><%= t('donationMedia.setup.playerLink') %></label>
+        <div class="flex gap-2">
+          <input id="dm-player-link" type="text" readonly value="<%= links.player %>" class="<%= inputClass %> font-mono" />
+          <button type="button" hidden class="<%= ghostButtonClass %> shrink-0" data-copy-target="dm-player-link" data-copied-label="<%= t('donationMedia.setup.copied') %>"><%= t('donationMedia.setup.copy') %></button>
+        </div>
+        <p class="text-xs text-neutral-500 mt-1"><%= t('donationMedia.setup.playerHint') %></p>
+      </div>
+
+      <div>
+        <label for="dm-panel-link" class="<%= labelClass %>"><%= t('donationMedia.setup.panelLink') %></label>
+        <div class="flex gap-2">
+          <input id="dm-panel-link" type="text" readonly value="<%= links.panel %>" class="<%= inputClass %> font-mono" />
+          <button type="button" hidden class="<%= ghostButtonClass %> shrink-0" data-copy-target="dm-panel-link" data-copied-label="<%= t('donationMedia.setup.copied') %>"><%= t('donationMedia.setup.copy') %></button>
+        </div>
+        <p class="text-xs text-neutral-500 mt-1"><%= t('donationMedia.setup.panelHint') %></p>
+      </div>
+
+      <p class="text-sm text-neutral-400">
+        <%= t('donationMedia.setup.moderatorsHint') %>
+        <a class="text-purple-400 hover:text-purple-300 underline" href="/<%= channel.channelLogin %>/settings/donation-media/queue"><%= t('donationMedia.setup.moderatorsLink') %></a>
+      </p>
+
+      <p class="rounded-md border border-amber-800 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+        <%= t('donationMedia.setup.secretWarning') %>
+      </p>
+
+      <form method="post" action="/<%= channel.channelLogin %>/settings/donation-media" data-confirm="<%= t('donationMedia.setup.regenerateConfirm') %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="action" value="regenerate" />
+        <button type="submit" class="<%= dangerButtonClass %>"><%= t('donationMedia.setup.regenerate') %></button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Platforms -->
+  <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('donationMedia.setup.platformsHeading') %></h2>
+  <p class="text-sm text-neutral-500 mb-2"><%= t('donationMedia.setup.platformsIntro') %></p>
+  <p class="text-sm text-amber-300/90 mb-5"><%= t('donationMedia.setup.doublePlayWarning') %></p>
+
+  <div class="space-y-6">
+    <% cards.forEach(function (card) {
+         const stored = platforms[card.key];
+         const live = status[card.name];
+         const hasError = error && errorPlatform === card.key; %>
+    <section id="<%= card.key %>" class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 scroll-mt-24">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="text-base font-semibold text-neutral-100"><%= card.name %></h3>
+        <% if (!stored) { %>
+          <span class="text-xs rounded-full border border-neutral-700 text-neutral-500 px-2.5 py-0.5"><%= t('donationMedia.setup.state.off') %></span>
+        <% } else if (live && live.connected) { %>
+          <span class="text-xs rounded-full border border-green-800 bg-green-900/30 text-green-400 px-2.5 py-0.5"><%= t('donationMedia.setup.state.connected') %></span>
+        <% } else { %>
+          <span class="text-xs rounded-full border border-amber-800 bg-amber-950/40 text-amber-300 px-2.5 py-0.5" title="<%= live && live.error ? live.error : '' %>"><%= t('donationMedia.setup.state.connecting') %></span>
+        <% } %>
+      </div>
+
+      <% if (stored && live && live.error && !live.connected) { %>
+        <p class="mb-4 text-xs text-amber-300/80 break-all"><%= t('donationMedia.setup.lastError') %>: <%= live.error %></p>
+      <% } %>
+      <% if (hasError) { %>
+        <p class="mb-4 rounded-lg border border-red-800/50 bg-red-900/20 text-red-400 px-4 py-2.5 text-sm"><%= t('donationMedia.setup.errors.' + error) %></p>
+      <% } %>
+
+      <form method="post" action="/<%= channel.channelLogin %>/settings/donation-media#<%= card.key %>" class="space-y-4" autocomplete="off">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+        <% if (card.key === 'donationAlerts') { %>
+          <input type="hidden" name="action" value="saveDonationAlerts" />
+          <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_9rem] gap-4">
+            <div>
+              <label for="da-token" class="<%= labelClass %>"><%= t('donationMedia.setup.da.token') %></label>
+              <input id="da-token" name="token" type="password" spellcheck="false" class="<%= inputClass %>"
+                     placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.masked : 'https://www.donationalerts.com/widget/...?token=...' %>" />
+            </div>
+            <div>
+              <label for="da-currency" class="<%= labelClass %>"><%= t('donationMedia.setup.da.currency') %></label>
+              <select id="da-currency" name="currency" class="<%= inputClass %>">
+                <% currencies.forEach(function (code) { %>
+                  <option value="<%= code %>" <%= (stored ? stored.currency : 'RUB') === code ? 'selected' : '' %>><%= code %></option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+          <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.da.hint') %></p>
+        <% } else if (card.key === 'donatello') { %>
+          <input type="hidden" name="action" value="saveDonatello" />
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="dn-user" class="<%= labelClass %>"><%= t('donationMedia.setup.dn.userId') %></label>
+              <input id="dn-user" name="userId" type="password" spellcheck="false" class="<%= inputClass %>"
+                     placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.masked : '' %>" />
+            </div>
+            <div>
+              <label for="dn-widget" class="<%= labelClass %>"><%= t('donationMedia.setup.dn.widget') %></label>
+              <input id="dn-widget" name="widget" type="password" spellcheck="false" class="<%= inputClass %>"
+                     placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.widgetMasked : '' %>" />
+            </div>
+          </div>
+          <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.dn.hint') %></p>
+        <% } else { %>
+          <input type="hidden" name="action" value="saveDonatePay" />
+          <div>
+            <label for="dp-widget" class="<%= labelClass %>"><%= t('donationMedia.setup.dp.widget') %></label>
+            <input id="dp-widget" name="widget" type="password" spellcheck="false" class="<%= inputClass %>"
+                   placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.masked + ' (' + stored.host + ')' : 'https://widget.donatepay.eu/widgets/media/...' %>" />
+          </div>
+          <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.dp.hint') %></p>
+        <% } %>
+
+        <div class="flex flex-wrap gap-3">
+          <button type="submit" class="<%= buttonClass %>"><%= stored ? t('donationMedia.setup.update') : t('donationMedia.setup.connect') %></button>
+        </div>
+      </form>
+
+      <% if (stored) { %>
+        <form method="post" action="/<%= channel.channelLogin %>/settings/donation-media" class="mt-3" data-confirm="<%= t('donationMedia.setup.disconnectConfirm') %>">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <input type="hidden" name="action" value="clear" />
+          <input type="hidden" name="platform" value="<%= card.key %>" />
+          <button type="submit" class="<%= dangerButtonClass %>"><%= t('donationMedia.setup.disconnect') %></button>
+        </form>
+      <% } %>
+    </section>
+    <% }) %>
+  </div>
+</main>
+<%- include('partials/settingsShellClose') %>
+
+<script src="<%= asset('/js/donation-media-setup.js') %>" defer></script>
+
+<%- include('partials/foot') %>

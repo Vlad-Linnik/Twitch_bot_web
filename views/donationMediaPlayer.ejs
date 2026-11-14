@@ -1,0 +1,23 @@
+<!doctype html>
+<%#
+  The OBS browser source for donation media (routes/donationMedia.js). Deliberately NOT built on
+  partials/head + nav + foot like every other page: OBS composites this over the stream, so the
+  page is a transparent box with a YouTube player in it and nothing else - no site chrome, no
+  stylesheet, no view transitions. Its CSP is its own (routes/donationMedia.js's OBS_CSP).
+%>
+<html lang="<%= locale %>">
+<head>
+  <meta charset="utf-8" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Donation media · <%= channelLogin %></title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    #player-container { width: 100%; height: 100%; display: none; }
+  </style>
+</head>
+<body data-key="<%= key %>">
+  <div id="player-container"><div id="ytplayer"></div></div>
+  <script src="<%= asset('/js/donation-media-player.js') %>"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>

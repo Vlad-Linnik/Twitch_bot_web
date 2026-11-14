@@ -4,6 +4,7 @@ const { connect, connectWeb } = require("./db/connection");
 const createApp = require("./app");
 const createSessionMiddleware = require("./middleware/session");
 const attachSocketServer = require("./realtime/socketServer");
+const donationMediaManager = require("./realtime/donationMediaManager");
 const { startProfileCacheRefreshLoop } = require("./twitch/profileCacheScheduler");
 const { startModeratorSyncLoop } = require("./twitch/moderatorSyncScheduler");
 const { startExampleRefreshLoop } = require("./jobs/higherLowerExamples");
@@ -29,6 +30,8 @@ async function main() {
   startGuessChatterRefreshLoop();
   startImdbRatingsSync();
   startSteamReviewsSync();
+  // Donation media: reconnect every configured channel's platform listeners and reload its queue.
+  donationMediaManager.start();
 }
 
 main().catch((err) => {

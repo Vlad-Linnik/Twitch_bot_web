@@ -1,0 +1,40 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('donationMedia.queuePage.title') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The donation media queue on the site (routes/donationMedia.js): every moderator of the channel
+  sees it; whether the buttons are there is decided by the server over the socket
+  (realtime/donationMediaManager.js), so a moderator denied the "donationMedia" section gets the
+  same panel without controls. The panel itself is public/js/donation-media-panel.js, shared with
+  the OBS dock.
+%>
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
+  <link rel="stylesheet" href="<%= asset('/css/donation-media.css') %>" />
+
+  <header class="mb-6">
+    <h1 class="settings-heading text-3xl font-bold text-neutral-100 mb-1"><%= t('donationMedia.queuePage.title') %></h1>
+    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('donationMedia.queuePage.subtitle') %></p>
+  </header>
+
+  <% if (!configured) { %>
+    <p class="mb-6 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 px-4 py-3 text-sm">
+      <%= t('donationMedia.queuePage.notConfigured') %>
+      <% if (isOwner) { %>
+        <a class="text-purple-400 hover:text-purple-300 underline" href="/<%= channel.channelLogin %>/settings/donation-media"><%= t('donationMedia.queuePage.goSetup') %></a>
+      <% } %>
+    </p>
+  <% } %>
+
+  <div id="dm-panel" class="dm"
+       data-ws-query="channel=<%= encodeURIComponent(channel.channelLogin) %>"
+       data-locale="<%= locale %>"
+       data-i18n="<%= JSON.stringify(panelStrings) %>">
+    <noscript><%= t('donationMedia.queuePage.noscript') %></noscript>
+  </div>
+</main>
+<%- include('partials/settingsShellClose') %>
+
+<script src="<%= asset('/js/donation-media-panel.js') %>" defer></script>
+
+<%- include('partials/foot') %>
