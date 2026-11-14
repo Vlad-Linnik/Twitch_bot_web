@@ -1095,7 +1095,7 @@
     "ratingExternal": "IMDb rating",
     "ratingTipNone": "{{label}}: none yet",
     "ratingTip": "{{label}}: {{value}}",
-    "imdbPending": "the IMDb rating is not loaded yet",
+    "imdbPending": "not loaded yet",
     "info": {
       "genres": "Genre",
       "directors": "Director",

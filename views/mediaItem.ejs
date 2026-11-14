@@ -141,21 +141,24 @@
           </div>
         <% } %>
 
-        <%# Three plates, three different sources - each drawn its own way so they never read as
-            one number repeated: the streamer's gold medal, the viewers' star, IMDb's own yellow. %>
-        <dl class="mt-5 flex flex-wrap gap-3">
-          <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
-            <dd class="grid place-items-center w-12 h-12 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-(--sec-accent) text-stone-950 shadow-lg shadow-(--sec-accent)/20' : 'bg-stone-800 text-stone-500' %>">
-              <%= item.ratings.streamer || '—' %>
+        <%# The score plates, each drawn its own way so they never read as one number repeated: the
+            streamer's gold medal, the viewers' star, your star, IMDb's own yellow. All the same
+            size on a two-column grid - a value column of one fixed width, then a two-line label
+            (what it is / how many or out of what) - so the numbers and labels line up across rows.
+            On a phone a cell is too narrow for both side by side, so the value sits over the label. %>
+        <dl class="mt-5 grid grid-cols-2 gap-2 sm:gap-3 max-w-xl">
+          <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
+            <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
+              <span class="grid place-items-center w-10 h-10 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-(--sec-accent) text-stone-950 shadow-lg shadow-(--sec-accent)/20' : 'bg-stone-800 text-stone-500' %>"><%= item.ratings.streamer || '—' %></span>
             </dd>
-            <dt class="text-[11px] leading-tight text-stone-400"><%= st('ratingStreamer') %><br /><span class="text-stone-500"><%= st('outOfTen') %></span></dt>
+            <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingStreamer') %><br /><span class="text-stone-500"><%= st('outOfTen') %></span></dt>
           </div>
-          <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
-            <dd class="flex items-center gap-1.5 pl-2">
-              <svg class="w-6 h-6 <%= item.viewerAverage !== null ? 'text-(--sec-accent-strong)' : 'text-stone-700' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-viewer-star><path d="<%= starPath %>"/></svg>
+          <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
+            <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
+              <svg class="w-6 h-6 shrink-0 <%= item.viewerAverage !== null ? 'text-(--sec-accent-strong)' : 'text-stone-700' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-viewer-star><path d="<%= starPath %>"/></svg>
               <span class="text-2xl font-extrabold tabular-nums <%= item.viewerAverage !== null ? 'text-white' : 'text-stone-600' %>" data-viewer-average><%= item.viewerAverage !== null ? item.viewerAverage.toFixed(1) : '—' %></span>
             </dd>
-            <dt class="text-[11px] leading-tight text-stone-400"><%= st('ratingViewers') %><br />
+            <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingViewers') %><br />
               <span class="text-stone-500" data-viewer-count data-template="<%= st('ratingCount', { count: '{{count}}' }) %>" data-none="<%= st('ratingNone') %>"><%= item.viewerCount ? st('ratingCount', { count: item.viewerCount }) : st('ratingNone') %></span>
             </dt>
           </div>
@@ -165,14 +168,14 @@
                 an outside click or Escape and keeps it inside the screen. It is open on arrival when
                 the no-JS form just posted (?rated=), so the note under the stars is seen. The owner
                 has their own score and gets no plate at all. %>
-            <details id="rating" data-rate-popover class="relative"<%= ratingFlash ? ' open' : '' %>>
-              <summary class="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2 hover:ring-(--sec-accent)/60 focus-visible:outline-2 focus-visible:outline-(--sec-accent)"
+            <details id="rating" data-rate-popover class="relative min-w-0"<%= ratingFlash ? ' open' : '' %>>
+              <summary class="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0 hover:ring-(--sec-accent)/60 focus-visible:outline-2 focus-visible:outline-(--sec-accent)"
                        title="<%= st('yourRating') %>">
-                <span class="flex items-center gap-1.5 pl-2">
-                  <svg class="w-6 h-6 <%= mine ? 'text-(--sec-accent)' : 'text-stone-500' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-my-star><path d="<%= starPath %>"/></svg>
+                <span class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
+                  <svg class="w-6 h-6 shrink-0 <%= mine ? 'text-(--sec-accent)' : 'text-stone-500' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-my-star><path d="<%= starPath %>"/></svg>
                   <span class="text-2xl font-extrabold tabular-nums <%= mine ? 'text-white' : 'text-stone-600' %>" data-star-readout><%= mine || '—' %></span>
                 </span>
-                <span class="text-[11px] leading-tight text-stone-400"><%= st('yourRating') %><br /><span class="text-stone-500"><%= st(mine ? 'outOfTen' : 'rateOpen') %></span></span>
+                <span class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('yourRating') %><br /><span class="text-stone-500"><%= st(mine ? 'outOfTen' : 'rateOpen') %></span></span>
               </summary>
               <div data-rate-panel class="absolute z-30 left-0 top-full mt-2 w-max max-w-[calc(100vw-2rem)] rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/10 shadow-2xl shadow-black/60 p-3">
             <% if (!user) { %>
@@ -214,28 +217,28 @@
           <% if (!item.externalRating && item.external && item.external.imdbId) { %>
             <%# The card has an IMDb id but the dataset pass has not reached it yet (a new card asks
                 for an early pass - routes/movies.js's afterSave). %>
-            <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
-              <dd class="flex items-center gap-2 pl-1">
+            <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
+              <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
                 <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#f5c518] text-black font-black">IMDb</span><span class="text-2xl font-extrabold tabular-nums text-stone-600">—</span>
               </dd>
-              <dt class="text-[11px] leading-tight text-stone-500 max-w-[11rem]"><%= st('imdbPending') %></dt>
+              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingExternal') %><br /><span class="text-stone-500"><%= st('imdbPending') %></span></dt>
             </div>
           <% } %>
           <% if (item.externalRating) { %>
             <%# The outside figure, from a daily pass: IMDb's own for a film, Steam's share of positive
                 reviews for a game - each drawn in its source's own colours (partials/externalRating). %>
-            <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
-              <dd class="flex items-center gap-2 pl-1">
+            <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
+              <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
                 <%- include('partials/externalRating', { rating: item.externalRating, size: 'md' }) %>
               </dd>
-              <dt class="text-[11px] leading-tight text-stone-500"><%= st('ratingCount', { count: item.externalRating.votes.toLocaleString(dateLocale) }) %></dt>
+              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingExternal') %><br /><span class="text-stone-500"><%= st('ratingCount', { count: item.externalRating.votes.toLocaleString(dateLocale) }) %></span></dt>
             </div>
           <% } %>
           <% if (item.extras && item.extras.minutes) { %>
             <%# Games: how long it was on stream and when last, from the bot's 5-minute samples. %>
-            <div class="flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2">
-              <dd class="pl-2 text-2xl font-extrabold tabular-nums text-white"><%= item.extras.minutes >= 60 ? st('hoursShort', { n: Math.round(item.extras.minutes / 60) }) : st('minutesShort', { n: item.extras.minutes }) %></dd>
-              <dt class="text-[11px] leading-tight text-stone-400"><%= st('onStream') %><% if (item.extras.lastSeen) { %><br /><span class="text-stone-500"><%= st('lastOnStream', { date: new Date(item.extras.lastSeen).toLocaleDateString(dateLocale) }) %></span><% } %></dt>
+            <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
+              <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24 text-2xl font-extrabold tabular-nums text-white"><%= item.extras.minutes >= 60 ? st('hoursShort', { n: Math.round(item.extras.minutes / 60) }) : st('minutesShort', { n: item.extras.minutes }) %></dd>
+              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('onStream') %><% if (item.extras.lastSeen) { %><br /><span class="text-stone-500"><%= st('lastOnStream', { date: new Date(item.extras.lastSeen).toLocaleDateString(dateLocale) }) %></span><% } %></dt>
             </div>
           <% } %>
         </dl>
