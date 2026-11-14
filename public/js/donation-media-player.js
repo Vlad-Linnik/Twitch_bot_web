@@ -77,7 +77,10 @@
         onStateChange: (event) => {
           if (event.data === YT.PlayerState.ENDED) finish(false);
           // A pause that arrived while the clip was still loading.
-          else if (event.data === YT.PlayerState.PLAYING && wantPaused) player.pauseVideo();
+          else if (event.data === YT.PlayerState.PLAYING && wantPaused) {
+            player.pauseVideo();
+            releaseMute();
+          }
         },
         // Removed, private, not embeddable: report it and let the queue move on.
         onError: () => finish(true),
@@ -85,9 +88,20 @@
     });
   };
 
+  // A clip that arrives already paused (the server restarted, or this source reloaded, while a
+  // moderator had it on pause) is loaded muted: YouTube has to start playing it before it can be
+  // paused on a frame, and that moment must not reach the stream as a burst of sound.
+  let mutedForPause = false;
+  function releaseMute() {
+    if (!mutedForPause) return;
+    mutedForPause = false;
+    player.unMute();
+  }
+
   function play(item) {
     current = item;
-    wantPaused = false;
+    wantPaused = Boolean(item && item.paused);
+    releaseMute();
     setCover(coverMode);
     if (!item || !item.videoId) {
       finish(true);
@@ -96,6 +110,10 @@
     const options = { videoId: item.videoId, startSeconds: item.start || 0 };
     if (item.end > 0) options.endSeconds = item.end;
     show(true);
+    if (wantPaused) {
+      mutedForPause = true;
+      player.mute();
+    }
     player.loadVideoById(options);
   }
 
@@ -112,7 +130,10 @@
     pending = null;
     wantPaused = false;
     show(false);
-    if (playerReady) player.stopVideo();
+    if (playerReady) {
+      releaseMute();
+      player.stopVideo();
+    }
   }
 
   function onMessage(msg) {
@@ -129,6 +150,7 @@
         break;
       case "resume":
         wantPaused = false;
+        if (playerReady) releaseMute();
         if (playerReady && current) player.playVideo();
         break;
       case "seek":
