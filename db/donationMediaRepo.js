@@ -7,6 +7,8 @@
 //     donationAlerts: { tokenEnc, currency },
 //     donatello:      { userIdEnc, widgetIdEnc },
 //     donatePay:      { tokenEnc, origin },
+//     placeholderUrl,                            the owner's own placeholder picture, or absent
+//                                                (lib/donationMediaPlaceholder.js)
 //     createdAt, updatedAt }
 // The platform credentials are encrypted at rest (lib/tokenCrypto.js), like the owner refresh
 // tokens: each of them reads the streamer's donations, donor names included. The two link keys are
@@ -78,6 +80,7 @@ function toConfig(doc) {
     donationAlerts: da ? { token: da, currency: doc.donationAlerts.currency || null } : null,
     donatello: dnUser && dnWidget ? { userId: dnUser, widgetId: dnWidget } : null,
     donatePay: dp ? { token: dp, origin: doc.donatePay.origin } : null,
+    placeholderUrl: doc.placeholderUrl || null,
     updatedAt: doc.updatedAt || null,
   };
 }
@@ -109,10 +112,15 @@ async function findByKey(key) {
   const { settings: col } = await ensureInitialized();
   const doc = await col.findOne(
     { $or: [{ playerKey: key }, { panelKey: key }] },
-    { projection: { channelId: 1, channelLogin: 1, playerKey: 1, panelKey: 1 } }
+    { projection: { channelId: 1, channelLogin: 1, playerKey: 1, panelKey: 1, placeholderUrl: 1 } }
   );
   if (!doc) return null;
-  return { role: doc.playerKey === key ? "player" : "panel", channelId: doc.channelId, channelLogin: doc.channelLogin };
+  return {
+    role: doc.playerKey === key ? "player" : "panel",
+    channelId: doc.channelId,
+    channelLogin: doc.channelLogin,
+    placeholderUrl: doc.placeholderUrl || null,
+  };
 }
 
 // Every channel with at least one platform connected - the manager starts their listeners at boot.
@@ -155,6 +163,15 @@ async function setDonatePay(channelId, { token, origin }) {
     { channelId: String(channelId) },
     { $set: { donatePay: { tokenEnc: encrypt(token), origin }, updatedAt: new Date() } }
   );
+}
+
+// Sets (or, with null, removes) the placeholder picture; resolves to the one it replaced, so the
+// caller can delete that file.
+async function setPlaceholder(channelId, url) {
+  const { settings: col } = await ensureInitialized();
+  const update = url ? { $set: { placeholderUrl: url, updatedAt: new Date() } } : { $unset: { placeholderUrl: "" }, $set: { updatedAt: new Date() } };
+  const before = await col.findOneAndUpdate({ channelId: String(channelId) }, update, { projection: { placeholderUrl: 1 } });
+  return before && before.placeholderUrl ? before.placeholderUrl : null;
 }
 
 const PLATFORM_FIELDS = { donationAlerts: "donationAlerts", donatello: "donatello", donatePay: "donatePay" };
@@ -202,4 +219,5 @@ module.exports = {
   regenerateKeys,
   loadQueue,
   saveQueue,
+  setPlaceholder,
 };

@@ -228,6 +228,13 @@ async function start() {
   }
 }
 
+// The owner changed the placeholder picture: OBS players open now switch to it without a reload
+// (a player opened later gets it in its page).
+function setPlaceholder(channelId, url) {
+  const session = sessions.get(String(channelId));
+  if (session) session.send("players", { type: "placeholder", url: url || null });
+}
+
 // After the setup page saved something for this channel.
 async function reload(channelId, channelLogin) {
   const config = await donationMediaRepo.findByChannelId(channelId);
@@ -440,6 +447,7 @@ async function handleConnection(ws, principal) {
 module.exports = {
   start,
   reload,
+  setPlaceholder,
   statusOf,
   // realtime/socketServer.js's handler contract
   authorizeUpgrade,

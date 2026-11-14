@@ -4,6 +4,7 @@
 //   { type: "play", item }  { type: "pause" }  { type: "resume" }  { type: "seek", time }  { type: "stop" }
 //   { type: "cover", mode, blur }  mode null | "hide" | "blur" | "image" - the picture over the clip,
 //                                  sound unchanged; blur = strength in percent (10-100)
+//   { type: "placeholder", url }   the owner's own placeholder picture changed (null = built-in)
 // and sends { type: "ended", id, error } and, once a second, { type: "progress", id, time, duration, title }.
 //
 // Loaded BEFORE the YouTube IFrame API script, so onYouTubeIframeAPIReady exists when it calls it.
@@ -38,6 +39,20 @@
     const px = Math.round(value * 0.8);
     container.style.setProperty("--blur", `${px}px`);
     container.style.setProperty("--blur-scale", String(1 + px / 45));
+  }
+
+  // Only a path of the site's own upload folder is put into the page.
+  function setPlaceholder(url) {
+    const cover = document.getElementById("player-cover");
+    const old = cover.querySelector("img");
+    if (old) old.remove();
+    const ok = typeof url === "string" && /^\/uploads\/donation-media\/[0-9a-f-]{36}\.webp$/.test(url);
+    cover.classList.toggle("has-image", ok);
+    if (!ok) return;
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = url;
+    cover.appendChild(img);
   }
 
   function setCover(mode) {
@@ -121,6 +136,9 @@
         break;
       case "stop":
         stop();
+        break;
+      case "placeholder":
+        setPlaceholder(msg.url);
         break;
       case "cover":
         if (msg.blur !== undefined) setBlur(msg.blur);

@@ -12,6 +12,7 @@
 //
 // The live part - the listeners, the queue, the socket - is realtime/donationMediaManager.js.
 const express = require("express");
+const multer = require("multer");
 const channelsRepo = require("../db/channelsRepo");
 const donationMediaRepo = require("../db/donationMediaRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -30,6 +31,7 @@ const {
   maskSecret,
 } = require("../lib/donationMedia");
 const { resolveDonatelloUserId } = require("../lib/donatelloWidgetPage");
+const placeholder = require("../lib/donationMediaPlaceholder");
 
 const router = express.Router();
 
@@ -118,6 +120,7 @@ router.get("/:channel/settings/donation-media", requireLevel(1), settingsNav("do
       platforms: platformView(config),
       status: donationMediaManager.statusOf(channel.channelId),
       currencies: DA_CURRENCIES,
+      placeholderUrl: config.placeholderUrl,
       saved: typeof req.query.saved === "string" ? req.query.saved : null,
       error: typeof req.query.error === "string" ? req.query.error : null,
       errorPlatform: typeof req.query.platform === "string" ? req.query.platform : null,
@@ -200,6 +203,69 @@ router.post(
   }
 );
 
+// The owner's placeholder picture (lib/donationMediaPlaceholder.js). Its own route because it is
+// the one multipart form on the page: multer must read the body before the CSRF check can.
+const placeholderUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: placeholder.MAX_UPLOAD_BYTES, files: 1, fields: 4, parts: 5, fieldSize: 1024 },
+});
+
+function readPlaceholderUpload(req, res, next) {
+  placeholderUpload.single("image")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      req.placeholderUploadError = err.code === "LIMIT_FILE_SIZE" ? "too_large" : "not_allowed_type";
+      return next();
+    }
+    next(err);
+  });
+}
+
+const PLACEHOLDER_ERRORS = { not_allowed_type: "phType", unreadable: "phType", too_large: "phTooLarge", empty: "phEmpty" };
+
+router.post(
+  "/:channel/settings/donation-media/placeholder",
+  settingsWriteLimiter,
+  requireLevel(1),
+  readPlaceholderUpload,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannel(req, res);
+      if (!channel) return;
+      await donationMediaRepo.getOrCreate(channel);
+      const back = `/${channel.channelLogin}/settings/donation-media`;
+      const fail = (code) => res.redirect(`${back}?error=${PLACEHOLDER_ERRORS[code] || "phType"}&platform=placeholder#placeholder`);
+
+      let url = null;
+      if (req.body.action !== "reset") {
+        if (req.placeholderUploadError) return fail(req.placeholderUploadError);
+        if (!req.file || !req.file.buffer || req.file.buffer.length === 0) return fail("empty");
+        try {
+          url = await placeholder.savePlaceholder(req.file.buffer);
+        } catch (err) {
+          if (err instanceof placeholder.PlaceholderError) return fail(err.code);
+          throw err;
+        }
+      }
+      const previous = await donationMediaRepo.setPlaceholder(channel.channelId, url);
+      if (previous && previous !== url) await placeholder.deletePlaceholder(previous);
+      donationMediaManager.setPlaceholder(channel.channelId, url);
+      await settingsChangeLogRepo.logChange({
+        channelLogin: channel.channelLogin,
+        user: req.user,
+        category: "donation_media",
+        action: url ? "connect" : "disconnect",
+        target: "placeholder",
+        before: null,
+        after: null,
+      });
+      return res.redirect(`${back}?saved=${url ? "placeholder" : "placeholderReset"}#placeholder`);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.get(
   "/:channel/settings/donation-media/queue",
   requireLevel(2),
@@ -232,7 +298,12 @@ function obsPage(role, view) {
       res.setHeader("Content-Security-Policy", OBS_CSP);
       res.setHeader("X-Robots-Tag", "noindex, nofollow");
       res.setHeader("Cache-Control", "no-store");
-      res.render(view, { key: req.params.key, channelLogin: found.channelLogin, panelStrings: panelStrings(res.locals.t) });
+      res.render(view, {
+        key: req.params.key,
+        channelLogin: found.channelLogin,
+        placeholderUrl: placeholder.isPlaceholderUrl(found.placeholderUrl) ? found.placeholderUrl : null,
+        panelStrings: panelStrings(res.locals.t),
+      });
     } catch (err) {
       next(err);
     }

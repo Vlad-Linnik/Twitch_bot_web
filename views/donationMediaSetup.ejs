@@ -29,7 +29,7 @@
 
   <% if (saved) { %>
     <p class="mb-6 rounded-lg border border-green-800/50 bg-green-900/20 text-green-400 px-4 py-2.5 text-sm">
-      <%= t('donationMedia.setup.saved.' + (['connected', 'cleared', 'links'].includes(saved) ? saved : 'connected')) %>
+      <%= t('donationMedia.setup.saved.' + (['connected', 'cleared', 'links', 'placeholder', 'placeholderReset'].includes(saved) ? saved : 'connected')) %>
     </p>
   <% } %>
 
@@ -77,6 +77,46 @@
         <input type="hidden" name="action" value="regenerate" />
         <button type="submit" class="<%= dangerButtonClass %>"><%= t('donationMedia.setup.regenerate') %></button>
       </form>
+    </div>
+  </section>
+
+  <!-- Placeholder picture -->
+  <section id="placeholder" class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6 scroll-mt-24">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('donationMedia.setup.placeholderHeading') %></h2>
+    <p class="text-sm text-neutral-500 mb-5"><%= t('donationMedia.setup.placeholderIntro') %></p>
+
+    <% if (error && errorPlatform === 'placeholder') { %>
+      <p class="mb-4 rounded-lg border border-red-800/50 bg-red-900/20 text-red-400 px-4 py-2.5 text-sm"><%= t('donationMedia.setup.errors.' + (['phType', 'phTooLarge', 'phEmpty'].includes(error) ? error : 'phType')) %></p>
+    <% } %>
+
+    <div class="flex flex-col sm:flex-row gap-5 items-start">
+      <div class="w-full sm:w-64 shrink-0 aspect-video rounded-md overflow-hidden border border-neutral-800 bg-neutral-950 flex items-center justify-center">
+        <% if (placeholderUrl) { %>
+          <img src="<%= placeholderUrl %>" alt="<%= t('donationMedia.setup.placeholderCurrent') %>" class="w-full h-full object-contain" />
+        <% } else { %>
+          <div class="text-center text-neutral-300 text-sm" style="background: radial-gradient(circle at 50% 40%, #2b2140, #0d0b12 70%); width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+            <span class="text-3xl">🙈</span><span><%= t('donationMedia.player.coverText') %></span>
+          </div>
+        <% } %>
+      </div>
+      <div class="flex-1 space-y-3">
+        <p class="text-xs text-neutral-500"><%= placeholderUrl ? t('donationMedia.setup.placeholderOwn') : t('donationMedia.setup.placeholderBuiltin') %></p>
+        <form method="post" enctype="multipart/form-data" action="/<%= channel.channelLogin %>/settings/donation-media/placeholder" class="space-y-3">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <input type="hidden" name="action" value="upload" />
+          <input type="file" name="image" required accept="image/png,image/jpeg,image/webp,image/gif"
+                 class="block w-full text-sm text-neutral-400 file:mr-3 file:rounded-md file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-200 hover:file:bg-neutral-700" />
+          <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.placeholderHint') %></p>
+          <button type="submit" class="<%= buttonClass %>"><%= t('donationMedia.setup.placeholderUpload') %></button>
+        </form>
+        <% if (placeholderUrl) { %>
+          <form method="post" enctype="multipart/form-data" action="/<%= channel.channelLogin %>/settings/donation-media/placeholder">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="action" value="reset" />
+            <button type="submit" class="<%= ghostButtonClass %>"><%= t('donationMedia.setup.placeholderReset') %></button>
+          </form>
+        <% } %>
+      </div>
     </div>
   </section>
 

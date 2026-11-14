@@ -2954,7 +2954,9 @@
       "saved": {
         "connected": "Saved. Connecting to the platform.",
         "cleared": "Platform disconnected, key deleted.",
-        "links": "New links issued. Paste them into OBS again."
+        "links": "New links issued. Paste them into OBS again.",
+        "placeholder": "Placeholder uploaded. Open OBS players already use it.",
+        "placeholderReset": "The built-in placeholder is back."
       },
       "da": {
         "token": "Widget link or token",
@@ -2976,8 +2978,19 @@
         "donatelloNotMedia": "This links to another Donatello widget (a timer, a wheel, etc.); the YouTube media widget is needed.",
         "donatelloUnreachable": "Could not open the widget on donatello.to. Try again a little later.",
         "dpHost": "This is not a DonatePay widget link.",
-        "dpToken": "No DonatePay media widget token found in the link."
-      }
+        "dpToken": "No DonatePay media widget token found in the link.",
+        "phType": "Not an image, or an unsupported format: PNG, JPG, WebP or GIF please.",
+        "phTooLarge": "The picture is too large: up to 8 MB, 4000 px a side, a GIF up to 300 frames.",
+        "phEmpty": "Choose a file."
+      },
+      "placeholderHeading": "Placeholder",
+      "placeholderIntro": "The picture viewers see when a moderator covers a clip with \"Placeholder\". The clip's sound keeps playing.",
+      "placeholderOwn": "Your own picture is in use.",
+      "placeholderBuiltin": "The built-in placeholder is in use.",
+      "placeholderCurrent": "Current placeholder",
+      "placeholderHint": "PNG, JPG, WebP or GIF (animation is kept), up to 8 MB. The picture is fitted into a 16:9 frame without cropping.",
+      "placeholderUpload": "Upload",
+      "placeholderReset": "Back to the default"
     },
     "queuePage": {
       "title": "Clip queue",

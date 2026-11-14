@@ -28,6 +28,9 @@
       text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
     }
     #player-cover .icon { font-size: 2.2em; }
+    #player-cover img { width: 100%; height: 100%; object-fit: contain; }
+    #player-cover.has-image { background: transparent; }
+    #player-cover.has-image .builtin { display: none; }
     #player-container.cover-image #player-cover { display: flex; }
     /* blur leaves a hard edge at the frame; the container clips it */
     #player-container { overflow: hidden; }
@@ -36,7 +39,10 @@
 <body data-key="<%= key %>">
   <div id="player-container">
     <div id="ytplayer"></div>
-    <div id="player-cover" aria-hidden="true"><span class="icon">🙈</span><span><%= t('donationMedia.player.coverText') %></span></div>
+    <div id="player-cover" aria-hidden="true" class="<%= placeholderUrl ? 'has-image' : '' %>">
+      <span class="builtin icon">🙈</span><span class="builtin"><%= t('donationMedia.player.coverText') %></span>
+      <% if (placeholderUrl) { %><img src="<%= placeholderUrl %>" alt="" /><% } %>
+    </div>
   </div>
   <script src="<%= asset('/js/donation-media-player.js') %>"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
