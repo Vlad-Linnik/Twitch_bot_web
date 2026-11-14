@@ -28,6 +28,7 @@
 // served by Mongo (the viewer average is computed on read), and a channel has hundreds of cards,
 // not tens of thousands. 24 per portion - a full last row at 2, 3, 4 and 6 columns.
 const express = require("express");
+const { infoIsStale, INFO_VERSION } = require("../lib/mediaInfo");
 const multer = require("multer");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
 const mediaRatingsRepo = require("../db/mediaRatingsRepo");
@@ -818,25 +819,25 @@ function createMediaSectionRouter(cfg) {
 
   // --- the card's own page ----------------------------------------------------------------
 
-  // A card saved before `info` existed (the field is absent, not null) gets it the first time its
-  // page is opened. A null answer is either "the source has nothing" or "the source is down" -
+  // A card saved before `info` existed (the field is absent, not null), or under an older shape of
+  // it, gets it the first time its page is opened; until then the old block is shown as it is. A null answer is either "the source has nothing" or "the source is down" -
   // the registry does not tell them apart - so nothing is written and the card is not asked about
   // again for INFO_RETRY_MS: a TMDB outage must not turn every page view into a timed-out request.
   const INFO_RETRY_MS = 60 * 60 * 1000;
   const infoTried = new Map();
   async function fillInfo(item) {
-    if (item.info !== undefined || !cfg.infoRef) return item.info || null;
+    if (!infoIsStale(item.info) || !cfg.infoRef) return item.info || null;
     const ref = cfg.infoRef(item);
     if (!ref) return null;
     const key = String(item._id);
-    if (Date.now() - (infoTried.get(key) || 0) < INFO_RETRY_MS) return null;
+    if (Date.now() - (infoTried.get(key) || 0) < INFO_RETRY_MS) return item.info || null;
     infoTried.set(key, Date.now());
     if (infoTried.size > 1000) infoTried.delete(infoTried.keys().next().value);
     const details = await mediaSources.details(ref);
-    if (!details) return null;
+    if (!details) return item.info || null;
     const info = details.info || null;
-    // Only where it is still absent: an edit in between wins.
-    await mediaItemsRepo.setInfoIfAbsent(item._id, info);
+    // Only where it is still stale: an edit in between wins.
+    await mediaItemsRepo.setInfoIfStale(item._id, info, INFO_VERSION);
     infoTried.delete(key);
     return info;
   }

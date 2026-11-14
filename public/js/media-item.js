@@ -2,7 +2,7 @@
 //   - "show 18+ cover": swaps the blurred poster for the normal one. The normal URL is only on
 //     this page, in data-full-src; the button is rendered hidden so a no-JS visitor never sees a
 //     button that does nothing;
-//   - the viewer's 1-10 stars. The server draws a working form (ten submit buttons, the current
+//   - the viewer's 1-10 stars, in a popover opened from the "your rating" plate. The server draws a working form (ten submit buttons, the current
 //     score's star posting "clear"); this adds what a form cannot do:
 //       * preview - hovering or focusing a star lights it and every star before it;
 //       * keyboard - one tab stop for the whole row (roving tabindex, the radiogroup pattern),
@@ -23,11 +23,42 @@
     });
   }
 
+  // The "your rating" plate's picker is a <details>: open/close comes free, this adds closing on an
+  // outside click or Escape, and keeps the panel on screen (it opens to the right of the plate,
+  // which near the right edge of a narrow screen would hang off it).
+  const popover = document.querySelector("[data-rate-popover]");
+  const panel = popover && popover.querySelector("[data-rate-panel]");
+  function placePanel() {
+    if (!panel) return;
+    panel.style.left = "";
+    const rect = panel.getBoundingClientRect();
+    const overflow = rect.right - (document.documentElement.clientWidth - 8);
+    if (overflow > 0) panel.style.left = `${-Math.min(overflow, rect.left - 8)}px`;
+  }
+  if (popover) {
+    popover.addEventListener("toggle", () => {
+      if (!popover.open) return;
+      placePanel();
+      const target = popover.querySelector('[data-star][tabindex="0"]');
+      if (target) target.focus();
+    });
+    document.addEventListener("click", (event) => {
+      if (popover.open && !popover.contains(event.target)) popover.open = false;
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !popover.open) return;
+      popover.open = false;
+      popover.querySelector("summary").focus();
+    });
+    if (popover.open) placePanel();
+  }
+
   const form = document.querySelector("[data-rate-form]");
   if (!form) return;
   const group = form.querySelector("[data-stars]");
   const stars = [...form.querySelectorAll("[data-star]")];
-  const readout = form.querySelector("[data-star-readout]");
+  const readout = document.querySelector("[data-star-readout]");
+  const myStar = document.querySelector("[data-my-star]");
   const note = document.querySelector("[data-rate-note]");
   const averageEl = document.querySelector("[data-viewer-average]");
   const averageStar = document.querySelector("[data-viewer-star]");
@@ -54,7 +85,15 @@
       star.title = label;
       star.tabIndex = n === (current || 1) ? 0 : -1;
     }
-    if (readout) readout.textContent = current ? `${current}/10` : "";
+    if (readout) {
+      readout.textContent = current ? String(current) : "—";
+      readout.classList.toggle("text-white", Boolean(current));
+      readout.classList.toggle("text-stone-600", !current);
+    }
+    if (myStar) {
+      myStar.classList.toggle("text-(--sec-accent)", Boolean(current));
+      myStar.classList.toggle("text-stone-500", !current);
+    }
     paint(current);
   }
 
@@ -107,7 +146,7 @@
         averageEl.classList.toggle("text-white", has);
         averageEl.classList.toggle("text-stone-600", !has);
         if (averageStar) {
-          averageStar.classList.toggle("text-amber-300", has);
+          averageStar.classList.toggle("text-(--sec-accent-strong)", has);
           averageStar.classList.toggle("text-stone-700", !has);
         }
       }
@@ -115,6 +154,9 @@
         countEl.textContent = data.count ? countEl.dataset.template.replace("{{count}}", String(data.count)) : countEl.dataset.none;
       }
       if (note) note.textContent = clearing ? note.dataset.noteCleared : data.counted ? note.dataset.noteCounted : note.dataset.noteNotCounted;
+      // A score that counts needs no reading: the plate already shows it, so the picker closes.
+      // One that does not count, or a cleared one, stays open on its note.
+      if (popover && !clearing && data.counted) setTimeout(() => { popover.open = false; }, 700);
     } catch {
       paint(current);
       if (note) note.textContent = note.dataset.noteError;

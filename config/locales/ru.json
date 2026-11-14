@@ -1102,8 +1102,10 @@
       "cast": "В ролях",
       "characters": "Главные герои",
       "overview": "О фильме",
-      "runtime": "{{n}} мин"
-    }
+      "runtime": "{{n}} мин",
+      "ageRating": "Возрастной рейтинг"
+    },
+    "rateOpen": "нажмите, чтобы оценить"
   },
   "gamesStream": {
     "titleSuffix": "игры",

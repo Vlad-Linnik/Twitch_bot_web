@@ -112,13 +112,16 @@ async function update(id, set) {
   return col.findOneAndUpdate({ _id: oid }, { $set: { ...set, updatedAt: new Date() } }, { returnDocument: "after" });
 }
 
-// The lazy fill of a card saved before `info` existed (routes/mediaSection.js's fillInfo): written
-// only while the field is still absent, so it can never overwrite what an edit stored meanwhile.
-async function setInfoIfAbsent(id, info) {
+// The lazy fill of a card whose `info` is missing or of an older shape (routes/mediaSection.js's
+// fillInfo): written only while it is still so, so it never overwrites what an edit stored meanwhile.
+async function setInfoIfStale(id, info, version) {
   const oid = toOid(id);
   if (!oid) return;
   const col = await ensureInitialized();
-  await col.updateOne({ _id: oid, info: { $exists: false } }, { $set: { info } });
+  await col.updateOne(
+    { _id: oid, $or: [{ info: { $exists: false } }, { info: { $type: "object" }, "info.v": { $ne: version } }] },
+    { $set: { info } }
+  );
 }
 
 async function getById(id) {
@@ -256,7 +259,7 @@ async function sourceStats() {
 module.exports = {
   create,
   update,
-  setInfoIfAbsent,
+  setInfoIfStale,
   getById,
   listForGrid,
   countByStatus,

@@ -38,13 +38,17 @@
 
   <a href="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('backToGrid') %></a>
 
-  <article class="relative rounded-(--sec-radius-lg) overflow-hidden bg-(--sec-base) ring-1 ring-white/5">
+  <%# Only the backdrop is clipped, not the article: the "your rating" popover has to be able to
+      hang past the card's edge. %>
+  <article class="relative rounded-(--sec-radius-lg) bg-(--sec-base) ring-1 ring-white/5">
+    <div class="absolute inset-0 overflow-hidden rounded-(--sec-radius-lg)" aria-hidden="true">
     <% if (item.poster && item.poster.blurUrl) { %>
-      <img src="<%= item.poster.blurUrl %>" alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover scale-125 opacity-50" />
+      <img src="<%= item.poster.blurUrl %>" alt="" class="absolute inset-0 w-full h-full object-cover scale-125 opacity-50" />
       <div class="absolute inset-0 bg-gradient-to-r from-(--sec-base) via-(--sec-base)/80 to-(--sec-base)/40"></div>
     <% } else { %>
       <div class="absolute inset-0 bg-gradient-to-br from-(--sec-accent)/10 to-(--sec-base)"></div>
     <% } %>
+    </div>
 
     <div class="relative flex flex-col sm:flex-row gap-6 p-5 sm:p-7">
       <div class="w-44 sm:w-52 shrink-0 self-center sm:self-start">
@@ -82,6 +86,11 @@
           <% [item.year, item.mediaType ? st('type.' + item.mediaType) : null, info && info.runtime ? st('info.runtime', { n: info.runtime }) : null].filter(Boolean).forEach(function(chip) { %>
             <span class="px-2 py-0.5 rounded-full bg-white/5 text-stone-300 ring-1 ring-white/10"><%= chip %></span>
           <% }) %>
+          <% if (info && info.ageRating) { %>
+            <%# The age rating as its source prints it - Russia's "16+", else the US or Shikimori one. %>
+            <span class="px-2 py-0.5 rounded-md font-bold ring-1 <%= /^(18\+|R\+|Rx|NC-17|TV-MA)$/.test(info.ageRating) ? 'text-red-300 ring-red-500/50 bg-red-500/10' : 'text-stone-200 ring-white/25' %>"
+                  title="<%= st('info.ageRating') %>"><%= info.ageRating %></span>
+          <% } %>
           <% if (item.status === 'accepted') { %><span class="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"><%= st('statusPlanned') %></span><% } %>
           <% if (item.status === 'suggested') { %><span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"><%= st('statusSuggested') %></span><% } %>
           <% if (item.status === 'rejected') { %><span class="px-2 py-0.5 rounded-full bg-stone-700/60 text-stone-200 ring-1 ring-white/10"><%= st('statusRejected') %></span><% } %>
@@ -150,6 +159,58 @@
               <span class="text-stone-500" data-viewer-count data-template="<%= st('ratingCount', { count: '{{count}}' }) %>" data-none="<%= st('ratingNone') %>"><%= item.viewerCount ? st('ratingCount', { count: item.viewerCount }) : st('ratingNone') %></span>
             </dt>
           </div>
+          <% if (item.status !== 'rejected' && !(user && !canRate)) { %>
+            <%# The viewer's own score: a plate like the three beside it, whose star opens the ten-star
+                picker. A <details>, so it opens without JS too; public/js/media-item.js closes it on
+                an outside click or Escape and keeps it inside the screen. It is open on arrival when
+                the no-JS form just posted (?rated=), so the note under the stars is seen. The owner
+                has their own score and gets no plate at all. %>
+            <details id="rating" data-rate-popover class="relative"<%= ratingFlash ? ' open' : '' %>>
+              <summary class="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex items-center gap-3 pr-4 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 p-2 hover:ring-(--sec-accent)/60 focus-visible:outline-2 focus-visible:outline-(--sec-accent)"
+                       title="<%= st('yourRating') %>">
+                <span class="flex items-center gap-1.5 pl-2">
+                  <svg class="w-6 h-6 <%= mine ? 'text-(--sec-accent)' : 'text-stone-500' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-my-star><path d="<%= starPath %>"/></svg>
+                  <span class="text-2xl font-extrabold tabular-nums <%= mine ? 'text-white' : 'text-stone-600' %>" data-star-readout><%= mine || '—' %></span>
+                </span>
+                <span class="text-[11px] leading-tight text-stone-400"><%= st('yourRating') %><br /><span class="text-stone-500"><%= st(mine ? 'outOfTen' : 'rateOpen') %></span></span>
+              </summary>
+              <div data-rate-panel class="absolute z-30 left-0 top-full mt-2 w-max max-w-[calc(100vw-2rem)] rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/10 shadow-2xl shadow-black/60 p-3">
+            <% if (!user) { %>
+              <p class="text-sm whitespace-nowrap"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-(--sec-accent-strong) hover:text-(--sec-accent-soft)"><%= st('loginToRate') %></a></p>
+            <% } else if (!canRate) { %>
+              <p class="text-sm text-stone-500"><%= st('ownerCannotRate') %></p>
+            <% } else { %>
+              <%# Ten stars, each a submit button of one form - so it works without JS: the star you
+                  click is the score, and the star of the score you already gave posts "clear", which
+                  takes it back (re-clicking your own rating removes it). public/js/media-item.js adds
+                  the hover/keyboard preview (roving focus, arrow keys), posts by fetch and patches in
+                  place. Lit stars are drawn by the server too, so the score shows before any script. %>
+              <form method="post" action="<%= base %>/rate" data-rate-form data-current="<%= mine || '' %>"
+                    data-label-pick="<%= st('starPick', { n: '{{n}}' }) %>" data-label-clear="<%= st('starClear', { n: '{{n}}' }) %>"
+                    class="flex items-center">
+                <input type="hidden" name="_csrf" value="<%= csrf %>" />
+                <div role="radiogroup" aria-label="<%= st('starsLabel') %>" class="flex" data-stars>
+                  <% for (let n = 1; n <= 10; n++) { %>
+                    <% const label = mine === n ? st('starClear', { n }) : st('starPick', { n }); %>
+                    <button type="submit" name="value" value="<%= mine === n ? 'clear' : n %>" data-star="<%= n %>"
+                            role="radio" aria-checked="<%= mine === n ? 'true' : 'false' %>" aria-label="<%= label %>" title="<%= label %>"
+                            data-lit="<%= n <= mine ? '1' : '0' %>"
+                            class="p-0.5 rounded text-stone-700 hover:text-(--sec-accent-strong) data-[lit=1]:text-(--sec-accent) transition-colors focus-visible:outline-2 focus-visible:outline-(--sec-accent)">
+                      <%# 24 px on a phone: ten stars must fit a 375 px screen inside the panel (measured overflow at 28 px). %>
+                      <svg class="w-6 h-6 sm:w-8 sm:h-8" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="<%= starPath %>"/></svg>
+                    </button>
+                  <% } %>
+                </div>
+              </form>
+              <p class="mt-2 w-0 min-w-full text-xs leading-snug text-stone-400" data-rate-note
+                 data-note-counted="<%= st('rateCounted') %>" data-note-not-counted="<%= st('rateNotCounted') %>"
+                 data-note-cleared="<%= st('rateCleared') %>" data-note-error="<%= st('rateError') %>">
+                <% if (ratingFlash === 'cleared') { %><%= st('rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= st('rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= st('rateCounted') %><% } else if (ratingFlash) { %><%= st('rateError') %><% } else { %><%= st('rateHint') %><% } %>
+              </p>
+            <% } %>
+              </div>
+            </details>
+          <% } %>
           <% if (!item.externalRating && item.external && item.external.imdbId) { %>
             <%# The card has an IMDb id but the dataset pass has not reached it yet (a new card asks
                 for an early pass - routes/movies.js's afterSave). %>
@@ -261,45 +322,6 @@
     </section>
   <% } %>
 
-  <% if (item.status !== 'rejected') { %>
-    <section id="rating" class="mt-6 rounded-(--sec-radius-lg) bg-(--sec-surface)/60 ring-1 ring-white/5 px-4 sm:px-5 py-4">
-      <h3 class="text-sm font-semibold text-stone-200 mb-2"><%= st('yourRating') %></h3>
-      <% if (!user) { %>
-        <p class="text-sm"><a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-(--sec-accent-strong) hover:text-(--sec-accent-soft)"><%= st('loginToRate') %></a></p>
-      <% } else if (!canRate) { %>
-        <p class="text-sm text-stone-500"><%= st('ownerCannotRate') %></p>
-      <% } else { %>
-        <%# Ten stars, each a submit button of one form - so it works without JS: the star you
-            click is the score, and the star of the score you already gave posts "clear", which
-            takes it back (re-clicking your own rating removes it). public/js/media-item.js adds
-            the hover/keyboard preview (roving focus, arrow keys), posts by fetch and patches in
-            place. Lit stars are drawn by the server too, so the score shows before any script. %>
-        <form method="post" action="<%= base %>/rate" data-rate-form data-current="<%= mine || '' %>"
-              data-label-pick="<%= st('starPick', { n: '{{n}}' }) %>" data-label-clear="<%= st('starClear', { n: '{{n}}' }) %>"
-              class="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <input type="hidden" name="_csrf" value="<%= csrf %>" />
-          <div role="radiogroup" aria-label="<%= st('starsLabel') %>" class="flex" data-stars>
-            <% for (let n = 1; n <= 10; n++) { %>
-              <% const label = mine === n ? st('starClear', { n }) : st('starPick', { n }); %>
-              <button type="submit" name="value" value="<%= mine === n ? 'clear' : n %>" data-star="<%= n %>"
-                      role="radio" aria-checked="<%= mine === n ? 'true' : 'false' %>" aria-label="<%= label %>" title="<%= label %>"
-                      data-lit="<%= n <= mine ? '1' : '0' %>"
-                      class="p-0.5 rounded text-stone-700 hover:text-(--sec-accent-strong) data-[lit=1]:text-(--sec-accent) transition-colors focus-visible:outline-2 focus-visible:outline-(--sec-accent)">
-                <%# 24 px on a phone: ten stars must fit a 375 px screen inside the panel (measured overflow at 28 px). %>
-                <svg class="w-6 h-6 sm:w-8 sm:h-8" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="<%= starPath %>"/></svg>
-              </button>
-            <% } %>
-          </div>
-          <span class="text-lg font-bold tabular-nums text-(--sec-accent-soft)" data-star-readout><%= mine ? mine + '/10' : '' %></span>
-        </form>
-        <p class="mt-2 text-xs text-stone-500" data-rate-note
-           data-note-counted="<%= st('rateCounted') %>" data-note-not-counted="<%= st('rateNotCounted') %>"
-           data-note-cleared="<%= st('rateCleared') %>" data-note-error="<%= st('rateError') %>">
-          <% if (ratingFlash === 'cleared') { %><%= st('rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= st('rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= st('rateCounted') %><% } else if (ratingFlash) { %><%= st('rateError') %><% } else { %><%= st('rateHint') %><% } %>
-        </p>
-      <% } %>
-    </section>
-  <% } %>
 
   <% if (item.review) { %>
     <section class="mt-6">

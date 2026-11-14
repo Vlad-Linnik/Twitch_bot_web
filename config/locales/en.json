@@ -1102,8 +1102,10 @@
       "cast": "Cast",
       "characters": "Main characters",
       "overview": "About",
-      "runtime": "{{n}} min"
-    }
+      "runtime": "{{n}} min",
+      "ageRating": "Age rating"
+    },
+    "rateOpen": "click to rate"
   },
   "gamesStream": {
     "titleSuffix": "games",
