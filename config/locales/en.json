@@ -2962,9 +2962,8 @@
         "hint": "DonationAlerts → Widgets → Alerts (or Media): copy the widget link — it contains token=…. The currency is what to show the donation in: DonationAlerts sends the amount in several at once. To change only the currency, leave the key field empty."
       },
       "dn": {
-        "userId": "User ID",
-        "widget": "Media widget link or its ID",
-        "hint": "The Donatello user ID and media widget ID are 24-character strings (digits and letters a–f)."
+        "widget": "Media widget link",
+        "hint": "Copy the link of your Donatello media widget (YouTube clips), shaped https://donatello.to/widget/…/token/…. The site finds your user ID from it."
       },
       "dp": {
         "widget": "Media widget link",
@@ -2973,8 +2972,9 @@
       "errors": {
         "empty": "The field is empty.",
         "daToken": "No DonationAlerts token found: paste the whole widget link (with token=…) or the token itself.",
-        "donatelloUser": "No Donatello user ID found: it is a single 24-character string.",
-        "donatelloWidget": "No Donatello media widget ID found in the link.",
+        "donatelloLink": "This is not a Donatello media widget link, or its token is wrong. Paste the whole https://donatello.to/widget/…/token/… link.",
+        "donatelloNotMedia": "This links to another Donatello widget (a timer, a wheel, etc.); the YouTube media widget is needed.",
+        "donatelloUnreachable": "Could not open the widget on donatello.to. Try again a little later.",
         "dpHost": "This is not a DonatePay widget link.",
         "dpToken": "No DonatePay media widget token found in the link."
       }

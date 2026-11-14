@@ -25,10 +25,11 @@ const {
   DEFAULT_DA_CURRENCY,
   parseDonationAlertsToken,
   parseDonationAlertsCurrency,
-  parseDonatelloIds,
+  parseDonatelloWidgetLink,
   parseDonatePayWidget,
   maskSecret,
 } = require("../lib/donationMedia");
+const { resolveDonatelloUserId } = require("../lib/donatelloWidgetPage");
 
 const router = express.Router();
 
@@ -123,7 +124,7 @@ router.get("/:channel/settings/donation-media", requireLevel(1), settingsNav("do
   }
 });
 
-const ERROR_KEYS = new Set(["empty", "daToken", "donatelloUser", "donatelloWidget", "dpHost", "dpToken"]);
+const ERROR_KEYS = new Set(["empty", "daToken", "donatelloLink", "donatelloNotMedia", "donatelloUnreachable", "dpHost", "dpToken"]);
 
 router.post(
   "/:channel/settings/donation-media",
@@ -166,9 +167,11 @@ router.post(
         }
         await log("connect", "donationAlerts");
       } else if (action === "saveDonatello") {
-        const parsed = parseDonatelloIds(req.body.userId, req.body.widget);
-        if (!parsed.ok) return fail(parsed.error, "donatello");
-        await donationMediaRepo.setDonatello(channel.channelId, { userId: parsed.userId, widgetId: parsed.widgetId });
+        const link = parseDonatelloWidgetLink(req.body.widget);
+        if (!link.ok) return fail(link.error, "donatello");
+        const page = await resolveDonatelloUserId(link);
+        if (!page.ok) return fail(page.error, "donatello");
+        await donationMediaRepo.setDonatello(channel.channelId, { userId: page.userId, widgetId: link.widgetId });
         await log("connect", "donatello");
       } else if (action === "saveDonatePay") {
         const parsed = parseDonatePayWidget(req.body.widget);

@@ -132,17 +132,10 @@
           <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.da.hint') %></p>
         <% } else if (card.key === 'donatello') { %>
           <input type="hidden" name="action" value="saveDonatello" />
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label for="dn-user" class="<%= labelClass %>"><%= t('donationMedia.setup.dn.userId') %></label>
-              <input id="dn-user" name="userId" type="password" spellcheck="false" class="<%= inputClass %>"
-                     placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.masked : '' %>" />
-            </div>
-            <div>
-              <label for="dn-widget" class="<%= labelClass %>"><%= t('donationMedia.setup.dn.widget') %></label>
-              <input id="dn-widget" name="widget" type="password" spellcheck="false" class="<%= inputClass %>"
-                     placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.widgetMasked : '' %>" />
-            </div>
+          <div>
+            <label for="dn-widget" class="<%= labelClass %>"><%= t('donationMedia.setup.dn.widget') %></label>
+            <input id="dn-widget" name="widget" type="password" spellcheck="false" class="<%= inputClass %>"
+                   placeholder="<%= stored ? t('donationMedia.setup.storedKey') + ' ' + stored.widgetMasked : 'https://donatello.to/widget/.../token/...' %>" />
           </div>
           <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.dn.hint') %></p>
         <% } else { %>
