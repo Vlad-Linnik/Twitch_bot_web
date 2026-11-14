@@ -54,7 +54,7 @@ const OBS_CSP = [
 const PANEL_STRING_KEYS = [
   "offline", "readOnly", "keyReplaced", "player", "playerOff",
   "nowPlaying", "nothingPlaying", "waitingForPlayer", "paused", "pause", "resume", "skip", "restart", "seek",
-  "queue", "queueEmpty", "moveTop", "remove", "add", "addPlaceholder",
+  "queue", "queueEmpty", "moveTop", "dragHint", "remove", "add", "addPlaceholder",
   "history", "historyEmpty", "clearHistory", "requeue", "requeueHint", "playNext", "playNextHint",
   "anonymous", "manual", "addedBy", "replay",
   "status.skipped", "status.removed", "status.error",

@@ -3005,6 +3005,7 @@
       "queue": "Queue",
       "queueEmpty": "The queue is empty",
       "moveTop": "Move to the top of the queue",
+      "dragHint": "Drag to change the place in the queue (or ↑/↓ on the keyboard)",
       "remove": "Remove from the queue",
       "add": "+ Queue",
       "addPlaceholder": "YouTube link or clip ID",

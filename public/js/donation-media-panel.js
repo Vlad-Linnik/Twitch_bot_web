@@ -32,6 +32,12 @@
   let canControl = false;
   let reqSeq = 0;
   const pendingReplies = new Map();
+  // Reordering the queue by dragging. While a row is held, state updates from the server are not
+  // drawn into the queue (they would pull the row out from under the pointer); the latest one is
+  // drawn on drop.
+  let drag = null; // { row, id, startOrder, offsetY, pointerId }
+  let queueRenderPending = false;
+  let focusGripId = null; // the row whose handle keeps focus across a re-render (keyboard moves)
 
   // --- the skeleton ------------------------------------------------------------------------------
   function el(tag, props, ...children) {
@@ -216,13 +222,14 @@
     document.getElementById("dm-time-total").textContent = duration > 0 ? formatTime(duration) : "—";
   }
 
-  function row(item, { num, actions, extra }) {
+  function row(item, { num, actions, extra, grip }) {
     const body = el("div", { class: "dm-row-body" }, donorLine(item), el("div", { class: "dm-title", text: titleOf(item), title: titleOf(item) }));
     if (item.message) body.appendChild(el("div", { class: "dm-msg-short", text: item.message, title: item.message }));
     if (extra) body.appendChild(extra);
     return el(
       "div",
-      { class: "dm-row" },
+      { class: "dm-row", "data-dm-id": String(item.id) },
+      grip || null,
       num !== undefined ? el("span", { class: "dm-num", text: String(num) }) : null,
       el("a", { href: videoUrl(item), target: "_blank", rel: "noopener noreferrer", title: titleOf(item) }, thumb(item)),
       body,
@@ -231,6 +238,11 @@
   }
 
   function renderQueue() {
+    if (drag) {
+      queueRenderPending = true;
+      return;
+    }
+    queueRenderPending = false;
     queueBox.replaceChildren();
     queueCount.textContent = state.queue.length ? String(state.queue.length) : "";
     if (state.queue.length === 0) {
@@ -245,8 +257,143 @@
         }
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("remove", { id: item.id }) }));
       }
-      queueBox.appendChild(row(item, { num: index + 1, actions }));
+      const grip = canControl && state.queue.length > 1 ? makeGrip(item, index) : null;
+      queueBox.appendChild(row(item, { num: index + 1, actions, grip }));
     });
+    if (focusGripId !== null) {
+      const grip = queueBox.querySelector(`.dm-row[data-dm-id="${focusGripId}"] .dm-grip`);
+      if (grip) grip.focus();
+      focusGripId = null;
+    }
+  }
+
+  // --- drag to reorder ---------------------------------------------------------------------------
+  // The row is moved in the DOM as the pointer passes a neighbour's middle, and follows the pointer
+  // with a transform in between. On drop the server is told which item the row now stands in front
+  // of (see MediaQueue.move) - the server's next "state" is what finally redraws the list.
+  function queueRows() {
+    return Array.from(queueBox.querySelectorAll(".dm-row[data-dm-id]"));
+  }
+
+  function rowId(rowEl) {
+    return Number(rowEl.getAttribute("data-dm-id"));
+  }
+
+  function renumber() {
+    queueRows().forEach((rowEl, i) => {
+      const num = rowEl.querySelector(".dm-num");
+      if (num) num.textContent = String(i + 1);
+    });
+  }
+
+  function makeGrip(item, index) {
+    const grip = el("span", {
+      class: "dm-grip",
+      text: "⠿",
+      role: "button",
+      tabindex: "0",
+      title: t("dragHint"),
+      "aria-label": t("dragHint"),
+    });
+    grip.addEventListener("pointerdown", (event) => startDrag(event, grip));
+    grip.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      const queue = state.queue;
+      let beforeId;
+      if (event.key === "ArrowUp") {
+        if (index === 0) return;
+        beforeId = queue[index - 1].id;
+      } else {
+        if (index >= queue.length - 1) return;
+        beforeId = index + 2 < queue.length ? queue[index + 2].id : null;
+      }
+      focusGripId = item.id;
+      command("move", { id: item.id, beforeId, index: event.key === "ArrowUp" ? index - 1 : index + 1 });
+    });
+    return grip;
+  }
+
+  function startDrag(event, grip) {
+    if (drag || event.button > 0) return;
+    const rowEl = grip.closest(".dm-row");
+    if (!rowEl) return;
+    event.preventDefault();
+    drag = {
+      row: rowEl,
+      id: rowId(rowEl),
+      startOrder: queueRows().map(rowId).join(","),
+      offsetY: event.clientY - rowEl.getBoundingClientRect().top,
+      pointerId: event.pointerId,
+    };
+    rowEl.classList.add("is-dragging");
+    queueBox.classList.add("is-sorting");
+    // Listened for on the window, not captured on the handle: moving the row in the DOM detaches
+    // the handle for an instant, which drops a pointer capture, and the release then never arrives.
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+  }
+
+  function onDragMove(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    placeDragged(event.clientY);
+  }
+
+  // Moves the held row to where the pointer is. Called on every move and once more on release:
+  // a pointer may jump between two move events, and the release is the one position that counts.
+  function placeDragged(y) {
+    const others = queueRows().filter((r) => r !== drag.row);
+    const next = others.find((r) => {
+      const rect = r.getBoundingClientRect();
+      return y < rect.top + rect.height / 2;
+    });
+    if (next) {
+      if (drag.row.nextElementSibling !== next) queueBox.insertBefore(drag.row, next);
+    } else if (queueBox.lastElementChild !== drag.row) {
+      queueBox.appendChild(drag.row);
+    }
+    renumber();
+    drag.row.style.transform = "";
+    const natural = drag.row.getBoundingClientRect().top;
+    drag.row.style.transform = `translateY(${y - drag.offsetY - natural}px)`;
+
+    // Near the window edge the page scrolls, so a long queue can be crossed in one drag.
+    const edge = 48;
+    if (y < edge) window.scrollBy(0, -12);
+    else if (y > window.innerHeight - edge) window.scrollBy(0, 12);
+  }
+
+  function endDrag(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    window.removeEventListener("pointermove", onDragMove);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
+
+    if (event.type === "pointerup") placeDragged(event.clientY);
+    const { row: rowEl, id, startOrder } = drag;
+    rowEl.style.transform = "";
+    rowEl.classList.remove("is-dragging");
+    queueBox.classList.remove("is-sorting");
+    const rows = queueRows();
+    const moved = event.type === "pointerup" && rows.map(rowId).join(",") !== startOrder;
+    const nextRow = rowEl.nextElementSibling;
+    drag = null;
+
+    if (moved) {
+      command("move", {
+        id,
+        beforeId: nextRow && nextRow.hasAttribute("data-dm-id") ? rowId(nextRow) : null,
+        index: rows.indexOf(rowEl),
+      });
+    }
+    // Cancelled or unmoved: put the list back as the server last described it. Moved: leave the
+    // row where it was dropped - the server's answer to "move" redraws the list; the timer only
+    // covers a move the server refused, which sends no answer at all.
+    if (!moved) renderQueue();
+    else setTimeout(() => {
+      if (!drag) renderQueue();
+    }, 1500);
   }
 
   function renderHistory() {

@@ -337,6 +337,10 @@ async function handlePanelCommand(session, ws, principal, msg) {
       return asId(msg.id) && q.remove(msg.id, principal.by);
     case "moveTop":
       return asId(msg.id) && q.moveTop(msg.id);
+    case "move":
+      if (!asId(msg.id)) return;
+      if (msg.beforeId !== null && !asId(msg.beforeId)) return;
+      return q.move(msg.id, { beforeId: msg.beforeId, index: Number.isInteger(msg.index) ? msg.index : null });
     case "clearHistory":
       return q.clearHistory();
     case "add": {
