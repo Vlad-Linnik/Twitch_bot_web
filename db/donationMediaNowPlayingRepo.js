@@ -7,8 +7,10 @@
 // One row per channel, written by realtime/donationMediaManager.js and only by it:
 //   { channelId,                       string, numeric Twitch id
 //     channelLogin,                    without "#", for a human reading the collection
-//     item: null | { videoId, title, donor, amount: { value, currency } | null,
+//     item: null | { id, videoId, title, donor, amount: { value, currency } | null,
 //                    platform, addedBy },
+//                                  `id` is the queue's own item id; the bot sends it back with a
+//                                  `!clip` command (db/donationMediaChatCommandsRepo.js)
 //     paused,                          boolean
 //     startedAt,                       Date the clip started playing (null with no item)
 //     updatedAt }                      Date of the last write

@@ -93,6 +93,10 @@
       "cooldownMs": 15000,
       "signature": "!track"
     },
+    "clip": {
+      "enabled": true,
+      "signature": "!clip"
+    },
     "muteduel": {
       "enabled": true,
       "cooldownMs": 50000,

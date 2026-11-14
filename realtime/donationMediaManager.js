@@ -15,6 +15,8 @@
 // the last second, and the listeners are restarted at boot for every configured channel.
 const donationMediaRepo = require("../db/donationMediaRepo");
 const donationMediaNowPlayingRepo = require("../db/donationMediaNowPlayingRepo");
+const donationMediaChatCommandsRepo = require("../db/donationMediaChatCommandsRepo");
+const chatCommand = require("../lib/donationMediaChatCommand");
 const channelsRepo = require("../db/channelsRepo");
 const { computePermission, canEditSectionAt } = require("../middleware/permissions");
 const { MediaQueue } = require("../lib/donationMediaQueue");
@@ -33,6 +35,12 @@ const OEMBED_TIMEOUT_MS = 8000;
 // one left behind by a web process that died mid-clip. The bot's staleness limit is a hand-kept
 // multiple of this (TwitchBot commands/nowPlaying.js, STALE_MS).
 const NOW_PLAYING_REFRESH_MS = 60 * 1000;
+// How often DonationMediaChatCommands is looked at for a moderator's `!clip ...` from chat. The
+// bot waits for the outcome to say it in chat (TwitchBot commands/donationMediaControl.js,
+// RESULT_WAIT_MS - a hand-kept multiple of this), so this is most of the delay a moderator sees.
+const CHAT_COMMAND_POLL_MS = 1000;
+// At most this many commands per tick: a burst is drained over a few ticks rather than in one loop.
+const CHAT_COMMAND_BATCH = 20;
 
 const sessions = new Map(); // channelId -> Session
 
@@ -96,6 +104,9 @@ class Session {
     this.published = { key, at: now, itemId: current ? current.id : null, startedAt };
     const item = current
       ? {
+          // The bot sends it back with a `!clip` command, so the command applies only to this clip
+          // (lib/donationMediaChatCommand.js).
+          id: current.id,
           videoId: current.videoId,
           title: current.title || null,
           donor: current.donor || null,
@@ -213,8 +224,64 @@ function getSession(channelId, channelLogin) {
   return session;
 }
 
+// --- chat commands -------------------------------------------------------------------------------
+
+// One `!clip ...` from chat, already claimed. Returns the status to record.
+async function runChatCommand(cmd) {
+  if (!cmd.createdAt || Date.now() - new Date(cmd.createdAt).getTime() > donationMediaChatCommandsRepo.MAX_AGE_MS) return "expired";
+  if (!chatCommand.isAction(cmd.action)) return "invalid";
+  // Only a channel whose session exists has anything playing: the bot found a playing row, which
+  // only a session writes, so a missing one means this process restarted since.
+  const session = sessions.get(String(cmd.channelId));
+  if (!session) return "changed";
+  await session.ready;
+
+  // The bot checked the badge; the site's own rules decide, the same as for the queue panel - a
+  // moderator the owner denied the donation media section is refused here too.
+  const userId = cmd.by && cmd.by.userId ? String(cmd.by.userId) : null;
+  if (!userId) return "forbidden";
+  const level = await computePermission(userId, session.channelLogin);
+  if (level > 2 || !(await canEditSectionAt(level, session.channelId, userId, "donationMedia"))) return "forbidden";
+
+  const by = cmd.by.login ? String(cmd.by.login).slice(0, 25) : userId;
+  return chatCommand.apply(session.queue, { action: cmd.action, itemId: cmd.itemId, by }).status;
+}
+
+let chatCommandTimer = null;
+let chatCommandBusy = false;
+
+async function pollChatCommands() {
+  if (chatCommandBusy) return;
+  chatCommandBusy = true;
+  try {
+    for (let i = 0; i < CHAT_COMMAND_BATCH; i++) {
+      const cmd = await donationMediaChatCommandsRepo.claim();
+      if (!cmd) break;
+      let status;
+      try {
+        status = await runChatCommand(cmd);
+      } catch (err) {
+        console.error(`[donationMedia] chat command ${cmd.action} failed:`, err.message);
+        status = "invalid";
+      }
+      await donationMediaChatCommandsRepo.finish(cmd._id, status);
+    }
+  } catch (err) {
+    console.error("[donationMedia] chat command poll failed:", err.message);
+  } finally {
+    chatCommandBusy = false;
+  }
+}
+
+function startChatCommands() {
+  if (chatCommandTimer) return;
+  chatCommandTimer = setInterval(pollChatCommands, CHAT_COMMAND_POLL_MS);
+  chatCommandTimer.unref();
+}
+
 // Boot: start listening for every channel that has a platform connected.
 async function start() {
+  startChatCommands();
   try {
     const configs = await donationMediaRepo.listConfigured();
     for (const config of configs) {
@@ -454,4 +521,5 @@ module.exports = {
   handleConnection,
   // for tests
   _sessions: sessions,
+  _runChatCommand: runChatCommand,
 };

@@ -50,6 +50,7 @@ module.exports = [
       { signature: "!longban @user <duration|date> timeout|ban [reason]", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.longban", useCaseKey: "commands.useCase.longban", configKey: "longban" },
       { signature: "!cancellongban @user", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.cancellongban", useCaseKey: "commands.useCase.cancellongban", configKey: "cancellongban" },
       { signature: "!longbans", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.longbans", useCaseKey: "commands.useCase.longbans", configKey: "longbans" },
+      { signature: "!clip hide|show|pause|play|skip", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.clip", useCaseKey: "commands.useCase.clip", configKey: "clip" },
     ],
   },
   {
