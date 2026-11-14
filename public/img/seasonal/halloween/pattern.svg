@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+<g fill="#c4a6ff">
+<path transform="translate(60 52) scale(1.4)" d="M0,-3 C1,-6 2,-6 3,-4 L4,-6 C6,-2 12,-7 20,-4 C16,-1 16,3 17,7 C13,3 10,4 8,7 C6,4 3,4 1,6 L0,5 L-1,6 C-3,4 -6,4 -8,7 C-10,4 -13,3 -17,7 C-16,3 -16,-1 -20,-4 C-12,-7 -6,-2 -4,-6 L-3,-4 C-2,-6 -1,-6 0,-3 Z"/>
+<path transform="translate(236 196) scale(1) rotate(-12)" d="M0,-3 C1,-6 2,-6 3,-4 L4,-6 C6,-2 12,-7 20,-4 C16,-1 16,3 17,7 C13,3 10,4 8,7 C6,4 3,4 1,6 L0,5 L-1,6 C-3,4 -6,4 -8,7 C-10,4 -13,3 -17,7 C-16,3 -16,-1 -20,-4 C-12,-7 -6,-2 -4,-6 L-3,-4 C-2,-6 -1,-6 0,-3 Z"/>
+</g>
+<g transform="translate(210 70)">
+<path d="M-12,14 L-12,-2 A12,12 0 0 1 12,-2 L12,14 L8,10 L4,14 L0,10 L-4,14 L-8,10 Z" fill="#f2f0ff"/>
+<circle cx="-4.5" cy="-1" r="2" fill="#1a1426"/><circle cx="4.5" cy="-1" r="2" fill="#1a1426"/>
+<ellipse cx="0" cy="5" rx="2" ry="2.6" fill="#1a1426"/>
+</g>
+<g transform="translate(92 236) rotate(18)">
+<path d="M0,-14 L10,12 L-10,12 Z" fill="#ffe9a8"/>
+<path d="M-5.4,0 L5.4,0 L8,6 L-8,6 Z" fill="#ff9a2e"/>
+<path d="M-8,6 L8,6 L10,12 L-10,12 Z" fill="#fff4dc"/>
+</g>
+<g fill="#ffd34d">
+<path d="M150,140 l2,5 5,2 -5,2 -2,5 -2,-5 -5,-2 5,-2 Z"/>
+<path d="M290,290 l1.5,4 4,1.5 -4,1.5 -1.5,4 -1.5,-4 -4,-1.5 4,-1.5 Z"/>
+<path d="M28,160 l1.5,4 4,1.5 -4,1.5 -1.5,4 -1.5,-4 -4,-1.5 4,-1.5 Z"/>
+</g>
+<g transform="translate(280 120)" stroke="#d9d3ea" stroke-width="1" fill="none">
+<line x1="0" y1="-30" x2="0" y2="0"/>
+<circle cx="0" cy="4" r="4" fill="#d9d3ea" stroke="none"/>
+<path d="M-3,2 L-9,-2 M-3,4 L-10,4 M-3,6 L-9,10 M3,2 L9,-2 M3,4 L10,4 M3,6 L9,10"/>
+</g>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="170" viewBox="0 0 200 170">
+<path d="M98,34 C96,20 100,10 112,4 L116,10 C107,15 105,23 106,34 Z" fill="#4c6b2a"/>
+<path d="M112,8 C126,2 136,8 138,16 C130,12 122,12 114,16 Z" fill="#5f8a32"/>
+<ellipse cx="44" cy="100" rx="38" ry="52" fill="#b24d14"/>
+<ellipse cx="156" cy="100" rx="38" ry="52" fill="#b24d14"/>
+<ellipse cx="70" cy="98" rx="44" ry="60" fill="#d0611a"/>
+<ellipse cx="130" cy="98" rx="44" ry="60" fill="#d0611a"/>
+<ellipse cx="100" cy="97" rx="46" ry="63" fill="#ec7a20"/>
+<path d="M100,36 C90,60 90,134 100,158 M70,40 C56,64 56,132 70,156 M130,40 C144,64 144,132 130,156" stroke="#b9561a" stroke-width="2.5" fill="none" opacity="0.7"/>
+<path d="M58,78 L84,74 L74,96 Z M142,78 L116,74 L126,96 Z" fill="#ffd34d"/>
+<path d="M100,98 L108,112 L92,112 Z" fill="#ffd34d"/>
+<path d="M50,118 Q100,150 150,118 L142,126 L134,120 L126,132 L116,124 L106,136 L94,136 L84,124 L74,132 L66,120 L58,126 Z" fill="#ffd34d"/>
+<path d="M62,82 L80,79 L74,92 Z M138,82 L120,79 L126,92 Z M60,121 Q100,143 140,121 L134,124 L126,128 L116,128 L106,132 L94,132 L84,128 L74,128 L66,124 Z" fill="#fff1a8" opacity="0.8"/>
+</svg>

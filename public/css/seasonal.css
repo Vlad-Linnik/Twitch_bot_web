@@ -109,6 +109,16 @@ html[data-season="newyear"] .season-backdrop__tree--right { right: 1.5vw; width:
   html[data-season="newyear"] .season-backdrop__tree--left-small { display: none; }
 }
 
+/* The viewer's own avatar in the bar: a ring of ice with snow lying on top. Drawn over the
+   button (which is position: relative for this), larger than it so the cap overhangs. */
+html.season-on[data-season="newyear"] .site-nav__avatar::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  background: url("/img/seasonal/newyear/avatar-frost.svg") center / contain no-repeat;
+  pointer-events: none;
+}
+
 /* The wand: only for a real mouse, and only where nothing is aimed with the pointer. The
    hotspot (6 6) is the star, which is also where the trail is emitted from. */
 @media (hover: hover) and (pointer: fine) {
@@ -119,4 +129,554 @@ html[data-season="newyear"] .season-backdrop__tree--right { right: 1.5vw; width:
   html.season-on[data-season="newyear"]:not([data-season-quiet]) :is(input, textarea, select, [contenteditable="true"], [contenteditable=""]) {
     cursor: auto;
   }
+}
+
+/* ---------------------------------------------------------------- halloween */
+
+html.season-on[data-season="halloween"] nav.site-nav::after {
+  /* Cobweb fringe hanging off the bar's lower edge - same placement as the newyear drift. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 16px;
+  background: url("/img/seasonal/halloween/cobweb.svg") 0 0 / 220px 16px repeat-x;
+  pointer-events: none;
+}
+
+html.season-on[data-season="halloween"] nav.site-nav::before {
+  /* One spider on its thread, left of centre so it never hangs over the account menu. */
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 28%;
+  width: 24px;
+  height: 64px;
+  background: url("/img/seasonal/halloween/spider.svg") center top / contain no-repeat;
+  transform-origin: 50% 0;
+  pointer-events: none;
+}
+html.season-motion[data-season="halloween"]:not([data-season-quiet]) nav.site-nav::before {
+  animation: season-spider 7s ease-in-out infinite;
+}
+@keyframes season-spider {
+  0%, 100% { transform: translateY(-14px) rotate(0deg); }
+  45%      { transform: translateY(6px) rotate(3deg); }
+  60%      { transform: translateY(2px) rotate(-2deg); }
+}
+
+/* Devil's horns on the viewer's own avatar. */
+html.season-on[data-season="halloween"] .site-nav__avatar::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: -9px;
+  height: 18px;
+  background: url("/img/seasonal/halloween/horns.svg") center top / 100% 100% no-repeat;
+  pointer-events: none;
+}
+
+html[data-season="halloween"] .season-backdrop__moon {
+  position: absolute;
+  top: 84px;
+  right: 7vw;
+  width: clamp(80px, 11vw, 170px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 36%, rgb(255 244 200 / 0.9), rgb(255 214 140 / 0.75) 55%, rgb(230 170 90 / 0.6) 100%);
+  box-shadow: 0 0 60px 18px rgb(255 190 100 / 0.35);
+  opacity: 0.22;
+}
+
+html[data-season="halloween"] .season-backdrop__pattern {
+  position: absolute;
+  inset: 0;
+  background: url("/img/seasonal/halloween/pattern.svg") 0 0 / 320px 320px repeat;
+  opacity: 0.09;
+}
+
+html[data-season="halloween"] .season-backdrop__ground {
+  /* Low fog: purple and a touch of green, the colours of the trail. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 110px;
+  background: radial-gradient(55% 100% at 15% 100%, rgb(150 90 230 / 0.16), transparent 70%),
+              radial-gradient(55% 100% at 85% 100%, rgb(150 90 230 / 0.14), transparent 70%),
+              radial-gradient(40% 70% at 50% 100%, rgb(120 220 120 / 0.06), transparent 70%);
+}
+
+html[data-season="halloween"] .season-backdrop__pumpkin {
+  position: absolute;
+  bottom: 6px;
+  aspect-ratio: 200 / 170;
+  background: url("/img/seasonal/halloween/pumpkin.svg") center bottom / contain no-repeat;
+  opacity: 0.5;
+  filter: drop-shadow(0 0 14px rgb(255 140 30 / 0.45));
+}
+html[data-season="halloween"] .season-backdrop__pumpkin--left { left: 2vw; width: clamp(90px, 12vw, 190px); }
+html[data-season="halloween"] .season-backdrop__pumpkin--left-small { left: calc(2vw + clamp(80px, 11vw, 175px)); width: clamp(52px, 6.5vw, 100px); opacity: 0.38; }
+html[data-season="halloween"] .season-backdrop__pumpkin--right { right: 2vw; width: clamp(80px, 10vw, 160px); transform: scaleX(-1); }
+
+/* Candle light: the glow breathes unevenly, each pumpkin out of step with the others. */
+html.season-motion[data-season="halloween"]:not([data-season-quiet]) .season-backdrop__pumpkin {
+  animation: season-candle 3.1s ease-in-out infinite;
+}
+html.season-motion[data-season="halloween"]:not([data-season-quiet]) .season-backdrop__pumpkin--left-small { animation-duration: 2.3s; animation-delay: -0.7s; }
+html.season-motion[data-season="halloween"]:not([data-season-quiet]) .season-backdrop__pumpkin--right { animation-duration: 3.7s; animation-delay: -1.9s; }
+@keyframes season-candle {
+  0%, 100% { filter: drop-shadow(0 0 14px rgb(255 140 30 / 0.45)); }
+  30%      { filter: drop-shadow(0 0 20px rgb(255 160 40 / 0.6)); }
+  42%      { filter: drop-shadow(0 0 9px rgb(255 120 20 / 0.3)); }
+  70%      { filter: drop-shadow(0 0 17px rgb(255 150 35 / 0.52)); }
+}
+
+@media (max-width: 767px) {
+  html[data-season="halloween"] .season-backdrop__pattern { opacity: 0.06; }
+  html[data-season="halloween"] .season-backdrop__pumpkin { opacity: 0.25; }
+  html[data-season="halloween"] .season-backdrop__pumpkin--left-small { display: none; }
+  html[data-season="halloween"] .season-backdrop__moon { opacity: 0.12; }
+  /* The bar is full of controls on a phone; the spider would hang over the title. */
+  html.season-on[data-season="halloween"] nav.site-nav::before { display: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html.season-on[data-season="halloween"]:not([data-season-quiet]) {
+    cursor: url("/img/seasonal/halloween/wand.svg") 6 6, auto;
+  }
+  html.season-on[data-season="halloween"]:not([data-season-quiet]) :is(input, textarea, select, [contenteditable="true"], [contenteditable=""]) {
+    cursor: auto;
+  }
+}
+
+@media print {
+  nav.site-nav::before,
+  .site-nav__avatar::after { display: none !important; }
+}
+
+/* ================================================================ shared pieces of the
+   lighter themes below. Each theme only names its pictures; the boxes behave the same. */
+
+/* The themes below set their wand through one variable rather than repeating the media query
+   and the form-field exception for each of them. Unset (newyear, halloween) = no effect here. */
+html[data-season="valentine"]    { --season-cursor: url("/img/seasonal/valentine/wand.svg") 6 6; }
+html[data-season="maslenitsa"]   { --season-cursor: url("/img/seasonal/maslenitsa/wand.svg") 6 6; }
+html[data-season="aprilfools"]   { --season-cursor: url("/img/seasonal/aprilfools/wand.svg") 6 6; }
+html[data-season="cosmonautics"] { --season-cursor: url("/img/seasonal/cosmonautics/wand.svg") 6 6; }
+html[data-season="march8"]       { --season-cursor: url("/img/seasonal/march8/wand.svg") 6 6; }
+html[data-season="summer"]       { --season-cursor: url("/img/seasonal/summer/wand.svg") 6 6; }
+html[data-season="september"]    { --season-cursor: url("/img/seasonal/september/wand.svg") 6 6; }
+@media (hover: hover) and (pointer: fine) {
+  html.season-on:is([data-season="valentine"], [data-season="maslenitsa"], [data-season="aprilfools"], [data-season="cosmonautics"], [data-season="march8"], [data-season="summer"], [data-season="september"]):not([data-season-quiet]) {
+    cursor: var(--season-cursor), auto;
+  }
+  html.season-on:is([data-season="valentine"], [data-season="maslenitsa"], [data-season="aprilfools"], [data-season="cosmonautics"], [data-season="march8"], [data-season="summer"], [data-season="september"]):not([data-season-quiet]) :is(input, textarea, select, [contenteditable="true"], [contenteditable=""]) {
+    cursor: auto;
+  }
+}
+
+/* The tiled scatter of small pictures; each theme names its tile and how faint it is. */
+.season-backdrop__pattern {
+  position: absolute;
+  inset: 0;
+  background-position: 0 0;
+  background-size: 320px 320px;
+  background-repeat: repeat;
+  opacity: var(--season-pattern-opacity, 0.08);
+}
+@media (max-width: 767px) {
+  .season-backdrop__pattern { opacity: calc(var(--season-pattern-opacity, 0.08) * 0.65); }
+}
+
+/* Everything below that stands on the bottom edge or hangs in a corner. */
+.season-backdrop > [class*="season-backdrop__"] { position: absolute; }
+.season-backdrop > .season-backdrop__pattern { inset: 0; }
+
+/* A garland lying along the bar's lower edge (the newyear drift's placement). */
+html.season-on:is([data-season="valentine"], [data-season="maslenitsa"], [data-season="aprilfools"], [data-season="march8"], [data-season="september"]) nav.site-nav::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--season-garland-height);
+  background: var(--season-garland) 0 0 / var(--season-garland-size) repeat-x;
+  pointer-events: none;
+}
+
+/* Something hanging off the bar on a thread (the halloween spider's placement). */
+html.season-on:is([data-season="aprilfools"], [data-season="cosmonautics"]) nav.site-nav::before {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 28%;
+  width: var(--season-hanger-width);
+  height: var(--season-hanger-height);
+  background: var(--season-hanger) center top / contain no-repeat;
+  transform-origin: 50% 0;
+  pointer-events: none;
+}
+html.season-motion:is([data-season="aprilfools"], [data-season="cosmonautics"]):not([data-season-quiet]) nav.site-nav::before {
+  animation: season-swing 4.5s ease-in-out infinite;
+}
+@keyframes season-swing {
+  0%, 100% { transform: rotate(-7deg); }
+  50%      { transform: rotate(7deg); }
+}
+@media (max-width: 767px) {
+  html.season-on[data-season] nav.site-nav::before { display: none; }
+}
+
+/* The viewer's own avatar: one picture over the button, placed by the theme. */
+html.season-on:is([data-season="valentine"], [data-season="maslenitsa"], [data-season="aprilfools"], [data-season="cosmonautics"], [data-season="march8"], [data-season="summer"], [data-season="september"]) .site-nav__avatar::after {
+  content: "";
+  position: absolute;
+  inset: var(--season-avatar-inset);
+  background: var(--season-avatar) center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+
+/* A gentle sway for whatever hangs or stands; the element sets its own origin. */
+@keyframes season-sway {
+  0%, 100% { transform: var(--season-flip, scaleX(1)) rotate(-2.5deg); }
+  50%      { transform: var(--season-flip, scaleX(1)) rotate(2.5deg); }
+}
+@keyframes season-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+/* ---------------------------------------------------------------- valentine (Feb 12-15) */
+
+html[data-season="valentine"] {
+  --season-pattern-opacity: 0.08;
+  --season-garland: url("/img/seasonal/valentine/garland.svg");
+  --season-garland-size: 200px 22px;
+  --season-garland-height: 22px;
+  --season-avatar: url("/img/seasonal/valentine/wings.svg");
+  --season-avatar-inset: 1px -15px 3px -15px;
+}
+html[data-season="valentine"] .season-backdrop__pattern { background-image: url("/img/seasonal/valentine/pattern.svg"); }
+html[data-season="valentine"] .season-backdrop__glow {
+  top: 56px;
+  right: 0;
+  width: 45vw;
+  height: 45vh;
+  background: radial-gradient(closest-side at 70% 30%, rgb(255 80 130 / 0.12), transparent);
+}
+html[data-season="valentine"] .season-backdrop__balloons {
+  bottom: 0;
+  aspect-ratio: 160 / 260;
+  background: url("/img/seasonal/valentine/balloons.svg") center bottom / contain no-repeat;
+  opacity: 0.45;
+  transform-origin: 50% 100%;
+}
+html[data-season="valentine"] .season-backdrop__balloons--left { left: 2vw; width: clamp(80px, 10vw, 150px); }
+html[data-season="valentine"] .season-backdrop__balloons--right { right: 2vw; width: clamp(64px, 8vw, 120px); --season-flip: scaleX(-1); transform: scaleX(-1); }
+html.season-motion[data-season="valentine"]:not([data-season-quiet]) .season-backdrop__balloons { animation: season-sway 5s ease-in-out infinite; }
+html.season-motion[data-season="valentine"]:not([data-season-quiet]) .season-backdrop__balloons--right { animation-duration: 6.2s; animation-delay: -2s; }
+/* A small heart badge on the avatar, beside the wings. */
+html.season-on[data-season="valentine"] .site-nav__avatar::before {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  width: 13px;
+  height: 13px;
+  background: url("/img/seasonal/valentine/heart.svg") center / contain no-repeat;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------- maslenitsa (Easter - 55..49) */
+
+html[data-season="maslenitsa"] {
+  --season-pattern-opacity: 0.08;
+  --season-garland: url("/img/seasonal/maslenitsa/ribbons.svg");
+  --season-garland-size: 160px 26px;
+  --season-garland-height: 26px;
+  --season-avatar: url("/img/seasonal/maslenitsa/kokoshnik.svg");
+  --season-avatar-inset: -11px -5px 21px -5px;
+}
+html[data-season="maslenitsa"] .season-backdrop__pattern { background-image: url("/img/seasonal/maslenitsa/pattern.svg"); }
+html[data-season="maslenitsa"] .season-backdrop__sun {
+  top: 80px;
+  right: 5vw;
+  width: clamp(90px, 12vw, 180px);
+  aspect-ratio: 1;
+  background: url("/img/seasonal/maslenitsa/sun.svg") center / contain no-repeat;
+  opacity: 0.32;
+}
+html.season-motion[data-season="maslenitsa"]:not([data-season-quiet]) .season-backdrop__sun { animation: season-pulse 6s ease-in-out infinite; }
+@keyframes season-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+html[data-season="maslenitsa"] .season-backdrop__ground {
+  /* The last snow of the winter being seen off. */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 70px;
+  background: radial-gradient(60% 100% at 15% 100%, rgb(240 245 255 / 0.10), transparent 70%),
+              radial-gradient(60% 100% at 85% 100%, rgb(240 245 255 / 0.10), transparent 70%);
+}
+html[data-season="maslenitsa"] .season-backdrop__pancakes {
+  left: 2vw;
+  bottom: 4px;
+  width: clamp(110px, 13vw, 200px);
+  aspect-ratio: 200 / 150;
+  background: url("/img/seasonal/maslenitsa/pancakes.svg") center bottom / contain no-repeat;
+  opacity: 0.5;
+}
+html[data-season="maslenitsa"] .season-backdrop__effigy {
+  right: 3vw;
+  bottom: 0;
+  width: clamp(60px, 7vw, 110px);
+  aspect-ratio: 140 / 300;
+  background: url("/img/seasonal/maslenitsa/effigy.svg") center bottom / contain no-repeat;
+  opacity: 0.45;
+  transform-origin: 50% 100%;
+}
+html.season-motion[data-season="maslenitsa"]:not([data-season-quiet]) .season-backdrop__effigy { animation: season-sway 5.5s ease-in-out infinite; }
+
+/* ---------------------------------------------------------------- aprilfools (Apr 1)
+   Clowns everywhere, on purpose: the wallpaper, both bottom corners, a trapeze under the bar,
+   the avatar's wig and nose, every page heading, the brand, the tab title, and (with motion)
+   clowns popping in from the screen edges - public/js/seasonal-theme.js adds those last three. */
+
+html[data-season="aprilfools"] {
+  --season-pattern-opacity: 0.1;
+  --season-garland: url("/img/seasonal/aprilfools/bunting.svg");
+  --season-garland-size: 200px 22px;
+  --season-garland-height: 22px;
+  --season-hanger: url("/img/seasonal/aprilfools/trapeze.svg");
+  --season-hanger-width: 40px;
+  --season-hanger-height: 70px;
+  --season-avatar: url("/img/seasonal/aprilfools/wig.svg");
+  --season-avatar-inset: -6px -11px 8px -11px;
+}
+html[data-season="aprilfools"] .season-backdrop__pattern { background-image: url("/img/seasonal/aprilfools/pattern.svg"); }
+html[data-season="aprilfools"] .season-backdrop__balloons {
+  top: 76px;
+  left: 1.5vw;
+  width: clamp(60px, 7vw, 110px);
+  aspect-ratio: 140 / 200;
+  background: url("/img/seasonal/aprilfools/balloons.svg") center / contain no-repeat;
+  opacity: 0.4;
+}
+html.season-motion[data-season="aprilfools"]:not([data-season-quiet]) .season-backdrop__balloons { animation: season-bob 4s ease-in-out infinite; }
+html[data-season="aprilfools"] .season-backdrop__clown {
+  bottom: 0;
+  width: clamp(90px, 11vw, 170px);
+  aspect-ratio: 160 / 120;
+  background: url("/img/seasonal/aprilfools/clown-peek.svg") center bottom / contain no-repeat;
+  opacity: 0.6;
+}
+html[data-season="aprilfools"] .season-backdrop__clown--left { left: 3vw; }
+html[data-season="aprilfools"] .season-backdrop__clown--right { right: 3vw; }
+html.season-motion[data-season="aprilfools"]:not([data-season-quiet]) .season-backdrop__clown { animation: season-peek 7s ease-in-out infinite; }
+html.season-motion[data-season="aprilfools"]:not([data-season-quiet]) .season-backdrop__clown--right { animation-delay: -3.5s; }
+@keyframes season-peek {
+  0%, 100% { transform: translateY(0); }
+  40%      { transform: translateY(0); }
+  55%      { transform: translateY(70%); }
+  75%      { transform: translateY(70%); }
+}
+/* The avatar's red nose (the wig is the shared ::after). */
+html.season-on[data-season="aprilfools"] .site-nav__avatar::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ff9b9b 0 18%, #e8202a 22% 100%);
+  box-shadow: 0 0 0 1px #0b0b10;
+  pointer-events: none;
+  z-index: 1;
+}
+/* Every page heading gets one. Inline text, so it can neither move nor clip anything. */
+html.season-on[data-season="aprilfools"] main :is(h1, h2)::after { content: " \1F921"; }
+
+/* Clowns popping in from a screen edge (created by script; motion only). */
+.season-popclown {
+  position: fixed;
+  z-index: 55;
+  width: 120px;
+  height: 90px;
+  background: url("/img/seasonal/aprilfools/clown-peek.svg") center bottom / contain no-repeat;
+  pointer-events: none;
+  animation: season-popclown 3.2s ease-in-out forwards;
+}
+/* The script turns the box so its bottom faces the edge it comes from (--season-pop-turn);
+   the slide is along the box's own vertical, so one keyframe set serves every edge. */
+@keyframes season-popclown {
+  0%   { transform: rotate(var(--season-pop-turn, 0deg)) translateY(100%); }
+  20%  { transform: rotate(var(--season-pop-turn, 0deg)) translateY(8%); }
+  30%  { transform: rotate(var(--season-pop-turn, 0deg)) translateY(14%); }
+  70%  { transform: rotate(var(--season-pop-turn, 0deg)) translateY(8%); }
+  100% { transform: rotate(var(--season-pop-turn, 0deg)) translateY(100%); }
+}
+
+/* ---------------------------------------------------------------- cosmonautics (Apr 11-13) */
+
+html[data-season="cosmonautics"] {
+  --season-pattern-opacity: 0.14;
+  --season-hanger: url("/img/seasonal/cosmonautics/sputnik.svg");
+  --season-hanger-width: 36px;
+  --season-hanger-height: 44px;
+  --season-avatar: url("/img/seasonal/cosmonautics/helmet.svg");
+  --season-avatar-inset: -12px;
+}
+html[data-season="cosmonautics"] .season-backdrop__pattern { background-image: url("/img/seasonal/cosmonautics/pattern.svg"); }
+html[data-season="cosmonautics"] .season-backdrop__planet {
+  top: 78px;
+  right: 4vw;
+  width: clamp(100px, 13vw, 200px);
+  aspect-ratio: 1;
+  background: url("/img/seasonal/cosmonautics/planet.svg") center / contain no-repeat;
+  opacity: 0.38;
+}
+html[data-season="cosmonautics"] .season-backdrop__rocket {
+  left: 4vw;
+  bottom: 40px;
+  width: clamp(40px, 4vw, 64px);
+  aspect-ratio: 80 / 160;
+  background: url("/img/seasonal/cosmonautics/rocket.svg") center / contain no-repeat;
+  opacity: 0.55;
+  transform: rotate(35deg);
+}
+/* With motion the rocket launches: bottom-left to top-right, then a pause off screen. */
+html.season-motion[data-season="cosmonautics"]:not([data-season-quiet]) .season-backdrop__rocket {
+  left: 0;
+  bottom: 0;
+  animation: season-launch 24s linear infinite;
+}
+@keyframes season-launch {
+  0%   { transform: translate(-10vw, 10vh) rotate(42deg); opacity: 0; }
+  3%   { opacity: 0.6; }
+  40%  { transform: translate(110vw, -110vh) rotate(42deg); opacity: 0.6; }
+  41%, 100% { transform: translate(110vw, -110vh) rotate(42deg); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------- march8 (Mar 6-9) */
+
+html[data-season="march8"] {
+  --season-pattern-opacity: 0.08;
+  --season-garland: url("/img/seasonal/march8/garland.svg");
+  --season-garland-size: 200px 20px;
+  --season-garland-height: 20px;
+  --season-avatar: url("/img/seasonal/march8/wreath.svg");
+  --season-avatar-inset: -12px -10px 14px -10px;
+}
+html[data-season="march8"] .season-backdrop__pattern { background-image: url("/img/seasonal/march8/pattern.svg"); }
+html[data-season="march8"] .season-backdrop__mimosa {
+  left: 0;
+  bottom: 0;
+  width: clamp(110px, 14vw, 220px);
+  aspect-ratio: 1;
+  background: url("/img/seasonal/march8/mimosa.svg") left bottom / contain no-repeat;
+  opacity: 0.5;
+  transform-origin: 0 100%;
+}
+html[data-season="march8"] .season-backdrop__tulips {
+  right: 3vw;
+  bottom: 0;
+  width: clamp(80px, 9vw, 150px);
+  aspect-ratio: 180 / 240;
+  background: url("/img/seasonal/march8/tulips.svg") center bottom / contain no-repeat;
+  opacity: 0.5;
+  transform-origin: 50% 100%;
+}
+html.season-motion[data-season="march8"]:not([data-season-quiet]) :is(.season-backdrop__mimosa, .season-backdrop__tulips) { animation: season-sway 6s ease-in-out infinite; }
+
+/* ---------------------------------------------------------------- summer (Jun 1-7) */
+
+html[data-season="summer"] {
+  --season-pattern-opacity: 0.07;
+  --season-avatar: url("/img/seasonal/summer/sunglasses.svg");
+  --season-avatar-inset: 8px -5px 11px -5px;
+}
+html[data-season="summer"] .season-backdrop__pattern { background-image: url("/img/seasonal/summer/pattern.svg"); }
+html[data-season="summer"] .season-backdrop__sun {
+  top: 76px;
+  right: 5vw;
+  width: clamp(100px, 13vw, 200px);
+  aspect-ratio: 1;
+  background: url("/img/seasonal/summer/sun.svg") center / contain no-repeat;
+  opacity: 0.32;
+}
+html.season-motion[data-season="summer"]:not([data-season-quiet]) .season-backdrop__sun { animation: season-spin 60s linear infinite; }
+@keyframes season-spin { to { transform: rotate(360deg); } }
+html[data-season="summer"] .season-backdrop__palm {
+  left: 1vw;
+  bottom: 20px;
+  width: clamp(100px, 12vw, 190px);
+  aspect-ratio: 200 / 300;
+  background: url("/img/seasonal/summer/palm.svg") center bottom / contain no-repeat;
+  opacity: 0.42;
+  transform-origin: 50% 100%;
+}
+html.season-motion[data-season="summer"]:not([data-season-quiet]) .season-backdrop__palm { animation: season-sway 7s ease-in-out infinite; }
+html[data-season="summer"] .season-backdrop__waves {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44px;
+  background: url("/img/seasonal/summer/waves.svg") 0 0 / 240px 44px repeat-x;
+  opacity: 0.3;
+}
+html.season-motion[data-season="summer"]:not([data-season-quiet]) .season-backdrop__waves { animation: season-waves 9s linear infinite; }
+@keyframes season-waves { to { background-position: 240px 0; } }
+
+/* ---------------------------------------------------------------- september (Sep 1-7) */
+
+html[data-season="september"] {
+  --season-pattern-opacity: 0.07;
+  --season-garland: url("/img/seasonal/september/garland.svg");
+  --season-garland-size: 200px 18px;
+  --season-garland-height: 18px;
+  --season-avatar: url("/img/seasonal/september/crown.svg");
+  --season-avatar-inset: -12px -10px 14px -10px;
+}
+html[data-season="september"] .season-backdrop__pattern { background-image: url("/img/seasonal/september/pattern.svg"); }
+html[data-season="september"] .season-backdrop__branch {
+  top: 56px;
+  right: 0;
+  width: clamp(130px, 16vw, 240px);
+  aspect-ratio: 240 / 180;
+  background: url("/img/seasonal/september/branch.svg") right top / contain no-repeat;
+  opacity: 0.45;
+  transform-origin: 100% 0;
+}
+html.season-motion[data-season="september"]:not([data-season-quiet]) .season-backdrop__branch { animation: season-sway 6s ease-in-out infinite; }
+html[data-season="september"] .season-backdrop__pile {
+  bottom: 0;
+  width: clamp(120px, 15vw, 240px);
+  aspect-ratio: 240 / 90;
+  background: url("/img/seasonal/september/pile.svg") center bottom / contain no-repeat;
+  opacity: 0.45;
+}
+html[data-season="september"] .season-backdrop__pile--left { left: 1vw; }
+html[data-season="september"] .season-backdrop__pile--right { right: 1vw; transform: scaleX(-1); }
+
+/* ---------------------------------------------------------------- phones, for all of the above */
+
+@media (max-width: 767px) {
+  html[data-season] :is(.season-backdrop__balloons, .season-backdrop__pancakes, .season-backdrop__effigy,
+    .season-backdrop__clown, .season-backdrop__mimosa, .season-backdrop__tulips, .season-backdrop__palm,
+    .season-backdrop__pile, .season-backdrop__branch, .season-backdrop__rocket) { opacity: 0.22; }
+  html[data-season] :is(.season-backdrop__sun, .season-backdrop__planet) { opacity: 0.14; }
+  html[data-season="valentine"] .season-backdrop__balloons--right,
+  html[data-season="september"] .season-backdrop__pile--right { display: none; }
+}
+
+@media print {
+  .season-popclown { display: none !important; }
 }

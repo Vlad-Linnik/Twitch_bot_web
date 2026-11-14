@@ -22,17 +22,33 @@
   <%# w-full, not justify-self-start: a fit-content box is never narrower than the brand's
       unbreakable text, so it would overflow the column instead of letting the text truncate. %>
   <div class="w-full flex items-center gap-1 sm:gap-2 min-w-0">
-    <a href="/" class="text-sm font-semibold tracking-wide text-neutral-100 min-w-0 truncate"><%= t('nav.brand') %></a>
+    <a href="/" data-season-brand class="text-sm font-semibold tracking-wide text-neutral-100 min-w-0 truncate"><%= t('nav.brand') %></a>
     <%# The viewer's own switch for the seasonal decor. Present only while a theme is on, and
         shown only with JS (public/css/seasonal.css) - the choice is applied and remembered by
         public/js/seasonal-theme.js; data-csrf is how it saves a logged-in viewer's choice. %>
+    <%# The switch's icon and colour per theme. Literal class names, so Tailwind's scan of this
+        file keeps every one of them in the build. %>
+    <%
+      const SEASON_ICONS = {
+        newyear: { color: "text-sky-200", path: "M12 2v20M3.34 7l17.32 10M3.34 17 20.66 7M12 2l-2.5 2.5M12 2l2.5 2.5M12 22l-2.5-2.5M12 22l2.5-2.5" },
+        halloween: { color: "text-orange-300", path: "M12 6.5c-.2-2 .6-3.6 2.4-4.4M12 6.5c-2-1.3-5.2-1.1-7 .9-1.8 2-2.3 5-1.7 7.6.7 3 3 5 5.4 5 1.2 0 2-.4 3.3-.4s2.1.4 3.3.4c2.4 0 4.7-2 5.4-5 .6-2.6.1-5.6-1.7-7.6-1.8-2-5-2.2-7-.9ZM12 6.5c-1.4 3.2-1.4 9.6 0 13" },
+        valentine: { color: "text-pink-300", path: "M12 20s-7.5-4.6-9.3-9.4C1.5 7.4 3.6 4.5 6.7 4.5c2.1 0 3.6 1.2 5.3 3.2 1.7-2 3.2-3.2 5.3-3.2 3.1 0 5.2 2.9 4 6.1C19.5 15.4 12 20 12 20Z" },
+        maslenitsa: { color: "text-amber-300", path: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" },
+        aprilfools: { color: "text-rose-300", path: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM8 14.5c1.5 2.2 6.5 2.2 8 0M8.5 9h.01M15.5 9h.01M12 11.5a1.2 1.2 0 1 0 0 .01" },
+        cosmonautics: { color: "text-indigo-300", path: "M12 2.5c3 2 4.8 6 4 11l-1.8 3h-4.4L8 13.5c-.8-5 1-9 4-11ZM9.8 16.5l-2.3 4 2.6-1.2M14.2 16.5l2.3 4-2.6-1.2M12 8.5h.01" },
+        march8: { color: "text-pink-300", path: "M7 4l2.5 3L12 3l2.5 4L17 4v5a5 5 0 0 1-10 0V4ZM12 14v7M12 18c-1.8-1.8-3.6-2-5-2M12 18c1.8-1.8 3.6-2 5-2" },
+        summer: { color: "text-yellow-300", path: "M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9ZM12 1.5v2.5M12 20v2.5M1.5 12H4M20 12h2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8" },
+        september: { color: "text-amber-400", path: "M5 19C5 10 10 5 19 5c0 9-5 14-14 14ZM5 19l9-9" },
+      };
+      const seasonIcon = SEASON_ICONS[seasonalTheme] || SEASON_ICONS.newyear;
+    %>
     <div class="season-toggle relative shrink-0"<% if (typeof user !== "undefined" && user && typeof csrfToken !== "undefined") { %> data-csrf="<%= csrfToken %>"<% } %>>
       <button type="button"
-              class="season-toggle__button grid place-items-center w-8 h-8 rounded-full text-sky-200 hover:text-white hover:bg-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 transition-colors"
+              class="season-toggle__button grid place-items-center w-8 h-8 rounded-full <%= seasonIcon.color %> hover:text-white hover:bg-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 transition-colors"
               aria-expanded="false" aria-controls="season-panel"
               aria-label="<%= t('season.toggleLabel') %>" title="<%= t('season.toggleLabel') %>">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-          <path d="M12 2v20M3.34 7l17.32 10M3.34 17 20.66 7M12 2l-2.5 2.5M12 2l2.5 2.5M12 22l-2.5-2.5M12 22l2.5-2.5"/>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="<%= seasonIcon.path %>"/>
         </svg>
       </button>
       <div id="season-panel" class="season-toggle__panel absolute left-0 top-full mt-2 w-64 rounded-lg border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/40 p-4 text-sm text-neutral-300" hidden>
@@ -50,7 +66,7 @@
     </div>
   </div>
   <% } else { %>
-  <a href="/" class="justify-self-start text-sm font-semibold tracking-wide text-neutral-100 shrink-0 truncate"><%= t('nav.brand') %></a>
+  <a href="/" data-season-brand class="justify-self-start text-sm font-semibold tracking-wide text-neutral-100 shrink-0 truncate"><%= t('nav.brand') %></a>
   <% } %>
   <div class="justify-self-center flex items-center gap-2.5 sm:gap-6 text-xs sm:text-sm text-neutral-400 min-w-0">
     <a href="/commands" class="hover:text-neutral-100 transition-colors <%= currentPath === '/commands' ? 'text-neutral-100 font-medium' : '' %>"><%= t('nav.commands') %></a>
@@ -70,7 +86,7 @@
       <div class="relative group shrink-0">
         <%# The avatar IS the menu trigger. tabindex + aria make it reachable without a pointer. %>
         <button type="button"
-                class="flex items-center rounded-full ring-1 ring-neutral-700 hover:ring-neutral-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 transition-shadow"
+                class="site-nav__avatar relative flex items-center rounded-full ring-1 ring-neutral-700 hover:ring-neutral-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 transition-shadow"
                 aria-haspopup="true"
                 aria-label="<%= user.displayName %>">
           <% if (typeof userAvatarUrl !== "undefined" && userAvatarUrl) { %>

@@ -15,6 +15,7 @@ const {
   normalizeDecorPref,
   themeForDate,
   nextStart,
+  windowFor,
 } = require("../lib/seasonalThemes");
 
 const router = express.Router();
@@ -29,7 +30,13 @@ router.get("/admin/seasonal-theme", requireAdmin, async (req, res, next) => {
       override,
       formValue: overrideToFormValue(override),
       calendarTheme: themeForDate(now),
-      themes: SEASONAL_THEMES.map((theme) => ({ ...theme, next: nextStart(theme, now) })),
+      themes: SEASONAL_THEMES.map((theme) => {
+        const next = nextStart(theme, now);
+        // The window of the year it next starts in - a movable one differs from year to year.
+        return { id: theme.id, next, window: windowFor(theme, next.year) };
+      })
+        // Listed by when they next come round, not in SEASONAL_THEMES' priority order.
+        .sort((a, b) => Date.UTC(a.next.year, a.next.month - 1, a.next.day) - Date.UTC(b.next.year, b.next.month - 1, b.next.day)),
       timeZone: SEASON_TIME_ZONE,
       saved: req.query.saved === "1",
       invalid: req.query.invalid === "1",

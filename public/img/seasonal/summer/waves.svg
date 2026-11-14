@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="60" viewBox="0 0 240 60" preserveAspectRatio="none">
+<path d="M0,20 Q30,6 60,20 T120,20 T180,20 T240,20 L240,60 L0,60 Z" fill="#1f8fc8"/>
+<path d="M0,34 Q30,22 60,34 T120,34 T180,34 T240,34 L240,60 L0,60 Z" fill="#1673a8"/>
+<path d="M0,20 Q30,6 60,20 T120,20 T180,20 T240,20" stroke="#bfeaff" stroke-width="2.5" fill="none"/>
+</svg>

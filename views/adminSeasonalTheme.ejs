@@ -61,7 +61,7 @@
         <li class="px-4 py-3 flex flex-wrap items-baseline justify-between gap-2">
           <span class="text-neutral-100"><%= themeName(theme.id) %></span>
           <span class="text-neutral-400">
-            <%= t('season.admin.window', { start: md(theme.start), end: md(theme.end) }) %>
+            <%= theme.window.start.month === theme.window.end.month && theme.window.start.day === theme.window.end.day ? md(theme.window.start) : t('season.admin.window', { start: md(theme.window.start), end: md(theme.window.end) }) %>
             · <%= t('season.admin.nextStart', { date: fullDateFmt.format(new Date(Date.UTC(theme.next.year, theme.next.month - 1, theme.next.day))) }) %>
           </span>
         </li>

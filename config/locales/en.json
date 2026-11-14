@@ -19,7 +19,7 @@
     "requestBot": "Get the bot for my channel"
   },
   "season": {
-    "toggleLabel": "Holiday decorations",
+    "toggleLabel": "Seasonal decorations",
     "decorLabel": "Decorations",
     "motionLabel": "Animation",
     "savedAccount": "Your choice is saved to your account.",
@@ -28,6 +28,38 @@
       "newyear": {
         "name": "New Year theme",
         "motionHint": "falling snow and a snowflake trail behind the cursor"
+      },
+      "halloween": {
+        "name": "Halloween theme",
+        "motionHint": "bats and sparks behind the cursor"
+      },
+      "valentine": {
+        "name": "Valentine's Day",
+        "motionHint": "hearts in the background and behind the cursor"
+      },
+      "maslenitsa": {
+        "name": "Maslenitsa",
+        "motionHint": "the last snow and bonfire sparks behind the cursor"
+      },
+      "aprilfools": {
+        "name": "April Fools' Day",
+        "motionHint": "balloons, confetti and clowns peeking in"
+      },
+      "cosmonautics": {
+        "name": "Cosmonautics Day",
+        "motionHint": "twinkling stars, a rocket and a trail of stars"
+      },
+      "march8": {
+        "name": "Women's Day (March 8)",
+        "motionHint": "petals in the background and behind the cursor"
+      },
+      "summer": {
+        "name": "Start of summer",
+        "motionHint": "bubbles in the background and behind the cursor"
+      },
+      "september": {
+        "name": "Start of autumn",
+        "motionHint": "falling leaves in the background and behind the cursor"
       }
     },
     "admin": {
