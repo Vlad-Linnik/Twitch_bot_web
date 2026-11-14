@@ -231,3 +231,8 @@
 .dm-playlist .dm-note { margin-bottom: 6px; }
 .dm-row.is-playing { border-color: var(--dm-accent); }
 .dm-badge.p-playlist { background: var(--dm-card-2); color: var(--dm-text); border: 1px solid var(--dm-accent); }
+.dm-playlist-banner {
+  margin-bottom: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px;
+  background: rgba(147, 51, 234, 0.18); border: 1px solid var(--dm-accent); color: var(--dm-text);
+}
+.dm-btn.is-kept { color: var(--dm-warn); opacity: 0.85; cursor: default; }

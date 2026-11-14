@@ -59,7 +59,7 @@ const PANEL_STRING_KEYS = [
   "anonymous", "manual", "addedBy", "replay",
   "coverLabel", "coverNone", "coverHide", "coverBlur", "coverImage", "coverHint", "coverActive",
   "playlist", "playlistAuto", "playlistAutoHint", "playlistEmpty", "playlistAdd", "playlistDuplicate",
-  "playlistFull", "playlistStalled", "playlistBadge",
+  "playlistFull", "playlistStalled", "playlistBadge", "playlistNowPlaying", "toPlaylist", "toPlaylistHint", "inPlaylist",
   "status.skipped", "status.removed", "status.error",
 ];
 

@@ -95,9 +95,7 @@
     { class: "dm-playlist" },
     el("summary", { class: "dm-h" }, el("span", { text: t("playlist") }), playlistCount),
     playlistNote,
-    playlistBox,
-    playlistForm,
-    playlistMsg
+    playlistBox
   );
 
   const addInput = el("input", { type: "text", placeholder: t("addPlaceholder"), autocomplete: "off", maxlength: "300" });
@@ -119,7 +117,7 @@
     statusBox,
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("nowPlaying") })), nowBox),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("queue") }), queueCount), queueBox, addForm),
-    el("section", {}, autoLabel, autoHint, playlistDetails),
+    el("section", {}, autoLabel, autoHint, playlistDetails, playlistForm, playlistMsg),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
   );
 
@@ -199,6 +197,24 @@
     }
   }
 
+  // One click to keep a clip: the clip playing, a queued one or one from the history goes into the
+  // channel's own playlist. A clip already there shows as kept instead.
+  function playlistButton(item, { wide = false } = {}) {
+    if (!canControl || !item || item.platform === "playlist") return null;
+    const kept = (state.playlist || []).some((p) => p.videoId === item.videoId);
+    if (kept) {
+      return el("button", { class: "dm-btn is-small is-kept", type: "button", disabled: true, text: wide ? `★ ${t("inPlaylist")}` : "★", title: t("inPlaylist"), "aria-label": t("inPlaylist") });
+    }
+    return el("button", {
+      class: "dm-btn is-small",
+      type: "button",
+      text: wide ? `☆ ${t("toPlaylist")}` : "☆",
+      title: t("toPlaylistHint"),
+      "aria-label": t("toPlaylistHint"),
+      onclick: () => command("playlistAdd", { url: item.videoId }),
+    });
+  }
+
   function renderNow() {
     nowBox.replaceChildren();
     const item = state.current;
@@ -207,6 +223,8 @@
       nowBox.appendChild(el("div", { class: "dm-empty", text }));
       return;
     }
+
+    if (item.fromPlaylist) nowBox.appendChild(el("div", { class: "dm-playlist-banner", text: `🎶 ${t("playlistNowPlaying")}` }));
 
     const info = el(
       "div",
@@ -244,7 +262,8 @@
             ? el("button", { class: "dm-btn is-primary", type: "button", text: `▶ ${t("resume")}`, onclick: () => command("resume") })
             : el("button", { class: "dm-btn is-primary", type: "button", text: `⏸ ${t("pause")}`, onclick: () => command("pause") }),
           el("button", { class: "dm-btn is-danger", type: "button", text: `⏭ ${t("skip")}`, onclick: () => command("skip") }),
-          el("button", { class: "dm-btn", type: "button", text: `↺ ${t("restart")}`, onclick: () => command("seek", { time: 0 }) })
+          el("button", { class: "dm-btn", type: "button", text: `↺ ${t("restart")}`, onclick: () => command("seek", { time: 0 }) }),
+          playlistButton(item, { wide: true })
         )
       );
       const modes = [
@@ -321,6 +340,8 @@
         if (index > 0) {
           actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: "⤒", title: t("moveTop"), "aria-label": t("moveTop"), onclick: () => command("moveTop", { id: item.id }) }));
         }
+        const keep = playlistButton(item);
+        if (keep) actions.appendChild(keep);
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("remove", { id: item.id }) }));
       }
       const grip = canControl && state.queue.length > 1 ? makeGrip(item, index) : null;
@@ -513,6 +534,8 @@
       if (canControl) {
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: `↻ ${t("requeue")}`, title: t("requeueHint"), onclick: () => command("replay", { id: item.id }) }));
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: t("playNext"), title: t("playNextHint"), onclick: () => command("replay", { id: item.id, next: true }) }));
+        const keep = playlistButton(item);
+        if (keep) actions.appendChild(keep);
       }
       historyBox.appendChild(row(item, { actions, extra }));
     }

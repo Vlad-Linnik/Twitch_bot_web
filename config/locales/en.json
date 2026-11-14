@@ -3040,7 +3040,11 @@
       "playlistDuplicate": "This clip is already in the playlist.",
       "playlistFull": "The playlist is full.",
       "playlistStalled": "No playlist track will start (removed or not embeddable) - the playlist has stopped. Change the list to try again.",
-      "playlistBadge": "Playlist"
+      "playlistBadge": "Playlist",
+      "playlistNowPlaying": "Your playlist is playing now",
+      "toPlaylist": "To playlist",
+      "toPlaylistHint": "Add this clip to your own playlist",
+      "inPlaylist": "In the playlist"
     },
     "player": {
       "coverText": "Clip hidden"
