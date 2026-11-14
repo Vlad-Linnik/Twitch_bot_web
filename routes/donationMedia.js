@@ -17,7 +17,7 @@ const channelsRepo = require("../db/channelsRepo");
 const donationMediaRepo = require("../db/donationMediaRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const donationMediaManager = require("../realtime/donationMediaManager");
-const { requireLevel, exposeSectionEditAccess } = require("../middleware/permissions");
+const { requireLevel, requireSectionEditAccess, exposeSectionEditAccess } = require("../middleware/permissions");
 const { settingsNav } = require("../middleware/settingsNav");
 const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const { verifyToken } = require("../middleware/csrf");
@@ -203,8 +203,12 @@ router.post(
   }
 );
 
-// The owner's placeholder picture (lib/donationMediaPlaceholder.js). Its own route because it is
-// the one multipart form on the page: multer must read the body before the CSRF check can.
+// The channel's placeholder picture (lib/donationMediaPlaceholder.js). Its own route because it is
+// the one multipart form: multer must read the body before the CSRF check can. Uploaded from the
+// owner's setup page or from the queue page, so it follows the queue's access - every moderator
+// who may control the queue (section "donationMedia") - rather than the platform keys' level 1:
+// a placeholder is what the moderator on duty needs when a clip turns out unfit, and every change
+// is in the settings change log under their name.
 const placeholderUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: placeholder.MAX_UPLOAD_BYTES, files: 1, fields: 4, parts: 5, fieldSize: 1024 },
@@ -225,7 +229,7 @@ const PLACEHOLDER_ERRORS = { not_allowed_type: "phType", unreadable: "phType", t
 router.post(
   "/:channel/settings/donation-media/placeholder",
   settingsWriteLimiter,
-  requireLevel(1),
+  requireSectionEditAccess("donationMedia"),
   readPlaceholderUpload,
   verifyToken,
   async (req, res, next) => {
@@ -233,7 +237,8 @@ router.post(
       const channel = await loadChannel(req, res);
       if (!channel) return;
       await donationMediaRepo.getOrCreate(channel);
-      const back = `/${channel.channelLogin}/settings/donation-media`;
+      const fromQueue = req.body.from === "queue";
+      const back = `/${channel.channelLogin}/settings/donation-media${fromQueue ? "/queue" : ""}`;
       const fail = (code) => res.redirect(`${back}?error=${PLACEHOLDER_ERRORS[code] || "phType"}&platform=placeholder#placeholder`);
 
       let url = null;
@@ -280,6 +285,10 @@ router.get(
         channel,
         configured: Boolean(config && (config.donationAlerts || config.donatello || config.donatePay)),
         isOwner: req.permissionLevel <= 1,
+        placeholderUrl: config && placeholder.isPlaceholderUrl(config.placeholderUrl) ? config.placeholderUrl : null,
+        saved: typeof req.query.saved === "string" ? req.query.saved : null,
+        error: typeof req.query.error === "string" ? req.query.error : null,
+        errorPlatform: typeof req.query.platform === "string" ? req.query.platform : null,
         panelStrings: panelStrings(res.locals.t),
       });
     } catch (err) {
