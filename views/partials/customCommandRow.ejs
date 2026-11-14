@@ -20,7 +20,8 @@
     data-command="<%= c.command %>"
     data-group="<%= c.group %>"
     data-enabled="<%= c.enabled ? '1' : '' %>"
-    data-created="<%= c.createdAt || 0 %>">
+    data-created="<%= c.createdAt || 0 %>"
+    data-uses="<%= c.uses %>">
   <div class="min-w-0 flex-1">
     <div class="flex items-center gap-2 flex-wrap">
       <code class="text-purple-400 font-medium">!<%= c.command %></code>
@@ -57,6 +58,32 @@
   </div>
 
   <div class="flex items-center gap-1 shrink-0">
+    <%# Call counter: viewer calls that got an answer (the bot's $inc on `uses`; timer auto-posts
+        are not counted). The reset is an ordinary POST like the row menu's actions, so
+        public/js/custom-commands.js sends it by fetch and swaps the list; without JS it redirects.
+        The class js-reset-uses keeps it apart from the move form that drag-and-drop looks up. %>
+    <% const usesLocale = typeof locale !== 'undefined' && locale === 'en' ? 'en-GB' : 'ru-RU'; %>
+    <% const usesSince = c.usesResetAt ? new Date(c.usesResetAt).toLocaleDateString(usesLocale) : null; %>
+    <span class="cc-uses text-xs tabular-nums text-neutral-500 whitespace-nowrap px-1"
+          title="<%= t('customCommands.usesTitle') %><%= usesSince ? ', ' + t('customCommands.usesSince', { date: usesSince }) : '' %>"><%= t('customCommands.uses', { n: c.uses.toLocaleString(usesLocale) }) %></span>
+    <% if (editable && c.uses > 0) { %>
+    <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands"
+          class="js-row-action js-reset-uses"
+          data-confirm="<%= t('customCommands.resetUsesConfirm', { name: c.command }) %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="action" value="resetUses" />
+      <input type="hidden" name="name" value="<%= c.command %>" />
+      <button type="submit"
+              class="p-1.5 rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+              title="<%= t('customCommands.resetUses') %>"
+              aria-label="<%= t('customCommands.resetUses') %>">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+        </svg>
+      </button>
+    </form>
+    <% } %>
+
     <%# Enable/disable toggle: submits via fetch when JS is available
         (public/js/custom-commands.js's data-command-toggle handler - flips the switch
         in place, no reload, so the CSS transition actually plays) and falls back to a
@@ -121,7 +148,7 @@
             both halves of the operation in one control: pick an existing group, or type a name
             that doesn't exist yet and it's created on save. Left blank, the command drops out of
             every group. %>
-        <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" class="js-row-action px-2.5 py-2">
+        <form method="post" action="/<%= channel.channelLogin %>/settings/custom-commands/commands" class="js-row-action js-move-form px-2.5 py-2">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
           <input type="hidden" name="action" value="setGroup" />
           <input type="hidden" name="name" value="<%= c.command %>" />

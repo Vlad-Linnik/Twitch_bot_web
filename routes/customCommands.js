@@ -80,6 +80,9 @@ async function buildCommandsView(channelLogin) {
     modOnly: !!c.modOnly,
     aliases: c.aliases || [],
     group: c.group || "",
+    // Viewer calls that got an answer (the bot's $inc - see customCommandsRepo.resetUses).
+    uses: Number(c.uses) || 0,
+    usesResetAt: c.usesResetAt ? new Date(c.usesResetAt).getTime() : 0,
   }));
 
   // Named groups first (alphabetical), then every ungrouped command as one final, header-less
@@ -216,6 +219,26 @@ router.post(
         }
         if (wantsJson(req)) return res.json(await listResponse(res, channel));
         return res.redirect(`${back}?saved=deleted`);
+      }
+
+      // The row's call counter back to zero. Its own write (customCommandsRepo.resetUses) rather
+      // than save(): the counter is the bot's $inc field, and save()'s $set list deliberately
+      // leaves it out so an ordinary edit never touches the count.
+      if (req.body.action === "resetUses") {
+        const name = normalizeName(req.body.name);
+        const before = name ? await customCommandsRepo.findOne(channel.channelLogin, name) : null;
+        if (!before) {
+          if (wantsJson(req)) return res.status(404).json({ ok: false, error: "name_required" });
+          return res.redirect(`${back}?error=name_required`);
+        }
+        await customCommandsRepo.resetUses(channel.channelLogin, name);
+        const after = await customCommandsRepo.findOne(channel.channelLogin, name);
+        await settingsChangeLogRepo.logChange({
+          channelLogin: channel.channelLogin, user: req.user, category: "custom_command",
+          action: "update", target: name, before, after,
+        });
+        if (wantsJson(req)) return res.json(await listResponse(res, channel));
+        return res.redirect(`${back}?saved=1`);
       }
 
       // Moving a command into another group (or into a brand-new one, or out of every group when

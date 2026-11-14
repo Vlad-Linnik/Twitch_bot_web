@@ -695,6 +695,7 @@
           command: row.dataset.command,
           enabled: row.dataset.enabled === "1",
           createdAt: Number(row.dataset.created) || 0,
+          uses: Number(row.dataset.uses) || 0,
         }));
       Order.sortCommands(items, mode).forEach((item) => list.appendChild(item.row));
 
@@ -848,6 +849,8 @@
         const commandName = actionForm.querySelector('input[name="name"]').value;
         const isDelete = actionForm.classList.contains("js-delete-form");
         if (isDelete && !window.confirm(`!${commandName}`)) return;
+        // The call-counter reset is not undoable either; its question comes from the server.
+        if (actionForm.dataset.confirm && !window.confirm(actionForm.dataset.confirm)) return;
 
         const submitButton = actionForm.querySelector('button[type="submit"]');
         submitButton.disabled = true;
@@ -863,7 +866,8 @@
 
           // A command moved into a collapsed group has to make that group open again, or the
           // move looks like it did nothing at all.
-          if (!isDelete) rememberExpanded(actionForm.querySelector('input[name="group"]').value.trim());
+          const groupInput = actionForm.querySelector('input[name="group"]');
+          if (groupInput) rememberExpanded(groupInput.value.trim());
           applyListHtml(data, isDelete ? null : commandName);
           showToast(isDelete ? toastEl?.dataset.deletedText : toastEl?.dataset.savedText);
         } catch {
@@ -958,7 +962,7 @@
 
     // Reuse the dropped row's own move form: it already carries the CSRF token and the action,
     // and it's the same request the menu sends - only the group value differs.
-    const moveForm = commandsList.querySelector(`.cc-row[data-command="${CSS.escape(command)}"] form.js-row-action:not(.js-delete-form)`);
+    const moveForm = commandsList.querySelector(`.cc-row[data-command="${CSS.escape(command)}"] form.js-move-form`);
     if (!moveForm) return;
 
     const body = new URLSearchParams(new FormData(moveForm));

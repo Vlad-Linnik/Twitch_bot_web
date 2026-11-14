@@ -1478,6 +1478,7 @@
       "commandModOnlyOff": "no longer restricted to moderators",
       "commandGroupSet": "moved to group \"{{group}}\"",
       "commandGroupCleared": "removed from its group",
+      "commandUsesReset": "call counter reset (was {{uses}})",
       "variableLabel": "Variable #{{name}}",
       "variableAdded": "Variable #{{name}} added (value {{value}}, access: {{access}})",
       "variableDeleted": "Variable #{{name}} deleted",
@@ -1709,6 +1710,11 @@
     "responseHint": "Used when the stream's current category doesn't match any of the categories below.",
     "disabledBadge": "disabled",
     "toggleEnabled": "Enable or disable this command",
+    "uses": "Calls: {{n}}",
+    "usesTitle": "How many times viewers called this command (auto-posts excluded)",
+    "usesSince": "since {{date}}",
+    "resetUses": "Reset the call counter",
+    "resetUsesConfirm": "Reset the call counter of !{{name}}?",
     "timer": "Auto-post (sec)",
     "timerOff": "off",
     "pin": "Pin to chat when posted (only pins if a moderator triggered it; unavailable together with the auto-post timer)",
@@ -1745,6 +1751,7 @@
     "sort": {
       "enabled": "Enabled first",
       "newest": "Newest first",
+      "uses": "Most used first",
       "name": "By name"
     },
     "ungrouped": "Ungrouped",

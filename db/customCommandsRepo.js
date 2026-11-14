@@ -6,7 +6,7 @@
 // module, and it is now a SHARED-WRITE collection. Two consequences worth knowing:
 //
 //   1. The document shape is the bot's, not ours: {channel, command, result, timer, pin, announce,
-//      announceColor, enabled, categoryTexts, modOnly, aliases}, with `channel` carrying a leading
+//      announceColor, enabled, categoryTexts, modOnly, aliases, uses, usesResetAt}, with `channel` carrying a leading
 //      "#" and `timer` in MILLISECONDS (the chat command takes seconds and multiplies). Writing a
 //      different shape here would produce commands the bot silently mis-reads. `enabled`,
 //      `categoryTexts` (per-stream-category text overrides), `modOnly` (restrict manual `!name`
@@ -63,10 +63,23 @@ async function save(channelLogin, { command, result, timer, pin, announce, annou
   return findOne(channelLogin, command);
 }
 
+// `uses` is the bot's $inc counter (TwitchBot/db/chatStats.js's incrementCustomCommandUses): one
+// per viewer call that got an answer, timers excluded. save() above never lists it, so an edit
+// keeps the count; this is the only place the site writes it. `usesResetAt` says since when the
+// count runs - absent means "since the counter shipped".
+async function resetUses(channelLogin, command) {
+  const col = await ensureInitialized();
+  const res = await col.updateOne(
+    { channel: withHash(channelLogin), command },
+    { $set: { uses: 0, usesResetAt: new Date() } }
+  );
+  return res.matchedCount > 0;
+}
+
 async function remove(channelLogin, command) {
   const col = await ensureInitialized();
   const res = await col.deleteOne({ channel: withHash(channelLogin), command });
   return res.deletedCount > 0;
 }
 
-module.exports = { list, findOne, save, remove };
+module.exports = { list, findOne, save, remove, resetUses };

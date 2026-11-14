@@ -13,7 +13,7 @@
   // The order the <select> lists them in. "name" is the default because it is the order the
   // server renders (customCommandsRepo.list sorts by command), so a visitor who never touches the
   // control sees the list exactly as it was before sorting existed.
-  const SORT_MODES = ["enabled", "newest", "name"];
+  const SORT_MODES = ["enabled", "newest", "uses", "name"];
   const DEFAULT_SORT = "name";
 
   function parseSortMode(raw) {
@@ -24,7 +24,7 @@
     return String(a.command).localeCompare(String(b.command));
   }
 
-  // items: [{command, enabled, createdAt}] - createdAt in ms (the Mongo ObjectId's timestamp, i.e.
+  // items: [{command, enabled, createdAt, uses}] - uses is the bot's call counter; createdAt in ms (the Mongo ObjectId's timestamp, i.e.
   // when the command was first created, by either chat or the panel), 0 when unknown.
   // Every mode falls back to the name so equal keys never shuffle between two renders.
   function compareFor(mode) {
@@ -33,6 +33,8 @@
         return (a, b) => (Number(!!b.enabled) - Number(!!a.enabled)) || byName(a, b);
       case "newest":
         return (a, b) => ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)) || byName(a, b);
+      case "uses":
+        return (a, b) => ((Number(b.uses) || 0) - (Number(a.uses) || 0)) || byName(a, b);
       default:
         return byName;
     }
