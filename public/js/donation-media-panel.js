@@ -215,6 +215,19 @@
     });
   }
 
+  // Sent on release only: every value would come back as a state update and redraw the card,
+  // slider included, under the pointer.
+  function blurSlider() {
+    const value = state.blurStrength || 60;
+    const label = el("span", { class: "dm-blur-value", text: `${value}%` });
+    const input = el("input", { type: "range", min: "10", max: "100", step: "5", value: String(value), "aria-label": t("blurStrength") });
+    input.addEventListener("input", () => {
+      label.textContent = `${input.value}%`;
+    });
+    input.addEventListener("change", () => command("blurStrength", { value: Number(input.value) }));
+    return el("div", { class: "dm-blur" }, el("span", { text: t("blurStrength") }), input, label);
+  }
+
   function renderNow() {
     nowBox.replaceChildren();
     const item = state.current;
@@ -288,6 +301,7 @@
           )
         )
       );
+      if (state.cover === "blur") card.appendChild(blurSlider());
     } else if (state.cover) {
       const names = { hide: t("coverHide"), blur: t("coverBlur"), image: t("coverImage") };
       card.appendChild(el("div", { class: "dm-cover" }, el("span", { class: "dm-cover-label", text: `${t("coverActive")} ${names[state.cover] || state.cover}` })));

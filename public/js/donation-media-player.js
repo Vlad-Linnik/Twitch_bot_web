@@ -2,7 +2,8 @@
 // on a transparent page, and reports back when a clip ends and how far it has got. The queue and
 // every decision live on the server (lib/donationMediaQueue.js); this page only obeys:
 //   { type: "play", item }  { type: "pause" }  { type: "resume" }  { type: "seek", time }  { type: "stop" }
-//   { type: "cover", mode }  null | "hide" | "blur" | "image" - the picture over the clip, sound unchanged
+//   { type: "cover", mode, blur }  mode null | "hide" | "blur" | "image" - the picture over the clip,
+//                                  sound unchanged; blur = strength in percent (10-100)
 // and sends { type: "ended", id, error } and, once a second, { type: "progress", id, time, duration, title }.
 //
 // Loaded BEFORE the YouTube IFrame API script, so onYouTubeIframeAPIReady exists when it calls it.
@@ -17,6 +18,9 @@
   let current = null; // the queue item now playing
   let pending = null; // arrived before the YouTube API was ready
   let wantPaused = false;
+  // The cover for the clip being played. Reset when a "play" ARRIVES, not when it is carried out:
+  // a play deferred until the YouTube API is ready runs after the "cover" that followed it.
+  let coverMode = null;
   let ws = null;
   let reconnectAttempt = 0;
 
@@ -26,6 +30,14 @@
 
   function show(visible) {
     container.style.display = visible ? "block" : "none";
+  }
+
+  // 100% is 80px, which leaves nothing of a 1080p frame but colour; 10% still softens faces.
+  function setBlur(percent) {
+    const value = Math.min(100, Math.max(10, Number(percent) || 60));
+    const px = Math.round(value * 0.8);
+    container.style.setProperty("--blur", `${px}px`);
+    container.style.setProperty("--blur-scale", String(1 + px / 45));
   }
 
   function setCover(mode) {
@@ -61,7 +73,7 @@
   function play(item) {
     current = item;
     wantPaused = false;
-    setCover(null);
+    setCover(coverMode);
     if (!item || !item.videoId) {
       finish(true);
       return;
@@ -91,6 +103,8 @@
   function onMessage(msg) {
     switch (msg.type) {
       case "play":
+        coverMode = null;
+        setCover(null);
         if (!playerReady) pending = msg.item;
         else play(msg.item);
         break;
@@ -109,7 +123,9 @@
         stop();
         break;
       case "cover":
-        setCover(msg.mode);
+        if (msg.blur !== undefined) setBlur(msg.blur);
+        coverMode = msg.mode || null;
+        setCover(coverMode);
         break;
       default:
         break;

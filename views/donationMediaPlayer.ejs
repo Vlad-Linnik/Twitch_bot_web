@@ -17,7 +17,9 @@
     /* What a moderator put over the current clip (lib/donationMediaQueue.js's cover). The sound
        goes on in every mode; only the picture changes. */
     #player-container.cover-hide #ytplayer { opacity: 0; }
-    #player-container.cover-blur #ytplayer { filter: blur(48px) saturate(0.6); transform: scale(1.35); }
+    /* --blur and --blur-scale come from the panel's strength setting (donation-media-player.js);
+       the scale pushes the blur's dark fringe out of the frame. */
+    #player-container.cover-blur #ytplayer { filter: blur(var(--blur, 48px)) saturate(0.6); transform: scale(var(--blur-scale, 1.35)); }
     #player-container.cover-image #ytplayer { opacity: 0; }
     #player-cover {
       display: none; position: absolute; inset: 0; align-items: center; justify-content: center;

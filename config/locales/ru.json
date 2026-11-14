@@ -3044,7 +3044,8 @@
       "playlistNowPlaying": "Сейчас играет ваш плейлист",
       "toPlaylist": "В плейлист",
       "toPlaylistHint": "Добавить этот ролик в свой плейлист",
-      "inPlaylist": "В плейлисте"
+      "inPlaylist": "В плейлисте",
+      "blurStrength": "Сила размытия"
     },
     "player": {
       "coverText": "Клип скрыт"

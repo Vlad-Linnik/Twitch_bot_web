@@ -3044,7 +3044,8 @@
       "playlistNowPlaying": "Your playlist is playing now",
       "toPlaylist": "To playlist",
       "toPlaylistHint": "Add this clip to your own playlist",
-      "inPlaylist": "In the playlist"
+      "inPlaylist": "In the playlist",
+      "blurStrength": "Blur strength"
     },
     "player": {
       "coverText": "Clip hidden"

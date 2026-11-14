@@ -236,3 +236,6 @@
   background: rgba(147, 51, 234, 0.18); border: 1px solid var(--dm-accent); color: var(--dm-text);
 }
 .dm-btn.is-kept { color: var(--dm-warn); opacity: 0.85; cursor: default; }
+.dm-blur { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--dm-muted); }
+.dm-blur input[type="range"] { flex: 1; max-width: 260px; accent-color: var(--dm-warn); }
+.dm-blur-value { min-width: 3.5em; color: var(--dm-text); font-variant-numeric: tabular-nums; }
