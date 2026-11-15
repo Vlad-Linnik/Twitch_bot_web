@@ -1133,7 +1133,6 @@
     "ratingExternal": "Рейтинг IMDb",
     "ratingTipNone": "{{label}}: пока нет",
     "ratingTip": "{{label}}: {{value}}",
-    "imdbPending": "ещё не загружен",
     "info": {
       "genres": "Жанр",
       "directors": "Режиссёр",
@@ -1152,7 +1151,8 @@
       "anime": "Аниме"
     },
     "filterGenreLabel": "Жанр",
-    "filterGenreAll": "Все жанры"
+    "filterGenreAll": "Все жанры",
+    "externalPending": "ещё не загружен"
   },
   "gamesStream": {
     "titleSuffix": "игры",
@@ -1228,7 +1228,8 @@
     },
     "ratingExternal": "Отзывы в Steam",
     "filterGenreLabel": "Жанр",
-    "filterGenreAll": "Все жанры"
+    "filterGenreAll": "Все жанры",
+    "externalPending": "ещё не загружены"
   },
   "comments": {
     "backToFeed": "Назад к новостям",
@@ -2694,8 +2695,9 @@
       "cardsWithSteam": "Со Steam id",
       "cardsWithSteamRating": "С отзывами Steam",
       "steamHeading": "Отзывы Steam",
-      "steamHint": "Раз в сутки по одному запросу на игру со Steam id: доля положительных отзывов. Обновляются только игры со Steam id.",
-      "steamBlocked": "Steam отказал этому серверу (редирект, 403 или 429) — оценки остались прежними."
+      "steamHint": "Раз в сутки (и через минуту после новой игры со Steam id): доля положительных отзывов. Сначала спрашивается сам Steam, при его отказе — SteamSpy.",
+      "steamBlocked": "Отказали и Steam, и SteamSpy (редирект, 403 или 429) — оценки остались прежними.",
+      "steamViaSteamSpy": "Steam отказал этому серверу — оценки взяты из SteamSpy (те же счётчики отзывов)."
     },
     "colGames": "Игры",
     "gamesEnable": "Включить игры",

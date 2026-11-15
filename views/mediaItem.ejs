@@ -214,14 +214,18 @@
               </div>
             </details>
           <% } %>
-          <% if (!item.externalRating && item.external && item.external.imdbId) { %>
-            <%# The card has an IMDb id but the dataset pass has not reached it yet (a new card asks
-                for an early pass - routes/movies.js's afterSave). %>
+          <% if (!item.externalRating && item.external && (item.external.imdbId || item.external.steamAppId)) { %>
+            <%# The card has an IMDb id / a Steam app but the pass has not reached it yet (a new card
+                asks for an early pass - routes/movies.js's and routes/gamesStream.js's afterSave). %>
             <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
               <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
-                <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#f5c518] text-black font-black">IMDb</span><span class="text-2xl font-extrabold tabular-nums text-stone-600">—</span>
+                <% if (item.external.imdbId) { %>
+                  <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#f5c518] text-black font-black">IMDb</span>
+                <% } else { %>
+                  <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#1b2838] text-[#66c0f4] font-black ring-1 ring-[#66c0f4]/30">Steam</span>
+                <% } %><span class="text-2xl font-extrabold tabular-nums text-stone-600">—</span>
               </dd>
-              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingExternal') %><br /><span class="text-stone-500"><%= st('imdbPending') %></span></dt>
+              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingExternal') %><br /><span class="text-stone-500"><%= st('externalPending') %></span></dt>
             </div>
           <% } %>
           <% if (item.externalRating) { %>

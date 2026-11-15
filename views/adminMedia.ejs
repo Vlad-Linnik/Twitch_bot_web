@@ -91,6 +91,9 @@
           <% if (steamStatus.ok) { %>
             <div><dt class="text-xs text-neutral-500"><%= t('admin.media.found') %></dt><dd class="text-neutral-200"><%= steamStatus.found %> / <%= steamStatus.wanted %></dd></div>
             <div><dt class="text-xs text-neutral-500"><%= t('admin.media.duration') %></dt><dd class="text-neutral-200"><%= (steamStatus.durationMs / 1000).toFixed(1) %> s</dd></div>
+            <% if (steamStatus.via === 'steamspy') { %>
+              <div class="col-span-2 sm:col-span-4 text-xs text-amber-300/90"><%= t('admin.media.steamViaSteamSpy') %></div>
+            <% } %>
           <% } else { %>
             <div class="col-span-2"><dt class="text-xs text-neutral-500"><%= t('admin.media.error') %></dt>
               <dd class="text-red-300 break-words"><%= steamStatus.error === 'blocked' ? t('admin.media.steamBlocked') : steamStatus.error %></dd></div>

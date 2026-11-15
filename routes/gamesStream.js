@@ -8,7 +8,8 @@
 //   - hours on stream and "last played", from the bot's 5-minute samples (db/streamHoursRepo.js),
 //     computed per request and usable as a sort; the editor's form lists the categories that were on
 //     stream with no card yet;
-//   - the outside rating: Steam's share of positive reviews, once a day (jobs/steamReviewsSync.js);
+//   - the outside rating: Steam's share of positive reviews, once a day and soon after a card gets a
+//     new Steam app (jobs/steamReviewsSync.js; SteamSpy when the store refuses this network);
 //   - the look: cyan on cold slate, 3:4 box art (the "games" theme in public/css/input.css).
 const media = require("../lib/mediaValidation");
 const suggestions = require("../lib/mediaSuggestions");
@@ -20,6 +21,7 @@ const mediaItemsRepo = require("../db/mediaItemsRepo");
 const { ensureAppAccessToken } = require("../twitch/appToken");
 const env = require("../config/env");
 const { createMediaSectionRouter } = require("./mediaSection");
+const steamReviewsSync = require("../jobs/steamReviewsSync");
 
 // The card's ids: the Steam app (typed or picked), the Twitch category (its id only from a pick -
 // the server-side details - and its name from the form or the pick).
@@ -57,6 +59,11 @@ module.exports = createMediaSectionRouter({
     gameState: item.gameState || "",
   }),
   externalIds,
+  // A card with a Steam app but no score yet: ask for an early pass instead of leaving it at "—"
+  // until the daily one - the same as a film with a new IMDb id.
+  afterSave(item) {
+    if (item?.external?.steamAppId && !item.ratings?.external) steamReviewsSync.requestSoon();
+  },
   editSet(value, item, picked) {
     const ids = externalIds(value, picked);
     const set = {

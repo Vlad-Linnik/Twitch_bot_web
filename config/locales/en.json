@@ -1133,7 +1133,6 @@
     "ratingExternal": "IMDb rating",
     "ratingTipNone": "{{label}}: none yet",
     "ratingTip": "{{label}}: {{value}}",
-    "imdbPending": "not loaded yet",
     "info": {
       "genres": "Genre",
       "directors": "Director",
@@ -1152,7 +1151,8 @@
       "anime": "Anime"
     },
     "filterGenreLabel": "Genre",
-    "filterGenreAll": "All genres"
+    "filterGenreAll": "All genres",
+    "externalPending": "not loaded yet"
   },
   "gamesStream": {
     "titleSuffix": "games",
@@ -1228,7 +1228,8 @@
     },
     "ratingExternal": "Steam reviews",
     "filterGenreLabel": "Genre",
-    "filterGenreAll": "All genres"
+    "filterGenreAll": "All genres",
+    "externalPending": "not loaded yet"
   },
   "comments": {
     "backToFeed": "Back to news",
@@ -2694,8 +2695,9 @@
       "cardsWithSteam": "With a Steam id",
       "cardsWithSteamRating": "With Steam reviews",
       "steamHeading": "Steam reviews",
-      "steamHint": "Once a day, one request per game with a Steam id: the share of positive reviews. Only games with a Steam id are refreshed.",
-      "steamBlocked": "Steam turned this server away (redirect, 403 or 429) — the scores stayed as they were."
+      "steamHint": "Once a day (and a minute after a new game with a Steam id): the share of positive reviews. Steam itself is asked first, SteamSpy when it refuses.",
+      "steamBlocked": "Both Steam and SteamSpy refused (redirect, 403 or 429) — scores were left as they were.",
+      "steamViaSteamSpy": "Steam refused this server — the scores came from SteamSpy (the same review counts)."
     },
     "colGames": "Games",
     "gamesEnable": "Enable games",
