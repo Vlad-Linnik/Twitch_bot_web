@@ -76,16 +76,30 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
   const channelCounts = new Map();
   if (groups.length) {
     const labelOf = new Map(groups.flatMap((g) => g.forms.map((form) => [form, g.word])));
-    const rows = await db
-      .collection("ChatWordStats")
-      .aggregate([
-        { $match: { channel, word: { $in: [...labelOf.keys()] }, date: { $gte: start, $lt: end } } },
-        { $group: { _id: "$word", n: { $sum: "$count" } } },
-      ])
-      .toArray();
-    for (const r of rows) {
-      const label = labelOf.get(r._id);
-      channelCounts.set(label, (channelCounts.get(label) || 0) + r.n);
+    const forms = [...labelOf.keys()];
+    let formCounts;
+    const at = channelRecap.data.wordCountsAt;
+    if (at) {
+      // The counts the channel job stored (db/annualRecapRepo.js's AnnualRecapWordCounts): a
+      // covered index read instead of every day row of these words. A form not stored was said
+      // once in the channel, and this person said it - see jobs/annualRecap.js's
+      // channelWordCounts - so its count is theirs, i.e. 1.
+      const stored = await recapRepo.wordCountsOf(login, year, at, forms);
+      formCounts = forms.map((form) => [form, stored.get(form) ?? wordCounts.get(form) ?? 0]);
+    } else {
+      // A recap built before those counts existed, until its next rebuild.
+      const rows = await db
+        .collection("ChatWordStats")
+        .aggregate([
+          { $match: { channel, word: { $in: forms }, date: { $gte: start, $lt: end } } },
+          { $group: { _id: "$word", n: { $sum: "$count" } } },
+        ])
+        .toArray();
+      formCounts = rows.map((r) => [r._id, r.n]);
+    }
+    for (const [form, n] of formCounts) {
+      const label = labelOf.get(form);
+      channelCounts.set(label, (channelCounts.get(label) || 0) + n);
     }
   }
   const yourWords = recap.distinctiveWords(

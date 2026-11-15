@@ -37,6 +37,10 @@ async function ensureInitialized() {
     await collection.createIndex({ channel: 1, strict: 1 });
     await collection.createIndex({ channel: 1, userId: 1, strict: 1 });
     await collection.createIndex({ channel: 1, builtAt: -1 });
+    // The draw-by-number lookups (see drawByNumber). Not unique: while a rebuild is upserting,
+    // a number can briefly belong to an old row and a new one.
+    await collection.createIndex({ channel: 1, strict: 1, seq: 1 });
+    await collection.createIndex({ channel: 1, userId: 1, aseq: 1 });
   } catch (err) {
     console.error("[GuessChatterQuestions] index creation failed:", err.message);
   }
@@ -53,9 +57,11 @@ async function ensureInitialized() {
 //
 // Cached because deriving it is a $group over the channel's whole pool - measured at 868ms against
 // 281k rows - and it sits on the "Играть" click. The answer only changes when the weekly rebuild
-// runs, so anything shorter than that is already conservative.
+// runs, and replaceForChannel drops this entry when it does, so the TTL is only a backstop for a
+// rebuild done by some other process; at ten minutes it put that $group on a player's click
+// several times an hour.
 const authorCache = new Map();
-const AUTHOR_CACHE_MS = 10 * 60 * 1000;
+const AUTHOR_CACHE_MS = 6 * 60 * 60 * 1000;
 
 async function getAuthors(channelLogin) {
   const hit = authorCache.get(channelLogin);
@@ -115,24 +121,58 @@ async function listPlayableChannels(channels) {
 // too few legal decoys, and pickRunQuestions drops the lines players have thumbed down.
 async function drawQuestions(channelLogin, poolUserIds, spare = 8) {
   const col = await ensureInitialized();
-  const inPool = { channel: channelLogin, userId: { $in: poolUserIds } };
+  const inPool = new Set(poolUserIds);
+  const draw = async (strict, size) => {
+    const scope = { channel: channelLogin, strict };
+    const rows = await drawByNumber(col, scope, "seq", size);
+    if (rows) return rows.filter((r) => inPool.has(r.userId));
+    return col
+      .aggregate([{ $match: { ...scope, userId: { $in: poolUserIds } } }, { $sample: { size } }])
+      .toArray();
+  };
   const [strict, loose] = await Promise.all([
-    col.aggregate([{ $match: { ...inPool, strict: true } }, { $sample: { size: gc.ROUNDS + spare } }]).toArray(),
-    col.aggregate([{ $match: { ...inPool, strict: false } }, { $sample: { size: gc.LOOSE_ROUNDS + spare } }]).toArray(),
+    draw(true, gc.ROUNDS + spare),
+    draw(false, gc.LOOSE_ROUNDS + spare),
   ]);
   return { strict, loose };
 }
 
-// Candidate hint lines for one author. Asked per author rather than in one big $sample so that a
+// Candidate hint lines for one author. Asked per author rather than in one big draw so that a
 // quiet author still gets their own draw instead of losing it to a loud one.
 async function drawAuthorLines(channelLogin, userId, size) {
   const col = await ensureInitialized();
-  return col
-    .aggregate([
-      { $match: { channel: channelLogin, userId, strict: true } },
-      { $sample: { size } },
-    ])
-    .toArray();
+  const scope = { channel: channelLogin, userId };
+  const rows = await drawByNumber(col, scope, "aseq", size);
+  if (rows) return rows;
+  return col.aggregate([{ $match: { ...scope, strict: true } }, { $sample: { size } }]).toArray();
+}
+
+// `size` uniformly random rows of `scope`, by the numbers lib/guessChatter.js's numberPool gave
+// them: one index lookup for the highest number, one for the chosen ones. null when the scope has
+// no numbered rows - a pool written before numbering existed, until its next rebuild - and the
+// caller falls back to $sample.
+//
+// The highest number stands in for the count. During a rebuild an old row and a new one can share
+// a number (the duplicate is harmless - both are real lines - and is dropped by _id), and the
+// sweep at the end removes the old ones.
+async function drawByNumber(col, scope, field, size) {
+  const top = await col.findOne(
+    { ...scope, [field]: { $exists: true } },
+    { sort: { [field]: -1 }, projection: { _id: 0, [field]: 1 } }
+  );
+  if (!top || typeof top[field] !== "number") return null;
+  const numbers = gc.distinctIndices(top[field] + 1, size);
+  const rows = await col.find({ ...scope, [field]: { $in: numbers } }).toArray();
+  const seen = new Set();
+  return gc.sample(
+    rows.filter((r) => {
+      const id = String(r._id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }),
+    size
+  );
 }
 
 async function findById(channelLogin, id) {
@@ -207,8 +247,9 @@ async function lastBuiltAt(channelLogin) {
 // Replaces this channel's pool. Batched rather than one bulkWrite because a full pool is hundreds
 // of thousands of rows; the sweep of everything older than this build runs afterwards, so a line
 // that stopped qualifying (its author left the top 50, a moderator acted on it) stops being asked.
-async function replaceForChannel(channelLogin, rows, builtAt = new Date()) {
+async function replaceForChannel(channelLogin, unnumbered, builtAt = new Date()) {
   const col = await ensureInitialized();
+  const rows = gc.numberPool(unnumbered);
   const BATCH = 1000;
   let written = 0;
 

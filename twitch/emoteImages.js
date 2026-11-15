@@ -11,8 +11,16 @@
 //
 // All three are fetched lazily and cached in memory: the Twitch global list is identical for
 // every channel and changes rarely (hours-long TTL), the channel/7TV sources are per-channel
-// and owner-editable (short TTL so a newly added emote shows up without a restart). Everything
-// here is fail-soft - an unreachable 7TV/Helix just means fewer resolved images, never a 500:
+// and owner-editable (short TTL so a newly added emote shows up without a restart).
+//
+// A page never waits for a provider whose list it already holds. An expired entry is served as
+// it is and refreshed in the background, one fetch per source at a time; only a source never
+// fetched since boot is waited for, and then for at most COLD_WAIT_MS - past that the page renders
+// without those pictures and a later view gets them. Measured from the VPS, FFZ's /set/global took
+// 21s when it answered at all (two of three probes hit a 30s ceiling) and 7TV answers in 1-2s,
+// while a page's own Mongo work is tens of ms: with refresh-on-expiry every page that draws emotes
+// ran at the speed of the slowest provider once per TTL, and that was most of the slow-requests
+// log. Everything here is fail-soft - an unreachable 7TV/Helix just means fewer resolved images, never a 500:
 // an emote with no image (e.g. removed from the set since it was counted) falls back to text
 // in the view.
 const axios = require("axios");
@@ -37,8 +45,17 @@ const FFZ_API = "https://api.frankerfacez.com/v1";
 const GLOBAL_TTL_MS = 12 * 60 * 60 * 1000;
 const CHANNEL_TTL_MS = 10 * 60 * 1000;
 const SEVEN_TV_TTL_MS = 10 * 60 * 1000;
+// A background fetch still holds its source's single-flight slot; without a ceiling one hung
+// provider call would keep that source from ever refreshing again.
+const FETCH_TIMEOUT_MS = 15_000;
+// How long a page waits for a source it has never had. Kept under the slow-request threshold.
+const COLD_WAIT_MS = 700;
+// After a failed fetch the source is not retried on every page view.
+const RETRY_AFTER_FAILURE_MS = 60_000;
 
-let globalCache = null; // { map, expiresAt }
+const http = axios.create({ timeout: FETCH_TIMEOUT_MS });
+
+const globalCache = {};
 // One memo per source; the ones identical for every channel keep theirs on `.value` (see
 // cachedMap), the per-channel ones key by broadcaster id - or by login, for the only source
 // that is a row of ours rather than a provider's list.
@@ -49,14 +66,14 @@ const bttvChannelCache = new Map(); // broadcasterId -> { map, expiresAt }
 const ffzChannelCache = new Map(); // broadcasterId -> { map, expiresAt }
 const externalEmoteCache = new Map(); // channelLogin -> { map, expiresAt }
 const channelEmoteCache = new Map(); // broadcasterId -> { map, expiresAt }
-const sevenTvCache = new Map(); // broadcasterId -> { data, expiresAt } - raw 7TV response, null if not linked
+const sevenTvCache = new Map(); // broadcasterId -> { value, expiresAt } - raw 7TV response, null if not linked
 
 async function fetchGlobalEmoteImages() {
   const headers = {
     Authorization: `Bearer ${await ensureAppAccessToken()}`,
     "Client-Id": env.twitchClientId,
   };
-  const { data } = await axios.get(GLOBAL_EMOTES_URL, { headers });
+  const { data } = await http.get(GLOBAL_EMOTES_URL, { headers });
   const map = new Map();
   for (const emote of data.data || []) {
     // Helix ships duplicate names for the classic text emoticons (":)", "<3", ...) under
@@ -73,7 +90,7 @@ async function fetchChannelEmoteImages(broadcasterId) {
     Authorization: `Bearer ${await ensureAppAccessToken()}`,
     "Client-Id": env.twitchClientId,
   };
-  const { data } = await axios.get(CHANNEL_EMOTES_URL, {
+  const { data } = await http.get(CHANNEL_EMOTES_URL, {
     params: { broadcaster_id: broadcasterId },
     headers,
   });
@@ -91,7 +108,7 @@ async function fetchChannelEmoteImages(broadcasterId) {
 // linked/not-linked status need the same fetch.
 async function fetchSevenTvUser(broadcasterId) {
   try {
-    const { data } = await axios.get(`${SEVEN_TV_API}/users/twitch/${broadcasterId}`);
+    const { data } = await http.get(`${SEVEN_TV_API}/users/twitch/${broadcasterId}`);
     return data;
   } catch (err) {
     if (err.response?.status === 404) return null;
@@ -99,48 +116,30 @@ async function fetchSevenTvUser(broadcasterId) {
   }
 }
 
-async function getGlobalEmoteImages() {
-  if (globalCache && Date.now() < globalCache.expiresAt) return globalCache.map;
-  try {
-    const map = await fetchGlobalEmoteImages();
-    globalCache = { map, expiresAt: Date.now() + GLOBAL_TTL_MS };
-    return map;
-  } catch (err) {
-    console.error("[emoteImages] Twitch global emotes fetch failed:", err.message);
-    return globalCache?.map ?? new Map();
-  }
+function getGlobalEmoteImages(opts) {
+  return cached(globalCache, null, GLOBAL_TTL_MS, fetchGlobalEmoteImages, "Twitch global emotes", new Map(), opts);
 }
 
-async function getChannelEmoteImages(broadcasterId) {
-  if (!broadcasterId) return new Map();
-  const cached = channelEmoteCache.get(broadcasterId);
-  if (cached && Date.now() < cached.expiresAt) return cached.map;
-  try {
-    const map = await fetchChannelEmoteImages(broadcasterId);
-    channelEmoteCache.set(broadcasterId, { map, expiresAt: Date.now() + CHANNEL_TTL_MS });
-    return map;
-  } catch (err) {
-    console.error("[emoteImages] Twitch channel emotes fetch failed:", err.message);
-    return cached?.map ?? new Map();
-  }
+function getChannelEmoteImages(broadcasterId, opts) {
+  if (!broadcasterId) return Promise.resolve(new Map());
+  return cached(
+    channelEmoteCache,
+    broadcasterId,
+    CHANNEL_TTL_MS,
+    () => fetchChannelEmoteImages(broadcasterId),
+    "Twitch channel emotes",
+    new Map(),
+    opts
+  );
 }
 
-async function getSevenTvUser(broadcasterId) {
-  if (!broadcasterId) return null;
-  const cached = sevenTvCache.get(broadcasterId);
-  if (cached && Date.now() < cached.expiresAt) return cached.data;
-  try {
-    const data = await fetchSevenTvUser(broadcasterId);
-    sevenTvCache.set(broadcasterId, { data, expiresAt: Date.now() + SEVEN_TV_TTL_MS });
-    return data;
-  } catch (err) {
-    console.error("[emoteImages] 7TV lookup failed:", err.message);
-    return cached?.data ?? null;
-  }
+function getSevenTvUser(broadcasterId, opts) {
+  if (!broadcasterId) return Promise.resolve(null);
+  return cached(sevenTvCache, broadcasterId, SEVEN_TV_TTL_MS, () => fetchSevenTvUser(broadcasterId), "7TV lookup", null, opts);
 }
 
-async function getSevenTvEmoteImages(broadcasterId) {
-  const user = await getSevenTvUser(broadcasterId);
+async function getSevenTvEmoteImages(broadcasterId, opts) {
+  const user = await getSevenTvUser(broadcasterId, opts);
   const map = new Map();
   for (const emote of user?.emote_set?.emotes ?? []) {
     // Set-local name (the alias actually typed in chat), matching what the bot whitelists.
@@ -150,9 +149,10 @@ async function getSevenTvEmoteImages(broadcasterId) {
 }
 
 // Whether this broadcaster has a 7TV account linked to their Twitch, and how many emotes it
-// carries - for the settings page's read-only status line (no more manual link field).
+// carries - for the settings page's read-only status line (no more manual link field). Waits for a
+// cold source: "not linked" is a statement on that page, not a missing picture.
 async function getSevenTvLinkStatus(broadcasterId) {
-  const user = await getSevenTvUser(broadcasterId);
+  const user = await getSevenTvUser(broadcasterId, { complete: true });
   return { linked: !!user?.emote_set, emoteCount: user?.emote_set?.emotes?.length ?? 0 };
 }
 
@@ -166,7 +166,7 @@ async function getSevenTvLinkStatus(broadcasterId) {
 // ---------------------------------------------------------------------------------------
 
 async function fetchSevenTvGlobalImages() {
-  const { data } = await axios.get(`${SEVEN_TV_API}/emote-sets/global`);
+  const { data } = await http.get(`${SEVEN_TV_API}/emote-sets/global`);
   const map = new Map();
   for (const emote of data?.emotes ?? []) {
     if (emote.name) map.set(emote.name, sevenTvEmoteUrl(emote.id));
@@ -175,7 +175,7 @@ async function fetchSevenTvGlobalImages() {
 }
 
 async function fetchBttvGlobalImages() {
-  const { data } = await axios.get(`${BTTV_API}/cached/emotes/global`);
+  const { data } = await http.get(`${BTTV_API}/cached/emotes/global`);
   return new Map((data ?? []).filter((e) => e.code).map((e) => [e.code, bttvEmoteUrl(e.id)]));
 }
 
@@ -183,7 +183,7 @@ async function fetchBttvGlobalImages() {
 // be logged as one - most channels are in exactly that state.
 async function fetchBttvChannelImages(broadcasterId) {
   try {
-    const { data } = await axios.get(`${BTTV_API}/cached/users/twitch/${broadcasterId}`);
+    const { data } = await http.get(`${BTTV_API}/cached/users/twitch/${broadcasterId}`);
     const emotes = [...(data?.channelEmotes ?? []), ...(data?.sharedEmotes ?? [])];
     return new Map(emotes.filter((e) => e.code).map((e) => [e.code, bttvEmoteUrl(e.id)]));
   } catch (err) {
@@ -211,13 +211,13 @@ function ffzImagesFromSets(data, onlyDefaultSets) {
 }
 
 async function fetchFfzGlobalImages() {
-  const { data } = await axios.get(`${FFZ_API}/set/global`);
+  const { data } = await http.get(`${FFZ_API}/set/global`);
   return ffzImagesFromSets(data, true);
 }
 
 async function fetchFfzChannelImages(broadcasterId) {
   try {
-    const { data } = await axios.get(`${FFZ_API}/room/id/${broadcasterId}`);
+    const { data } = await http.get(`${FFZ_API}/room/id/${broadcasterId}`);
     return ffzImagesFromSets(data, false);
   } catch (err) {
     if (err.response?.status === 404) return new Map();
@@ -237,19 +237,55 @@ async function fetchExternalEmoteImages(channelLogin) {
 // One memo per source, so a slow or broken provider is retried on its own schedule instead of
 // taking the others' cached maps down with it. `key` is null for the sources that are identical
 // for every channel (fetched once and shared).
-async function cachedMap(store, key, ttlMs, fetcher, label) {
-  const cached = key === null ? store.value : store.get(key);
-  if (cached && Date.now() < cached.expiresAt) return cached.map;
-  try {
-    const map = await fetcher();
-    const entry = { map, expiresAt: Date.now() + ttlMs };
+//
+// Entry: { value, expiresAt, refreshing } - `refreshing` is the one in-flight fetch, shared by
+// everyone who asks meanwhile. Fresh: returned. Expired: returned anyway, refresh started. Never
+// fetched: waited for up to COLD_WAIT_MS, else `empty`. `opts.complete` lifts that ceiling on the
+// never-fetched case, for callers that keep or state the result rather than draw it (the recap
+// job, the 7TV link status) - a list ten minutes old is still the right answer for them. A failed fetch keeps the previous value and holds off retries for
+// RETRY_AFTER_FAILURE_MS.
+function cached(store, key, ttlMs, fetcher, label, empty, opts = {}) {
+  let entry = key === null ? store.value : store.get(key);
+  if (!entry) {
+    entry = { value: undefined, expiresAt: 0, refreshing: null };
     if (key === null) store.value = entry;
     else store.set(key, entry);
-    return map;
-  } catch (err) {
-    console.error(`[emoteImages] ${label} fetch failed:`, err.message);
-    return cached?.map ?? new Map();
   }
+  const has = entry.value !== undefined;
+  if (has && Date.now() < entry.expiresAt) return Promise.resolve(entry.value);
+
+  if (!entry.refreshing) {
+    entry.refreshing = Promise.resolve()
+      .then(fetcher)
+      .then(
+        (value) => {
+          entry.value = value;
+          entry.expiresAt = Date.now() + ttlMs;
+        },
+        (err) => {
+          console.error(`[emoteImages] ${label} fetch failed:`, err.message);
+          // A source down since boot must not make every page sit out COLD_WAIT_MS until it
+          // recovers: "nothing" becomes its cached value, refreshed like any other.
+          if (entry.value === undefined) entry.value = empty;
+          entry.expiresAt = Date.now() + RETRY_AFTER_FAILURE_MS;
+        }
+      )
+      .finally(() => {
+        entry.refreshing = null;
+      });
+  }
+  const current = () => (entry.value !== undefined ? entry.value : empty);
+  if (has) return Promise.resolve(entry.value);
+  if (opts.complete) return entry.refreshing.then(current);
+  let timer;
+  const giveUp = new Promise((resolve) => {
+    timer = setTimeout(resolve, COLD_WAIT_MS);
+    timer.unref?.();
+  });
+  return Promise.race([entry.refreshing, giveUp]).then(() => {
+    clearTimeout(timer);
+    return current();
+  });
 }
 
 // name -> image URL for everything resolvable for this channel. Precedence on a name collision
@@ -264,15 +300,18 @@ async function cachedMap(store, key, ttlMs, fetcher, label) {
 //
 // `channelLogin` is optional only so a caller holding nothing but a broadcaster id still works -
 // it costs that caller the learnt emotes, which are keyed by login.
-async function getEmoteImageMap(broadcasterId, channelLogin) {
+//
+// `opts.complete` waits for every source instead of answering with what is cached (see cached()).
+// A page leaves it off; a job whose result is stored passes it.
+async function getEmoteImageMap(broadcasterId, channelLogin, opts) {
   const [external, global, channel, sevenTvGlobal, bttv, ffz, sevenTv] = await Promise.all([
-    getExternalEmoteImages(channelLogin),
-    getGlobalEmoteImages(),
-    getChannelEmoteImages(broadcasterId),
-    getSevenTvGlobalImages(),
-    getBttvEmoteImages(broadcasterId),
-    getFfzEmoteImages(broadcasterId),
-    getSevenTvEmoteImages(broadcasterId),
+    getExternalEmoteImages(channelLogin, opts),
+    getGlobalEmoteImages(opts),
+    getChannelEmoteImages(broadcasterId, opts),
+    getSevenTvGlobalImages(opts),
+    getBttvEmoteImages(broadcasterId, opts),
+    getFfzEmoteImages(broadcasterId, opts),
+    getSevenTvEmoteImages(broadcasterId, opts),
   ]);
   const merged = new Map([...external, ...global, ...channel, ...sevenTvGlobal, ...bttv, ...ffz, ...sevenTv]);
   return dropBlockedImages(merged);
@@ -298,40 +337,42 @@ function dropBlockedImages(map) {
   return map;
 }
 
-function getSevenTvGlobalImages() {
-  return cachedMap(sevenTvGlobalCache, null, GLOBAL_TTL_MS, fetchSevenTvGlobalImages, "7TV global emotes");
+function getSevenTvGlobalImages(opts) {
+  return cached(sevenTvGlobalCache, null, GLOBAL_TTL_MS, fetchSevenTvGlobalImages, "7TV global emotes", new Map(), opts);
 }
 
 // Channel and global merged per provider, mirroring the single whitelist source the bot writes
 // them to: both halves render in this chat, and nothing downstream tells them apart.
-async function getBttvEmoteImages(broadcasterId) {
+async function getBttvEmoteImages(broadcasterId, opts) {
   const [global, channel] = await Promise.all([
-    cachedMap(bttvGlobalCache, null, GLOBAL_TTL_MS, fetchBttvGlobalImages, "BTTV global emotes"),
+    cached(bttvGlobalCache, null, GLOBAL_TTL_MS, fetchBttvGlobalImages, "BTTV global emotes", new Map(), opts),
     broadcasterId
-      ? cachedMap(bttvChannelCache, broadcasterId, CHANNEL_TTL_MS, () => fetchBttvChannelImages(broadcasterId), "BTTV channel emotes")
+      ? cached(bttvChannelCache, broadcasterId, CHANNEL_TTL_MS, () => fetchBttvChannelImages(broadcasterId), "BTTV channel emotes", new Map(), opts)
       : new Map(),
   ]);
   return new Map([...global, ...channel]);
 }
 
-async function getFfzEmoteImages(broadcasterId) {
+async function getFfzEmoteImages(broadcasterId, opts) {
   const [global, channel] = await Promise.all([
-    cachedMap(ffzGlobalCache, null, GLOBAL_TTL_MS, fetchFfzGlobalImages, "FFZ global emotes"),
+    cached(ffzGlobalCache, null, GLOBAL_TTL_MS, fetchFfzGlobalImages, "FFZ global emotes", new Map(), opts),
     broadcasterId
-      ? cachedMap(ffzChannelCache, broadcasterId, CHANNEL_TTL_MS, () => fetchFfzChannelImages(broadcasterId), "FFZ channel emotes")
+      ? cached(ffzChannelCache, broadcasterId, CHANNEL_TTL_MS, () => fetchFfzChannelImages(broadcasterId), "FFZ channel emotes", new Map(), opts)
       : new Map(),
   ]);
   return new Map([...global, ...channel]);
 }
 
-function getExternalEmoteImages(channelLogin) {
+function getExternalEmoteImages(channelLogin, opts) {
   if (!channelLogin) return Promise.resolve(new Map());
-  return cachedMap(
+  return cached(
     externalEmoteCache,
     String(channelLogin).toLowerCase(),
     CHANNEL_TTL_MS,
     () => fetchExternalEmoteImages(channelLogin),
-    "learnt Twitch emotes"
+    "learnt Twitch emotes",
+    new Map(),
+    opts
   );
 }
 

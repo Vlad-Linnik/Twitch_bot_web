@@ -65,6 +65,27 @@ function median(values) {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
+// Every word form the channel said at least twice this year, with its count. Twice and not the
+// five the "your word" rule asks of a person: that rule compares FORMS summed into one word, and a
+// person's form can be one use of a word they said five times in total. With the floor at two, a
+// form missing from this list was said exactly once in the channel - and the person asking said
+// it, so that once is theirs - which keeps the personal comparison exact
+// (db/annualRecapUserService.js). Runs on the {channel, date, count, word} index alone.
+async function channelWordCounts(db, channel, start, end) {
+  const rows = await db
+    .collection("ChatWordStats")
+    .aggregate(
+      [
+        { $match: { channel, date: { $gte: start, $lt: end } } },
+        { $group: { _id: "$word", n: { $sum: "$count" } } },
+        { $match: { n: { $gte: 2 } } },
+      ],
+      { allowDiskUse: true }
+    )
+    .toArray();
+  return rows.map((r) => ({ word: r._id, n: r.n }));
+}
+
 async function topAndTotal(db, collection, channel, start, end, limit) {
   const [res] = await db
     .collection(collection)
@@ -276,7 +297,7 @@ async function buildChannelRecap(channelLogin, year) {
   // itself renders as an emote is never listed as a word.
   const registryEmote = await emotePredicate(db, channel);
   const pictured = await emoteImages
-    .getEmoteImageMap(channelId, login)
+    .getEmoteImageMap(channelId, login, { complete: true })
     .then((map) => new Set([...map.keys()].map((n) => String(n).toLowerCase())))
     .catch(() => new Set());
   const isEmote = (token) => registryEmote(token) || pictured.has(String(token).toLowerCase());
@@ -428,6 +449,11 @@ async function buildChannelRecap(channelLogin, year) {
     monthlyCurves(db, "words", channel, emotes.top.slice(0, 5), start, end),
   ]);
 
+  // The channel's word counts for the personal page (db/annualRecapRepo.js's
+  // AnnualRecapWordCounts). Written before the recap that names them, pruned after it is saved.
+  const wordCountsAt = new Date();
+  await recapRepo.insertWordCounts(login, year, wordCountsAt, await channelWordCounts(db, channel, start, end));
+
   const data = {
     version: 1,
     range: { start, end },
@@ -459,11 +485,13 @@ async function buildChannelRecap(channelLogin, year) {
     firstChatters,
     moderation,
     unbans,
+    wordCountsAt,
     buildMs: { scan: scanMs, total: Date.now() - t0 },
   };
 
   await recapRepo.replaceMentions(login, year, mentionRows);
   const saved = await recapRepo.saveChannelRecap(login, year, data);
+  await recapRepo.pruneWordCounts(login, year, wordCountsAt);
   await recapRepo.clearUserRecaps(login, year);
   console.log(
     `[annualRecap] ${login} ${year}: ${state.total} messages, ${state.users.size} chatters, ` +

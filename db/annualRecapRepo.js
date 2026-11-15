@@ -11,6 +11,14 @@
 //   AnnualRecapOptOut    {_id: userId} - "leave me out of the public recap", for every channel
 //   AnnualRecapHiddenMoments  a loud moment a moderator removed, _id "<login>:<year>:<minute ISO>".
 //                        Kept apart from the recap so the daily rebuild cannot bring it back
+//   AnnualRecapWordCounts  {channelLogin, year, at, word, n} - the channel's count of every word
+//                        form said at least twice that year, for the personal page's "your word"
+//                        comparison. Without it that comparison is a ChatWordStats read of every
+//                        day row of the person's top words - ~18k documents for an active chatter,
+//                        0.7-3.6s whenever they are not in memory, on every viewer's first open and
+//                        again after every rebuild. `at` is the build that wrote the rows; the
+//                        channel recap names the one it was built with, so a reader never sees a
+//                        half-written set
 //   AnnualRecapPicks     the bot's best answers of the year, picked by hand in the AI journal.
 //                        A COPY of the AiReplyLog row, not a reference: that collection expires
 //                        rows by TTL, and a December recap would otherwise lose a March answer
@@ -28,6 +36,7 @@ async function ensureInitialized() {
     optOut: db.collection("AnnualRecapOptOut"),
     picks: db.collection("AnnualRecapPicks"),
     hiddenMoments: db.collection("AnnualRecapHiddenMoments"),
+    wordCounts: db.collection("AnnualRecapWordCounts"),
   };
   // Logged, never thrown: an index failure must not 500 the first page after a restart (the
   // handle above is already cached, so every later request would quietly work).
@@ -37,6 +46,8 @@ async function ensureInitialized() {
       cols.mentions.createIndex({ channelLogin: 1, year: 1, from: 1 }),
       cols.recaps.createIndex({ channelLogin: 1, year: -1 }),
       cols.picks.createIndex({ channelLogin: 1, year: 1, createdAt: 1 }),
+      // Covers wordCountsOf entirely (n is in the key), so the read touches no documents.
+      cols.wordCounts.createIndex({ channelLogin: 1, year: 1, at: 1, word: 1, n: 1 }),
     ]);
   } catch (err) {
     console.error("[annualRecapRepo] index creation failed:", err.message);
@@ -96,6 +107,37 @@ async function mentionsOf(login, year, logins) {
     .find({ channelLogin: String(login).toLowerCase(), year, to: { $in: logins } })
     .project({ _id: 0, from: 1, to: 1, n: 1 })
     .toArray();
+}
+
+// Writes one build's word counts, tagged `at`. The previous build's rows stay until
+// pruneWordCounts - the channel recap still pointing at them may be read meanwhile.
+async function insertWordCounts(login, year, at, rows) {
+  const { wordCounts } = await ensureInitialized();
+  const channelLogin = String(login).toLowerCase();
+  const CHUNK = 5000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await wordCounts.insertMany(
+      rows.slice(i, i + CHUNK).map((r) => ({ channelLogin, year, at, word: r.word, n: r.n })),
+      { ordered: false }
+    );
+  }
+}
+
+// Every build's rows but `keepAt`: run once the channel recap names `keepAt`.
+async function pruneWordCounts(login, year, keepAt) {
+  const { wordCounts } = await ensureInitialized();
+  await wordCounts.deleteMany({ channelLogin: String(login).toLowerCase(), year, at: { $ne: keepAt } });
+}
+
+// Map<word, n> for those of `words` the build `at` counted. A word missing from the map was said
+// fewer than twice in the channel that year.
+async function wordCountsOf(login, year, at, words) {
+  const { wordCounts } = await ensureInitialized();
+  const rows = await wordCounts
+    .find({ channelLogin: String(login).toLowerCase(), year, at, word: { $in: words } })
+    .project({ _id: 0, word: 1, n: 1 })
+    .toArray();
+  return new Map(rows.map((r) => [r.word, r.n]));
 }
 
 async function getUserRecap(login, year, userId) {
@@ -215,6 +257,9 @@ module.exports = {
   builtAtForYear,
   replaceMentions,
   mentionsOf,
+  insertWordCounts,
+  pruneWordCounts,
+  wordCountsOf,
   getUserRecap,
   saveUserRecap,
   clearUserRecaps,
