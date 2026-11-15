@@ -31,6 +31,9 @@ const { SOLO_GAMES } = require("../lib/gameReplay");
 const gamesCatalog = require("../data/gamesCatalog");
 const { SUPPORTED_LOCALES } = require("../config/i18n");
 const profileCacheRepo = require("../db/profileCacheRepo");
+const annualRecapJob = require("../jobs/annualRecap");
+const annualRecapRepo = require("../db/annualRecapRepo");
+const { currentYear } = require("../lib/annualRecap");
 const { parsePermissionTarget } = require("../lib/moderatorSections");
 const { describeChange } = require("../lib/settingsChangeDescribe");
 const newsRepo = require("../db/newsRepo");
@@ -93,11 +96,29 @@ router.get("/admin", requireAdmin, async (req, res, next) => {
         bot: botHeartbeat ? { ...botHeartbeat, online: botOnline, ageMs: botHeartbeatAgeMs } : null,
       },
       flash: req.query.flash || null,
+      ...(await recapStatus(channels)),
     });
   } catch (err) {
     next(err);
   }
 });
+
+// When each channel's current-year recap was last built, and which are building right now. Fail
+// soft: a missing caption must not take the admin page down.
+async function recapStatus(channels) {
+  const year = currentYear();
+  try {
+    const built = await annualRecapRepo.builtAtForYear(year);
+    const recapBuilding = {};
+    for (const ch of channels) {
+      if (annualRecapJob.isBuilding(ch.channelLogin, year)) recapBuilding[ch.channelLogin] = true;
+    }
+    return { recapBuilt: Object.fromEntries(built), recapBuilding };
+  } catch (err) {
+    console.error("[admin] recap status failed:", err.message);
+    return { recapBuilt: {}, recapBuilding: {} };
+  }
+}
 
 router.post("/admin/requests/:id/approve", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
   try {
@@ -198,6 +219,43 @@ router.post("/admin/channels/:login/toggle-movies", settingsWriteLimiter, requir
       });
     }
     res.redirect(`/admin?flash=${enable ? "moviesEnabled" : "moviesDisabled"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/channels/:login/toggle-recap", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const enable = req.body.recapEnabled === "1";
+    const changed = await channelsRepo.setSectionEnabled(req.params.login, "recapEnabled", enable);
+    if (changed) {
+      await adminActionLogsRepo.logAction({
+        admin: req.user,
+        action: enable ? "channel.recapEnable" : "channel.recapDisable",
+        target: req.params.login.toLowerCase(),
+      });
+    }
+    res.redirect(`/admin?flash=${enable ? "recapEnabled" : "recapDisabled"}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Builds (or rebuilds) a channel's recap for the current year in the background - a full pass
+// over the year's messages takes tens of seconds, too long to hold the request open. The page
+// says when it was last built, so the admin can see the result land.
+router.post("/admin/channels/:login/recap-rebuild", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const login = req.params.login.toLowerCase();
+    const channel = await channelsRepo.findByLogin(login);
+    if (!channel) return res.redirect("/admin?flash=recapUnknown");
+    const year = currentYear();
+    const { started, promise } = annualRecapJob.startBuild(login, year);
+    promise.catch((err) => console.error(`[annualRecap] ${login} ${year} failed:`, err.message));
+    if (started) {
+      await adminActionLogsRepo.logAction({ admin: req.user, action: "channel.recapRebuild", target: login });
+    }
+    res.redirect(`/admin?flash=${started ? "recapRebuildStarted" : "recapRebuildRunning"}`);
   } catch (err) {
     next(err);
   }

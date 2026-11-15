@@ -3259,3 +3259,22 @@ body.theme-hall-wide .throne-vitrine__case {
 .announce-swatch-label input:disabled + .announce-swatch { cursor: not-allowed; }
 .announce-swatch-label:has(input:disabled) { cursor: not-allowed; }
 .announce-swatch-label:has(input:disabled):hover .announce-swatch { transform: none; }
+
+/* Annual recap guessing game (views/annualRecapMe.ejs, public/js/annual-recap.js). A fact stays
+   hidden behind its question only when JS runs - without it html.js never appears and the whole
+   page is simply visible. */
+html.js .recap-locked {
+  display: none;
+}
+.recap-option-right {
+  border-color: rgb(34 197 94) !important;
+  background-color: rgb(20 83 45 / 0.5) !important;
+  color: #fff !important;
+}
+.recap-option-wrong {
+  border-color: rgb(239 68 68) !important;
+  background-color: rgb(127 29 29 / 0.4) !important;
+}
+.recap-option-dim {
+  opacity: 0.45;
+}

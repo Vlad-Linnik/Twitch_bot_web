@@ -1,0 +1,8 @@
+<%# A chat line (or an emote name) drawn the way chat saw it: a whitespace-delimited token that is
+    one of the channel's emotes becomes its picture, everything else stays escaped text. Chat text
+    is attacker-controlled, so nothing here is ever written unescaped.
+    Params: text, images (Map name -> url, may be empty). -%>
+<% String(text || '').trim().split(/(\s+)/).forEach(function (tok) {
+     const url = tok && images && typeof images.get === 'function' ? images.get(tok) : null;
+     if (url) { %><img src="<%= url %>" alt="<%= tok %>" title="<%= tok %>" class="inline-block h-6 w-auto align-middle" loading="lazy" /><% } else { %><%= tok %><% }
+   }) -%>

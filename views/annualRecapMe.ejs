@@ -1,0 +1,186 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('recap.me.titleSuffix') }) %>
+<%- include('partials/nav') %>
+<%
+  const loc = locale === 'ru' ? 'ru-RU' : 'en-GB';
+  const fmt = (n) => Number(n || 0).toLocaleString(loc);
+  const fmtDate = (d, opts) => new Date(d).toLocaleString(loc, Object.assign({ timeZone: 'Europe/Moscow' }, opts));
+  const monthNames = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 15)).toLocaleString(loc, { month: 'short', timeZone: 'UTC' }));
+  const card = 'rounded-xl border border-neutral-800 bg-neutral-900/60 p-5';
+  const h2 = 'text-lg font-semibold text-neutral-100 mb-3';
+  const hh = (h) => String(h).padStart(2, '0') + ':00';
+%>
+
+<main class="pt-14 max-w-2xl mx-auto px-4 sm:px-6 py-12">
+
+  <%- include('partials/channelHeader', { channel, broadcaster: typeof broadcaster !== 'undefined' ? broadcaster : null, channelNav }) %>
+
+  <p class="mb-4 text-sm"><a href="/<%= channel.channelLogin %>/recap/<%= year %>" class="text-purple-300 hover:text-purple-200">← <%= t('recap.me.backToChannel', { year }) %></a></p>
+
+  <% if (needLogin) { %>
+    <section class="<%= card %> text-center py-12">
+      <h1 class="text-2xl font-bold text-white mb-2"><%= t('recap.me.heading', { year }) %></h1>
+      <p class="text-sm text-neutral-400 mb-6"><%= t('recap.me.needLogin') %></p>
+      <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="inline-block px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold"><%= t('nav.login') %></a>
+    </section>
+  <% } else if (personal.empty) { %>
+    <section class="<%= card %> text-center py-12">
+      <h1 class="text-2xl font-bold text-white mb-2"><%= t('recap.me.heading', { year }) %></h1>
+      <p class="text-sm text-neutral-400"><%= t('recap.me.empty') %></p>
+    </section>
+  <% } else { const p = personal; %>
+
+  <section class="mb-8 rounded-2xl border border-purple-900/50 bg-gradient-to-br from-purple-950/70 via-neutral-900 to-neutral-950 p-6">
+    <p class="text-xs uppercase tracking-widest text-purple-300/80"><%= t('recap.me.kicker', { name: p.name }) %></p>
+    <h1 class="mt-1 text-3xl font-bold text-white"><%= t('recap.me.heading', { year }) %></h1>
+    <p class="mt-2 text-sm text-neutral-400"><%= t('recap.me.lead') %></p>
+  </section>
+
+  <%# The guessing game. Each fact is hidden until its question is answered - with JS only:
+      html.js .recap-locked hides them, so without JS the whole page is simply visible. %>
+  <div class="grid gap-4" data-recap-quiz>
+    <% quiz.forEach(function (q, qi) { %>
+      <section class="<%= card %>" data-quiz data-answer="<%= q.answer %>">
+        <p class="text-xs text-neutral-500 mb-1"><%= t('recap.me.questionN', { n: qi + 1, of: quiz.length }) %></p>
+        <h2 class="text-base font-semibold text-neutral-100 mb-3"><%= t('recap.me.q.' + q.kind) %></h2>
+        <div class="grid grid-cols-2 gap-2">
+          <% q.options.forEach(function (opt, oi) { %>
+            <button type="button" data-option="<%= oi %>"
+                    class="recap-option px-3 py-2 rounded-lg border border-neutral-700 bg-neutral-800/60 hover:border-purple-500 text-sm text-neutral-200 text-left transition-colors">
+              <% if (q.kind === 'messages') {
+                   const lo = messageBuckets[opt], hi = messageBuckets[opt + 1]; %>
+                <%= hi ? t('recap.me.range', { from: fmt(lo), to: fmt(hi - 1) }) : t('recap.me.rangeOpen', { from: fmt(lo) }) %>
+              <% } else if (q.kind === 'chronotype') { %>
+                <%= t('recap.me.chrono.' + opt) %>
+              <% } else if (q.kind === 'emote') { %>
+                <%- include('partials/recapChatText', { text: opt, images }) %> <span class="text-xs text-neutral-500"><%= opt %></span>
+              <% } else { %>
+                <%= opt %>
+              <% } %>
+            </button>
+          <% }) %>
+        </div>
+        <div class="recap-locked mt-4 rounded-lg bg-black/30 px-4 py-3 text-sm text-neutral-200" data-quiz-reveal>
+          <% if (q.kind === 'messages') { %>
+            <%= t('recap.me.a.messages', { n: fmt(p.messages), share: Math.floor(p.standing.share * 100), rank: fmt(p.standing.rank), of: fmt(p.standing.of) }) %>
+          <% } else if (q.kind === 'chronotype') { %>
+            <%= t('recap.me.a.chronotype', { hour: hh(p.chronotype.peakHour), label: t('recap.me.chrono.' + p.chronotype.key) }) %>
+          <% } else if (q.kind === 'emote') { %>
+            <%= t('recap.me.a.emote') %> <%- include('partials/recapChatText', { text: p.emotes[0].name, images }) %> — <%= t('recap.me.times', { n: fmt(p.emotes[0].n) }) %>
+          <% } else if (q.kind === 'partner') { const pt = p.partners[0]; %>
+            <%= t('recap.me.a.partner', { name: pt.login, out: fmt(pt.out), in: fmt(pt.in) }) %>
+          <% } %>
+        </div>
+      </section>
+    <% }) %>
+    <p class="text-center"><button type="button" data-quiz-skip class="recap-skip text-xs text-neutral-500 hover:text-neutral-300 underline"><%= t('recap.me.skip') %></button></p>
+  </div>
+
+  <div class="recap-locked mt-8 grid gap-6" data-quiz-rest>
+
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.me.presence.heading') %></h2>
+      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+        <div class="rounded-lg bg-black/20 px-3 py-2"><dt class="text-xs text-neutral-400"><%= t('recap.me.presence.streams') %></dt><dd class="text-xl font-semibold text-white tabular-nums"><%= p.attendance.attended %><span class="text-sm text-neutral-500"> / <%= p.attendance.of %></span></dd></div>
+        <div class="rounded-lg bg-black/20 px-3 py-2"><dt class="text-xs text-neutral-400"><%= t('recap.me.presence.streak') %></dt><dd class="text-xl font-semibold text-white tabular-nums"><%= p.attendance.longestStreak %></dd></div>
+        <div class="rounded-lg bg-black/20 px-3 py-2"><dt class="text-xs text-neutral-400"><%= t('recap.me.presence.days') %></dt><dd class="text-xl font-semibold text-white tabular-nums"><%= p.activeDays %></dd></div>
+        <div class="rounded-lg bg-black/20 px-3 py-2"><dt class="text-xs text-neutral-400"><%= t('recap.me.presence.opened') %></dt><dd class="text-xl font-semibold text-white tabular-nums"><%= p.attendance.opened %></dd></div>
+      </dl>
+      <% const maxM = Math.max(1, ...p.months); %>
+      <div class="mt-5 flex items-end gap-1 h-20" role="img" aria-label="<%= t('recap.rhythm.monthsLabel') %>">
+        <% p.months.forEach(function (n, m) { %>
+          <div class="flex-1 flex flex-col justify-end h-full" title="<%= monthNames[m] %>: <%= fmt(n) %>"><div class="w-full rounded-t bg-purple-500/70" style="height: <%= Math.round((n / maxM) * 100) %>%"></div></div>
+        <% }) %>
+      </div>
+      <div class="flex gap-1 mt-1 text-[10px] text-neutral-500">
+        <% monthNames.forEach(function (name) { %><div class="flex-1 text-center truncate"><%= name %></div><% }) %>
+      </div>
+    </section>
+
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.me.first.heading') %></h2>
+      <p class="text-xs text-neutral-500"><%= fmtDate(p.firstMessage.at, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) %></p>
+      <p class="mt-1 text-neutral-200 break-words">«<%- include('partials/recapChatText', { text: p.firstMessage.text, images }) %>»</p>
+    </section>
+
+    <% if (p.words.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.me.words.heading') %></h2>
+      <p class="text-xs text-neutral-500 mb-3"><%= t('recap.me.words.sub') %></p>
+      <ul class="space-y-2">
+        <% p.words.forEach(function (w, i) { %>
+          <li class="flex items-baseline gap-3">
+            <span class="<%= i === 0 ? 'text-2xl font-bold text-white' : 'text-base text-neutral-200' %>"><%= w.word %></span>
+            <span class="text-xs text-neutral-400"><%= t('recap.me.words.share', { n: fmt(w.n), share: Math.round(w.share * 100) }) %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <% if (p.emotes.length > 1 || p.partners.length > 1) { %>
+    <div class="grid sm:grid-cols-2 gap-6">
+      <% if (p.emotes.length) { %>
+      <section class="<%= card %>">
+        <h2 class="<%= h2 %>"><%= t('recap.me.emotes.heading') %></h2>
+        <ol class="space-y-2 text-sm">
+          <% p.emotes.forEach(function (e) { %>
+            <li class="flex items-center gap-2"><%- include('partials/recapChatText', { text: e.name, images }) %> <span class="text-neutral-400 text-xs"><%= e.name %></span><span class="ml-auto text-neutral-400 tabular-nums"><%= fmt(e.n) %></span></li>
+          <% }) %>
+        </ol>
+      </section>
+      <% } %>
+      <% if (p.partners.length) { %>
+      <section class="<%= card %>">
+        <h2 class="<%= h2 %>"><%= t('recap.me.partners.heading') %></h2>
+        <ol class="space-y-2 text-sm">
+          <% p.partners.forEach(function (pt) { %>
+            <li class="flex gap-2"><span class="text-neutral-100 truncate"><%= pt.login %></span><span class="ml-auto text-xs text-neutral-400 tabular-nums" title="<%= t('recap.me.partners.title') %>">→<%= fmt(pt.out) %> ←<%= fmt(pt.in) %></span></li>
+          <% }) %>
+        </ol>
+      </section>
+      <% } %>
+    </div>
+    <% } %>
+
+    <% const pu = p.punishments; const anyPunish = pu.timeouts + pu.bans + pu.duel + pu.sniper + pu.self + p.amnesty.approved + p.amnesty.denied > 0; %>
+    <% if (anyPunish) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.me.record.heading') %></h2>
+      <p class="text-xs text-neutral-500 mb-3"><%= t('recap.me.record.private') %></p>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+        <% [['timeouts', pu.timeouts], ['bans', pu.bans], ['duel', pu.duel], ['sniper', pu.sniper], ['self', pu.self], ['amnesty', p.amnesty.approved]].filter(function (s) { return s[1] > 0; }).forEach(function (s) { %>
+          <div class="rounded-lg bg-black/20 px-3 py-2"><dt class="text-xs text-neutral-400"><%= t('recap.me.record.' + s[0]) %></dt><dd class="text-xl font-semibold text-white tabular-nums"><%= fmt(s[1]) %></dd></div>
+        <% }) %>
+      </dl>
+    </section>
+    <% } %>
+
+    <% if (p.ai.answers || p.games.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.me.extras.heading') %></h2>
+      <% if (p.ai.answers) { %><p class="text-sm text-neutral-300"><%= t('recap.me.extras.ai', { n: fmt(p.ai.answers) }) %></p><% } %>
+      <% if (p.games.length) { %>
+        <ul class="mt-3 space-y-1.5 text-sm">
+          <% p.games.forEach(function (g) { const key = gameNameKey(g.game); %>
+            <li class="flex gap-2"><span class="text-neutral-200"><%= key ? t(key) : g.game %></span><span class="ml-auto text-neutral-400 tabular-nums"><%= fmt(g.bestScore) %></span></li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </section>
+    <% } %>
+  </div>
+
+  <section id="privacy" class="mt-10 rounded-xl border border-neutral-800 p-5 text-sm">
+    <p class="text-neutral-300 mb-3"><%= optedOut ? t('recap.me.privacy.hiddenNow') : t('recap.me.privacy.shownNow') %></p>
+    <form method="post" action="/<%= channel.channelLogin %>/recap/privacy" data-transition="instant">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
+      <input type="hidden" name="year" value="<%= year %>" />
+      <input type="hidden" name="hidden" value="<%= optedOut ? '0' : '1' %>" />
+      <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-300 hover:bg-neutral-800 text-xs font-medium"><%= optedOut ? t('recap.me.privacy.show') : t('recap.me.privacy.hide') %></button>
+    </form>
+  </section>
+  <% } %>
+</main>
+
+<script src="<%= asset('/js/annual-recap.js') %>" defer></script>
+<%- include('partials/foot') %>

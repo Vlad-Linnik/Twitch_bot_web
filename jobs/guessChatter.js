@@ -10,6 +10,7 @@
 // of which ~287k survive the length/link/command/uniqueness rules and ~135k (38.1%) also clear
 // MIN_CONTENT_WORDS - about 2700 strict questions per author.
 const { connect } = require("../db/connection");
+const { emotePredicate } = require("../db/emotePredicate");
 const channelsRepo = require("../db/channelsRepo");
 const questionsRepo = require("../db/guessChatterRepo");
 const { KNOWN_BOT_LOGINS } = require("../config/knownBots");
@@ -25,19 +26,6 @@ const REBUILD_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 const AUTHOR_SCAN_DEPTH = gc.POOL_SIZE * 3;
 
 const withHash = (channelLogin) => `#${String(channelLogin).toLowerCase().replace(/^#/, "")}`;
-
-// The same three-set union the word cloud uses for "is this token an emote": currently tracked,
-// ever counted, and tombstoned. Without it the tokenizer here would disagree with the one that
-// wrote ChatWordStats, and MIN_CONTENT_WORDS would be counting emotes as words.
-async function emotePredicate(db, channel) {
-  const [white, life, excluded] = await Promise.all([
-    db.collection("whiteList").distinct("word", { channel }),
-    db.collection("WordLifetimeStats").distinct("word", { channel }),
-    db.collection("EmoteExclusions").distinct("word", { channel }),
-  ]);
-  const set = new Set([...white, ...life, ...excluded].map((w) => String(w).toLowerCase()));
-  return (token) => set.has(String(token).toLowerCase());
-}
 
 // Who may be asked about. Three exclusions, and the third is the one that needed a decision.
 //

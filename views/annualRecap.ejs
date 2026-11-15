@@ -1,0 +1,298 @@
+<%- include('partials/head', { title: channel.channelLogin + ' ' + t('recap.titleSuffix') }) %>
+<%- include('partials/nav') %>
+<%
+  const loc = locale === 'ru' ? 'ru-RU' : 'en-GB';
+  const fmt = (n) => Number(n || 0).toLocaleString(loc);
+  const fmtDate = (d, opts) => new Date(d).toLocaleString(loc, Object.assign({ timeZone: 'Europe/Moscow' }, opts));
+  const monthNames = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 15)).toLocaleString(loc, { month: 'short', timeZone: 'UTC' }));
+  const card = 'rounded-xl border border-neutral-800 bg-neutral-900/60 p-5';
+  const h2 = 'text-lg font-semibold text-neutral-100 mb-1';
+  const sub = 'text-xs text-neutral-500 mb-4';
+%>
+
+<main class="pt-14 max-w-3xl mx-auto px-4 sm:px-6 py-12">
+
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
+
+  <% if (preview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3">
+      <%= t('recap.previewNotice') %>
+    </div>
+  <% } %>
+
+  <% if (!recapDoc) { %>
+    <p class="text-center text-neutral-500 text-sm py-16"><%= t('recap.notBuilt') %></p>
+  <% } else { const d = recapDoc.data; %>
+
+  <section class="mb-8 rounded-2xl border border-purple-900/50 bg-gradient-to-br from-purple-950/70 via-neutral-900 to-neutral-950 p-6 sm:p-8">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <p class="text-xs uppercase tracking-widest text-purple-300/80"><%= t('recap.kicker') %></p>
+        <h1 class="mt-1 text-3xl sm:text-4xl font-bold text-white"><%= t('recap.heading', { year }) %></h1>
+        <p class="mt-2 text-sm text-neutral-400 max-w-md"><%= t('recap.lead') %></p>
+      </div>
+      <% if (years.length > 1) { %>
+        <nav class="flex gap-1" aria-label="<%= t('recap.yearsLabel') %>">
+          <% years.forEach(function (y) { %>
+            <a href="/<%= channel.channelLogin %>/recap/<%= y.year %>"
+               class="px-2.5 py-1 rounded-md text-sm <%= y.year === year ? 'bg-purple-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800' %>"><%= y.year %></a>
+          <% }) %>
+        </nav>
+      <% } %>
+    </div>
+
+    <dl class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <% [['messages', d.totals.messages], ['chatters', d.totals.chatters], ['streams', d.totals.streams], ['emotes', d.totals.emoteUses]].forEach(function (s) { %>
+        <div class="rounded-lg bg-black/30 px-4 py-3">
+          <dt class="text-xs text-neutral-400"><%= t('recap.total.' + s[0]) %></dt>
+          <dd class="text-2xl font-bold text-white tabular-nums"><%= fmt(s[1]) %></dd>
+        </div>
+      <% }) %>
+    </dl>
+
+    <a href="/<%= channel.channelLogin %>/recap/<%= year %>/me"
+       class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors">
+      <%= t('recap.yourYearCta') %> <span aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <div class="grid gap-6">
+
+    <%# Months and hours %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.rhythm.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.rhythm.sub') %></p>
+      <% const maxM = Math.max(1, ...d.months); %>
+      <div class="flex items-end gap-1 h-28" role="img" aria-label="<%= t('recap.rhythm.monthsLabel') %>">
+        <% d.months.forEach(function (n, m) { %>
+          <div class="flex-1 flex flex-col items-center justify-end h-full" title="<%= monthNames[m] %>: <%= fmt(n) %>">
+            <div class="w-full rounded-t bg-purple-500/70" style="height: <%= Math.round((n / maxM) * 100) %>%"></div>
+          </div>
+        <% }) %>
+      </div>
+      <div class="flex gap-1 mt-1 text-[10px] text-neutral-500">
+        <% monthNames.forEach(function (name) { %><div class="flex-1 text-center truncate"><%= name %></div><% }) %>
+      </div>
+      <% const maxH = Math.max(1, ...d.hours); const peakH = d.hours.indexOf(Math.max(...d.hours)); %>
+      <p class="mt-5 text-sm text-neutral-300"><%= t('recap.rhythm.peakHour', { hour: String(peakH).padStart(2, '0') + ':00' }) %></p>
+      <div class="mt-2 flex items-end gap-px h-16" role="img" aria-label="<%= t('recap.rhythm.hoursLabel') %>">
+        <% d.hours.forEach(function (n, h) { %>
+          <div class="flex-1 rounded-t <%= h === peakH ? 'bg-amber-400' : 'bg-neutral-600' %>" style="height: <%= Math.max(2, Math.round((n / maxH) * 100)) %>%" title="<%= String(h).padStart(2, '0') %>:00 — <%= fmt(n) %>"></div>
+        <% }) %>
+      </div>
+      <div class="flex justify-between mt-1 text-[10px] text-neutral-500"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+    </section>
+
+    <%# Top chatters %>
+    <% if (view.topChatters.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.chatters.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.chatters.sub') %></p>
+      <ol class="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+        <% view.topChatters.forEach(function (u, i) { const p = view.profiles.get(String(u.userId)); %>
+          <li class="flex items-center gap-3 min-w-0">
+            <span class="w-5 text-right text-xs text-neutral-500 tabular-nums"><%= i + 1 %></span>
+            <% if (p && p.avatarUrl) { %><img src="<%= p.avatarUrl %>" alt="" class="w-7 h-7 rounded-full" loading="lazy" /><% } else { %><span class="w-7 h-7 rounded-full bg-neutral-800"></span><% } %>
+            <a href="/<%= channel.channelLogin %>/user/<%= u.name %>" class="truncate text-neutral-200 hover:text-white"><%= (p && p.displayName) || u.name %></a>
+            <span class="ml-auto text-xs text-neutral-400 tabular-nums"><%= fmt(u.n) %></span>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+    <% } %>
+
+    <%# Words and emotes %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.words.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.words.sub') %></p>
+      <div class="grid sm:grid-cols-2 gap-6">
+        <% [['words', d.words], ['emotes', d.emotes]].forEach(function (pair) { const block = pair[1]; if (!block.top.length) return; %>
+          <div>
+            <h3 class="text-sm font-medium text-neutral-300 mb-2"><%= t('recap.words.' + pair[0]) %></h3>
+            <ol class="space-y-1.5">
+              <% block.top.slice(0, 5).forEach(function (w, i) {
+                   const curve = block.curves[w.word] || [];
+                   const cmax = Math.max(1, ...curve);
+                   const points = curve.map(function (v, k) { return (k * 10) + ',' + (24 - Math.round((v / cmax) * 22)); }).join(' ');
+              %>
+                <li class="flex items-center gap-2">
+                  <span class="w-4 text-right text-xs text-neutral-500"><%= i + 1 %></span>
+                  <span class="text-neutral-100 truncate"><%- include('partials/recapChatText', { text: w.word, images: pair[0] === 'emotes' ? view.images : null }) %></span>
+                  <% if (curve.length) { %>
+                    <svg viewBox="0 0 110 26" class="ml-auto w-20 h-5 text-purple-400" aria-hidden="true"><polyline points="<%= points %>" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /></svg>
+                  <% } %>
+                  <span class="text-xs text-neutral-400 tabular-nums w-14 text-right"><%= fmt(w.n) %></span>
+                </li>
+              <% }) %>
+            </ol>
+            <% if (block.top.length > 5) { %>
+              <p class="mt-3 flex flex-wrap gap-1.5 text-xs">
+                <% block.top.slice(5, 20).forEach(function (w) { %>
+                  <span class="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300"><%- include('partials/recapChatText', { text: w.word, images: pair[0] === 'emotes' ? view.images : null }) %></span>
+                <% }) %>
+              </p>
+            <% } %>
+          </div>
+        <% }) %>
+      </div>
+    </section>
+
+    <%# New words of the year %>
+    <% if (view.newWords.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.newWords.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.newWords.sub') %></p>
+      <ul class="space-y-3">
+        <% view.newWords.forEach(function (w) { %>
+          <li class="rounded-lg bg-black/20 px-4 py-3">
+            <div class="flex items-baseline gap-2">
+              <span class="text-base font-semibold text-white"><%= w.word %></span>
+              <span class="text-xs text-neutral-400"><%= t('recap.newWords.uses', { n: fmt(w.n) }) %></span>
+            </div>
+            <% if (w.by) { %>
+              <p class="mt-1 text-xs text-neutral-400">
+                <%= t('recap.newWords.patientZero', { name: w.by.name, date: fmtDate(w.by.at, { day: 'numeric', month: 'long' }) }) %>
+              </p>
+              <p class="mt-1 text-sm text-neutral-300 break-words">«<%- include('partials/recapChatText', { text: w.by.text, images: view.images }) %>»</p>
+            <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <%# Loudest minutes %>
+    <% if (d.loud.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.loud.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.loud.sub') %></p>
+      <ol class="space-y-3">
+        <% d.loud.forEach(function (m, i) { %>
+          <li class="flex gap-4 items-start">
+            <span class="text-2xl font-bold text-amber-400 tabular-nums w-6"><%= i + 1 %></span>
+            <div class="min-w-0">
+              <p class="text-sm text-neutral-200">
+                <%= fmtDate(m.at, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) %>
+                <span class="text-neutral-500">·</span>
+                <%= t('recap.loud.perMinute', { n: fmt(m.n) }) %>
+                <% if (m.category) { %><span class="text-neutral-500">·</span> <span class="text-neutral-400"><%= m.category %></span><% } %>
+              </p>
+              <% if (m.chant) { %>
+                <p class="mt-1 text-sm text-neutral-300 break-words"><%= t('recap.loud.chant') %> «<%- include('partials/recapChatText', { text: m.chant.text, images: view.images }) %>» <span class="text-xs text-neutral-500">×<%= m.chant.n %></span></p>
+              <% } %>
+            </div>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+    <% } %>
+
+    <%# Pairs %>
+    <% if (view.pairs.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.pairs.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.pairs.sub') %></p>
+      <ul class="grid sm:grid-cols-2 gap-2">
+        <% view.pairs.forEach(function (p) { %>
+          <li class="flex items-center gap-2 rounded-lg bg-black/20 px-3 py-2 text-sm">
+            <span class="truncate text-neutral-100"><%= p.a %></span>
+            <span class="text-pink-400" aria-hidden="true">⇄</span>
+            <span class="truncate text-neutral-100"><%= p.b %></span>
+            <span class="ml-auto text-xs text-neutral-400 tabular-nums" title="<%= p.ab %> / <%= p.ba %>"><%= fmt(p.total) %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <%# Commands and first chatters %>
+    <div class="grid sm:grid-cols-2 gap-6">
+      <% if (view.commands.length) { %>
+      <section class="<%= card %>">
+        <h2 class="<%= h2 %>"><%= t('recap.commands.heading') %></h2>
+        <p class="<%= sub %>"><%= t('recap.commands.sub') %></p>
+        <ol class="space-y-1.5 text-sm">
+          <% view.commands.forEach(function (c) { %>
+            <li class="flex gap-2"><code class="text-purple-300">!<%= c.name %></code><span class="ml-auto text-neutral-400 tabular-nums"><%= fmt(c.n) %></span></li>
+          <% }) %>
+        </ol>
+      </section>
+      <% } %>
+      <% if (view.firstChatters.length) { %>
+      <section class="<%= card %>">
+        <h2 class="<%= h2 %>"><%= t('recap.first.heading') %></h2>
+        <p class="<%= sub %>"><%= t('recap.first.sub') %></p>
+        <ol class="space-y-1.5 text-sm">
+          <% view.firstChatters.forEach(function (f) { %>
+            <li class="flex gap-2"><span class="text-neutral-100 truncate"><%= f.name %></span><span class="ml-auto text-neutral-400 tabular-nums"><%= t('recap.first.times', { n: f.n }) %></span></li>
+          <% }) %>
+        </ol>
+      </section>
+      <% } %>
+    </div>
+
+    <%# Categories %>
+    <% if (d.categories.list.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.categories.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.categories.sub', { since: fmtDate(d.categories.since, { day: 'numeric', month: 'long' }) }) %></p>
+      <% const liveliest = d.categories.list.filter(function (c) { return c.hours >= 5; }).slice().sort(function (a, b) { return b.perHour - a.perHour; })[0]; %>
+      <% if (liveliest) { %>
+        <p class="mb-3 text-sm text-neutral-300"><%= t('recap.categories.liveliest', { name: liveliest.name, n: fmt(Math.round(liveliest.perHour)) }) %></p>
+      <% } %>
+      <table class="w-full text-sm">
+        <thead class="text-xs text-neutral-500"><tr><th class="text-left font-normal pb-1"><%= t('recap.categories.colName') %></th><th class="text-right font-normal pb-1"><%= t('recap.categories.colHours') %></th><th class="text-right font-normal pb-1"><%= t('recap.categories.colPerHour') %></th></tr></thead>
+        <tbody>
+          <% d.categories.list.slice(0, 8).forEach(function (c) { %>
+            <tr class="border-t border-neutral-800"><td class="py-1.5 text-neutral-200"><%= c.name %></td><td class="py-1.5 text-right tabular-nums text-neutral-400"><%= fmt(Math.round(c.hours)) %></td><td class="py-1.5 text-right tabular-nums text-neutral-400"><%= fmt(Math.round(c.perHour)) %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </section>
+    <% } %>
+
+    <%# Moderation %>
+    <% if (d.moderation.since) { const a = d.moderation.actions; %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.moderation.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.moderation.sub', { since: fmtDate(d.moderation.since, { day: 'numeric', month: 'long' }) }) %></p>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+        <% [['timeouts', a.timeout || 0], ['bans', a.ban || 0], ['deletes', a.delete || 0], ['duels', d.moderation.duel], ['sniper', d.moderation.sniper], ['amnesty', d.unbans.approved]].forEach(function (s) { %>
+          <div class="rounded-lg bg-black/20 px-3 py-2"><dt class="text-xs text-neutral-400"><%= t('recap.moderation.' + s[0]) %></dt><dd class="text-xl font-semibold text-white tabular-nums"><%= fmt(s[1]) %></dd></div>
+        <% }) %>
+      </dl>
+      <% if (view.mods.length) { %>
+        <h3 class="mt-5 mb-2 text-sm font-medium text-neutral-300"><%= t('recap.moderation.fastest') %></h3>
+        <ol class="space-y-1.5 text-sm">
+          <% view.mods.forEach(function (m) { const p = view.profiles.get(String(m.userId)); %>
+            <li class="flex gap-2"><span class="text-neutral-100"><%= (p && (p.displayName || p.login)) || m.userId %></span><span class="ml-auto text-neutral-400 tabular-nums"><%= t('recap.moderation.median', { s: (m.medianMs / 1000).toFixed(1) }) %></span></li>
+          <% }) %>
+        </ol>
+      <% } %>
+    </section>
+    <% } %>
+
+    <%# The bot %>
+    <% if (d.ai.answers) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.ai.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.ai.sub', { since: fmtDate(d.ai.since, { day: 'numeric', month: 'long' }) }) %></p>
+      <p class="text-sm text-neutral-300"><%= t('recap.ai.answers', { n: fmt(d.ai.answers) }) %></p>
+      <% if (view.askers.length) { %>
+        <ol class="mt-3 space-y-1.5 text-sm">
+          <% view.askers.forEach(function (a) { %>
+            <li class="flex gap-2"><span class="text-neutral-100"><%= a.name %></span><span class="ml-auto text-neutral-400 tabular-nums"><%= fmt(a.n) %></span></li>
+          <% }) %>
+        </ol>
+      <% } %>
+    </section>
+    <% } %>
+
+    <p class="text-xs text-neutral-500 leading-relaxed">
+      <%= t('recap.footnote', { date: fmtDate(recapDoc.builtAt, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) }) %>
+    </p>
+  </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

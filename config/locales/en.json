@@ -933,7 +933,8 @@
     "news": "News",
     "movies": "Movies",
     "games": "Games",
-    "preview": "preview"
+    "preview": "preview",
+    "recap": "Year recap"
   },
   "news": {
     "titleSuffix": "news",
@@ -2308,7 +2309,12 @@
       "moviesEnabled": "Movies section enabled for the channel.",
       "moviesDisabled": "Movies section disabled for the channel.",
       "gamesEnabled": "The Games section is on for the channel.",
-      "gamesDisabled": "The Games section is off for the channel."
+      "gamesDisabled": "The Games section is off for the channel.",
+      "recapEnabled": "Year recap section enabled for the channel.",
+      "recapDisabled": "Year recap section disabled for the channel.",
+      "recapRebuildStarted": "Recap build started — it takes about a minute.",
+      "recapRebuildRunning": "This channel's recap is already being built.",
+      "recapUnknown": "No such channel."
     },
     "healthHeading": "Service health",
     "healthMessages": "Messages stored",
@@ -2398,7 +2404,10 @@
         "moviesEnable": "Movies section enabled",
         "moviesDisable": "Movies section disabled",
         "gamesEnable": "Games section enabled",
-        "gamesDisable": "Games section disabled"
+        "gamesDisable": "Games section disabled",
+        "recapEnable": "Year recap section enabled",
+        "recapDisable": "Year recap section disabled",
+        "recapRebuild": "Year recap build started"
       },
       "game": {
         "hide": "Game hidden",
@@ -2675,7 +2684,14 @@
     },
     "colGames": "Games",
     "gamesEnable": "Enable games",
-    "gamesDisable": "Disable games"
+    "gamesDisable": "Disable games",
+    "colRecap": "Recap",
+    "recapEnable": "Enable recap",
+    "recapDisable": "Disable recap",
+    "recapRebuild": "Rebuild recap",
+    "recapBuilding": "building…",
+    "recapBuiltAt": "built {{when}}",
+    "recapNotBuilt": "not built"
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",
@@ -3105,6 +3121,164 @@
     },
     "player": {
       "coverText": "Clip hidden"
+    }
+  },
+  "recap": {
+    "titleSuffix": "— year recap",
+    "previewNotice": "This section is switched off for the channel — you are seeing an admin preview.",
+    "notBuilt": "The year recap has not been built yet.",
+    "kicker": "The chat's year",
+    "heading": "{{year}} in chat",
+    "lead": "Not how much you watched — Twitch knows that. What the chat said, to whom, and when it shouted.",
+    "yearsLabel": "Year",
+    "yourYearCta": "My year in this chat",
+    "total": {
+      "messages": "messages",
+      "chatters": "chatters",
+      "streams": "streams",
+      "emotes": "emotes"
+    },
+    "rhythm": {
+      "heading": "Rhythm of the year",
+      "sub": "Messages by month and by hour (Moscow time).",
+      "monthsLabel": "Messages by month",
+      "hoursLabel": "Messages by hour of day",
+      "peakHour": "The loudest hour is {{hour}}."
+    },
+    "chatters": {
+      "heading": "Voices of the year",
+      "sub": "Who wrote the most."
+    },
+    "words": {
+      "heading": "Words and emotes of the year",
+      "sub": "The curve shows how a word lived month by month.",
+      "words": "Words",
+      "emotes": "Emotes"
+    },
+    "newWords": {
+      "heading": "Words the chat invented",
+      "sub": "They were not in the chat before this year — and then they caught on.",
+      "uses": "{{n}} times this year",
+      "patientZero": "First written by {{name}}, {{date}}:"
+    },
+    "loud": {
+      "heading": "Loudest minutes",
+      "sub": "The minutes the chat wrote fastest all year.",
+      "perMinute": "{{n}} messages in a minute",
+      "chant": "The chat shouted"
+    },
+    "pairs": {
+      "heading": "Pairs of the year",
+      "sub": "Who wrote to EACH OTHER most — ranked by whoever answered less."
+    },
+    "commands": {
+      "heading": "Commands of the year",
+      "sub": "What was called with “!” most."
+    },
+    "first": {
+      "heading": "Opened the stream",
+      "sub": "Who wrote first in a stream's chat.",
+      "times": "{{n}} times"
+    },
+    "categories": {
+      "heading": "Games of the year",
+      "sub": "Data since {{since}} — the stream category was not recorded before.",
+      "liveliest": "The chat was liveliest on “{{name}}” — {{n}} messages an hour.",
+      "colName": "Category",
+      "colHours": "Hours",
+      "colPerHour": "Msgs/hour"
+    },
+    "moderation": {
+      "heading": "Moderation",
+      "sub": "Data since {{since}}.",
+      "timeouts": "timeouts",
+      "bans": "bans",
+      "deletes": "deleted messages",
+      "duels": "duels lost",
+      "sniper": "sniper shots",
+      "amnesty": "pardons",
+      "fastest": "Fastest moderators",
+      "median": "{{s}} s median"
+    },
+    "ai": {
+      "heading": "The bot answered",
+      "sub": "Since {{since}}.",
+      "answers": "Answers to mentions: {{n}}."
+    },
+    "footnote": "Built {{date}}. Counts messages in the channel's chat, shared-chat lines included. Streams are split on chat pauses longer than an hour and a half.",
+    "me": {
+      "titleSuffix": "— my year",
+      "backToChannel": "The channel's {{year}}",
+      "heading": "My {{year}} in chat",
+      "kicker": "Year recap · {{name}}",
+      "lead": "Guess first — then look.",
+      "needLogin": "Log in with Twitch to see your year in this chat. Only you can see it.",
+      "empty": "You did not write in this chat this year.",
+      "questionN": "Question {{n}} of {{of}}",
+      "q": {
+        "messages": "How many messages did you write this year?",
+        "chronotype": "When do you write most?",
+        "emote": "Your favourite emote?",
+        "partner": "Who did you talk to most?"
+      },
+      "range": "{{from}} to {{to}}",
+      "rangeOpen": "over {{from}}",
+      "chrono": {
+        "night": "at night",
+        "morning": "in the morning",
+        "day": "in the afternoon",
+        "evening": "in the evening"
+      },
+      "a": {
+        "messages": "Messages: {{n}} — more than {{share}}% of the chat. Rank {{rank}} of {{of}}.",
+        "chronotype": "You write most {{label}}, peaking at {{hour}}.",
+        "emote": "Your emote is",
+        "partner": "{{name}}: you wrote {{out}} times, they wrote {{in}}."
+      },
+      "times": "{{n}} times",
+      "skip": "Show everything",
+      "presence": {
+        "heading": "At the streams",
+        "streams": "streams with your message",
+        "streak": "streams in a row — record",
+        "days": "days in chat",
+        "opened": "times you opened a stream"
+      },
+      "first": {
+        "heading": "First message of the year"
+      },
+      "words": {
+        "heading": "Your words",
+        "sub": "Words you say far more often than the rest of the chat.",
+        "share": "{{n}} times — {{share}}% of the whole chat"
+      },
+      "emotes": {
+        "heading": "Your emotes"
+      },
+      "partners": {
+        "heading": "Conversations",
+        "title": "→ you to them, ← them to you"
+      },
+      "record": {
+        "heading": "Your record",
+        "private": "Only you can see this.",
+        "timeouts": "timeouts",
+        "bans": "bans",
+        "duel": "duels lost",
+        "sniper": "sniper hits",
+        "self": "self-requested timeouts",
+        "amnesty": "pardons"
+      },
+      "extras": {
+        "heading": "Also",
+        "ai": "The bot answered you {{n}} times."
+      },
+      "privacy": {
+        "shownNow": "You are shown in the channel's public recap (tops, pairs, new words).",
+        "hiddenNow": "You are hidden from every channel's public recap.",
+        "hide": "Hide me from public recaps",
+        "show": "Show me again"
+      }
     }
   }
 }

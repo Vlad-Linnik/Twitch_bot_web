@@ -10,6 +10,7 @@
 // every word costs exactly the same one scan. Measured on production data, 1.93M messages take
 // ~21 seconds and cover 99.3% of the pool at roughly half a megabyte per channel.
 const { connect } = require("../db/connection");
+const { emotePredicate } = require("../db/emotePredicate");
 const examplesRepo = require("../db/higherLowerExamplesRepo");
 const channelsRepo = require("../db/channelsRepo");
 const { extractWords, LIFETIME_BUCKET } = require("../lib/textStats");
@@ -34,19 +35,6 @@ const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const REBUILD_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 const withHash = (channelLogin) => `#${String(channelLogin).toLowerCase().replace(/^#/, "")}`;
-
-// The same three-set union the word cloud uses for "is this token an emote": currently tracked,
-// ever counted, and tombstoned. Without it the tokenizer here would disagree with the one that
-// wrote ChatWordStats, and examples would be attached to words the game never deals.
-async function emotePredicate(db, channel) {
-  const [white, life, excluded] = await Promise.all([
-    db.collection("whiteList").distinct("word", { channel }),
-    db.collection("WordLifetimeStats").distinct("word", { channel }),
-    db.collection("EmoteExclusions").distinct("word", { channel }),
-  ]);
-  const set = new Set([...white, ...life, ...excluded].map((w) => String(w).toLowerCase()));
-  return (token) => set.has(String(token).toLowerCase());
-}
 
 async function buildForChannel(channelLogin) {
   const db = await connect();

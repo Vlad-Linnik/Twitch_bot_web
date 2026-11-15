@@ -11,6 +11,7 @@ const { startExampleRefreshLoop } = require("./jobs/higherLowerExamples");
 const { startGuessChatterRefreshLoop } = require("./jobs/guessChatter");
 const { startImdbRatingsSync } = require("./jobs/imdbRatingsSync");
 const { startSteamReviewsSync } = require("./jobs/steamReviewsSync");
+const { startAnnualRecapLoop } = require("./jobs/annualRecap");
 
 async function main() {
   await connect();
@@ -30,6 +31,7 @@ async function main() {
   startGuessChatterRefreshLoop();
   startImdbRatingsSync();
   startSteamReviewsSync();
+  startAnnualRecapLoop();
   // Donation media: reconnect every configured channel's platform listeners and reload its queue.
   donationMediaManager.start();
 }

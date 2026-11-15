@@ -36,6 +36,7 @@ router.use("/", require("./unbanBureau"));
 router.use("/", require("./news"));
 router.use("/", require("./movies"));
 router.use("/", require("./gamesStream"));
+router.use("/", require("./annualRecap"));
 router.use("/", require("./userDashboard"));
 router.use("/", require("./channelRedirect"));
 

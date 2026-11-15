@@ -254,6 +254,7 @@
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colNews') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colMovies') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colGames') %></th>
+            <th class="text-left font-medium px-4 py-2"><%= t('admin.colRecap') %></th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
@@ -300,6 +301,23 @@
                   <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
                 <% } %>
               </td>
+              <td class="px-4 py-2">
+                <% if (ch.recapEnabled) { %>
+                  <span class="text-green-400"><%= t('admin.newsYes') %></span>
+                <% } else { %>
+                  <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
+                <% } %>
+                <% const builtAt = typeof recapBuilt !== 'undefined' && recapBuilt[ch.channelLogin]; %>
+                <div class="text-[11px] text-neutral-500 whitespace-nowrap">
+                  <% if (typeof recapBuilding !== 'undefined' && recapBuilding[ch.channelLogin]) { %>
+                    <%= t('admin.recapBuilding') %>
+                  <% } else if (builtAt) { %>
+                    <%= t('admin.recapBuiltAt', { when: builtAt.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-GB', { timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short' }) }) %>
+                  <% } else { %>
+                    <%= t('admin.recapNotBuilt') %>
+                  <% } %>
+                </div>
+              </td>
               <td class="px-4 py-2 text-right whitespace-nowrap">
                 <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-homepage" data-transition="instant" class="inline-block">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -336,6 +354,19 @@
                   <% } else { %>
                     <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.gamesEnable') %></button>
                   <% } %>
+                </form>
+                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-recap" data-transition="instant" class="inline-block">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <input type="hidden" name="recapEnabled" value="<%= ch.recapEnabled ? '0' : '1' %>" />
+                  <% if (ch.recapEnabled) { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.recapDisable') %></button>
+                  <% } else { %>
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.recapEnable') %></button>
+                  <% } %>
+                </form>
+                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/recap-rebuild" data-transition="instant" class="inline-block">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <button type="submit" class="px-3 py-1.5 rounded-md border border-purple-900 text-purple-300 hover:bg-purple-500/10 text-xs font-medium transition-colors"><%= t('admin.recapRebuild') %></button>
                 </form>
                 <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle" data-transition="instant" class="inline-block">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
