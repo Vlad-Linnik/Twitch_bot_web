@@ -2693,7 +2693,9 @@
     "recapRebuild": "Rebuild recap",
     "recapBuilding": "building…",
     "recapBuiltAt": "built {{when}}",
-    "recapNotBuilt": "not built"
+    "recapNotBuilt": "not built",
+    "recapOpen": "open",
+    "recapAwardsTest": "awards: test view"
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",
@@ -3331,6 +3333,16 @@
         "soon": "Chat awards",
         "open": "Vote in the chat awards",
         "closed": "Chat awards results"
+      },
+      "test": {
+        "heading": "Awards test view (admin only)",
+        "soon": "before opening",
+        "open": "voting",
+        "closed": "results",
+        "real": "as it is now",
+        "note": "This is how viewers will see the page in this phase. Nothing is saved: the ballot is not frozen, buttons do nothing.",
+        "demoVotes": "The votes are made up.",
+        "inert": "Test view — voting is disabled"
       }
     }
   }

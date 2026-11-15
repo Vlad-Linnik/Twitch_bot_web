@@ -127,6 +127,7 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
       years,
       year,
       awardPhase: awards.phaseOf(year),
+      isAdmin: req.permission === 0,
       preview: res.locals.sectionPreview,
       view: {
         topChatters,
@@ -201,8 +202,13 @@ router.get("/:channel/recap/:year/me", recapPage, async (req, res, next) => {
 const voteLimiter = createSimpleLimiter({ windowMs: 10 * 1000, max: 12 });
 
 // The ballot for `year`: null before voting opens, frozen on first need afterwards.
-async function loadBallot(channel, year, recapDoc) {
-  const phase = awards.phaseOf(year);
+//
+// `previewPhase` is the site admin's test view (?preview=soon|open|closed): the page as viewers
+// will see it in that phase, today. It must leave nothing behind - freezing a ballot in November
+// would fix December's nominees on November's data - so it uses the frozen ballot if one exists
+// and otherwise builds one in memory.
+async function loadBallot(channel, year, recapDoc, { previewPhase = null } = {}) {
+  const phase = previewPhase || awards.phaseOf(year);
   if (phase === "soon") return { phase, ballot: null };
   let stored = await awardsRepo.getBallot(channel.channelLogin, year);
   if (!stored) {
@@ -219,6 +225,7 @@ async function loadBallot(channel, year, recapDoc) {
       .map(([id]) => id);
     const profiles = await profileCacheRepo.getOrFetchProfiles(openerIds).catch(() => new Map());
     const ballot = awards.buildBallot(d, { hidden, nameOf: (id) => profiles.get(String(id))?.login || null });
+    if (previewPhase) return { phase, ballot };
     stored = await awardsRepo.freezeBallot(channel.channelLogin, year, ballot);
   }
   return { phase, ballot: stored.ballot };
@@ -236,9 +243,12 @@ router.get("/:channel/recap/:year/awards", recapPage, async (req, res, next) => 
     const doc = await recapRepo.getChannelRecap(channel.channelLogin, year);
     if (!doc) return res.status(404).render("errors/404");
 
-    const { phase, ballot } = await loadBallot(channel, year, doc);
+    const previewPhase =
+      req.permission === 0 && awards.PREVIEW_PHASES.includes(req.query.preview) ? req.query.preview : null;
+    const { phase, ballot } = await loadBallot(channel, year, doc, { previewPhase });
     const { start, end } = recap.yearRange(year);
-    const userId = req.user?.userId || null;
+    // The test view is what a viewer would see, so the admin's own identity stays out of it.
+    const userId = previewPhase ? null : req.user?.userId || null;
 
     const [hidden, myVotes, eligible, images, broadcaster, voters] = await Promise.all([
       recapRepo.optedOutAmong(ballotUserIds(ballot)),
@@ -252,9 +262,20 @@ router.get("/:channel/recap/:year/awards", recapPage, async (req, res, next) => 
     ]);
 
     // Running tallies stay hidden while voting is open - a visible leader pulls votes to itself.
-    // The site admin sees them, to notice a ballot being stuffed before it closes.
-    const showResults = ballot && (phase === "closed" || req.permission === 0);
-    const outcome = showResults ? awards.results(ballot, await awardsRepo.tally(channel.channelLogin, year), { hidden }) : null;
+    // The site admin sees them, to notice a ballot being stuffed before it closes. The test view of
+    // a finished contest shows made-up votes (lib/chatAwards.js's demoTally), and says so.
+    let showResults = ballot && (phase === "closed" || req.permission === 0);
+    let tallyRows = [];
+    let demo = false;
+    if (previewPhase === "closed") {
+      tallyRows = awards.demoTally(ballot, `${channel.channelLogin}:${year}`);
+      demo = true;
+    } else if (previewPhase === "open") {
+      showResults = false;
+    } else if (showResults) {
+      tallyRows = await awardsRepo.tally(channel.channelLogin, year);
+    }
+    const outcome = showResults ? awards.results(ballot, tallyRows, { hidden }) : null;
 
     res.render("annualRecapAwards", {
       channel,
@@ -269,13 +290,16 @@ router.get("/:channel/recap/:year/awards", recapPage, async (req, res, next) => 
         nominees: a.nominees.filter((n) => n.userIds.every((id) => !hidden.has(String(id)))),
       })),
       results: outcome,
-      liveResults: showResults && phase !== "closed",
+      liveResults: Boolean(showResults) && phase !== "closed",
       myVotes,
       eligible,
       loggedIn: Boolean(userId),
       minMessages: awards.MIN_VOTER_MESSAGES,
-      voters,
+      voters: demo ? awards.demoVoterCount(tallyRows) : voters,
       images,
+      previewPhase,
+      demo,
+      isAdmin: req.permission === 0,
     });
   } catch (err) {
     next(err);

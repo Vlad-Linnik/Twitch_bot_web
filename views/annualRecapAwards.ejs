@@ -5,7 +5,11 @@
   const fmt = (n) => Number(n || 0).toLocaleString(loc);
   const fmtDate = (d, opts) => new Date(d).toLocaleString(loc, Object.assign({ timeZone: 'Europe/Moscow' }, opts));
   const card = 'rounded-xl border border-neutral-800 bg-neutral-900/60 p-5';
-  const canVote = phase === 'open' && loggedIn && eligible;
+  // In the admin's test view the buttons are drawn, as a voter would see them, but inert: the
+  // real window is not open, and the server would refuse the vote anyway.
+  const canVote = phase === 'open' && (previewPhase || (loggedIn && eligible));
+  const inert = Boolean(previewPhase);
+  const base = '/' + channel.channelLogin + '/recap/' + year + '/awards';
   const lastDay = new Date(awardWindow.closes.getTime() - 1);
   const csrf = typeof csrfToken !== 'undefined' ? csrfToken : '';
 %>
@@ -18,6 +22,23 @@
 
   <% if (preview) { %>
     <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3"><%= t('recap.previewNotice') %></div>
+  <% } %>
+
+  <%# Site admin only: the page in any phase, today (routes/annualRecap.js's previewPhase). %>
+  <% if (isAdmin) { %>
+    <div class="mb-6 rounded-lg border border-sky-900/60 bg-sky-950/30 px-4 py-3 text-sm">
+      <p class="text-sky-300 font-medium"><%= t('recap.awards.test.heading') %></p>
+      <nav class="mt-2 flex flex-wrap gap-2" aria-label="<%= t('recap.awards.test.heading') %>">
+        <% [['soon', 'soon'], ['open', 'open'], ['closed', 'closed'], [null, 'real']].forEach(function (opt) {
+             const active = opt[0] === previewPhase; %>
+          <a href="<%= base %><%= opt[0] ? '?preview=' + opt[0] : '' %>"
+             class="px-2.5 py-1 rounded-md text-xs <%= active ? 'bg-sky-700 text-white' : 'border border-sky-900 text-sky-300 hover:bg-sky-900/40' %>"><%= t('recap.awards.test.' + opt[1]) %></a>
+        <% }) %>
+      </nav>
+      <% if (previewPhase) { %>
+        <p class="mt-2 text-xs text-sky-200/80"><%= t('recap.awards.test.note') %><% if (demo) { %> <strong class="text-amber-300"><%= t('recap.awards.test.demoVotes') %></strong><% } %></p>
+      <% } %>
+    </div>
   <% } %>
 
   <section class="mb-8 rounded-2xl border border-amber-900/50 bg-gradient-to-br from-amber-950/60 via-neutral-900 to-neutral-950 p-6">
@@ -34,7 +55,9 @@
     </p>
     <% if (phase === 'open') { %>
       <p class="mt-3 text-xs text-neutral-400">
-        <% if (!loggedIn) { %>
+        <% if (previewPhase) { %>
+          <%= t('recap.awards.howTo') %>
+        <% } else if (!loggedIn) { %>
           <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>" class="text-purple-300 hover:text-purple-200 underline"><%= t('nav.login') %></a> — <%= t('recap.awards.loginToVote', { n: minMessages }) %>
         <% } else if (!eligible) { %>
           <%= t('recap.awards.notEligible', { n: minMessages }) %>
@@ -91,7 +114,9 @@
                 <% if (votes !== null) { %>
                   <span class="text-sm text-amber-300 tabular-nums"><%= fmt(votes) %></span>
                 <% } %>
-                <% if (canVote) { %>
+                <% if (canVote && inert) { %>
+                  <button type="button" disabled title="<%= t('recap.awards.test.inert') %>" class="px-3 py-1 rounded-md text-xs font-medium border border-neutral-700 text-neutral-400 cursor-not-allowed"><%= t('recap.awards.vote') %></button>
+                <% } else if (canVote) { %>
                   <form method="post" action="/<%= channel.channelLogin %>/recap/<%= year %>/awards/vote" data-vote-form>
                     <input type="hidden" name="_csrf" value="<%= csrf %>" />
                     <input type="hidden" name="key" value="<%= award.key %>" />
