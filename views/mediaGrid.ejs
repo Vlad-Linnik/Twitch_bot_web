@@ -15,11 +15,17 @@
       underlined tabs. The colours and shapes come from the section's theme (the media-theme-* classes
       in public/css/input.css): gold on warm black for films, cyan on cold slate for games. %>
   <div class="flex flex-wrap items-center gap-3 mb-5">
-    <nav class="inline-flex gap-1 p-1 rounded-full bg-(--sec-surface) ring-1 ring-white/5" aria-label="<%= st('tabsLabel') %>">
-      <% tabs.forEach(function(tab) { %>
-        <a href="<%= tab.href %>" data-transition="instant"<% if (tab.key === view.tab) { %> aria-current="page"<% } %>
-           class="px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors <%= tab.key === view.tab ? 'bg-(--sec-accent) text-stone-950' : 'text-stone-400 hover:text-(--sec-accent-soft)' %>">
-          <%= st('tab.' + tab.key) %> <span class="text-xs tabular-nums <%= tab.key === view.tab ? 'text-stone-800' : 'text-stone-600' %>"><%= tab.count %></span>
+    <%# Switching tabs slides the page like the channel navbar does: towards the tab picked
+        (data-transition backward/forward - all tabs share one path, so without an explicit type
+        views/partials/head.ejs would read it as a same-page reload). The bar itself is pinned and
+        its highlight slides between tabs (.media-tabs / .media-tabs-pill in public/css/input.css). %>
+    <% const activeTabIndex = tabs.findIndex(function(t) { return t.key === view.tab; }); %>
+    <nav class="media-tabs inline-flex gap-1 p-1 rounded-full bg-(--sec-surface) ring-1 ring-white/5" aria-label="<%= st('tabsLabel') %>">
+      <% tabs.forEach(function(tab, i) { %>
+        <a href="<%= tab.href %>" data-media-tab data-transition="<%= i < activeTabIndex ? 'backward' : 'forward' %>"<% if (tab.key === view.tab) { %> aria-current="page"<% } %>
+           class="relative px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors <%= tab.key === view.tab ? 'text-stone-950' : 'text-stone-400 hover:text-(--sec-accent-soft)' %>">
+          <% if (tab.key === view.tab) { %><span class="media-tabs-pill absolute inset-0 rounded-full bg-(--sec-accent)" aria-hidden="true"></span><% } %>
+          <span class="relative"><%= st('tab.' + tab.key) %> <span class="text-xs tabular-nums <%= tab.key === view.tab ? 'text-stone-800' : 'text-stone-600' %>"><%= tab.count %></span></span>
         </a>
       <% }) %>
     </nav>

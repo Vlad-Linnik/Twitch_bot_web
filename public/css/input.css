@@ -94,6 +94,21 @@ article.post-card {
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* The grid's own tabs (Watched / Suggestions / Rejected, views/mediaGrid.ejs): pinned while the
+   page slides, with the active tab's highlight sliding to the new tab - the channel navbar's
+   behaviour one level down. */
+nav.media-tabs {
+  view-transition-name: media-tabs;
+  contain: layout;
+}
+.media-tabs-pill {
+  view-transition-name: media-tabs-pill;
+}
+::view-transition-group(media-tabs-pill) {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 /* The channel media sections (views/mediaGrid.ejs, mediaItem.ejs and their partials) draw every
    colour and shape that makes a section look like itself from these variables, set by a class on
    <main> (routes/movies.js and routes/gamesStream.js pick the theme). Films: gold on warm black,

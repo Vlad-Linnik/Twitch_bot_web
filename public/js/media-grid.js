@@ -41,7 +41,7 @@
 
   // The tab links keep the current search and filters, as they do on a server-rendered page.
   function updateTabLinks(params) {
-    for (const link of document.querySelectorAll("nav a[data-transition='instant'][href]")) {
+    for (const link of document.querySelectorAll("a[data-media-tab][href]")) {
       const url = new URL(link.href, location.href);
       if (url.pathname !== location.pathname) continue;
       for (const key of ["q", "type", "genre"]) {
