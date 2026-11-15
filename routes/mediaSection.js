@@ -227,22 +227,30 @@ function createMediaSectionRouter(cfg) {
     const q = typeof query.q === "string" ? query.q.slice(0, 100) : "";
     // Type and genre narrow the grid; both read as "all" when absent or unknown. Type exists only
     // where the form has the field (films/series/anime); a genre is matched against the card's
-    // stored `info.genres` (lib/mediaInfo.js), so a card saved without info never matches one.
+    // stored `info.genres` and `info.tags` (lib/mediaInfo.js - tags are games' Steam tags), so a
+    // card saved without info never matches one.
     const type = cfg.view.fields.mediaType && media.MEDIA_TYPES.includes(query.type) ? query.type : "";
     const genre = typeof query.genre === "string" ? query.genre.trim().slice(0, 60) : "";
     return { tab, sort, q, type, genre };
   }
 
-  // The genres a tab's cards carry, most common first - the options of the grid's genre filter.
-  // Computed from the tab's rows before the type/genre filters, so picking one does not shrink the
-  // list of the others.
+  // The genres and the tags a tab's cards carry, each most common first - the options of the grid's
+  // genre filter. Computed from the tab's rows before the type/genre filters, so picking one does not
+  // shrink the list of the others. A name that is both a genre and a tag is listed as a genre.
   function genresOf(rows) {
-    const counts = new Map();
-    for (const row of rows) {
-      for (const g of row.info?.genres || []) counts.set(g, (counts.get(g) || 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
+    const count = (field) => {
+      const counts = new Map();
+      for (const row of rows) for (const g of row.info?.[field] || []) counts.set(g, (counts.get(g) || 0) + 1);
+      return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
+    };
+    const genres = count("genres");
+    return { genres, tags: count("tags").filter((t) => !genres.includes(t)) };
   }
+
+  const labelsOf = (row) => [...(row.info?.genres || []), ...(row.info?.tags || [])];
+  // The search box finds a card by its title or by one of its genres/tags ("рогалик", "Roguelike").
+  const matchesQuery = (row, q) =>
+    media.matchesSearch(row.searchKey, q) || (q !== "" && labelsOf(row).some((l) => media.matchesSearch(media.normalizeSearchText(l), q)));
 
   // Which sorts a tab offers: the vote score only means something where there are votes.
   const sortsFor = (tab) => cfg.sorts.filter((key) => key !== "score" || tab !== "done");
@@ -256,9 +264,9 @@ function createMediaSectionRouter(cfg) {
     if (cfg.decorateRows) rows = await cfg.decorateRows(channel, rows);
     const spec = media.SORTS[sort];
     const filtered = rows
-      .filter((r) => media.matchesSearch(r.searchKey, q))
+      .filter((r) => matchesQuery(r, q))
       .filter((r) => !type || r.mediaType === type)
-      .filter((r) => !genre || (r.info?.genres || []).includes(genre))
+      .filter((r) => !genre || labelsOf(r).includes(genre))
       .map(media.withSortKeys)
       .sort(cursorPaging.compareBySpec(spec));
     return { rows: filtered, genres: genresOf(rows) };
@@ -354,7 +362,10 @@ function createMediaSectionRouter(cfg) {
           count: TABS[key].statuses.reduce((n, st) => n + (counts[st] || 0), 0),
           href: gridUrl(channel, { ...view, tab: key, sort: TABS[key].defaultSort }),
         })),
-        genres: view.genre && !genres.includes(view.genre) ? [view.genre, ...genres] : genres,
+        genres: genres.genres,
+        tags: genres.tags,
+        // A genre from a link (a chip on a card's page) that no card of this tab carries.
+        strayGenre: view.genre && !genres.genres.includes(view.genre) && !genres.tags.includes(view.genre) ? view.genre : null,
         mediaTypes: cfg.view.fields.mediaType ? media.MEDIA_TYPES : [],
         suggest,
         csrf: req.user ? res.locals.csrfToken || "" : "",

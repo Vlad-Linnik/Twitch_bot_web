@@ -13,6 +13,7 @@
 const { connectWeb } = require("../db/connection");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
 const { fetchSteamReviews } = require("../lib/steamReviews");
+const { fetchGameInfo } = require("../lib/steamGameInfo");
 
 const RUN_EVERY_MS = 24 * 60 * 60 * 1000;
 // Later than the IMDb pass's boot delay, so the two never start together after a deploy.
@@ -20,6 +21,28 @@ const BOOT_DELAY_MS = 10 * 60 * 1000;
 const STATUS_ID = "steamReviews";
 const SOON_DELAY_MS = 60 * 1000;
 const SOON_MIN_GAP_MS = 10 * 60 * 1000;
+// The same pass fills genres/tags (lib/steamGameInfo.js) for cards that have none - each such app
+// once, two requests apiece, paced like the reviews. A ceiling per pass keeps the first run after a
+// deploy (every card at once) from taking an hour; the rest follow on the next passes.
+const INFO_PER_PASS = 150;
+const INFO_PACE_MS = 1500;
+
+// Genres and tags for the cards still missing them. Stops at the first app both sources refused.
+async function fillGameInfo(pause = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  const ids = await mediaItemsRepo.steamAppIdsNeedingInfo(INFO_PER_PASS);
+  let filled = 0;
+  for (const [i, appId] of ids.entries()) {
+    if (i > 0) await pause(INFO_PACE_MS);
+    const { info, refused } = await fetchGameInfo(appId);
+    if (info) {
+      await mediaItemsRepo.setGameInfo(appId, info);
+      filled++;
+    } else if (refused.store && refused.steamspy) {
+      break;
+    }
+  }
+  return { wanted: ids.length, filled };
+}
 
 let inFlight = null;
 let timer = null;
@@ -45,6 +68,11 @@ async function runOnce() {
       const ids = await mediaItemsRepo.distinctSteamAppIds();
       const { found, asked, blocked, via } = await fetchSteamReviews(ids);
       const modified = await mediaItemsRepo.setExternalRatings("steam", "external.steamAppId", found, startedAt);
+      // Genres/tags are not worth failing the scores over.
+      const gameInfo = await fillGameInfo().catch((err) => {
+        console.error("[steamReviewsSync] game info failed:", err.message);
+        return null;
+      });
       const status = {
         lastRunAt: startedAt,
         ok: !blocked,
@@ -52,6 +80,7 @@ async function runOnce() {
         asked,
         found: found.size,
         via,
+        infoFilled: gameInfo ? gameInfo.filled : null,
         modified,
         durationMs: Date.now() - startedAt.getTime(),
         error: blocked ? "blocked" : null,

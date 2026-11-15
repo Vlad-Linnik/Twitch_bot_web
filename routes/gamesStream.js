@@ -8,6 +8,8 @@
 //   - hours on stream and "last played", from the bot's 5-minute samples (db/streamHoursRepo.js),
 //     computed per request and usable as a sort; the editor's form lists the categories that were on
 //     stream with no card yet;
+//   - genres (the store's, in Russian) and community tags (SteamSpy's), filled by the same daily
+//     pass (lib/steamGameInfo.js) - the grid filters and searches by them;
 //   - the outside rating: Steam's share of positive reviews, once a day and soon after a card gets a
 //     new Steam app (jobs/steamReviewsSync.js; SteamSpy when the store refuses this network);
 //   - the look: cyan on cold slate, 3:4 box art (the "games" theme in public/css/input.css).
@@ -59,10 +61,10 @@ module.exports = createMediaSectionRouter({
     gameState: item.gameState || "",
   }),
   externalIds,
-  // A card with a Steam app but no score yet: ask for an early pass instead of leaving it at "—"
-  // until the daily one - the same as a film with a new IMDb id.
+  // A card with a Steam app but no score or no genres/tags yet: ask for an early pass instead of
+  // leaving it empty until the daily one - the same as a film with a new IMDb id.
   afterSave(item) {
-    if (item?.external?.steamAppId && !item.ratings?.external) steamReviewsSync.requestSoon();
+    if (item?.external?.steamAppId && (!item.ratings?.external || !item.info?.tags)) steamReviewsSync.requestSoon();
   },
   editSet(value, item, picked) {
     const ids = externalIds(value, picked);
@@ -72,7 +74,12 @@ module.exports = createMediaSectionRouter({
       "external.twitchCategoryName": ids.twitchCategoryName ?? null,
     };
     // A different Steam app makes the stored Steam score another game's; the daily pass fills it in.
-    if ((ids.steamAppId || null) !== (item.external?.steamAppId || null)) set["ratings.external"] = null;
+    // Its genres and tags too: a null block is what the pass fills (db/mediaItemsRepo.js's
+    // steamAppIdsNeedingInfo).
+    if ((ids.steamAppId || null) !== (item.external?.steamAppId || null)) {
+      set["ratings.external"] = null;
+      set.info = null;
+    }
     // The category id follows the name: a new pick brings its id, a hand-edited name drops the old one.
     if (picked?.external?.twitchCategoryId) set["external.twitchCategoryId"] = picked.external.twitchCategoryId;
     else if (categoryKey(ids.twitchCategoryName) !== categoryKey(item.external?.twitchCategoryName)) set["external.twitchCategoryId"] = null;

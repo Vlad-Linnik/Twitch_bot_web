@@ -960,7 +960,7 @@
       "rejected": "Отклонённые"
     },
     "create": "Добавить фильм",
-    "searchPlaceholder": "Название…",
+    "searchPlaceholder": "Название или жанр…",
     "searchSubmit": "Найти",
     "sortLabel": "Сортировка",
     "sort": {
@@ -1140,7 +1140,8 @@
       "characters": "Главные герои",
       "overview": "О фильме",
       "runtime": "{{n}} мин",
-      "ageRating": "Возрастной рейтинг"
+      "ageRating": "Возрастной рейтинг",
+      "tags": "Метки"
     },
     "rateOpen": "нажмите, чтобы оценить",
     "filterTypeLabel": "Тип",
@@ -1152,7 +1153,9 @@
     },
     "filterGenreLabel": "Жанр",
     "filterGenreAll": "Все жанры",
-    "externalPending": "ещё не загружен"
+    "externalPending": "ещё не загружен",
+    "filterGenresGroup": "Жанры",
+    "filterTagsGroup": "Метки"
   },
   "gamesStream": {
     "titleSuffix": "игры",
@@ -1228,8 +1231,14 @@
     },
     "ratingExternal": "Отзывы в Steam",
     "filterGenreLabel": "Жанр",
-    "filterGenreAll": "Все жанры",
-    "externalPending": "ещё не загружены"
+    "filterGenreAll": "Все жанры и метки",
+    "externalPending": "ещё не загружены",
+    "searchPlaceholder": "Название, жанр или метка…",
+    "info": {
+      "genres": "Жанр",
+      "tags": "Метки",
+      "overview": "Об игре"
+    }
   },
   "comments": {
     "backToFeed": "Назад к новостям",

@@ -960,7 +960,7 @@
       "rejected": "Rejected"
     },
     "create": "Add a movie",
-    "searchPlaceholder": "Title…",
+    "searchPlaceholder": "Title or genre…",
     "searchSubmit": "Search",
     "sortLabel": "Sort",
     "sort": {
@@ -1140,7 +1140,8 @@
       "characters": "Main characters",
       "overview": "About",
       "runtime": "{{n}} min",
-      "ageRating": "Age rating"
+      "ageRating": "Age rating",
+      "tags": "Tags"
     },
     "rateOpen": "click to rate",
     "filterTypeLabel": "Type",
@@ -1152,7 +1153,9 @@
     },
     "filterGenreLabel": "Genre",
     "filterGenreAll": "All genres",
-    "externalPending": "not loaded yet"
+    "externalPending": "not loaded yet",
+    "filterGenresGroup": "Genres",
+    "filterTagsGroup": "Tags"
   },
   "gamesStream": {
     "titleSuffix": "games",
@@ -1228,8 +1231,14 @@
     },
     "ratingExternal": "Steam reviews",
     "filterGenreLabel": "Genre",
-    "filterGenreAll": "All genres",
-    "externalPending": "not loaded yet"
+    "filterGenreAll": "All genres and tags",
+    "externalPending": "not loaded yet",
+    "searchPlaceholder": "Title, genre or tag…",
+    "info": {
+      "genres": "Genre",
+      "tags": "Tags",
+      "overview": "About the game"
+    }
   },
   "comments": {
     "backToFeed": "Back to news",

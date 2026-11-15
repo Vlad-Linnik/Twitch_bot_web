@@ -98,13 +98,20 @@
           <% if (badge) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30 tabular-nums"><%= st('watchedLabel') %>: <%= badge %></span><% } %>
         </div>
 
-        <% if (info && (info.genres.length || info.directors.length || info.cast.length)) { %>
-          <%# What the source says about the film (lib/mediaInfo.js) - plain text, escaped like any other. %>
-          <dl class="mt-4 max-w-xl grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            <% if (info.genres.length) { %>
-              <dt class="text-stone-500"><%= st('info.genres') %></dt>
-              <dd class="text-stone-200"><%= info.genres.join(', ') %></dd>
-            <% } %>
+        <% const infoTags = info && info.tags ? info.tags : []; %>
+        <% if (info && (info.genres.length || infoTags.length || info.directors.length || info.cast.length)) { %>
+          <%# What the source says about the film or game (lib/mediaInfo.js) - plain text, escaped like
+              any other. Genres and tags are links to the grid filtered by them. %>
+          <dl class="mt-4 max-w-xl grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm items-baseline">
+            <% [['genres', info.genres], ['tags', infoTags]].forEach(function(row) { if (!row[1].length) return; %>
+              <dt class="text-stone-500"><%= st('info.' + row[0]) %></dt>
+              <dd class="flex flex-wrap gap-1">
+                <% row[1].forEach(function(label) { %>
+                  <a href="/<%= channel.channelLogin %>/<%= sec.path %>?genre=<%= encodeURIComponent(label) %>" data-transition="backward"
+                     class="px-2 py-0.5 rounded-md text-xs text-stone-200 bg-white/5 ring-1 ring-white/10 hover:ring-(--sec-accent)/60 hover:text-(--sec-accent-soft) transition-colors"><%= label %></a>
+                <% }) %>
+              </dd>
+            <% }) %>
             <% if (info.directors.length) { %>
               <dt class="text-stone-500"><%= st('info.directors') %></dt>
               <dd class="text-stone-200"><%= info.directors.join(', ') %></dd>

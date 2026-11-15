@@ -230,6 +230,26 @@ async function distinctSteamAppIds() {
   return col.distinct("external.steamAppId", { kind: "game", "external.steamAppId": { $type: "number" } });
 }
 
+// Game cards with a Steam app whose genres/tags were never fetched (lib/steamGameInfo.js): no
+// block at all, or a block without `tags` - one written before tags existed, or one that came from
+// the Twitch pick, which carries no Steam data.
+async function steamAppIdsNeedingInfo(limit) {
+  const col = await ensureInitialized();
+  const ids = await col.distinct("external.steamAppId", {
+    kind: "game",
+    "external.steamAppId": { $type: "number" },
+    "info.tags": { $exists: false },
+  });
+  return ids.slice(0, limit);
+}
+
+// One game's info block onto every card of that Steam app, in every channel.
+async function setGameInfo(appId, info) {
+  const col = await ensureInitialized();
+  const result = await col.updateMany({ kind: "game", "external.steamAppId": appId }, { $set: { info } });
+  return result.modifiedCount;
+}
+
 // Writes one source's outside ratings: Map<id, {value, votes}>, matched on `field` (e.g.
 // "external.steamAppId"). One updateMany per id, batched.
 async function setExternalRatings(source, field, ratings, fetchedAt = new Date()) {
@@ -272,6 +292,8 @@ module.exports = {
   distinctImdbIds,
   setImdbRatings,
   distinctSteamAppIds,
+  steamAppIdsNeedingInfo,
+  setGameInfo,
   setExternalRatings,
   sourceStats,
 };

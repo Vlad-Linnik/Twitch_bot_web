@@ -81,15 +81,25 @@
                aria-label="<%= st('searchPlaceholder') %>"
                class="w-full rounded-full bg-(--sec-surface) border border-stone-700 text-sm text-stone-100 placeholder:text-stone-500 pl-10 pr-4 py-1.5 focus:outline-none focus:border-(--sec-accent)" />
       </div>
-      <% if (genres.length) { %>
+      <% if (genres.length || tags.length || strayGenre) { %>
+        <%# Genres, and for games the Steam community tags under their own heading. %>
         <label class="flex items-center">
           <span class="sr-only"><%= st('filterGenreLabel') %></span>
           <select name="genre"
                   class="max-w-[12rem] rounded-full bg-(--sec-surface) border border-stone-700 text-sm text-stone-100 px-3 py-1.5 focus:outline-none focus:border-(--sec-accent)">
             <option value=""><%= st('filterGenreAll') %></option>
+            <% if (strayGenre) { %><option value="<%= strayGenre %>" selected><%= strayGenre %></option><% } %>
+            <% const grouped = tags.length > 0 && genres.length > 0; %>
+            <% if (grouped) { %><optgroup label="<%= st('filterGenresGroup') %>"><% } %>
             <% genres.forEach(function(g) { %>
               <option value="<%= g %>"<%= g === view.genre ? ' selected' : '' %>><%= g %></option>
             <% }) %>
+            <% if (grouped) { %></optgroup><% } %>
+            <% if (tags.length) { %><optgroup label="<%= st('filterTagsGroup') %>">
+              <% tags.forEach(function(g) { %>
+                <option value="<%= g %>"<%= g === view.genre ? ' selected' : '' %>><%= g %></option>
+              <% }) %>
+            </optgroup><% } %>
           </select>
         </label>
       <% } %>
