@@ -1056,8 +1056,10 @@
         "duplicate_rejected": "This one was suggested before and rejected:",
         "upload_limit": "Too many uploads: at most 5 an hour and 20 a day.",
         "busy": "Other covers are being processed - try again in a minute.",
-        "rate_limited": "Too often - try again a little later."
-      }
+        "rate_limited": "Too often - try again a little later.",
+        "poster_restore_failed": "Could not load the automatic cover — the source did not answer. The current cover was kept."
+      },
+      "posterRestore": "Bring back the automatic cover (from the card’s source)"
     },
     "lookup": {
       "heading": "Find and fill in",

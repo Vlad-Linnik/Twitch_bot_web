@@ -42,6 +42,8 @@ module.exports = createMediaSectionRouter({
   externalIds,
   // Genres, director, cast and synopsis for a card saved before they were stored.
   infoRef: (item) => infoRefOf(item.external),
+  // Where the automatic cover comes from - the same source ids.
+  sourceRef: (item) => infoRefOf(item.external),
   // A card with an IMDb id but no rating yet: ask for an early dataset pass instead of leaving
   // it at "—" until the nightly one.
   afterSave(item) {

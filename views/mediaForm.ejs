@@ -197,6 +197,13 @@
       <% if (posterUrl) { %>
         <img src="<%= posterUrl %>" alt="" class="mb-2 h-40 rounded-md border border-neutral-800" />
         <p class="text-xs text-neutral-600 mb-2"><%= st('form.posterKeep') %></p>
+        <% if (typeof canRestorePoster !== 'undefined' && canRestorePoster) { %>
+          <%# The cover is a hand upload: this puts back the one the card's source has (routes/mediaSection.js's readForm). %>
+          <label class="mb-3 flex items-center gap-2 text-sm text-neutral-300">
+            <input type="checkbox" name="posterRestore" value="1" class="accent-purple-600" />
+            <%= st('form.posterRestore') %>
+          </label>
+        <% } %>
       <% } %>
       <% if (suggesting) { %><p class="text-xs text-neutral-600 mb-2"><%= st('suggest.coverHint') %></p><% } %>
       <input type="file" name="poster" accept="<%= suggesting ? 'image/jpeg,image/png,image/webp' : 'image/*' %>"

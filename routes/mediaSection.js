@@ -490,6 +490,7 @@ function createMediaSectionRouter(cfg) {
       noteMax: suggestions.NOTE_MAX,
       ...extras,
       posterUrl: item?.poster?.url || null,
+      canRestorePoster: mode === "edit" && canRestorePoster(item),
       lookupSources: mediaSources.describe(),
       lookupUrl: `/${req.channel.channelLogin}/${SECTION}/lookup.json`,
     };
@@ -528,8 +529,17 @@ function createMediaSectionRouter(cfg) {
       if (!picked) errors.push("source_unavailable");
     }
 
+    // "Bring back the automatic cover": the card's own source is asked again, the way a fresh pick
+    // would be - never a URL from the form. Only on an edit, and an uploaded file still wins.
+    const restore = Boolean(item) && req.body.posterRestore === "1" && !req.file;
+
     let poster = null;
-    if (errors.length === 0 && req.file) {
+    if (errors.length === 0 && restore) {
+      const ref = picked ? null : sourceRefOf(item);
+      const source = picked || (ref ? await mediaSources.details(ref) : null);
+      poster = await downloadSourcePoster(value, source);
+      if (!poster) errors.push("poster_restore_failed");
+    } else if (errors.length === 0 && req.file) {
       try {
         poster = await savePoster(req.file.buffer);
       } catch {
@@ -540,6 +550,15 @@ function createMediaSectionRouter(cfg) {
     }
     return { errors, value, poster, picked };
   }
+
+  // The search-source ref a saved card's cover came from (cfg.sourceRef: TMDB/Shikimori for a film,
+  // the Twitch category for a game), or null.
+  const sourceRefOf = (item) => (cfg.sourceRef ? cfg.sourceRef(item) : null);
+  // Whether "bring back the automatic cover" can work for this card: its cover is a hand upload and
+  // there is somewhere to get the automatic one from (a source ref, or the section's own ids - a
+  // game's Steam app).
+  const canRestorePoster = (item) =>
+    Boolean(item?.poster) && item.poster.source === "upload" && Boolean(sourceRefOf(item) || (cfg.posterUrlsFor && cfg.posterUrlsFor(cfg.formValues ? cfg.formValues(item) : {}, null).length));
 
   // The card's `external` ids come from the section config (cfg.externalIds): what the form may
   // carry (an IMDb id, a Steam link) plus the search source's own id, only from the server-side

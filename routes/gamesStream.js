@@ -95,6 +95,9 @@ module.exports = createMediaSectionRouter({
     if (appId) urls.push({ url: steam.headerArtUrl(appId), source: "steam" });
     return urls;
   },
+  // The source ref "bring back the automatic cover" asks when the card has no Steam app: its Twitch
+  // category's box art (posterUrlsFor tries Steam first whenever there is an app id).
+  sourceRef: (item) => (item.external?.twitchCategoryId ? `twitch:${item.external.twitchCategoryId}` : null),
   // A different Steam app on an edit: the cover built from the old one shows another game.
   posterOutdated: (value, item) => Boolean(value.steamAppId) && value.steamAppId !== (item.external?.steamAppId || null),
   // Hours on stream per card, from the channel's samples - also the "hours" sort key.
