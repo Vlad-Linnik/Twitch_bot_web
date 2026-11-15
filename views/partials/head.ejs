@@ -64,6 +64,24 @@
           }
         }
 
+        // And for a media grid (movies/games): coming back from a card's page morphs its poster
+        // (.media-poster, views/mediaItem.ejs) back into the tile it was opened from. On a history
+        // traversal document.referrer is that entry's own referrer, not the page just left, so
+        // the Navigation API's "from" is asked first.
+        {
+          const back = (window.navigation && navigation.activation && navigation.activation.from && navigation.activation.from.url) || (from && from.href);
+          const grid = location.pathname.match(/^\/[^/]+\/(?:movies|games)$/);
+          const prev = back ? new URL(back) : null;
+          if (grid && prev && prev.pathname.startsWith(location.pathname + "/")) {
+            const id = prev.pathname.slice(location.pathname.length + 1);
+            const tile = /^[0-9a-f]{24}$/.test(id) && document.querySelector(`[data-list-item="${id}"] [data-vt-name="media-poster"]`);
+            if (tile) {
+              const r = tile.getBoundingClientRect();
+              if (r.bottom > 0 && r.top < innerHeight) tile.style.viewTransitionName = "media-poster";
+            }
+          }
+        }
+
         // Same idea for /<channel>/settings: leaving one of its sub-pages (custom-commands,
         // long-bans, spam-signatures, variables, change-log, moderators, banned-words) - via
         // their own "back to settings" link OR the browser's Back button, referrer-based

@@ -968,7 +968,8 @@
       "streamer": "Streamer's score",
       "viewers": "Viewers' score",
       "imdb": "IMDb rating",
-      "score": "By votes"
+      "score": "By votes",
+      "comments": "Most discussed"
     },
     "empty": {
       "done": "Nothing watched yet.",
@@ -1142,7 +1143,16 @@
       "runtime": "{{n}} min",
       "ageRating": "Age rating"
     },
-    "rateOpen": "click to rate"
+    "rateOpen": "click to rate",
+    "filterTypeLabel": "Type",
+    "filterTypeAll": "All",
+    "filterType": {
+      "film": "Films",
+      "series": "Series",
+      "anime": "Anime"
+    },
+    "filterGenreLabel": "Genre",
+    "filterGenreAll": "All genres"
   },
   "gamesStream": {
     "titleSuffix": "games",
@@ -1152,7 +1162,8 @@
     "create": "Add a game",
     "sort": {
       "hours": "Most hours on stream",
-      "steam": "Steam reviews"
+      "steam": "Steam reviews",
+      "comments": "Most discussed"
     },
     "empty": {
       "done": "Nothing played yet."
@@ -1215,7 +1226,9 @@
     "vote": {
       "promote": "Promote — I want it played"
     },
-    "ratingExternal": "Steam reviews"
+    "ratingExternal": "Steam reviews",
+    "filterGenreLabel": "Genre",
+    "filterGenreAll": "All genres"
   },
   "comments": {
     "backToFeed": "Back to news",

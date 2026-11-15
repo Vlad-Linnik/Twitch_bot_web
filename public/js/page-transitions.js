@@ -53,7 +53,9 @@ document.addEventListener("click", (event) => {
   if (transition) sessionStorage.setItem(STORAGE_KEY, transition);
 
   if (lastVtElement) lastVtElement.style.viewTransitionName = "";
-  const vtTarget = link.closest("[data-vt-name]");
+  // The name sits on the clicked link or an ancestor (home's cards, news posts), or on one part of
+  // the link's content (a media grid tile's poster, views/partials/mediaCards.ejs).
+  const vtTarget = link.closest("[data-vt-name]") || link.querySelector("[data-vt-name]");
   if (vtTarget) {
     vtTarget.style.viewTransitionName = vtTarget.dataset.vtName;
     lastVtElement = vtTarget;

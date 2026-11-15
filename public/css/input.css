@@ -6,6 +6,13 @@
   navigation: auto;
 }
 
+/* The scrollbar's room is kept on every page, long or short: otherwise a page without a scrollbar
+   is wider by its width, and everything centred - the site nav, the channel navbar - shifts
+   sideways when moving between a short page and a long one. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* Pin the nav so the browser treats it as the SAME element across the
    outgoing and incoming documents instead of cross-fading it like the rest
    of the page. Requires the nav's markup to be byte-identical on every page
@@ -26,6 +33,27 @@ nav.site-nav {
 header.channel-header {
   view-transition-name: channel-header;
   contain: layout;
+  /* One width on every channel page: the content box of the widest one (max-w-5xl minus px-6),
+     or the screen minus the same gutters. A <main> narrower than that gets negative margins, so
+     the header stays centred on the same axis as the page and the bar never moves. */
+  --channel-header-w: min(61rem, calc(100vw - 3rem));
+  width: var(--channel-header-w);
+  margin-inline: calc((100% - var(--channel-header-w)) / 2);
+}
+/* The active section's highlight, captured on its own so it slides between items when the
+   section changes instead of fading with the rest of the header. */
+.channel-nav-pill {
+  view-transition-name: channel-nav-pill;
+}
+::view-transition-group(channel-nav-pill) {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.channel-nav {
+  scrollbar-width: none;
+}
+.channel-nav::-webkit-scrollbar {
+  display: none;
 }
 nav.stats-tabs {
   view-transition-name: stats-tabs;
@@ -52,6 +80,18 @@ header.user-header {
 article.post-card {
   view-transition-name: post-card;
   contain: layout;
+}
+
+/* Same shared-element morph for the media grids (views/mediaGrid.ejs) -> a card's page
+   (views/mediaItem.ejs): the clicked tile's poster (data-vt-name="media-poster",
+   views/partials/mediaCards.ejs) flies into the page's poster while the rest of the page slides.
+   The way back is tagged in views/partials/head.ejs's pagereveal handler. */
+.media-poster {
+  view-transition-name: media-poster;
+}
+::view-transition-group(media-poster) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* The channel media sections (views/mediaGrid.ejs, mediaItem.ejs and their partials) draw every

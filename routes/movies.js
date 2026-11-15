@@ -27,7 +27,7 @@ module.exports = createMediaSectionRouter({
   section: "movies",
   kind: "movie",
   sources: createMediaSources({ tmdbToken: env.tmdbReadToken }),
-  sorts: ["added", "streamer", "viewers", "imdb", "score"],
+  sorts: ["added", "streamer", "viewers", "imdb", "comments", "score"],
   view: {
     path: "movies",
     i18n: "movies",

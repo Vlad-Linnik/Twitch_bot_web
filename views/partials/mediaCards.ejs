@@ -22,7 +22,9 @@
   <div data-list-item="<%= card.id %>">
     <a href="/<%= channel.channelLogin %>/<%= section %>/<%= card.id %>"
        class="group block rounded-(--sec-radius) focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--sec-accent)">
-      <div class="relative aspect-(--sec-aspect) rounded-(--sec-radius) overflow-hidden bg-(--sec-surface) shadow-lg shadow-black/40 ring-1 ring-white/5
+      <%# data-vt-name: the poster morphs into the card page's own poster (public/js/page-transitions.js
+          tags it on click, mediaItem.ejs's .media-poster is the destination). %>
+      <div data-vt-name="media-poster" class="relative aspect-(--sec-aspect) rounded-(--sec-radius) overflow-hidden bg-(--sec-surface) shadow-lg shadow-black/40 ring-1 ring-white/5
                   transition duration-200 group-hover:-translate-y-1 group-hover:ring-(--sec-accent)/70 group-hover:shadow-(--sec-accent)/10">
         <% if (card.posterUrl) { %>
           <img src="<%= card.posterUrl %>" alt="" loading="lazy" decoding="async"

@@ -968,7 +968,8 @@
       "streamer": "Оценка стримера",
       "viewers": "Оценка зрителей",
       "imdb": "Рейтинг IMDb",
-      "score": "По голосам"
+      "score": "По голосам",
+      "comments": "По комментариям"
     },
     "empty": {
       "done": "Пока ничего не посмотрели.",
@@ -1142,7 +1143,16 @@
       "runtime": "{{n}} мин",
       "ageRating": "Возрастной рейтинг"
     },
-    "rateOpen": "нажмите, чтобы оценить"
+    "rateOpen": "нажмите, чтобы оценить",
+    "filterTypeLabel": "Тип",
+    "filterTypeAll": "Всё",
+    "filterType": {
+      "film": "Фильмы",
+      "series": "Сериалы",
+      "anime": "Аниме"
+    },
+    "filterGenreLabel": "Жанр",
+    "filterGenreAll": "Все жанры"
   },
   "gamesStream": {
     "titleSuffix": "игры",
@@ -1152,7 +1162,8 @@
     "create": "Добавить игру",
     "sort": {
       "hours": "Больше часов на стриме",
-      "steam": "Отзывы Steam"
+      "steam": "Отзывы Steam",
+      "comments": "По комментариям"
     },
     "empty": {
       "done": "Пока ни во что не играли."
@@ -1215,7 +1226,9 @@
     "vote": {
       "promote": "Продвинуть — хочу, чтобы сыграли"
     },
-    "ratingExternal": "Отзывы в Steam"
+    "ratingExternal": "Отзывы в Steam",
+    "filterGenreLabel": "Жанр",
+    "filterGenreAll": "Все жанры"
   },
   "comments": {
     "backToFeed": "Назад к новостям",

@@ -225,23 +225,43 @@ function createMediaSectionRouter(cfg) {
     // An explicit sort wins; otherwise the tab's own default (votes on the suggestions tab).
     const sort = cfg.sorts.includes(query.sort) ? query.sort : TABS[tab].defaultSort;
     const q = typeof query.q === "string" ? query.q.slice(0, 100) : "";
-    return { tab, sort, q };
+    // Type and genre narrow the grid; both read as "all" when absent or unknown. Type exists only
+    // where the form has the field (films/series/anime); a genre is matched against the card's
+    // stored `info.genres` (lib/mediaInfo.js), so a card saved without info never matches one.
+    const type = cfg.view.fields.mediaType && media.MEDIA_TYPES.includes(query.type) ? query.type : "";
+    const genre = typeof query.genre === "string" ? query.genre.trim().slice(0, 60) : "";
+    return { tab, sort, q, type, genre };
+  }
+
+  // The genres a tab's cards carry, most common first - the options of the grid's genre filter.
+  // Computed from the tab's rows before the type/genre filters, so picking one does not shrink the
+  // list of the others.
+  function genresOf(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+      for (const g of row.info?.genres || []) counts.set(g, (counts.get(g) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
   }
 
   // Which sorts a tab offers: the vote score only means something where there are votes.
   const sortsFor = (tab) => cfg.sorts.filter((key) => key !== "score" || tab !== "done");
 
   // The whole filtered, sorted list for one grid view; portions are sliced from it.
-  async function gridRows(channel, { tab, sort, q }) {
+  // Returns { rows, genres }: rows filtered and sorted, genres from the whole tab (genresOf).
+  async function gridRows(channel, { tab, sort, q, type, genre }) {
     let rows = await mediaItemsRepo.listForGrid(channel.channelLogin, KIND, TABS[tab].statuses);
     // Section-specific facts computed per request (a game's hours on stream), before sorting: one of
     // them may be the sort key.
     if (cfg.decorateRows) rows = await cfg.decorateRows(channel, rows);
     const spec = media.SORTS[sort];
-    return rows
+    const filtered = rows
       .filter((r) => media.matchesSearch(r.searchKey, q))
+      .filter((r) => !type || r.mediaType === type)
+      .filter((r) => !genre || (r.info?.genres || []).includes(genre))
       .map(media.withSortKeys)
       .sort(cursorPaging.compareBySpec(spec));
+    return { rows: filtered, genres: genresOf(rows) };
   }
 
   function shapeCard(item, viewer = {}, myVotes = new Map()) {
@@ -286,15 +306,22 @@ function createMediaSectionRouter(cfg) {
     return suggestions.canSuggest({ loggedIn: true, permission: req.permission, chatted }) ? { allowed: true } : { allowed: false, reason: "chat" };
   }
 
-  function gridUrl(channel, { tab, sort, q }, extra = {}) {
+  function gridUrl(channel, { tab, sort, q, type, genre }, extra = {}) {
     const params = new URLSearchParams();
     if (tab !== "done") params.set("tab", tab);
     if (sort !== TABS[tab].defaultSort) params.set("sort", sort);
     if (q) params.set("q", q);
+    if (type) params.set("type", type);
+    if (genre) params.set("genre", genre);
     for (const [k, v] of Object.entries(extra)) params.set(k, v);
     const qs = params.toString();
     return `/${channel.channelLogin}/${SECTION}${qs ? `?${qs}` : ""}`;
   }
+
+  const listSrcOf = (channel, view) =>
+    `/${channel.channelLogin}/${SECTION}/list.json?${new URLSearchParams({ tab: view.tab, sort: view.sort, q: view.q, type: view.type, genre: view.genre })}`;
+  const restoreKeyOf = (channel, view) =>
+    `${SECTION}:${channel.channelLogin}:${view.tab}:${view.sort}:${view.q}:${view.type}:${view.genre}`;
 
   router.get(`/:channel/${SECTION}`, page, async (req, res, next) => {
     try {
@@ -304,7 +331,7 @@ function createMediaSectionRouter(cfg) {
       const parsed = cursorPaging.parseCursor(spec, req.query.cursor);
       if (parsed.error) return res.status(400).render("errors/400", { backHref: gridUrl(channel, view) });
 
-      const [rows, counts, broadcaster, editor, suggest] = await Promise.all([
+      const [{ rows, genres }, counts, broadcaster, editor, suggest] = await Promise.all([
         gridRows(channel, view),
         mediaItemsRepo.countByStatus(channel.channelLogin, KIND),
         profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
@@ -325,13 +352,15 @@ function createMediaSectionRouter(cfg) {
         tabs: visibleTabs(permission).map((key) => ({
           key,
           count: TABS[key].statuses.reduce((n, st) => n + (counts[st] || 0), 0),
-          href: gridUrl(channel, { tab: key, sort: TABS[key].defaultSort, q: view.q }),
+          href: gridUrl(channel, { ...view, tab: key, sort: TABS[key].defaultSort }),
         })),
+        genres: view.genre && !genres.includes(view.genre) ? [view.genre, ...genres] : genres,
+        mediaTypes: cfg.view.fields.mediaType ? media.MEDIA_TYPES : [],
         suggest,
         csrf: req.user ? res.locals.csrfToken || "" : "",
         nextHref: nextCursor ? gridUrl(channel, view, { cursor: nextCursor }) : null,
-        listSrc: `/${channel.channelLogin}/${SECTION}/list.json?${new URLSearchParams({ tab: view.tab, sort: view.sort, q: view.q })}`,
-        restoreKey: parsed.cursor ? null : `movies:${channel.channelLogin}:${view.tab}:${view.sort}:${view.q}`,
+        listSrc: listSrcOf(channel, view),
+        restoreKey: parsed.cursor ? null : restoreKeyOf(channel, view),
         totalShown: rows.length,
         canEdit: editor,
         sectionPreview: res.locals.sectionPreview,
@@ -347,7 +376,7 @@ function createMediaSectionRouter(cfg) {
       const { channel } = req;
       const view = readGridQuery(req.query, req.permission);
       const spec = media.SORTS[view.sort];
-      const rows = await gridRows(channel, view);
+      const { rows } = await gridRows(channel, view);
 
       let portion;
       let restored = false;
@@ -372,7 +401,18 @@ function createMediaSectionRouter(cfg) {
       const csrf = req.user ? res.locals.csrfToken || "" : "";
       res.render("partials/mediaCards", { cards, channel, section: SECTION, csrf }, (err, html) => {
         if (err) return next(err);
-        res.json({ ok: true, html, nextCursor: portion.nextCursor, restored });
+        // The page's own URL, list source and restore key for this view: the grid's live filter
+        // (public/js/media-grid.js) swaps the whole grid for a first portion and needs all three.
+        res.json({
+          ok: true,
+          html,
+          nextCursor: portion.nextCursor,
+          restored,
+          total: rows.length,
+          pageHref: gridUrl(channel, view),
+          listSrc: listSrcOf(channel, view),
+          restoreKey: restoreKeyOf(channel, view),
+        });
       });
     } catch (err) {
       next(err);

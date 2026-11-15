@@ -39,7 +39,7 @@ module.exports = createMediaSectionRouter({
   section: "games",
   kind: "game",
   sources: createGameSources({ twitch: { getToken: ensureAppAccessToken, clientId: env.twitchClientId } }),
-  sorts: ["added", "hours", "streamer", "viewers", "steam", "score"],
+  sorts: ["added", "hours", "streamer", "viewers", "steam", "comments", "score"],
   view: {
     path: "games",
     i18n: "gamesStream",
