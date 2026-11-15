@@ -67,17 +67,26 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
   }
 
   // Channel-side counts for the person's most used words only.
-  const candidates = [...wordCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, WORD_CANDIDATES);
+  // One word, many spellings: «табакошка» and «табакошку» are counted together on both sides of
+  // the comparison (lib/annualRecap.js's groupWordForms).
+  const groups = recap
+    .groupWordForms([...wordCounts.entries()].map(([word, n]) => ({ word, n })))
+    .slice(0, WORD_CANDIDATES);
+  const candidates = groups.map((g) => [g.word, g.n]);
   const channelCounts = new Map();
-  if (candidates.length) {
+  if (groups.length) {
+    const labelOf = new Map(groups.flatMap((g) => g.forms.map((form) => [form, g.word])));
     const rows = await db
       .collection("ChatWordStats")
       .aggregate([
-        { $match: { channel, word: { $in: candidates.map(([w]) => w) }, date: { $gte: start, $lt: end } } },
+        { $match: { channel, word: { $in: [...labelOf.keys()] }, date: { $gte: start, $lt: end } } },
         { $group: { _id: "$word", n: { $sum: "$count" } } },
       ])
       .toArray();
-    for (const r of rows) channelCounts.set(r._id, r.n);
+    for (const r of rows) {
+      const label = labelOf.get(r._id);
+      channelCounts.set(label, (channelCounts.get(label) || 0) + r.n);
+    }
   }
   const yourWords = recap.distinctiveWords(
     new Map(candidates),
@@ -113,7 +122,7 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
   const standing = recap.standingOf(channelRecap.data.sortedCounts, docs.length);
 
   const web = await connectWeb();
-  const [modRows, unbanRows, aiCount, games] = await Promise.all([
+  const [modRows, unbanRows, games] = await Promise.all([
     db
       .collection("ModeratorActionLogs")
       .find({ channel: login, userId: String(userId), timestamp: { $gte: start, $lt: end } })
@@ -124,12 +133,6 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
       .find({ channelId, userId: String(userId), "resolution.decidedAt": { $gte: start, $lt: end } })
       .project({ _id: 0, twitchStatus: 1 })
       .toArray(),
-    db.collection("AiReplyLog").countDocuments({
-      channel,
-      userId: String(userId),
-      sent: true,
-      createdAt: { $gte: start, $lt: end },
-    }),
     web
       .collection("GameScores")
       .find({ userId: String(userId), achievedAt: { $gte: start, $lt: end } })
@@ -175,7 +178,6 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
     partners,
     punishments,
     amnesty,
-    ai: { answers: aiCount },
     games: games.sort((a, b) => String(a.game).localeCompare(String(b.game))),
   };
 }

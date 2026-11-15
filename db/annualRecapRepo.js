@@ -9,6 +9,8 @@
 //   AnnualRecapUsers     the personal recap cache, _id "<login>:<year>:<userId>". Valid while its
 //                        `basedOn` equals the channel recap's builtAt; a rebuild invalidates all
 //   AnnualRecapOptOut    {_id: userId} - "leave me out of the public recap", for every channel
+//   AnnualRecapHiddenMoments  a loud moment a moderator removed, _id "<login>:<year>:<minute ISO>".
+//                        Kept apart from the recap so the daily rebuild cannot bring it back
 //   AnnualRecapPicks     the bot's best answers of the year, picked by hand in the AI journal.
 //                        A COPY of the AiReplyLog row, not a reference: that collection expires
 //                        rows by TTL, and a December recap would otherwise lose a March answer
@@ -25,6 +27,7 @@ async function ensureInitialized() {
     users: db.collection("AnnualRecapUsers"),
     optOut: db.collection("AnnualRecapOptOut"),
     picks: db.collection("AnnualRecapPicks"),
+    hiddenMoments: db.collection("AnnualRecapHiddenMoments"),
   };
   // Logged, never thrown: an index failure must not 500 the first page after a restart (the
   // handle above is already cached, so every later request would quietly work).
@@ -177,7 +180,32 @@ async function listPicks(login, year) {
   return picks.find({ channelLogin: String(login).toLowerCase(), year }).sort({ createdAt: 1 }).toArray();
 }
 
+const momentId = (login, year, at) => `${recapId(login, year)}:${new Date(at).toISOString()}`;
+
+async function setMomentHidden(login, year, at, hidden, by) {
+  const { hiddenMoments } = await ensureInitialized();
+  const _id = momentId(login, year, at);
+  if (!hidden) {
+    await hiddenMoments.deleteOne({ _id });
+    return;
+  }
+  await hiddenMoments.updateOne(
+    { _id },
+    { $set: { channelLogin: String(login).toLowerCase(), year, at: new Date(at), hiddenBy: by || null, hiddenAt: new Date() } },
+    { upsert: true }
+  );
+}
+
+// Set of minute ISO strings removed from the channel's recap for `year`.
+async function hiddenMomentsOf(login, year) {
+  const { hiddenMoments } = await ensureInitialized();
+  const rows = await hiddenMoments.find({ channelLogin: String(login).toLowerCase(), year }).project({ at: 1 }).toArray();
+  return new Set(rows.map((r) => r.at.toISOString()));
+}
+
 module.exports = {
+  setMomentHidden,
+  hiddenMomentsOf,
   setPick,
   pickedAmong,
   listPicks,

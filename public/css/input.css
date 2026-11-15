@@ -3278,3 +3278,138 @@ html.js .recap-locked {
 .recap-option-dim {
   opacity: 0.45;
 }
+/* Annual recap pages (views/annualRecap.ejs, views/annualRecapMe.ejs). Built as a poster rather
+   than a dashboard: one display numeral per screen, chapters with their own shapes, and amber as
+   the single accent - whatever is amber on a screen is the thing to look at. Purple stays the
+   site's colour for everything secondary. Motion is decoration only and stops under
+   prefers-reduced-motion. */
+.recap-hero {
+  background:
+    radial-gradient(110% 80% at 0% 0%, rgb(126 34 206 / 0.55), transparent 60%),
+    radial-gradient(70% 70% at 100% 100%, rgb(219 39 119 / 0.22), transparent 70%),
+    radial-gradient(50% 40% at 85% 10%, rgb(251 191 36 / 0.10), transparent 70%),
+    #0f0b16;
+}
+.recap-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(216 180 254);
+}
+.recap-display {
+  font-size: clamp(5.5rem, 30vw, 12rem);
+  font-weight: 900;
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.recap-num {
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.recap-gradient-text {
+  background: linear-gradient(100deg, #d8b4fe 0%, #f472b6 50%, #fcd34d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.recap-chapter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(216 180 254);
+}
+.recap-chapter::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.15), transparent);
+}
+.recap-chapter-n {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  color: rgb(252 211 77);
+}
+.recap-bar { background: linear-gradient(180deg, rgb(192 132 252), rgb(126 34 206)); }
+.recap-bar-peak { background: linear-gradient(180deg, rgb(253 230 138), rgb(245 158 11)); }
+.recap-bar-pink { background: linear-gradient(90deg, rgb(244 114 182), rgb(192 132 252)); }
+.recap-podium-1 { background: linear-gradient(180deg, rgb(253 230 138), rgb(217 119 6)); }
+.recap-pair-link {
+  height: 1px;
+  background: repeating-linear-gradient(90deg, rgb(244 114 182 / 0.7) 0 4px, transparent 4px 8px);
+}
+.recap-word-hero {
+  font-size: clamp(2.25rem, 9vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.recap-emote-hero { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+.recap-emote-hero img { height: 4.5rem; }
+.recap-emote-chip img { height: 1.75em; }
+.recap-terminal { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.recap-bubble {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.5rem 0.875rem;
+  border-radius: 1rem 1rem 1rem 0.25rem;
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+.recap-bubble-bot {
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  background: rgb(88 28 135 / 0.55);
+  border-color: rgb(168 85 247 / 0.35);
+}
+.recap-quiz-n {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: rgb(252 211 77);
+}
+.recap-dossier {
+  background:
+    repeating-linear-gradient(135deg, rgb(255 255 255 / 0.015) 0 10px, transparent 10px 20px),
+    rgb(23 23 23 / 0.6);
+}
+.recap-stamp {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border: 1.5px solid rgb(252 211 77 / 0.7);
+  border-radius: 0.25rem;
+  color: rgb(252 211 77);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  transform: rotate(-2deg);
+}
+@keyframes recap-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+html.js [data-quiz-reveal],
+html.js [data-quiz-rest] {
+  animation: recap-rise 0.45s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.js [data-quiz-reveal],
+  html.js [data-quiz-rest] { animation: none; }
+}
+
+/* An emote after a recap heading (views/partials/recapHeadingEmote.ejs): sized to the heading's
+   own text, so it reads as part of the title at any heading size. */
+.recap-heading-emote {
+  display: inline-block;
+  height: 1.25em;
+  width: auto;
+  margin-left: 0.35em;
+  vertical-align: -0.25em;
+}

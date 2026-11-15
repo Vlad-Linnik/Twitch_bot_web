@@ -62,6 +62,9 @@ function createApp(sessionMiddleware) {
           // + YouTube thumbnails, for the donation media queue panel (public/js/donation-media-panel.js).
           "img-src": [...new Set([...IMG_SRC_DIRECTIVE, ...MEDIA_IMAGE_ORIGINS, "https://i.ytimg.com"])],
           "script-src": ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+          // Twitch's clip player, for the year recap's loud moments (public/js/recap-moments.js).
+          // 'self' keeps what frames already fell back to under default-src.
+          "frame-src": ["'self'", "https://clips.twitch.tv"],
         },
       },
       hsts: env.isProduction,

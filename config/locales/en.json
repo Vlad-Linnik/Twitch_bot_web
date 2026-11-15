@@ -2694,8 +2694,7 @@
     "recapBuilding": "building…",
     "recapBuiltAt": "built {{when}}",
     "recapNotBuilt": "not built",
-    "recapOpen": "open",
-    "recapAwardsTest": "awards: test view"
+    "recapOpen": "open"
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",
@@ -3133,21 +3132,35 @@
     "notBuilt": "The year recap has not been built yet.",
     "kicker": "The chat's year",
     "heading": "{{year}} in chat",
-    "lead": "Not how much you watched — Twitch knows that. What the chat said, to whom, and when it shouted.",
+    "heroTail": "in chat",
+    "lead": "Not how much you watched — Twitch knows that. What the chat said, and to whom.",
     "yearsLabel": "Year",
     "yourYearCta": "My year in this chat",
+    "chapters": {
+      "rhythm": "Rhythm",
+      "people": "People",
+      "words": "Words",
+      "rituals": "Rituals",
+      "games": "Games",
+      "order": "Order",
+      "bot": "The bot",
+      "moments": "Moments",
+      "clips": "Clips"
+    },
     "total": {
       "messages": "messages",
       "chatters": "chatters",
       "streams": "streams",
-      "emotes": "emotes"
+      "emotes": "emotes",
+      "messagesLead": "messages the chat wrote this year"
     },
     "rhythm": {
       "heading": "Rhythm of the year",
       "sub": "Messages by month and by hour (Moscow time).",
       "monthsLabel": "Messages by month",
       "hoursLabel": "Messages by hour of day",
-      "peakHour": "The loudest hour is {{hour}}."
+      "peakHourLabel": "The loudest hour",
+      "peakMonth": "The loudest month — {{month}}"
     },
     "chatters": {
       "heading": "Voices of the year",
@@ -3164,12 +3177,6 @@
       "sub": "They were not in the chat before this year — and then they caught on.",
       "uses": "{{n}} times this year",
       "patientZero": "First written by {{name}}, {{date}}:"
-    },
-    "loud": {
-      "heading": "Loudest minutes",
-      "sub": "The minutes the chat wrote fastest all year.",
-      "perMinute": "{{n}} messages in a minute",
-      "chant": "The chat shouted"
     },
     "pairs": {
       "heading": "Pairs of the year",
@@ -3204,16 +3211,12 @@
       "fastest": "Fastest moderators",
       "median": "{{s}} s median"
     },
-    "ai": {
-      "heading": "The bot answered",
-      "sub": "Since {{since}}.",
-      "answers": "Answers to mentions: {{n}}."
-    },
     "footnote": "Built {{date}}. Counts messages in the channel's chat, shared-chat lines included. Streams are split on chat pauses longer than an hour and a half.",
     "me": {
       "titleSuffix": "— my year",
       "backToChannel": "The channel's {{year}}",
       "heading": "My {{year}} in chat",
+      "heroPre": "My",
       "kicker": "Year recap · {{name}}",
       "lead": "Guess first — then look.",
       "needLogin": "Log in with Twitch to see your year in this chat. Only you can see it.",
@@ -3274,8 +3277,7 @@
         "amnesty": "pardons"
       },
       "extras": {
-        "heading": "Also",
-        "ai": "The bot answered you {{n}} times."
+        "heading": "Also"
       },
       "privacy": {
         "shownNow": "You are shown in the channel's public recap (tops, pairs, new words).",
@@ -3288,62 +3290,21 @@
       "heading": "The bot's best answers",
       "sub": "Picked by hand."
     },
-    "awards": {
-      "titleSuffix": "— chat awards",
-      "kicker": "Chat awards",
-      "heading": "Chat awards {{year}}",
-      "soon": "Voting opens on {{date}}. The code picks the nominees from the year's recap; the chat picks the winners.",
-      "open": "Voting is open until {{date}} inclusive. Voters so far: {{n}}.",
-      "closed": "Voting is closed. Voters: {{n}}.",
-      "loginToVote": "to vote (you need {{n}}+ messages in this chat this year).",
-      "notEligible": "Voting is open to anyone with {{n}}+ messages in this chat this year.",
-      "howTo": "One vote per award; changed your mind — vote again. Results show after voting closes.",
-      "adminLive": "You see the live tally as an admin — everyone else sees it after voting closes.",
-      "empty": "Not enough data for any award.",
-      "name": {
-        "voice": "Voice of the year",
-        "pair": "Pair of the year",
-        "word": "Word of the year",
-        "emote": "Emote of the year",
-        "opener": "Stream opener",
-        "moment": "Moment of the year"
-      },
-      "desc": {
-        "voice": "Who wrote the most this year.",
-        "pair": "Who wrote to each other the most.",
-        "word": "A word the chat invented this year.",
-        "emote": "The most used emote of the year.",
-        "opener": "Who most often wrote first in a stream.",
-        "moment": "The loudest minute of the year."
-      },
-      "stat": {
-        "voice": "{{n}} messages",
-        "pair": "{{n}} messages to each other",
-        "word": "{{n}} times this year",
-        "emote": "{{n}} times this year",
-        "opener": "first in {{n}} streams",
-        "moment": "{{n}} messages in a minute"
-      },
-      "wordBy": "first written by {{name}}",
-      "vote": "Vote",
-      "yourVote": "Your vote",
-      "winner": "Winner",
-      "footnote": "Nominees were fixed on the day voting opened. Logged-in viewers with {{n}}+ messages in this chat this year can vote; anyone who hid from the public recap is not nominated.",
-      "cta": {
-        "soon": "Chat awards",
-        "open": "Vote in the chat awards",
-        "closed": "Chat awards results"
-      },
-      "test": {
-        "heading": "Awards test view (admin only)",
-        "soon": "before opening",
-        "open": "voting",
-        "closed": "results",
-        "real": "as it is now",
-        "note": "This is how viewers will see the page in this phase. Nothing is saved: the ballot is not frozen, buttons do nothing.",
-        "demoVotes": "The votes are made up.",
-        "inert": "Test view — voting is disabled"
-      }
+    "moments": {
+      "heading": "Moments of the year",
+      "sub": "The minutes the chat wrote fastest — in clips viewers made of them.",
+      "perMinute": "{{n}} messages a minute",
+      "chant": "The chat shouted",
+      "watch": "Watch the clip",
+      "hide": "Remove",
+      "clipBy": "Clip by {{name}} · {{n}} views"
+    },
+    "clips": {
+      "heading": "Clips of the year",
+      "sub": "The channel's most watched clips made this year.",
+      "first": "Clip of the year",
+      "views": "views",
+      "meta": "{{name}} · {{date}}"
     }
   }
 }

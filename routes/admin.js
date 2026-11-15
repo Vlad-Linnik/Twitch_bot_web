@@ -113,10 +113,10 @@ async function recapStatus(channels) {
     for (const ch of channels) {
       if (annualRecapJob.isBuilding(ch.channelLogin, year)) recapBuilding[ch.channelLogin] = true;
     }
-    return { recapBuilt: Object.fromEntries(built), recapBuilding, recapYear: year };
+    return { recapBuilt: Object.fromEntries(built), recapBuilding };
   } catch (err) {
     console.error("[admin] recap status failed:", err.message);
-    return { recapBuilt: {}, recapBuilding: {}, recapYear: year };
+    return { recapBuilt: {}, recapBuilding: {} };
   }
 }
 

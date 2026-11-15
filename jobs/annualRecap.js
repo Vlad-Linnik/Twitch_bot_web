@@ -2,7 +2,7 @@
 // for the storage and lib/annualRecap.js for what every number means.
 //
 // ONE time-ordered pass over the year's `messages` fills everything that needs the raw text or the
-// author (sessions, hours, loud minutes, who @-ed whom, commands, the first author of a new word),
+// author (sessions, hours, who @-ed whom, commands, the first author of a new word),
 // plus aggregations over the daily rows for what is already counted (words, emotes). It is the same
 // shape of work as jobs/higherLowerExamples.js, which reads ~2M messages in about twenty seconds.
 //
@@ -14,6 +14,9 @@ const channelsRepo = require("../db/channelsRepo");
 const recapRepo = require("../db/annualRecapRepo");
 const { emotePredicate } = require("../db/emotePredicate");
 const { KNOWN_BOT_LOGINS } = require("../config/knownBots");
+const { getKnownBotIdentifiers } = require("../lib/knownBotIds");
+const { clipsInWindow, videoStarts } = require("../twitch/clips");
+const emoteImages = require("../twitch/emoteImages");
 const { LIFETIME_BUCKET } = require("../lib/textStats");
 const recap = require("../lib/annualRecap");
 
@@ -21,8 +24,11 @@ const withHash = (login) => `#${String(login).toLowerCase().replace(/^#/, "")}`;
 
 // A viewer sample further than this from a message says nothing about what was on screen.
 const CATEGORY_MAX_GAP_MS = 10 * 60 * 1000;
-// A word needs this many uses in the year to be a "new word of the year".
+// A word needs this many uses in the year (all its forms together) to be a "new word of the year".
 const NEW_WORD_MIN_USES = 30;
+// A single spelling below this is too rare to fetch as a candidate form; the forms that carry a
+// word are well above it.
+const NEW_WORD_FORM_MIN_USES = 5;
 // New words are only meaningful against a history: a word is "new" when the index has watched the
 // chat for a while without seeing it. With less history than this before the year starts, every
 // word would be new.
@@ -78,12 +84,15 @@ async function topAndTotal(db, collection, channel, start, end, limit) {
   return { top: res.top.map((r) => ({ word: r._id, n: r.n })), total: res.total[0]?.n || 0 };
 }
 
-async function monthlyCurves(db, collection, channel, words, start, end) {
-  if (!words.length) return {};
+// Monthly counts per entry of `groups` ([{word, forms}]), summed over its forms, keyed by `word`.
+async function monthlyCurves(db, collection, channel, groups, start, end) {
+  if (!groups.length) return {};
+  const owner = new Map();
+  for (const g of groups) for (const f of g.forms || [g.word]) owner.set(f, g.word);
   const rows = await db
     .collection(collection)
     .aggregate([
-      { $match: { channel, word: { $in: words }, date: { $gte: start, $lt: end } } },
+      { $match: { channel, word: { $in: [...owner.keys()] }, date: { $gte: start, $lt: end } } },
       {
         $group: {
           _id: { w: "$word", m: { $month: { date: "$date", timezone: "+03:00" } } },
@@ -93,12 +102,17 @@ async function monthlyCurves(db, collection, channel, words, start, end) {
     ])
     .toArray();
   const curves = {};
-  for (const w of words) curves[w] = new Array(12).fill(0);
-  for (const r of rows) curves[r._id.w][r._id.m - 1] = r.n;
+  for (const g of groups) curves[g.word] = new Array(12).fill(0);
+  for (const r of rows) curves[owner.get(r._id.w)][r._id.m - 1] += r.n;
   return curves;
 }
 
-async function newWordCandidates(db, channel, start, end) {
+// Words the chat started saying this year, grouped by form (lib/annualRecap.js's groupWordForms).
+// "New" is decided per WORD, not per spelling: «дипе» first appearing this year means nothing if
+// «дип» was said all last year. So the candidates are new spellings, grouped, and then each group's
+// stem is looked up in the history before the year - an anchored prefix match on the {channel,
+// word, date} index, confirmed by stemming whatever it finds.
+async function newWordCandidates(db, channel, start, end, isEmote) {
   const earliest = await db
     .collection("ChatWordStats")
     .find({ channel, date: { $gt: LIFETIME_BUCKET } })
@@ -107,7 +121,7 @@ async function newWordCandidates(db, channel, start, end) {
     .limit(1)
     .toArray();
   if (!earliest.length || start.getTime() - earliest[0].date.getTime() < NEW_WORD_MIN_HISTORY_MS) return [];
-  return db
+  const forms = await db
     .collection("ChatWordStats")
     .aggregate(
       [
@@ -119,13 +133,128 @@ async function newWordCandidates(db, channel, start, end) {
             n: { $sum: { $cond: [{ $gte: ["$date", start] }, "$count", 0] } },
           },
         },
-        { $match: { first: { $gte: start }, n: { $gte: NEW_WORD_MIN_USES } } },
+        { $match: { first: { $gte: start }, n: { $gte: NEW_WORD_FORM_MIN_USES } } },
         { $sort: { n: -1 } },
-        { $limit: 40 },
+        { $limit: 2000 },
       ],
       { allowDiskUse: true }
     )
     .toArray();
+  const firstOf = new Map(forms.map((f) => [f._id, f.first]));
+  const groups = recap
+    .groupWordForms(forms.filter((f) => !isEmote(f._id)).map((f) => ({ word: f._id, n: f.n })))
+    .filter((g) => g.n >= NEW_WORD_MIN_USES)
+    .slice(0, 60);
+
+  const out = [];
+  for (const g of groups) {
+    if (/[а-яё]/.test(g.key)) {
+      const older = await db
+        .collection("ChatWordStats")
+        .aggregate([
+          {
+            $match: {
+              channel,
+              word: { $regex: "^" + recap.escapeRegExp(g.key) },
+              date: { $gt: LIFETIME_BUCKET, $lt: start },
+            },
+          },
+          { $group: { _id: "$word" } },
+          { $limit: 3000 },
+        ])
+        .toArray();
+      if (older.some((o) => recap.formKey(o._id) === g.key)) continue;
+    }
+    const first = g.forms.reduce((min, f) => (firstOf.get(f) < min ? firstOf.get(f) : min), firstOf.get(g.forms[0]));
+    out.push({ word: g.word, forms: g.forms, n: g.n, first });
+    if (out.length >= 25) break;
+  }
+  return out;
+}
+
+// The year's loud minutes that a viewer clipped. Each candidate minute costs one small indexed
+// read of its messages (the chant) and one Get Clips call; a minute nobody clipped is dropped -
+// the recap shows the moment as video or not at all.
+//
+// A Helix failure must not wipe moments a previous build found: the clips are a lookup of
+// something that does not change, so on error the previous build's list is kept.
+// The year's most watched clips of the channel - "clip of the year" decided by views, with no vote:
+// Helix answers a created_at window already sorted by view count, so the first page is the top.
+// The view counts are as of the build; the daily rebuild keeps them current through the year.
+// Fail-soft like the moments: an outage keeps the previous build's list.
+const TOP_CLIPS = 5;
+
+function shapeClip(c) {
+  return {
+    id: c.id,
+    url: c.url,
+    thumbnailUrl: c.thumbnail_url,
+    title: c.title,
+    creator: c.creator_name,
+    views: c.view_count,
+    duration: c.duration,
+    createdAt: c.created_at,
+  };
+}
+
+// Each clip also carries what the chat was shouting while it happened (lib/annualRecap.js's
+// clipChatWindow + chantOf) - one small indexed read of messages per clip.
+async function topClipsOfYear(db, channel, channelId, start, end, login, year) {
+  try {
+    const clips = (await clipsInWindow(channelId, start, end))
+      .slice()
+      .sort((a, b) => b.view_count - a.view_count)
+      .slice(0, TOP_CLIPS);
+    const starts = await videoStarts(clips.filter((c) => c.video_id && c.vod_offset !== null).map((c) => c.video_id));
+    const out = [];
+    for (const c of clips) {
+      const win = recap.clipChatWindow(c, starts.get(String(c.video_id)) || null);
+      const lines = await db
+        .collection("messages")
+        .find({ channel, timestamp: { $gte: win.from, $lt: win.to } })
+        .project({ _id: 0, message: 1 })
+        .limit(3000)
+        .toArray();
+      out.push({ ...shapeClip(c), chant: recap.chantOf(lines.map((l) => l.message), { minRepeats: recap.CLIP_CHANT_MIN_REPEATS }) });
+    }
+    return out;
+  } catch (err) {
+    console.error(`[annualRecap] ${login} ${year}: top clips lookup failed, keeping the previous list:`, err.message);
+    const previous = await recapRepo.getChannelRecap(login, year).catch(() => null);
+    return previous?.data?.topClips || [];
+  }
+}
+
+async function loudMomentsWithClips(db, channel, channelId, minutes, samples, login, year) {
+  const candidates = recap.pickLoudMoments(minutes);
+  const out = [];
+  try {
+    for (const moment of candidates) {
+      const { from, to } = recap.clipWindow(moment.at);
+      const clips = await clipsInWindow(channelId, from, to);
+      const starts = await videoStarts(clips.filter((c) => c.video_id && c.vod_offset !== null).map((c) => c.video_id));
+      const clip = recap.pickClipForMoment(clips, moment.at, starts);
+      if (!clip) continue;
+      const lines = await db
+        .collection("messages")
+        .find({ channel, timestamp: { $gte: new Date(moment.at), $lt: new Date(moment.at + 60000) } })
+        .project({ _id: 0, message: 1 })
+        .limit(3000)
+        .toArray();
+      out.push({
+        at: new Date(moment.at),
+        n: moment.n,
+        category: categoryNear(samples, moment.at),
+        chant: recap.chantOf(lines.map((l) => l.message)),
+        clip: shapeClip(clip),
+      });
+    }
+    return out;
+  } catch (err) {
+    console.error(`[annualRecap] ${login} ${year}: clip lookup failed, keeping the previous moments:`, err.message);
+    const previous = await recapRepo.getChannelRecap(login, year).catch(() => null);
+    return previous?.data?.loud || out;
+  }
 }
 
 async function buildChannelRecap(channelLogin, year) {
@@ -140,31 +269,43 @@ async function buildChannelRecap(channelLogin, year) {
 
   const botLogins = new Set(KNOWN_BOT_LOGINS.map((l) => l.toLowerCase()));
 
-  const [isEmote, words, emotes, newWords, samplesRaw] = await Promise.all([
-    emotePredicate(db, channel),
-    topAndTotal(db, "ChatWordStats", channel, start, end, 80),
+  // The emote registry (whiteList & co) is the bot's view, and it can lag: a channel emote the
+  // sync has not caught yet is a "word" to it - McopMeeting showed up as a word the chat invented
+  // on a copy of the database taken before the 7TV sync knew it. The same names the page draws as
+  // pictures (twitch/emoteImages.js, live from the providers) are added, so a token the page
+  // itself renders as an emote is never listed as a word.
+  const registryEmote = await emotePredicate(db, channel);
+  const pictured = await emoteImages
+    .getEmoteImageMap(channelId, login)
+    .then((map) => new Set([...map.keys()].map((n) => String(n).toLowerCase())))
+    .catch(() => new Set());
+  const isEmote = (token) => registryEmote(token) || pictured.has(String(token).toLowerCase());
+  const [words, emotes, newWords, samplesRaw, customCommands] = await Promise.all([
+    topAndTotal(db, "ChatWordStats", channel, start, end, 200),
     topAndTotal(db, "words", channel, start, end, 40),
-    newWordCandidates(db, channel, start, end),
+    newWordCandidates(db, channel, start, end, isEmote),
     db
       .collection("StreamViewerSamples")
       .find({ channelId, timestamp: { $gte: start, $lt: end } })
       .project({ _id: 0, timestamp: 1, category: 1, viewerCount: 1 })
       .sort({ timestamp: 1 })
       .toArray(),
+    db.collection("custom_commands").find({ channel }).project({ _id: 0, command: 1, aliases: 1 }).toArray(),
   ]);
+  const commandAliases = recap.commandAliasMap(customCommands);
   // ChatWordStats still holds rows for tokens learnt to be emotes after they were counted (see
   // CLAUDE.md "Words vs emotes"); the same predicate the word cloud uses keeps them out of the word
   // lists, where an emote is not a word and certainly not one the chat invented.
-  words.top = words.top.filter((w) => !isEmote(w.word));
-  const newWordRows = newWords.filter((w) => !isEmote(w._id));
+  words.top = recap.groupWordForms(words.top.filter((w) => !isEmote(w.word))).slice(0, 60);
 
   const samples = samplesRaw.map((s) => ({ t: s.timestamp.getTime(), category: s.category, viewers: s.viewerCount }));
 
   const acc = recap.createChannelAccumulator({
     isEmote,
     botLogins,
-    candidateWords: new Set(newWordRows.map((w) => w._id)),
+    candidateWords: new Set(newWords.flatMap((w) => w.forms)),
     broadcasterLogin: login,
+    commandAliases,
     categoryAt: samples.length ? (at) => categoryNear(samples, at.getTime()) : () => null,
   });
 
@@ -178,22 +319,8 @@ async function buildChannelRecap(channelLogin, year) {
   const state = acc.finish();
   const scanMs = Date.now() - t0;
 
-  // Loud minutes: the second read is per moment and indexed, five small reads in all.
-  const loud = [];
-  for (const moment of recap.pickLoudMoments(state.minutes)) {
-    const lines = await db
-      .collection("messages")
-      .find({ channel, timestamp: { $gte: new Date(moment.at), $lt: new Date(moment.at + 60000) } })
-      .project({ _id: 0, message: 1 })
-      .limit(3000)
-      .toArray();
-    loud.push({
-      at: new Date(moment.at),
-      n: moment.n,
-      category: categoryNear(samples, moment.at),
-      chant: recap.chantOf(lines.map((l) => l.message)),
-    });
-  }
+  const loud = await loudMomentsWithClips(db, channel, channelId, state.minutes, samples, login, year);
+  const topClips = await topClipsOfYear(db, channel, channelId, start, end, login, year);
 
   // Hours on air per category, from the gaps between samples (capped, so an outage between two
   // samples is not counted as hours of streaming).
@@ -214,9 +341,9 @@ async function buildChannelRecap(channelLogin, year) {
     .filter((c) => c.hours >= 1)
     .sort((a, b) => b.hours - a.hours);
 
-  // Moderation, unbans and the bot's answers - each with the date its data starts, because none of
-  // the three covers the whole year (see планы/рекап-года.md).
-  const [modRows, unbanRows, aiCount, aiAskers] = await Promise.all([
+  // Moderation and unbans - each with the date its data starts, because neither covers the whole
+  // year (see планы/рекап-года.md).
+  const [modRows, unbanRows] = await Promise.all([
     db
       .collection("ModeratorActionLogs")
       .find({ channel: login, timestamp: { $gte: start, $lt: end } })
@@ -227,31 +354,14 @@ async function buildChannelRecap(channelLogin, year) {
       .find({ channelId, "resolution.decidedAt": { $gte: start, $lt: end } })
       .project({ _id: 0, twitchStatus: 1 })
       .toArray(),
-    db.collection("AiReplyLog").countDocuments({ channel, sent: true, createdAt: { $gte: start, $lt: end } }),
-    db
-      .collection("AiReplyLog")
-      .aggregate([
-        { $match: { channel, sent: true, createdAt: { $gte: start, $lt: end } } },
-        { $group: { _id: "$userId", login: { $last: "$login" }, n: { $sum: 1 }, first: { $min: "$createdAt" } } },
-        { $sort: { n: -1 } },
-        { $limit: 15 },
-      ])
-      .toArray(),
   ]);
-  const aiFirst = aiCount
-    ? (
-        await db
-          .collection("AiReplyLog")
-          .find({ channel, createdAt: { $gte: start, $lt: end } })
-          .project({ createdAt: 1 })
-          .sort({ createdAt: 1 })
-          .limit(1)
-          .toArray()
-      )[0]?.createdAt || null
-    : null;
 
   const moderation = { actions: {}, duel: 0, sniper: 0, self: 0, since: null, fastest: [] };
   const ttaByMod = new Map();
+  // Bots hold moderator rights and answer in milliseconds, so they would top "fastest moderators"
+  // every time. modID is an id (or a login on legacy rows), hence both spellings.
+  const bots = await getKnownBotIdentifiers();
+  const botMods = new Set([...bots.ids, ...bots.logins].map(String));
   for (const row of modRows) {
     if (!moderation.since || row.timestamp < moderation.since) moderation.since = row.timestamp;
     moderation.actions[row.action] = (moderation.actions[row.action] || 0) + 1;
@@ -260,7 +370,7 @@ async function buildChannelRecap(channelLogin, year) {
       moderation[kind] += 1;
       continue; // a duel or a sniper shot is not a moderator reacting to anything
     }
-    if (typeof row.TTA === "number" && row.TTA > 0 && row.modID) {
+    if (typeof row.TTA === "number" && row.TTA > 0 && row.modID && !botMods.has(String(row.modID).toLowerCase())) {
       const id = String(row.modID);
       if (!ttaByMod.has(id)) ttaByMod.set(id, []);
       ttaByMod.get(id).push(row.TTA);
@@ -302,16 +412,20 @@ async function buildChannelRecap(channelLogin, year) {
     bId: idByLogin.get(p.b) || null,
   }));
 
-  const firstWords = newWordRows
+  // The first author of a word is whoever wrote ANY of its forms first.
+  const firstWords = newWords
     .map((w) => {
-      const first = state.firstUse.get(w._id);
-      return { word: w._id, n: w.n, firstAt: w.first, by: first || null };
+      const by = w.forms
+        .map((f) => state.firstUse.get(f))
+        .filter(Boolean)
+        .sort((a, b) => a.at - b.at)[0];
+      return { word: w.word, forms: w.forms, n: w.n, firstAt: w.first, by: by || null };
     })
     .slice(0, 20);
 
   const [wordCurves, emoteCurves] = await Promise.all([
-    monthlyCurves(db, "ChatWordStats", channel, words.top.slice(0, 5).map((w) => w.word), start, end),
-    monthlyCurves(db, "words", channel, emotes.top.slice(0, 5).map((w) => w.word), start, end),
+    monthlyCurves(db, "ChatWordStats", channel, words.top.slice(0, 5), start, end),
+    monthlyCurves(db, "words", channel, emotes.top.slice(0, 5), start, end),
   ]);
 
   const data = {
@@ -332,9 +446,10 @@ async function buildChannelRecap(channelLogin, year) {
     emotes: { top: emotes.top, curves: emoteCurves },
     newWords: firstWords,
     loud,
+    topClips,
     categories: { since: samples.length ? new Date(samples[0].t) : null, list: categories.slice(0, 15) },
     pairs,
-    commands: recap.topCommands(state.commands),
+    commands: recap.topCommands(state.commands, 15, commandAliases),
     sessions: state.sessions.map((s) => ({
       start: s.start,
       end: s.end,
@@ -344,7 +459,6 @@ async function buildChannelRecap(channelLogin, year) {
     firstChatters,
     moderation,
     unbans,
-    ai: { answers: aiCount, since: aiFirst, askers: aiAskers.map((a) => ({ userId: a._id, name: a.login, n: a.n })) },
     buildMs: { scan: scanMs, total: Date.now() - t0 },
   };
 
