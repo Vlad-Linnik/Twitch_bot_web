@@ -9,6 +9,9 @@
 //   AnnualRecapUsers     the personal recap cache, _id "<login>:<year>:<userId>". Valid while its
 //                        `basedOn` equals the channel recap's builtAt; a rebuild invalidates all
 //   AnnualRecapOptOut    {_id: userId} - "leave me out of the public recap", for every channel
+//   AnnualRecapPicks     the bot's best answers of the year, picked by hand in the AI journal.
+//                        A COPY of the AiReplyLog row, not a reference: that collection expires
+//                        rows by TTL, and a December recap would otherwise lose a March answer
 const { connectWeb } = require("./connection");
 
 let cols = null;
@@ -21,6 +24,7 @@ async function ensureInitialized() {
     mentions: db.collection("AnnualRecapMentions"),
     users: db.collection("AnnualRecapUsers"),
     optOut: db.collection("AnnualRecapOptOut"),
+    picks: db.collection("AnnualRecapPicks"),
   };
   // Logged, never thrown: an index failure must not 500 the first page after a restart (the
   // handle above is already cached, so every later request would quietly work).
@@ -29,6 +33,7 @@ async function ensureInitialized() {
       cols.mentions.createIndex({ channelLogin: 1, year: 1, to: 1 }),
       cols.mentions.createIndex({ channelLogin: 1, year: 1, from: 1 }),
       cols.recaps.createIndex({ channelLogin: 1, year: -1 }),
+      cols.picks.createIndex({ channelLogin: 1, year: 1, createdAt: 1 }),
     ]);
   } catch (err) {
     console.error("[annualRecapRepo] index creation failed:", err.message);
@@ -133,7 +138,49 @@ async function optedOutAmong(userIds) {
   return new Set(rows.map((r) => r._id));
 }
 
+// Pick or unpick one AiReplyLog row. `row` is the log document; `year` its recap year.
+async function setPick(row, year, picked, pickedBy) {
+  const { picks } = await ensureInitialized();
+  const _id = String(row._id);
+  if (!picked) {
+    await picks.deleteOne({ _id });
+    return;
+  }
+  await picks.replaceOne(
+    { _id },
+    {
+      channelLogin: String(row.channel || "").replace(/^#/, "").toLowerCase(),
+      year,
+      userId: row.userId ? String(row.userId) : null,
+      login: row.login || null,
+      question: String(row.question || ""),
+      answer: String(row.answer || ""),
+      createdAt: row.createdAt,
+      pickedAt: new Date(),
+      pickedBy: pickedBy || null,
+    },
+    { upsert: true }
+  );
+}
+
+// Set of picked log ids among `ids` - the journal's star state.
+async function pickedAmong(ids) {
+  const list = [...new Set(ids.map(String))];
+  if (!list.length) return new Set();
+  const { picks } = await ensureInitialized();
+  const rows = await picks.find({ _id: { $in: list } }).project({ _id: 1 }).toArray();
+  return new Set(rows.map((r) => r._id));
+}
+
+async function listPicks(login, year) {
+  const { picks } = await ensureInitialized();
+  return picks.find({ channelLogin: String(login).toLowerCase(), year }).sort({ createdAt: 1 }).toArray();
+}
+
 module.exports = {
+  setPick,
+  pickedAmong,
+  listPicks,
   saveChannelRecap,
   getChannelRecap,
   listYears,

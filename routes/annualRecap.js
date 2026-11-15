@@ -18,6 +18,8 @@ const { loadChannelSection } = require("../middleware/channelSection");
 const { createSimpleLimiter } = require("../middleware/rateLimiters");
 const { buildChannelNav } = require("../lib/channelNav");
 const recap = require("../lib/annualRecap");
+const awards = require("../lib/chatAwards");
+const awardsRepo = require("../db/chatAwardsRepo");
 const gamesCatalog = require("../data/gamesCatalog");
 
 const router = express.Router();
@@ -74,9 +76,10 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
     const { channel } = req;
     const year = parseYear(req.params.year);
     if (!year) return res.status(404).render("errors/404");
-    const [doc, years] = await Promise.all([
+    const [doc, years, picks] = await Promise.all([
       recapRepo.getChannelRecap(channel.channelLogin, year),
       recapRepo.listYears(channel.channelLogin),
+      recapRepo.listPicks(channel.channelLogin, year),
     ]);
     if (!doc) return res.status(404).render("errors/404");
     const d = doc.data;
@@ -88,6 +91,7 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
       ...Object.keys(d.firstChatters),
       ...d.commands.map((c) => c.topUserId),
       ...d.ai.askers.map((a) => a.userId),
+      ...picks.map((p) => p.userId),
     ];
     const [hidden, broadcaster, images] = await Promise.all([
       recapRepo.optedOutAmong(idsShown),
@@ -122,6 +126,7 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
       recapDoc: doc,
       years,
       year,
+      awardPhase: awards.phaseOf(year),
       preview: res.locals.sectionPreview,
       view: {
         topChatters,
@@ -131,6 +136,7 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
         newWords: d.newWords.filter((w) => visible(w.by?.userId)).slice(0, 8),
         commands: d.commands.slice(0, 8).map((c) => ({ ...c, topUserId: visible(c.topUserId) ? c.topUserId : null })),
         askers: d.ai.askers.filter((a) => visible(a.userId)).slice(0, 5),
+        picks: picks.filter((p) => visible(p.userId)),
         profiles,
         images,
       },
@@ -184,6 +190,127 @@ router.get("/:channel/recap/:year/me", recapPage, async (req, res, next) => {
       gameNameKey,
       messageBuckets: recap.MESSAGE_BUCKETS,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- «Премия чата» ------------------------------------------------------------------------------
+// Rules in lib/chatAwards.js, storage in db/chatAwardsRepo.js.
+
+const voteLimiter = createSimpleLimiter({ windowMs: 10 * 1000, max: 12 });
+
+// The ballot for `year`: null before voting opens, frozen on first need afterwards.
+async function loadBallot(channel, year, recapDoc) {
+  const phase = awards.phaseOf(year);
+  if (phase === "soon") return { phase, ballot: null };
+  let stored = await awardsRepo.getBallot(channel.channelLogin, year);
+  if (!stored) {
+    const d = recapDoc.data;
+    const hidden = await recapRepo.optedOutAmong([
+      ...d.topChatters.map((u) => u.userId),
+      ...d.pairs.flatMap((p) => [p.aId, p.bId]),
+      ...d.newWords.map((w) => w.by?.userId),
+      ...Object.keys(d.firstChatters),
+    ]);
+    const openerIds = Object.entries(d.firstChatters)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([id]) => id);
+    const profiles = await profileCacheRepo.getOrFetchProfiles(openerIds).catch(() => new Map());
+    const ballot = awards.buildBallot(d, { hidden, nameOf: (id) => profiles.get(String(id))?.login || null });
+    stored = await awardsRepo.freezeBallot(channel.channelLogin, year, ballot);
+  }
+  return { phase, ballot: stored.ballot };
+}
+
+function ballotUserIds(ballot) {
+  return (ballot || []).flatMap((a) => a.nominees.flatMap((n) => n.userIds));
+}
+
+router.get("/:channel/recap/:year/awards", recapPage, async (req, res, next) => {
+  try {
+    const { channel } = req;
+    const year = parseYear(req.params.year);
+    if (!year) return res.status(404).render("errors/404");
+    const doc = await recapRepo.getChannelRecap(channel.channelLogin, year);
+    if (!doc) return res.status(404).render("errors/404");
+
+    const { phase, ballot } = await loadBallot(channel, year, doc);
+    const { start, end } = recap.yearRange(year);
+    const userId = req.user?.userId || null;
+
+    const [hidden, myVotes, eligible, images, broadcaster, voters] = await Promise.all([
+      recapRepo.optedOutAmong(ballotUserIds(ballot)),
+      userId && ballot ? awardsRepo.votesOf(channel.channelLogin, year, userId) : {},
+      userId && phase === "open"
+        ? awardsRepo.hasMessages(channel.channelLogin, userId, start, end, awards.MIN_VOTER_MESSAGES)
+        : false,
+      imagesFor(channel),
+      profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+      ballot ? awardsRepo.voterCount(channel.channelLogin, year) : 0,
+    ]);
+
+    // Running tallies stay hidden while voting is open - a visible leader pulls votes to itself.
+    // The site admin sees them, to notice a ballot being stuffed before it closes.
+    const showResults = ballot && (phase === "closed" || req.permission === 0);
+    const outcome = showResults ? awards.results(ballot, await awardsRepo.tally(channel.channelLogin, year), { hidden }) : null;
+
+    res.render("annualRecapAwards", {
+      channel,
+      broadcaster,
+      channelNav: buildChannelNav(channel, { permission: req.permission, active: "recap" }),
+      year,
+      preview: res.locals.sectionPreview,
+      phase,
+      awardWindow: awards.awardsWindow(year),
+      ballot: (ballot || []).map((a) => ({
+        ...a,
+        nominees: a.nominees.filter((n) => n.userIds.every((id) => !hidden.has(String(id)))),
+      })),
+      results: outcome,
+      liveResults: showResults && phase !== "closed",
+      myVotes,
+      eligible,
+      loggedIn: Boolean(userId),
+      minMessages: awards.MIN_VOTER_MESSAGES,
+      voters,
+      images,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:channel/recap/:year/awards/vote", recapWrite, requireLogin, verifyToken, async (req, res, next) => {
+  const wantsJson = (req.get("accept") || "").includes("application/json");
+  const fail = (status, error) =>
+    wantsJson ? res.status(status).json({ ok: false, error }) : res.status(status).render("errors/400", { backHref: req.originalUrl.replace(/\/vote$/, "") });
+  try {
+    const { channel } = req;
+    const year = parseYear(req.params.year);
+    if (!year) return fail(404, "not_found");
+    if (!voteLimiter(String(req.user.userId))) return fail(429, "rate_limited");
+    if (awards.phaseOf(year) !== "open") return fail(409, "closed");
+
+    const doc = await recapRepo.getChannelRecap(channel.channelLogin, year);
+    if (!doc) return fail(404, "not_found");
+    const { ballot } = await loadBallot(channel, year, doc);
+
+    const key = String(req.body.key || "");
+    const nomineeId = String(req.body.nominee || "");
+    if (!awards.isValidVote(ballot, key, nomineeId)) return fail(400, "invalid");
+    const nominee = ballot.find((a) => a.key === key).nominees.find((n) => n.id === nomineeId);
+    const hidden = await recapRepo.optedOutAmong(nominee.userIds);
+    if (hidden.size) return fail(400, "invalid");
+
+    const { start, end } = recap.yearRange(year);
+    const eligible = await awardsRepo.hasMessages(channel.channelLogin, req.user.userId, start, end, awards.MIN_VOTER_MESSAGES);
+    if (!eligible) return fail(403, "not_eligible");
+
+    await awardsRepo.castVote(channel.channelLogin, year, req.user.userId, key, nomineeId);
+    if (wantsJson) return res.json({ ok: true, key, nominee: nomineeId });
+    res.redirect(`/${channel.channelLogin}/recap/${year}/awards#award-${key}`);
   } catch (err) {
     next(err);
   }

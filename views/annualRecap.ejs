@@ -50,10 +50,16 @@
       <% }) %>
     </dl>
 
-    <a href="/<%= channel.channelLogin %>/recap/<%= year %>/me"
-       class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors">
-      <%= t('recap.yourYearCta') %> <span aria-hidden="true">→</span>
-    </a>
+    <div class="mt-6 flex flex-wrap gap-3">
+      <a href="/<%= channel.channelLogin %>/recap/<%= year %>/me"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors">
+        <%= t('recap.yourYearCta') %> <span aria-hidden="true">→</span>
+      </a>
+      <a href="/<%= channel.channelLogin %>/recap/<%= year %>/awards"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-700/70 text-amber-300 hover:bg-amber-500/10 text-sm font-semibold transition-colors">
+        🏆 <%= t('recap.awards.cta.' + awardPhase) %>
+      </a>
+    </div>
   </section>
 
   <div class="grid gap-6">
@@ -285,6 +291,23 @@
           <% }) %>
         </ol>
       <% } %>
+    </section>
+    <% } %>
+
+    <%# Picked by hand in the admin panel's AI journal (routes/adminAi.js's /pick). %>
+    <% if (view.picks.length) { %>
+    <section class="<%= card %>">
+      <h2 class="<%= h2 %>"><%= t('recap.picks.heading') %></h2>
+      <p class="<%= sub %>"><%= t('recap.picks.sub') %></p>
+      <ul class="space-y-4">
+        <% view.picks.forEach(function (p) { %>
+          <li>
+            <p class="text-xs text-neutral-500"><%= p.login %> · <%= fmtDate(p.createdAt, { day: 'numeric', month: 'long' }) %></p>
+            <p class="text-sm text-neutral-400 break-words">— <%- include('partials/recapChatText', { text: p.question, images: view.images }) %></p>
+            <p class="mt-1 text-sm text-neutral-100 break-words rounded-lg bg-purple-950/40 border border-purple-900/50 px-3 py-2"><%- include('partials/recapChatText', { text: p.answer, images: view.images }) %></p>
+          </li>
+        <% }) %>
+      </ul>
     </section>
     <% } %>
 

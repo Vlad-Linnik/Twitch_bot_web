@@ -2159,7 +2159,9 @@
         "unknown": "refused: no such login on this channel",
         "self": "refused: asked about themselves",
         "protected": "refused: this person cannot be muted"
-      }
+      },
+      "recapPick": "Into the channel's year recap",
+      "recapUnpick": "Remove from the year recap"
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",
@@ -3278,6 +3280,57 @@
         "hiddenNow": "You are hidden from every channel's public recap.",
         "hide": "Hide me from public recaps",
         "show": "Show me again"
+      }
+    },
+    "picks": {
+      "heading": "The bot's best answers",
+      "sub": "Picked by hand."
+    },
+    "awards": {
+      "titleSuffix": "— chat awards",
+      "kicker": "Chat awards",
+      "heading": "Chat awards {{year}}",
+      "soon": "Voting opens on {{date}}. The code picks the nominees from the year's recap; the chat picks the winners.",
+      "open": "Voting is open until {{date}} inclusive. Voters so far: {{n}}.",
+      "closed": "Voting is closed. Voters: {{n}}.",
+      "loginToVote": "to vote (you need {{n}}+ messages in this chat this year).",
+      "notEligible": "Voting is open to anyone with {{n}}+ messages in this chat this year.",
+      "howTo": "One vote per award; changed your mind — vote again. Results show after voting closes.",
+      "adminLive": "You see the live tally as an admin — everyone else sees it after voting closes.",
+      "empty": "Not enough data for any award.",
+      "name": {
+        "voice": "Voice of the year",
+        "pair": "Pair of the year",
+        "word": "Word of the year",
+        "emote": "Emote of the year",
+        "opener": "Stream opener",
+        "moment": "Moment of the year"
+      },
+      "desc": {
+        "voice": "Who wrote the most this year.",
+        "pair": "Who wrote to each other the most.",
+        "word": "A word the chat invented this year.",
+        "emote": "The most used emote of the year.",
+        "opener": "Who most often wrote first in a stream.",
+        "moment": "The loudest minute of the year."
+      },
+      "stat": {
+        "voice": "{{n}} messages",
+        "pair": "{{n}} messages to each other",
+        "word": "{{n}} times this year",
+        "emote": "{{n}} times this year",
+        "opener": "first in {{n}} streams",
+        "moment": "{{n}} messages in a minute"
+      },
+      "wordBy": "first written by {{name}}",
+      "vote": "Vote",
+      "yourVote": "Your vote",
+      "winner": "Winner",
+      "footnote": "Nominees were fixed on the day voting opened. Logged-in viewers with {{n}}+ messages in this chat this year can vote; anyone who hid from the public recap is not nominated.",
+      "cta": {
+        "soon": "Chat awards",
+        "open": "Vote in the chat awards",
+        "closed": "Chat awards results"
       }
     }
   }

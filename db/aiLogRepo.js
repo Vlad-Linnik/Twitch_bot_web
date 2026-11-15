@@ -131,6 +131,13 @@ async function setReview(id, review) {
   await col.updateOne({ _id: new ObjectId(String(id)) }, { $set: { review, reviewedAt: new Date() } });
 }
 
+async function getById(id) {
+  const { ObjectId } = require("mongodb");
+  if (!ObjectId.isValid(String(id))) return null;
+  const col = await ensureInitialized();
+  return col.findOne({ _id: new ObjectId(String(id)) });
+}
+
 async function reviewTally() {
   const col = await ensureInitialized();
   const rows = await col
@@ -153,4 +160,5 @@ module.exports = {
   spendSince,
   setReview,
   reviewTally,
+  getById,
 };
