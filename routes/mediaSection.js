@@ -177,6 +177,9 @@ function createMediaSectionRouter(cfg) {
 
   // The review and the streamer's score: the owner, or the admin on the owner's behalf.
   const canWriteStreamerFields = (permission) => permission <= 1;
+  // The person IS the channel's streamer - by identity, not by level: the site's level is a single
+  // number, and an owner who is also on ADMIN_USER_IDS reads as 0 there, never as 1.
+  const isChannelOwner = (req) => Boolean(req.user) && String(req.user.userId) === String(req.channel.ownerId || req.channel.channelId);
 
   const viewerOf = (req) => ({ userId: req.user?.userId || null, permission: req.permission });
 
@@ -941,6 +944,7 @@ function createMediaSectionRouter(cfg) {
       const viewer = viewerOf(req);
       if (!item || !canSeeCard(item, viewer)) return res.status(404).render("errors/404");
 
+      const ownerHere = isChannelOwner(req);
       const [broadcaster, thread, myRating, editor, myVote] = await Promise.all([
         profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
         discussion.threadPageLocals(req, res, channel, item),
@@ -975,9 +979,14 @@ function createMediaSectionRouter(cfg) {
           info,
           extras: cfg.cardExtras ? cfg.cardExtras(decorated) : null,
         },
-        myRating: myRating ? { value: myRating.value, counted: myRating.counted } : null,
-        // The owner has their own score; a rejected card is not rated.
-        canRate: Boolean(req.user) && permission !== 1 && suggestions.isRatable(item),
+        // The channel's owner rates with the same stars, but what they set is the streamer's score -
+        // whatever their level on the site (an owner who is also a site admin is level 0, not 1,
+        // and was being treated as a viewer). A rejected card is not rated.
+        myRating: ownerHere
+          ? item.ratings?.streamer ? { value: item.ratings.streamer, counted: true } : null
+          : myRating ? { value: myRating.value, counted: myRating.counted } : null,
+        rateAsStreamer: ownerHere,
+        canRate: Boolean(req.user) && (ownerHere || permission !== 1) && suggestions.isRatable(item),
         canEdit: editor,
         decisions: editor ? Object.keys(DECISIONS).filter((key) => DECISIONS[key].from.includes(item.status)) : [],
         decidedFlash: typeof req.query.decided === "string" ? req.query.decided : null,
@@ -1000,7 +1009,6 @@ function createMediaSectionRouter(cfg) {
 
       if (!item || !canSeeCard(item, viewerOf(req))) return fail(404, "not_found");
       if (!suggestions.isRatable(item)) return fail(400, "not_ratable");
-      if (req.permission === 1) return fail(403, "owner");
       if (!rateLimiterAllow(req.user.userId)) return fail(429, "rate_limited");
 
       // "clear" takes the viewer's own rating back - the star widget sends it when the star they
@@ -1008,6 +1016,25 @@ function createMediaSectionRouter(cfg) {
       const clearing = req.body.value === "clear";
       const parsed = clearing ? { value: null } : media.parseRating(req.body.value);
       if (!clearing && (parsed.error || parsed.value === null)) return fail(400, "rating_invalid");
+
+      // The streamer's stars set the streamer's score, the same field the edit form writes.
+      if (isChannelOwner(req)) {
+        await mediaItemsRepo.update(item._id, { "ratings.streamer": parsed.value });
+        // A viewer score they left while the page took them for a viewer leaves the average.
+        const stray = await mediaRatingsRepo.removeRating(item._id, req.user.userId);
+        if (stray) await mediaItemsRepo.incViewerRatings(item._id, media.viewerRatingDelta(stray, 0, false));
+        await logWrite(req, "streamerRating", item);
+        if (!wantsJson(req)) return res.redirect(back(clearing ? "cleared" : "ok"));
+        const fresh = await mediaItemsRepo.getById(item._id);
+        return res.json({
+          ok: true,
+          value: parsed.value,
+          counted: true,
+          streamer: parsed.value,
+          average: media.viewerAverage(fresh?.ratings?.viewers),
+          count: fresh?.ratings?.viewers?.count || 0,
+        });
+      }
 
       let counted = false;
       if (clearing) {

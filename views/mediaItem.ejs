@@ -16,6 +16,8 @@
   const csrf = user ? csrfToken : '';
   const base = '/' + channel.channelLogin + '/' + sec.path + '/' + item.id;
   const mine = myRating ? myRating.value : 0;
+  // The channel's streamer: these stars set the streamer's score (routes/mediaSection.js).
+  const asStreamer = typeof rateAsStreamer !== 'undefined' && rateAsStreamer;
   const badge = (() => {
     const p = item.progress;
     if (!p) return null;
@@ -157,7 +159,7 @@
         <dl class="mt-5 grid grid-cols-2 gap-2 sm:gap-3 max-w-xl">
           <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
             <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
-              <span class="grid place-items-center w-10 h-10 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-(--sec-accent) text-stone-950 shadow-lg shadow-(--sec-accent)/20' : 'bg-stone-800 text-stone-500' %>"><%= item.ratings.streamer || '—' %></span>
+              <span data-streamer-score class="grid place-items-center w-10 h-10 rounded-full text-lg font-black tabular-nums <%= item.ratings.streamer ? 'bg-(--sec-accent) text-stone-950 shadow-lg shadow-(--sec-accent)/20' : 'bg-stone-800 text-stone-500' %>"><%= item.ratings.streamer || '—' %></span>
             </dd>
             <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingStreamer') %><br /><span class="text-stone-500"><%= st('outOfTen') %></span></dt>
           </div>
@@ -178,12 +180,12 @@
                 has their own score and gets no plate at all. %>
             <details id="rating" data-rate-popover class="relative min-w-0"<%= ratingFlash ? ' open' : '' %>>
               <summary class="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0 hover:ring-(--sec-accent)/60 focus-visible:outline-2 focus-visible:outline-(--sec-accent)"
-                       title="<%= st('yourRating') %>">
+                       title="<%= st(asStreamer ? 'yourRatingStreamer' : 'yourRating') %>">
                 <span class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
                   <svg class="w-6 h-6 shrink-0 <%= mine ? 'text-(--sec-accent)' : 'text-stone-500' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-my-star><path d="<%= starPath %>"/></svg>
                   <span class="text-2xl font-extrabold tabular-nums <%= mine ? 'text-white' : 'text-stone-600' %>" data-star-readout><%= mine || '—' %></span>
                 </span>
-                <span class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('yourRating') %><br /><span class="text-stone-500"><%= st(mine ? 'outOfTen' : 'rateOpen') %></span></span>
+                <span class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st(asStreamer ? 'yourRatingStreamer' : 'yourRating') %><br /><span class="text-stone-500"><%= st(mine ? 'outOfTen' : 'rateOpen') %></span></span>
               </summary>
               <div data-rate-panel class="absolute z-30 left-0 top-full mt-2 w-max max-w-[calc(100vw-2rem)] rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/10 shadow-2xl shadow-black/60 p-3">
             <% if (!user) { %>
@@ -214,9 +216,9 @@
                 </div>
               </form>
               <p class="mt-2 w-0 min-w-full text-xs leading-snug text-stone-400" data-rate-note
-                 data-note-counted="<%= st('rateCounted') %>" data-note-not-counted="<%= st('rateNotCounted') %>"
-                 data-note-cleared="<%= st('rateCleared') %>" data-note-error="<%= st('rateError') %>">
-                <% if (ratingFlash === 'cleared') { %><%= st('rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= st('rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= st('rateCounted') %><% } else if (ratingFlash) { %><%= st('rateError') %><% } else { %><%= st('rateHint') %><% } %>
+                 data-note-counted="<%= st(asStreamer ? 'rateStreamerSaved' : 'rateCounted') %>" data-note-not-counted="<%= st('rateNotCounted') %>"
+                 data-note-cleared="<%= st(asStreamer ? 'rateStreamerCleared' : 'rateCleared') %>" data-note-error="<%= st('rateError') %>">
+                <% if (ratingFlash === 'cleared') { %><%= st(asStreamer ? 'rateStreamerCleared' : 'rateCleared') %><% } else if (ratingFlash === 'not_counted' || (myRating && !myRating.counted)) { %><%= st('rateNotCounted') %><% } else if (ratingFlash === 'ok' || myRating) { %><%= st(asStreamer ? 'rateStreamerSaved' : 'rateCounted') %><% } else if (ratingFlash) { %><%= st('rateError') %><% } else { %><%= st(asStreamer ? 'rateStreamerHint' : 'rateHint') %><% } %>
               </p>
             <% } %>
               </div>

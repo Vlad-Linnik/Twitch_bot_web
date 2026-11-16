@@ -1161,7 +1161,11 @@
     "externalPending": "not loaded yet",
     "filterGenresGroup": "Genres",
     "filterTagsGroup": "Tags",
-    "ratingExternalShikimori": "Shikimori score"
+    "ratingExternalShikimori": "Shikimori score",
+    "yourRatingStreamer": "Your score as the streamer",
+    "rateStreamerSaved": "Saved as the streamer’s score.",
+    "rateStreamerCleared": "Streamer score removed.",
+    "rateStreamerHint": "1 to 10 — this is the streamer’s score, kept apart from the viewers’. Click your star again to remove it."
   },
   "gamesStream": {
     "titleSuffix": "games",
@@ -1510,7 +1514,8 @@
       "removePoster": "Cover removed",
       "connect": "Connected",
       "disconnect": "Disconnected",
-      "regenerate": "New links"
+      "regenerate": "New links",
+      "streamerRating": "Streamer score changed"
     },
     "colChanges": "What changed",
     "rawDetails": "Raw data",
@@ -2478,7 +2483,8 @@
         "reopen": "Suggestion reopened",
         "approvePoster": "Cover approved",
         "removePoster": "Cover removed",
-        "steamSync": "Steam reviews refreshed by hand"
+        "steamSync": "Steam reviews refreshed by hand",
+        "streamerRating": "Streamer score changed"
       },
       "mediaComment": {
         "delete": "Comment under a card deleted",

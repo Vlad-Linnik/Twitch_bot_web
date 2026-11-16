@@ -82,6 +82,7 @@
   const myStar = document.querySelector("[data-my-star]");
   const note = document.querySelector("[data-rate-note]");
   const averageEl = document.querySelector("[data-viewer-average]");
+  const streamerEl = document.querySelector("[data-streamer-score]");
   const averageStar = document.querySelector("[data-viewer-star]");
   const countEl = document.querySelector("[data-viewer-count]");
   const fill = (template, n) => template.replace("{{n}}", String(n));
@@ -161,6 +162,13 @@
       current = clearing ? 0 : data.value;
       sync();
       submitter.focus();
+      // The streamer's own stars set the streamer's plate.
+      if (streamerEl && "streamer" in data) {
+        const has = Boolean(data.streamer);
+        streamerEl.textContent = has ? String(data.streamer) : "—";
+        for (const c of ["bg-(--sec-accent)", "text-stone-950", "shadow-lg", "shadow-(--sec-accent)/20"]) streamerEl.classList.toggle(c, has);
+        for (const c of ["bg-stone-800", "text-stone-500"]) streamerEl.classList.toggle(c, !has);
+      }
       if (averageEl) {
         const has = data.average !== null && data.average !== undefined;
         averageEl.textContent = has ? data.average.toFixed(1) : "—";
