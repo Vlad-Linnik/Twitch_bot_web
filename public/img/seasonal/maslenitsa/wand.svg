@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-<g stroke-linecap="round">
-<line x1="10" y1="10" x2="29" y2="29" stroke="#0b0b10" stroke-width="5.5"/>
-<line x1="10" y1="10" x2="29" y2="29" stroke="#7a4a22" stroke-width="3.2"/>
-<line x1="25" y1="25" x2="29" y2="29" stroke="#f4f1ff" stroke-width="3.2"/>
-</g>
-<ellipse cx="6" cy="6.2" rx="5.6" ry="4.4" fill="#e9a93f" stroke="#0b0b10" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="6" cy="5.8" rx="3.6" ry="2.6" fill="#f6c862"/><rect x="4.6" y="4.2" width="2.8" height="2.2" rx="0.4" fill="#fff4b8" stroke="#c99a2e" stroke-width="0.5"/>
-</svg>

@@ -18,7 +18,8 @@
   // In the grid the row spans the tile and the pills stay compact: two columns on a 375 px phone
   // leave a tile ~156 px wide, where the full "▲ Promote" + "Not now" pair overflowed or wrapped.
   // So the grid's promote pill shows only ▲ (its words stay in aria-label and title); the card page
-  // shows both labels in full.
+  // shows the promote label in full. "Not now" is a bare ▼ everywhere; its words live in aria-label
+  // and title.
   const pill = big ? 'px-3.5 py-1.5 text-sm' : 'px-2 py-1 text-[11px]';
   const row = big ? 'inline-flex items-center gap-1.5' : 'flex w-full items-center justify-between gap-1';
   const signed = card.score > 0 ? '+' + card.score : String(card.score);
@@ -39,10 +40,11 @@
           title="<%= st('vote.scoreHint') %>"><%= signed %></span>
     <button type="submit" name="value" value="<%= card.myVote === -1 ? 'clear' : '-1' %>" data-vote="-1"
             aria-pressed="<%= card.myVote === -1 ? 'true' : 'false' %>" title="<%= st(card.myVote === -1 ? 'vote.notNowUndo' : 'vote.notNow') %>"
+            aria-label="<%= st('vote.notNowShort') %>"
             class="<%= pill %> inline-flex items-center whitespace-nowrap rounded-full font-semibold transition-colors border
                    border-slate-500/60 text-slate-300 hover:bg-slate-500/15
                    aria-pressed:bg-slate-500 aria-pressed:border-slate-500 aria-pressed:text-white">
-      <%= st('vote.notNowShort') %>
+      <span aria-hidden="true">▼</span>
     </button>
   </form>
 <% } else { %>

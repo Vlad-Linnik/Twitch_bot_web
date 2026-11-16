@@ -37,17 +37,9 @@
         "name": "Valentine's Day",
         "motionHint": "hearts in the background and behind the cursor"
       },
-      "maslenitsa": {
-        "name": "Maslenitsa",
-        "motionHint": "the last snow and bonfire sparks behind the cursor"
-      },
       "aprilfools": {
         "name": "April Fools' Day",
         "motionHint": "balloons, confetti and clowns peeking in"
-      },
-      "cosmonautics": {
-        "name": "Cosmonautics Day",
-        "motionHint": "twinkling stars, a rocket and a trail of stars"
       },
       "march8": {
         "name": "Women's Day (March 8)",

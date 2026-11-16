@@ -365,96 +365,6 @@
     };
   }
 
-  // Twinkling stars and, now and then, a shooting star.
-  function createStarfield() {
-    const host = document.querySelector(".season-backdrop");
-    if (!host) return null;
-    let canvas = null;
-    let ctx = null;
-    let w = 0;
-    let h = 0;
-    let stars = [];
-    let meteor = null;
-    let nextMeteor = 0;
-    let raf = 0;
-    let last = 0;
-
-    function seed() {
-      const count = Math.max(40, Math.min(160, Math.round((w * h) / 9000)));
-      stars = Array.from({ length: count }, () => ({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        r: 0.5 + Math.random() * 1.3,
-        phase: Math.random() * Math.PI * 2,
-        rate: 0.6 + Math.random() * 2,
-      }));
-    }
-
-    function frame(t) {
-      raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.05, (t - (last || t)) / 1000);
-      last = t;
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#fff7e0";
-      for (const s of stars) {
-        s.phase += dt * s.rate;
-        ctx.globalAlpha = 0.15 + 0.55 * (0.5 + 0.5 * Math.sin(s.phase));
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if (!meteor && t > nextMeteor) {
-        meteor = { x: Math.random() * w * 0.7 + w * 0.2, y: Math.random() * h * 0.3, life: 0 };
-      }
-      if (meteor) {
-        meteor.life += dt;
-        const k = meteor.life / 0.9;
-        const x = meteor.x - k * 260;
-        const y = meteor.y + k * 150;
-        const grad = ctx.createLinearGradient(x, y, x + 90, y - 52);
-        grad.addColorStop(0, "rgba(255,255,255,0.9)");
-        grad.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.globalAlpha = Math.max(0, 1 - k);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + 90, y - 52);
-        ctx.stroke();
-        if (k >= 1) {
-          meteor = null;
-          nextMeteor = t + 5000 + Math.random() * 9000;
-        }
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    function resize() {
-      if (!canvas) return;
-      ({ ctx, w, h } = fitCanvas(canvas));
-      seed();
-    }
-
-    return {
-      start() {
-        if (canvas) return;
-        canvas = makeCanvas("season-snowfall", host);
-        resize();
-        last = 0;
-        nextMeteor = performance.now() + 3000;
-        raf = requestAnimationFrame(frame);
-      },
-      stop() {
-        if (!canvas) return;
-        cancelAnimationFrame(raf);
-        canvas.remove();
-        canvas = null;
-        meteor = null;
-      },
-      resize,
-    };
-  }
-
   // A clown slides in from a screen edge, hangs about for a moment and ducks back out. Every
   // 12-30 s, one at a time, from the bottom, left or right edge - never the top, where the bar is.
   function createClownPops() {
@@ -746,14 +656,6 @@
       }),
       pointer: () => createTrail({ sprites: ["#ff4d7d", "#ff9db8", "#e8174f"].map((c) => shapeSprite(16, "heart", c)) }),
     },
-    maslenitsa: {
-      background: createSnowfall,
-      pointer: () => createTrail({
-        sprites: [emberSprite(16, "255,170,40"), emberSprite(16, "255,110,30"), emberSprite(16, "255,220,120")],
-        gravity: -30,
-        rise: true,
-      }),
-    },
     aprilfools: {
       background: () => createDrift({
         sprites: () => CONFETTI.map((c) => balloonSprite(48, c)),
@@ -762,13 +664,6 @@
       pointer: () => createTrail({ sprites: CONFETTI.map((c) => confettiSprite(16, c)), gravity: 120, burstOnClick: 18 }),
       extra: createClownPops,
       decor: createClownLabels,
-    },
-    cosmonautics: {
-      background: createStarfield,
-      pointer: () => createTrail({
-        sprites: [shapeSprite(16, "star", "#ffe680"), shapeSprite(16, "star", "#ffffff"), emberSprite(16, "160,200,255")],
-        gravity: 0,
-      }),
     },
     march8: {
       background: () => createDrift({
