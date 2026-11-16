@@ -3341,5 +3341,19 @@
       "views": "views",
       "meta": "{{name}} · {{date}}"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet.",
+    "markAllRead": "Mark all as read",
+    "viewAll": "All notifications",
+    "unreadMark": "Unread",
+    "replyHeadline": "{{name}} replied to your comment",
+    "where": "{{section}} · “{{title}}” · {{channel}}",
+    "sections": {
+      "news": "News",
+      "movies": "Movies",
+      "games": "Games"
+    }
   }
 }

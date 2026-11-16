@@ -34,6 +34,7 @@ const mediaItemsRepo = require("../db/mediaItemsRepo");
 const mediaRatingsRepo = require("../db/mediaRatingsRepo");
 const mediaSuggestionVotesRepo = require("../db/mediaSuggestionVotesRepo");
 const mediaThreads = require("../db/mediaThreads");
+const notificationsRepo = require("../db/notificationsRepo");
 const chatPresenceRepo = require("../db/chatPresenceRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -713,6 +714,7 @@ function createMediaSectionRouter(cfg) {
           mediaRatingsRepo.deleteAllFor(item._id),
           mediaSuggestionVotesRepo.deleteAllFor(item._id),
           mediaThreads.deleteAllFor(item._id),
+          notificationsRepo.removeForItem(SECTION, item._id),
           deletePoster(item.poster),
         ]);
         await logWrite(req, "delete", item);

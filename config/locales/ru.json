@@ -3341,5 +3341,19 @@
       "views": "просмотров",
       "meta": "{{name}} · {{date}}"
     }
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "empty": "Уведомлений пока нет.",
+    "markAllRead": "Отметить все прочитанными",
+    "viewAll": "Все уведомления",
+    "unreadMark": "Не прочитано",
+    "replyHeadline": "{{name}}: ответ на ваш комментарий",
+    "where": "{{section}} · «{{title}}» · {{channel}}",
+    "sections": {
+      "news": "Новости",
+      "movies": "Фильмы",
+      "games": "Игры"
+    }
   }
 }

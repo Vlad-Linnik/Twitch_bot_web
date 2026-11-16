@@ -23,6 +23,7 @@ const commentBansRepo = require("../db/newsCommentBansRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const profileCacheRepo = require("../db/profileCacheRepo");
+const notificationsRepo = require("../db/notificationsRepo");
 const emoteImages = require("../twitch/emoteImages");
 const requireLogin = require("../middleware/requireLogin");
 const { verifyToken } = require("../middleware/csrf");
@@ -41,6 +42,7 @@ const {
   buildCommentTree,
 } = require("../lib/commentValidation");
 const { renderCommentBody, buildEmoteLookup } = require("../lib/commentEmotes");
+const { buildReplyNotification, revealRootCount } = require("../lib/notifications");
 
 // Root-level threads per page - pagination is on ROOTS, see loadCommentTree.
 const COMMENTS_PAGE_SIZE = 20;
@@ -179,11 +181,14 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
       // box's autocomplete needs the same list the server rendered with.
       emoteImages.getEmoteImageMap(channel.channelId, channel.channelLogin).catch(() => new Map()),
     ]);
+    // A notification's link (?comment=<id>) may point into a thread past the first page: render
+    // through that thread so the link's #hash has something to land on.
+    const shown = revealRootCount(commentTree, typeof req.query.comment === "string" ? req.query.comment : null, COMMENTS_PAGE_SIZE);
     return {
       ...threadLocals(req, res, channel, item, commentSort),
-      commentTree: commentTree.slice(0, COMMENTS_PAGE_SIZE),
-      hasMoreComments: commentTree.length > COMMENTS_PAGE_SIZE,
-      nextCommentOffset: COMMENTS_PAGE_SIZE,
+      commentTree: commentTree.slice(0, shown),
+      hasMoreComments: commentTree.length > shown,
+      nextCommentOffset: shown,
       emoteList: [...emoteMap].filter(([, url]) => url).map(([name, url]) => ({ name, url })),
       isRestricted,
       restrictedUsers,
@@ -256,8 +261,9 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
 
       let parentId = null;
       let depth = 0;
+      let parent = null;
       if (req.body.parentId) {
-        const parent = await store.getComment(req.body.parentId);
+        parent = await store.getComment(req.body.parentId);
         // A tampered parentId must not attach a reply to another item's thread.
         if (!parent || store.itemIdOf(parent) !== String(item._id)) return fail(400, "invalid_parent");
         if (parent.depth + 1 > MAX_DEPTH) return fail(400, "too_deep");
@@ -275,6 +281,23 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
         authorDisplayName: req.user.displayName || req.user.login,
         body,
       });
+
+      // Tell the parent's author (lib/notifications.js decides whether there is anyone to tell).
+      // Not awaited into the response's fate: a failed notice must not turn a saved reply into an
+      // error page the author would answer by posting it again.
+      if (parent) {
+        const notice = buildReplyNotification({
+          parent,
+          reply: created,
+          section,
+          channelLogin: channel.channelLogin,
+          item,
+          threadBase,
+        });
+        if (notice) {
+          notificationsRepo.create(notice).catch((err) => console.error("[discussion] reply notification failed:", err.message));
+        }
+      }
 
       // No JS: back to the new comment's anchor (reliable for a reply and for "Newest"; for a new
       // root under "Top"/"Oldest" it may sit past the first page and the browser just stays put).
@@ -336,7 +359,11 @@ function createDiscussionRoutes({ section, store, getItem, adminActionPrefix, is
       const comment = await store.getComment(req.params.commentId);
       if (comment && comment.channelLogin === channel.channelLogin) {
         const removed = await store.removeComment(comment._id, req.user.userId);
-        if (removed) await logModeration(req, channel, { action: "delete", target: String(comment._id), details: comment.authorLogin });
+        if (removed) {
+          // The notice quotes the reply - it must not outlive the moderation.
+          await notificationsRepo.removeForComment(comment._id);
+          await logModeration(req, channel, { action: "delete", target: String(comment._id), details: comment.authorLogin });
+        }
       }
       res.redirect(backTo(req, channel, `comment-${req.params.commentId}`));
     } catch (err) {

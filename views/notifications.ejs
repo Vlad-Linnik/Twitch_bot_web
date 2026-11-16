@@ -1,0 +1,43 @@
+<%- include('partials/head', { title: t('notifications.title') }) %>
+<%- include('partials/nav') %>
+
+<main class="pt-14 max-w-2xl mx-auto px-4 sm:px-6 py-16">
+  <div class="flex items-center justify-between gap-4 mb-8">
+    <h1 class="text-3xl font-bold text-neutral-100"><%= t('notifications.title') %></h1>
+    <% if (notifications.some(function (n) { return !n.read; })) { %>
+      <form method="post" action="/notifications/read-all">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="text-sm text-purple-400 hover:text-purple-300"><%= t('notifications.markAllRead') %></button>
+      </form>
+    <% } %>
+  </div>
+
+  <% if (!notifications.length) { %>
+    <p class="text-neutral-500"><%= t('notifications.empty') %></p>
+  <% } else { %>
+    <%# Each row is a form: opening a notice marks it read, which is a write - a POST, so a link
+        prefetch can never mark anything. Works the same with and without JS. %>
+    <ul class="space-y-2">
+      <% notifications.forEach(function (n) { %>
+        <li>
+          <form method="post" action="/notifications/<%= n.id %>/open">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <button type="submit" class="w-full text-left rounded-lg border px-4 py-3 transition-colors <%= n.read ? 'border-neutral-800 bg-neutral-900/40 hover:bg-neutral-900' : 'border-purple-500/30 bg-purple-500/5 hover:bg-purple-500/10' %>">
+              <span class="flex items-start gap-3">
+                <span class="min-w-0 flex-1">
+                  <span class="block <%= n.read ? 'text-neutral-300' : 'text-neutral-100 font-medium' %>"><%= n.headline %></span>
+                  <span class="block text-xs text-neutral-500 truncate"><%= n.where %></span>
+                  <% if (n.excerpt) { %><span class="block mt-1 text-sm text-neutral-400 break-words"><%= n.excerpt %></span><% } %>
+                  <time data-notif-time datetime="<%= n.createdAt %>" class="block mt-1 text-xs text-neutral-600"><%= new Date(n.createdAt).toISOString().slice(0, 16).replace('T', ' ') %></time>
+                </span>
+                <% if (!n.read) { %><span class="mt-2 w-2 h-2 rounded-full bg-purple-500 shrink-0" title="<%= t('notifications.unreadMark') %>"></span><% } %>
+              </span>
+            </button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>
