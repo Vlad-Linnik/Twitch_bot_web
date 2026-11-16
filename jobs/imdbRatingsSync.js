@@ -7,9 +7,30 @@
 //
 // One run at a time: an admin's "run now" while the timer's run is in flight joins it instead of
 // starting a second download.
+//
+// After IMDb, the same run asks Shikimori about the anime cards IMDb left without a rating
+// (lib/shikimoriRatings.js) - a title missing from IMDb, or a card picked in the Shikimori tab with
+// no IMDb id at all. An IMDb rating always wins: those cards are never asked.
 const { connectWeb } = require("../db/connection");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
 const { fetchImdbRatings } = require("../lib/imdbRatings");
+const { fetchShikimoriRatings } = require("../lib/shikimoriRatings");
+
+// The Shikimori half; its failure is logged and does not fail the IMDb half.
+async function syncShikimori(startedAt) {
+  try {
+    const ids = await mediaItemsRepo.shikimoriIdsWithoutImdb();
+    const { found, blocked } = await fetchShikimoriRatings(ids);
+    const modified = await mediaItemsRepo.setExternalRatings("shikimori", "external.shikimoriId", found, startedAt, {
+      kind: "movie",
+      "ratings.external.source": { $ne: "imdb" },
+    });
+    return { wanted: ids.length, found: found.size, modified, error: blocked ? "blocked" : null };
+  } catch (err) {
+    console.error("[imdbRatingsSync] shikimori failed:", err.message);
+    return { error: err.message };
+  }
+}
 
 const RUN_EVERY_MS = 24 * 60 * 60 * 1000;
 // Not in the first minutes after boot: a deploy restarts the process, and the site's own start-up
@@ -49,7 +70,9 @@ async function runOnce() {
       const ids = await mediaItemsRepo.distinctImdbIds();
       const { found, lines } = await fetchImdbRatings(new Set(ids));
       const modified = await mediaItemsRepo.setImdbRatings(found, startedAt);
+      const shikimori = await syncShikimori(startedAt);
       const status = {
+        shikimori,
         lastRunAt: startedAt,
         ok: true,
         wanted: ids.length,

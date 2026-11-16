@@ -194,19 +194,39 @@
 
     <div>
       <span class="block text-xs text-neutral-500 mb-1"><%= st('form.poster') %></span>
+      <%# The cover and its crop (public/js/poster-crop.js): the frame has the tile's proportions and
+          shows exactly what the grid will. Drag to pick the part on show, wheel or slider to zoom. A
+          newly chosen file is previewed here before saving and cropped the same way. posterCrop
+          starts disabled: without JS it is never sent, so a no-JS save keeps the crop as it was and
+          never lays the old rectangle over a new file. %>
+      <div data-poster-crop data-aspect="<%= posterAspect %>" class="mb-3 flex flex-wrap items-start gap-4">
+        <div data-crop-frame<%= posterUrl ? '' : ' hidden' %> title="<%= st('form.cropHint') %>"
+             class="relative w-40 shrink-0 overflow-hidden rounded-md border border-neutral-700 bg-neutral-900 select-none touch-none"
+             style="aspect-ratio: <%= posterAspect %>">
+          <img data-crop-img src="<%= posterUrl || '' %>" alt="" draggable="false" class="absolute inset-0 w-full h-full object-cover" />
+        </div>
+        <div data-crop-controls hidden class="flex flex-col gap-2 text-xs text-neutral-400 min-w-[10rem]">
+          <span><%= st('form.cropHint') %></span>
+          <label class="flex items-center gap-2">
+            <span><%= st('form.cropZoom') %></span>
+            <input type="range" data-crop-zoom min="1" max="4" step="0.01" value="1" class="accent-purple-600 w-28" />
+          </label>
+          <button type="button" data-crop-reset class="self-start px-2.5 py-1 rounded-md border border-neutral-700 text-neutral-300 hover:border-neutral-500"><%= st('form.cropReset') %></button>
+        </div>
+        <input type="hidden" name="posterCrop" value="<%= posterCrop %>" data-crop-input disabled />
+      </div>
       <% if (posterUrl) { %>
-        <img src="<%= posterUrl %>" alt="" class="mb-2 h-40 rounded-md border border-neutral-800" />
         <p class="text-xs text-neutral-600 mb-2"><%= st('form.posterKeep') %></p>
         <% if (typeof canRestorePoster !== 'undefined' && canRestorePoster) { %>
           <%# The cover is a hand upload: this puts back the one the card's source has (routes/mediaSection.js's readForm). %>
           <label class="mb-3 flex items-center gap-2 text-sm text-neutral-300">
-            <input type="checkbox" name="posterRestore" value="1" class="accent-purple-600" />
+            <input type="checkbox" name="posterRestore" value="1" data-crop-restore class="accent-purple-600" />
             <%= st('form.posterRestore') %>
           </label>
         <% } %>
       <% } %>
       <% if (suggesting) { %><p class="text-xs text-neutral-600 mb-2"><%= st('suggest.coverHint') %></p><% } %>
-      <input type="file" name="poster" accept="<%= suggesting ? 'image/jpeg,image/png,image/webp' : 'image/*' %>"
+      <input type="file" name="poster" data-crop-file accept="<%= suggesting ? 'image/jpeg,image/png,image/webp' : 'image/*' %>"
              class="w-full text-sm text-neutral-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:text-neutral-300 file:text-xs" />
       <label class="mt-3 flex items-center gap-2 text-sm text-neutral-300">
         <input type="checkbox" name="nsfw" value="1" data-nsfw-checkbox class="accent-purple-600"<%= nsfwChecked ? ' checked' : '' %> />
@@ -245,6 +265,7 @@
 </main>
 
 <script src="<%= asset('/js/media-form.js') %>" defer></script>
+<script src="<%= asset('/js/poster-crop.js') %>" defer></script>
 <script src="<%= asset('/js/media-lookup.js') %>" defer></script>
 
 <%- include('partials/foot') %>

@@ -10,8 +10,29 @@
 //       * re-clicking your own score takes it back;
 //       * the post goes by fetch and the average, the count, the stars and the note are patched in
 //         place.
+//   - "← all films": when this page was opened from the grid, the link goes BACK in history rather
+//     than to a fresh grid, so the visitor lands where they were - same scroll, same filters, same
+//     cards loaded on scroll (bfcache, or public/js/infinite-list.js's restore on a back_forward
+//     load). Opened any other way (a shared link, a new tab) it stays a plain link.
 // Plain script sharing the page's global scope: everything stays inside the IIFE.
 (() => {
+  const backLink = document.querySelector("[data-back-to-grid]");
+  if (backLink) {
+    backLink.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      let from = null;
+      try {
+        from = document.referrer ? new URL(document.referrer) : null;
+      } catch {
+        from = null;
+      }
+      if (!from || from.origin !== location.origin || from.pathname !== backLink.pathname || history.length < 2) return;
+      event.preventDefault();
+      // The slide direction comes from the traversal itself (views/partials/head.ejs).
+      history.back();
+    });
+  }
+
   for (const button of document.querySelectorAll("[data-nsfw-reveal]")) {
     const img = button.parentElement.querySelector("[data-nsfw-poster]");
     if (!img) continue;

@@ -27,8 +27,10 @@
       <div data-vt-name="media-poster" class="relative aspect-(--sec-aspect) rounded-(--sec-radius) overflow-hidden bg-(--sec-surface) shadow-lg shadow-black/40 ring-1 ring-white/5
                   transition duration-200 group-hover:-translate-y-1 group-hover:ring-(--sec-accent)/70 group-hover:shadow-(--sec-accent)/10">
         <% if (card.posterUrl) { %>
+          <%# posterStyle: the cover's crop (lib/posterCrop.js's posterCropStyle), else the middle. %>
           <img src="<%= card.posterUrl %>" alt="" loading="lazy" decoding="async"
-               class="absolute inset-0 w-full h-full object-cover<%= card.nsfw ? ' scale-110' : '' %>" />
+               class="absolute <%= card.posterStyle ? '' : 'inset-0 w-full h-full object-cover' %><%= card.nsfw ? ' scale-110' : '' %>"
+               <% if (card.posterStyle) { %>style="<%= card.posterStyle %>"<% } %> />
         <% } else { %>
           <span class="absolute inset-0 grid place-items-center bg-gradient-to-br from-stone-800 to-stone-950 text-4xl text-stone-700" aria-hidden="true">🎞</span>
         <% } %>

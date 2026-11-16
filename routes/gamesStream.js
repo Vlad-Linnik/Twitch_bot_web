@@ -51,6 +51,8 @@ module.exports = createMediaSectionRouter({
     attribution: "games",
     defaultMediaType: null,
     posterSource: "steam",
+    // = --sec-aspect of the games theme (public/css/input.css); the cover crop is kept to it.
+    posterAspect: 3 / 4,
     fields: { mediaType: false, progress: false, imdbId: false, gameState: true, steam: true, twitchCategory: true },
   },
   parseForm: (body, opts) => media.parseMediaForm(body, { ...opts, kind: "game" }),

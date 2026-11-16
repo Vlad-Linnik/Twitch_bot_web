@@ -60,7 +60,10 @@ function createApp(sessionMiddleware) {
           // + the poster sources, for the previews in a movie card's search dropdown only - a saved
           // card shows its own copy from /uploads (lib/mediaImageHosts.js).
           // + YouTube thumbnails, for the donation media queue panel (public/js/donation-media-panel.js).
-          "img-src": [...new Set([...IMG_SRC_DIRECTIVE, ...MEDIA_IMAGE_ORIGINS, "https://i.ytimg.com"])],
+          // + blob:, the preview of a cover chosen in the card form before it is uploaded
+          //   (public/js/poster-crop.js) - a URL.createObjectURL of the visitor's own file, which no
+          //   other origin can mint.
+          "img-src": [...new Set([...IMG_SRC_DIRECTIVE, ...MEDIA_IMAGE_ORIGINS, "https://i.ytimg.com", "blob:"])],
           "script-src": ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
           // Twitch's clip player, for the year recap's loud moments (public/js/recap-moments.js).
           // 'self' keeps what frames already fell back to under default-src.

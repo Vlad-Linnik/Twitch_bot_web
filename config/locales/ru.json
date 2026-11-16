@@ -967,7 +967,7 @@
       "added": "Недавно добавленные",
       "streamer": "Оценка стримера",
       "viewers": "Оценка зрителей",
-      "imdb": "Рейтинг IMDb",
+      "imdb": "Рейтинг IMDb / Shikimori",
       "score": "По голосам",
       "comments": "По комментариям"
     },
@@ -1059,7 +1059,10 @@
         "rate_limited": "Слишком часто — попробуйте чуть позже.",
         "poster_restore_failed": "Не удалось загрузить автоматическую обложку — источник не ответил. Текущая обложка осталась."
       },
-      "posterRestore": "Вернуть автоматическую обложку (из источника карточки)"
+      "posterRestore": "Вернуть автоматическую обложку (из источника карточки)",
+      "cropHint": "Перетащите картинку, чтобы выбрать видимую часть; колесо мыши или ползунок — масштаб.",
+      "cropZoom": "Масштаб",
+      "cropReset": "По центру"
     },
     "lookup": {
       "heading": "Найти и заполнить",
@@ -1157,7 +1160,8 @@
     "filterGenreAll": "Все жанры",
     "externalPending": "ещё не загружен",
     "filterGenresGroup": "Жанры",
-    "filterTagsGroup": "Метки"
+    "filterTagsGroup": "Метки",
+    "ratingExternalShikimori": "Оценка на Shikimori"
   },
   "gamesStream": {
     "titleSuffix": "игры",

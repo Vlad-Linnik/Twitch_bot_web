@@ -4,6 +4,7 @@
 //     anime (lib/mediaSources/);
 //   - the form's own fields: type (film / series / anime), how much was watched, the IMDb id;
 //   - the outside rating: IMDb's, from the official dataset once a day (jobs/imdbRatingsSync.js);
+//     for an anime IMDb does not rate, Shikimori's own users' score from the same pass;
 //   - the look: warm black with gold (the "movies" theme in public/css/input.css).
 const media = require("../lib/mediaValidation");
 const suggestions = require("../lib/mediaSuggestions");
@@ -34,6 +35,8 @@ module.exports = createMediaSectionRouter({
     theme: "movies",
     attribution: "movies",
     defaultMediaType: "film",
+    // = --sec-aspect of the movies theme (public/css/input.css); the cover crop is kept to it.
+    posterAspect: 2 / 3,
     fields: { mediaType: true, progress: true, imdbId: true, gameState: false, steam: false, twitchCategory: false },
   },
   parseForm: (body, opts) => media.parseMediaForm(body, opts),
@@ -44,10 +47,10 @@ module.exports = createMediaSectionRouter({
   infoRef: (item) => infoRefOf(item.external),
   // Where the automatic cover comes from - the same source ids.
   sourceRef: (item) => infoRefOf(item.external),
-  // A card with an IMDb id but no rating yet: ask for an early dataset pass instead of leaving
-  // it at "—" until the nightly one.
+  // A card with an IMDb or Shikimori id but no rating yet: ask for an early pass instead of
+  // leaving it at "—" until the nightly one (the same run does both).
   afterSave(item) {
-    if (item?.external?.imdbId && !item.ratings?.external) imdbRatingsSync.requestSoon();
+    if ((item?.external?.imdbId || item?.external?.shikimoriId) && !item.ratings?.external) imdbRatingsSync.requestSoon();
   },
   editSet(value, item, picked) {
     const set = { "external.imdbId": value.imdbId };
@@ -60,6 +63,10 @@ module.exports = createMediaSectionRouter({
       set["external.tmdbId"] = ids.tmdbId ?? null;
       set["external.tmdbType"] = ids.tmdbType ?? null;
       set["external.shikimoriId"] = ids.shikimoriId ?? null;
+      // Likewise a Shikimori score of another anime.
+      if (item.ratings?.external?.source === "shikimori" && (ids.shikimoriId ?? null) !== (item.external?.shikimoriId ?? null)) {
+        set["ratings.external"] = null;
+      }
     }
     return set;
   },

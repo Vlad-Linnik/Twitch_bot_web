@@ -48,6 +48,7 @@ const { buildChannelNav } = require("../lib/channelNav");
 const { COMMENT_SORT_MODES } = require("../lib/commentValidation");
 const media = require("../lib/mediaValidation");
 const { savePoster, deletePoster, gridPosterUrl, isPosterVisible } = require("../lib/mediaImage");
+const { parseCrop, normalizeCrop, posterCropStyle } = require("../lib/posterCrop");
 const suggestions = require("../lib/mediaSuggestions");
 const imageGuard = require("../lib/userImageGuard");
 const { sanitizeReturnTo } = require("../lib/returnTo");
@@ -283,6 +284,7 @@ function createMediaSectionRouter(cfg) {
       status: item.status,
       nsfw: item.nsfw,
       posterUrl: poster ? gridPosterUrl({ ...item, poster }) : null,
+      posterStyle: poster ? posterCropStyle(poster.crop) : "",
       // Shown to the author and 0-2 only (the only ones who can see a pending cover at all).
       posterPending: Boolean(poster && poster.approved === false),
       progress: media.progressBadge(item.progress),
@@ -490,6 +492,8 @@ function createMediaSectionRouter(cfg) {
       noteMax: suggestions.NOTE_MAX,
       ...extras,
       posterUrl: item?.poster?.url || null,
+      posterCrop: item?.poster?.crop ? [item.poster.crop.x, item.poster.crop.y, item.poster.crop.w, item.poster.crop.h].join(",") : "",
+      posterAspect: POSTER_ASPECT,
       canRestorePoster: mode === "edit" && canRestorePoster(item),
       lookupSources: mediaSources.describe(),
       lookupUrl: `/${req.channel.channelLogin}/${SECTION}/lookup.json`,
@@ -541,18 +545,35 @@ function createMediaSectionRouter(cfg) {
       if (!poster) errors.push("poster_restore_failed");
     } else if (errors.length === 0 && req.file) {
       try {
-        poster = await savePoster(req.file.buffer);
+        poster = withCrop(await savePoster(req.file.buffer), req.body);
       } catch {
         errors.push("poster_invalid");
       }
     } else if (errors.length === 0 && (!item || picked || !item.poster || (cfg.posterOutdated && cfg.posterOutdated(value, item)))) {
       poster = await downloadSourcePoster(value, picked);
     }
-    return { errors, value, poster, picked };
+    // The crop of the cover the card keeps (no new file, nothing downloaded): `undefined` when the
+    // form did not carry the field at all (no JS) - leave it as it is; null - back to the middle.
+    let keptCrop;
+    if (!poster && item?.poster && Object.prototype.hasOwnProperty.call(req.body, "posterCrop")) {
+      keptCrop = normalizeCrop(parseCrop(req.body.posterCrop), item.poster, POSTER_ASPECT);
+    }
+    return { errors, value, poster, picked, keptCrop };
+  }
+
+  // A freshly uploaded cover with the crop the form drew on that same file. A cover downloaded from
+  // a source never gets one - the form's rectangle was drawn on another picture.
+  function withCrop(poster, body) {
+    const crop = normalizeCrop(parseCrop(body.posterCrop), poster, POSTER_ASPECT);
+    return crop ? { ...poster, crop } : poster;
   }
 
   // The search-source ref a saved card's cover came from (cfg.sourceRef: TMDB/Shikimori for a film,
   // the Twitch category for a game), or null.
+  // The frame a cover is shown in: width / height (2/3 a film poster, 3/4 a game's box art) - the
+  // section theme's --sec-aspect, which the crop rectangle has to match.
+  const POSTER_ASPECT = cfg.view.posterAspect || 2 / 3;
+
   const sourceRefOf = (item) => (cfg.sourceRef ? cfg.sourceRef(item) : null);
   // Whether "bring back the automatic cover" can work for this card: its cover is a hand upload and
   // there is somewhere to get the automatic one from (a source ref, or the section's own ids - a
@@ -632,7 +653,7 @@ function createMediaSectionRouter(cfg) {
       const item = await loadCard(req);
       if (!item) return res.status(404).render("errors/404");
 
-      const { errors, value, poster, picked } = await readForm(req, { allowedStatuses: editStatusesFor(item), item });
+      const { errors, value, poster, picked, keptCrop } = await readForm(req, { allowedStatuses: editStatusesFor(item), item });
       if (errors.length) return res.status(400).render("mediaForm", formModel(req, { item, values: req.body, errors }));
 
       const set = {
@@ -648,6 +669,7 @@ function createMediaSectionRouter(cfg) {
       };
       if (value.status === "done" && item.status !== "done") set.doneAt = new Date();
       if (poster) set.poster = poster;
+      else if (keptCrop !== undefined) set["poster.crop"] = keptCrop;
       // The section's own fields and ids (an IMDb or Steam id, a game's state); the config also clears
       // an outside rating that belonged to an id the card no longer has.
       Object.assign(set, cfg.editSet(value, item, picked));
@@ -764,7 +786,7 @@ function createMediaSectionRouter(cfg) {
       if (req.file || req.posterUploadError) {
         const saved = await saveViewerPoster(req);
         if (saved.error) return reject(saved.error === "busy" ? 503 : 400, [saved.error]);
-        poster = saved.poster || null;
+        poster = saved.poster ? withCrop(saved.poster, req.body) : null;
       } else {
         poster = await downloadSourcePoster(value, picked);
       }
@@ -941,6 +963,7 @@ function createMediaSectionRouter(cfg) {
           poster,
           id: String(item._id),
           gridPosterUrl: poster ? gridPosterUrl({ ...item, poster }) : null,
+          posterStyle: poster ? posterCropStyle(poster.crop) : "",
           posterPending: Boolean(poster && poster.approved === false),
           hasHiddenPoster: Boolean(item.poster && !poster),
           votable: suggestions.isVotable(item),

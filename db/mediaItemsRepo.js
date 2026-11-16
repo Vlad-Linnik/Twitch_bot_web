@@ -250,13 +250,24 @@ async function setGameInfo(appId, info) {
   return result.modifiedCount;
 }
 
+// Anime cards with a Shikimori id and no IMDb rating - the set lib/shikimoriRatings.js asks about.
+async function shikimoriIdsWithoutImdb() {
+  const col = await ensureInitialized();
+  return col.distinct("external.shikimoriId", {
+    kind: "movie",
+    "external.shikimoriId": { $type: "number" },
+    "ratings.external.source": { $ne: "imdb" },
+  });
+}
+
 // Writes one source's outside ratings: Map<id, {value, votes}>, matched on `field` (e.g.
-// "external.steamAppId"). One updateMany per id, batched.
-async function setExternalRatings(source, field, ratings, fetchedAt = new Date()) {
+// "external.steamAppId"). One updateMany per id, batched. `where` narrows the cards written - the
+// Shikimori pass never overwrites an IMDb rating a card already has.
+async function setExternalRatings(source, field, ratings, fetchedAt = new Date(), where = {}) {
   if (!ratings.size) return 0;
   const col = await ensureInitialized();
   const ops = [...ratings].map(([id, { value, votes }]) => ({
-    updateMany: { filter: { [field]: id }, update: { $set: { "ratings.external": { source, value, votes, fetchedAt } } } },
+    updateMany: { filter: { ...where, [field]: id }, update: { $set: { "ratings.external": { source, value, votes, fetchedAt } } } },
   }));
   const result = await col.bulkWrite(ops, { ordered: false });
   return result.modifiedCount;
@@ -293,6 +304,7 @@ module.exports = {
   setImdbRatings,
   distinctSteamAppIds,
   steamAppIdsNeedingInfo,
+  shikimoriIdsWithoutImdb,
   setGameInfo,
   setExternalRatings,
   sourceStats,

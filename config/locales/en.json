@@ -967,7 +967,7 @@
       "added": "Recently added",
       "streamer": "Streamer's score",
       "viewers": "Viewers' score",
-      "imdb": "IMDb rating",
+      "imdb": "IMDb / Shikimori rating",
       "score": "By votes",
       "comments": "Most discussed"
     },
@@ -1059,7 +1059,10 @@
         "rate_limited": "Too often - try again a little later.",
         "poster_restore_failed": "Could not load the automatic cover — the source did not answer. The current cover was kept."
       },
-      "posterRestore": "Bring back the automatic cover (from the card’s source)"
+      "posterRestore": "Bring back the automatic cover (from the card’s source)",
+      "cropHint": "Drag the picture to choose the visible part; mouse wheel or slider to zoom.",
+      "cropZoom": "Zoom",
+      "cropReset": "Centre"
     },
     "lookup": {
       "heading": "Find and fill in",
@@ -1157,7 +1160,8 @@
     "filterGenreAll": "All genres",
     "externalPending": "not loaded yet",
     "filterGenresGroup": "Genres",
-    "filterTagsGroup": "Tags"
+    "filterTagsGroup": "Tags",
+    "ratingExternalShikimori": "Shikimori score"
   },
   "gamesStream": {
     "titleSuffix": "games",

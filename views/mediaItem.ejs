@@ -36,7 +36,7 @@
     </div>
   <% } %>
 
-  <a href="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('backToGrid') %></a>
+  <a href="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="backward" data-back-to-grid class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('backToGrid') %></a>
 
   <%# Only the backdrop is clipped, not the article: the "your rating" popover has to be able to
       hang past the card's edge. %>
@@ -58,7 +58,8 @@
                 data-full-src, swapped in by public/js/media-item.js on request. The button starts
                 hidden so a no-JS visitor sees only the blurred copy and no dead button. %>
             <img src="<%= item.gridPosterUrl %>" alt="" width="<%= item.poster.width %>" height="<%= item.poster.height %>"
-                 class="absolute inset-0 w-full h-full object-cover<%= item.nsfw ? ' scale-110' : '' %>"
+                 class="absolute <%= item.posterStyle ? '' : 'inset-0 w-full h-full object-cover' %><%= item.nsfw ? ' scale-110' : '' %>"
+                 <% if (item.posterStyle) { %>style="<%= item.posterStyle %>"<% } %>
                  <% if (item.nsfw) { %>data-nsfw-poster data-full-src="<%= item.poster.url %>"<% } %> />
             <% if (item.nsfw) { %>
               <button type="button" data-nsfw-reveal hidden
@@ -221,18 +222,20 @@
               </div>
             </details>
           <% } %>
-          <% if (!item.externalRating && item.external && (item.external.imdbId || item.external.steamAppId)) { %>
+          <% if (!item.externalRating && item.external && (item.external.imdbId || item.external.steamAppId || item.external.shikimoriId)) { %>
             <%# The card has an IMDb id / a Steam app but the pass has not reached it yet (a new card
                 asks for an early pass - routes/movies.js's and routes/gamesStream.js's afterSave). %>
             <div class="flex flex-col items-start justify-center gap-1 h-24 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:h-16 px-3 rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 min-w-0">
               <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
                 <% if (item.external.imdbId) { %>
                   <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#f5c518] text-black font-black">IMDb</span>
+                <% } else if (item.external.shikimoriId) { %>
+                  <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#e6e6e6] text-[#1c1c1c] font-black">Shikimori</span>
                 <% } else { %>
                   <span class="px-1.5 py-0.5 text-xs rounded-sm bg-[#1b2838] text-[#66c0f4] font-black ring-1 ring-[#66c0f4]/30">Steam</span>
                 <% } %><span class="text-2xl font-extrabold tabular-nums text-stone-600">—</span>
               </dd>
-              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingExternal') %><br /><span class="text-stone-500"><%= st('externalPending') %></span></dt>
+              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st(item.external.imdbId || !item.external.shikimoriId ? 'ratingExternal' : 'ratingExternalShikimori') %><br /><span class="text-stone-500"><%= st('externalPending') %></span></dt>
             </div>
           <% } %>
           <% if (item.externalRating) { %>
@@ -242,7 +245,7 @@
               <dd class="flex items-center gap-1.5 shrink-0 h-10 sm:w-24">
                 <%- include('partials/externalRating', { rating: item.externalRating, size: 'md' }) %>
               </dd>
-              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st('ratingExternal') %><br /><span class="text-stone-500"><%= st('ratingCount', { count: item.externalRating.votes.toLocaleString(dateLocale) }) %></span></dt>
+              <dt class="min-w-0 text-[11px] leading-tight text-stone-400"><%= st(item.externalRating.source === 'shikimori' ? 'ratingExternalShikimori' : 'ratingExternal') %><br /><span class="text-stone-500"><%= st('ratingCount', { count: item.externalRating.votes.toLocaleString(dateLocale) }) %></span></dt>
             </div>
           <% } %>
           <% if (item.extras && item.extras.minutes) { %>
@@ -262,7 +265,10 @@
               <%= st('recordingLink') %>
             </a>
           <% } %>
-          <% (item.extras && item.extras.links || (item.external && item.external.imdbId ? [{ href: 'https://www.imdb.com/title/' + item.external.imdbId + '/', label: 'IMDb' }] : [])).forEach(function(link) { %>
+          <% (item.extras && item.extras.links || [
+               item.external && item.external.imdbId ? { href: 'https://www.imdb.com/title/' + item.external.imdbId + '/', label: 'IMDb' } : null,
+               item.external && Number.isInteger(item.external.shikimoriId) ? { href: 'https://shikimori.io/animes/' + item.external.shikimoriId, label: 'Shikimori' } : null,
+             ].filter(Boolean)).forEach(function(link) { %>
             <a href="<%= link.href %>" target="_blank" rel="noopener noreferrer nofollow"
                class="px-3 py-1.5 rounded-full text-sm text-stone-300 ring-1 ring-white/15 hover:ring-white/30"><%= link.label %> ↗</a>
           <% }) %>
