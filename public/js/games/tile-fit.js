@@ -935,56 +935,13 @@
       });
       mapPath.appendChild(box);
     }
-    if ((DATA.emoteChannels || []).length) {
+    {
       const box = document.createElement("div");
       box.className = "tf-map-era";
-      box.innerHTML = '<p class="tf-map-era-name"></p><div class="tf-emote-channels"></div><div class="tf-emote-channels tf-emote-choice"></div><div class="tf-emote-boards"></div>';
+      box.innerHTML = '<p class="tf-map-era-name"></p><div class="tf-emote-boards"></div>';
       box.querySelector(".tf-map-era-name").textContent = I18N.emotesTitle;
-      const list = box.querySelector(".tf-emote-channels");
-      const boards = box.querySelector(".tf-emote-boards");
-      // The fixed set comes first and opens on its own.
-      const fav = document.createElement("button");
-      fav.type = "button";
-      fav.className = "tf-chip-btn tf-chip-on tf-chip-featured";
-      fav.textContent = I18N.emotesFeatured;
-      fav.addEventListener("click", () => {
-        list.querySelectorAll(".tf-chip-btn").forEach((x) => x.classList.toggle("tf-chip-on", x === fav));
-        box.querySelector(".tf-emote-choice").textContent = "";
-        loadEmoteBoards(null, boards, false, true);
-      });
-      list.appendChild(fav);
-      DATA.emoteChannels.forEach((ch) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "tf-chip-btn";
-        b.textContent = "#" + ch;
-        b.addEventListener("click", () => {
-          list.querySelectorAll(".tf-chip-btn").forEach((x) => x.classList.toggle("tf-chip-on", x === b));
-          showEmoteChoice(ch);
-        });
-        list.appendChild(b);
-      });
-      // A logged-in player chooses between the channel's favourites and their own.
-      const choice = box.querySelector(".tf-emote-choice");
-      function showEmoteChoice(ch) {
-        choice.textContent = "";
-        const options = [[false, I18N.emotesChannel]];
-        if (DATA.loggedIn) options.push([true, I18N.emotesMine]);
-        options.forEach(([mine, label], i) => {
-          const t = document.createElement("button");
-          t.type = "button";
-          t.className = "tf-chip-btn tf-chip-small" + (i === 0 ? " tf-chip-on" : "");
-          t.textContent = label;
-          t.addEventListener("click", () => {
-            choice.querySelectorAll(".tf-chip-btn").forEach((x) => x.classList.toggle("tf-chip-on", x === t));
-            loadEmoteBoards(ch, boards, mine);
-          });
-          choice.appendChild(t);
-        });
-        loadEmoteBoards(ch, boards, false);
-      }
       mapPath.appendChild(box);
-      loadEmoteBoards(null, boards, false, true);
+      loadEmoteBoards(box.querySelector(".tf-emote-boards"));
     }
     $("tf-solved-count").textContent = fmt(I18N.solvedCount, { n: [...solved].filter((n) => n <= LAST).length });
   }
@@ -1082,25 +1039,24 @@
   $("tf-open-records").addEventListener("click", loadDailyTable);
 
   // ---------------------------------------------------------------------------------------------
-  // Emote boards: a channel's most used emotes, shrunk into boards by the server. Listed on the map
-  // per channel; nothing about them is scored.
+  // Emote boards: a hand-picked set of emotes, shrunk into boards by the server and listed under
+  // "Смайлы" on the map; nothing about them is scored.
   // ---------------------------------------------------------------------------------------------
   const EMOTES_SOLVED_KEY = "tileFit.emotes";
-  async function loadEmoteBoards(channel, container, mine, featured) {
+  async function loadEmoteBoards(container) {
     container.textContent = "…";
     try {
-      const query = featured ? "featured=1" : "channel=" + encodeURIComponent(channel) + (mine ? "&mine=1" : "");
-      const res = await fetch("/games/tile-fit/emotes.json?" + query, { credentials: "same-origin" });
+      const res = await fetch("/games/tile-fit/emotes.json", { credentials: "same-origin" });
       const json = await res.json();
       container.textContent = "";
       if (!json.ok || !json.boards.length) {
-        container.textContent = mine ? I18N.emotesNoneMine : I18N.emotesNone;
+        container.textContent = I18N.emotesNone;
         return;
       }
       const done = new Set(readJson(EMOTES_SOLVED_KEY) || []);
-      if (featured) channel = json.channel;
+      const channel = json.channel;
       json.boards.forEach((b, i) => {
-        const id = 5000 + (hashString(channel + (mine ? ":me" : featured ? ":featured" : "")) % 50) * 10 + i;
+        const id = 5000 + i;
         customBoards.set(id, { emote: b.emote, channel, image: b.image });
         Engine.registerCustom(id, { mask: b.mask, colors: b.colors });
         const stop = document.createElement("button");
@@ -1121,11 +1077,7 @@
       container.textContent = I18N.emotesNone;
     }
   }
-  function hashString(str) {
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
-    return Math.abs(h);
-  }
+
 
   // ---------------------------------------------------------------------------------------------
   // Museum: every picture level of the eras reached so far. Assembled ones stand in the era's

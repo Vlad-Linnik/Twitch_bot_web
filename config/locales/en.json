@@ -1737,12 +1737,8 @@
       "dailyLocal": "Moves: {{moves}} · days in a row: {{streak}}",
       "dailyEmpty": "Nobody has solved today's board yet — be the first!",
       "dailyTable": "Level of the day — today",
-      "emotesTitle": "Channel emotes",
-      "emotesNone": "This channel has no emotes that make a board yet.",
-      "emotesChannel": "Channel favourites",
-      "emotesMine": "My emotes",
-      "emotesNoneMine": "None of your emotes in this channel make a board yet.",
-      "emotesFeatured": "★ vlad_261's favourite emotes"
+      "emotesTitle": "Emotes",
+      "emotesNone": "The emotes did not load just now — try opening the map again."
     }
   },
   "statistics": {

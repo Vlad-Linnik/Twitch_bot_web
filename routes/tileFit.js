@@ -16,7 +16,6 @@ const profileCacheRepo = require("../db/profileCacheRepo");
 const days = require("../lib/tileFitDays");
 const sharp = require("sharp");
 const channelsRepo = require("../db/channelsRepo");
-const wordStatsRepo = require("../db/wordStatsRepo");
 const emoteImages = require("../twitch/emoteImages");
 const emoteBoardsRepo = require("../db/tileFitEmoteBoardsRepo");
 const { boardFromPixels, SIDE } = require("../lib/tileFitEmoteBoard");
@@ -39,11 +38,9 @@ router.get("/games/tile-fit", async (req, res, next) => {
       buildLeaderboard(GAME_KEY, userId),
       userId ? tileFitProgressRepo.getSolved(userId) : Promise.resolve([]),
     ]);
-    const emoteChannels = (await channelsRepo.listEnabled()).map((c) => c.channelLogin);
     res.render("gameTileFit", {
       leaderboard,
       solved,
-      emoteChannels,
       levelsVersion: engine.LEVELS_VERSION,
     });
   } catch (err) {
@@ -112,13 +109,11 @@ async function dailyBoard(day, userId) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Emote boards: a channel's most used emotes, each turned into a board to assemble. Built on
+// Emote boards: a hand-picked set of emotes, each turned into a board to assemble. Built on
 // demand and kept for a week (db/tileFitEmoteBoardsRepo.js). Only the picture is fetched, and only
 // from an emote CDN the site already allows (lib/emoteImageHosts.js) - the URL never comes from
 // the request.
 // ---------------------------------------------------------------------------------------------
-const EMOTE_CANDIDATES = 24;
-const EMOTE_BOARDS = 8;
 const EMOTE_FETCH_TIMEOUT_MS = 6000;
 const EMOTE_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -137,50 +132,32 @@ async function buildEmoteBoard(url) {
   return boardFromPixels(data, info.width, info.height);
 }
 
-// One fixed set shown to everyone: a hand-picked list of one viewer's favourite emotes in one
-// channel. Names are matched case-insensitively against the channel's emote pictures, so the
-// list keeps working whichever provider (Twitch, 7TV, BTTV, FFZ) the emote comes from.
+// The set: one viewer's favourite emotes in one channel. Names are matched case-insensitively
+// against that channel's emote pictures, so the list keeps working whichever provider (Twitch,
+// 7TV, BTTV, FFZ) an emote comes from.
 const FEATURED_EMOTES = {
   channel: "mistercop",
-  login: "vlad_261",
   emotes: ["MickeyMouse", "Jokerge", "D:", "cannyCat", "BloodTrail"],
 };
 
-// ?featured=1 serves that set.
-// ?mine=1 takes the logged-in player's own most used emotes in that channel (the same count their
-// user page shows) instead of the channel's. Only ever the requester's own: no user id is read from
-// the request, so nobody's emote habits can be listed by someone else.
 router.get("/games/tile-fit/emotes.json", statsReadLimiter, async (req, res, next) => {
   try {
-    const featured = req.query.featured === "1";
-    const login = featured ? FEATURED_EMOTES.channel : String(req.query.channel || "").toLowerCase();
-    const mine = !featured && req.query.mine === "1";
-    if (mine && !req.user) return res.status(401).json({ ok: false, error: "auth" });
-    const channel = featured
-      ? await channelsRepo.findByLogin(login)
-      : (await channelsRepo.listEnabled()).find((c) => c.channelLogin === login);
+    const login = FEATURED_EMOTES.channel;
+    const channel = await channelsRepo.findByLogin(login);
     if (!channel) return res.status(404).json({ ok: false, error: "channel" });
-    let [cloud, images] = await Promise.all([
-      featured
-        ? { emotes: FEATURED_EMOTES.emotes.map((word) => ({ word })) }
-        : mine
-          ? wordStatsRepo.getUserClouds(login, req.user.userId, "all", EMOTE_CANDIDATES)
-          : wordStatsRepo.getChannelEmoteCloud(login, "all", EMOTE_CANDIDATES),
-      emoteImages.getEmoteImageMap(String(channel.channelId), login),
-    ]);
+    let images = await emoteImages.getEmoteImageMap(String(channel.channelId), login);
     // A channel's 7TV set is one large response and the first request after a restart can come
-    // back empty; the fixed list names emotes that exist, so a shortfall there is worth one retry.
-    const lower = new Set([...images.keys()].map((k) => k.toLowerCase()));
-    if (featured && FEATURED_EMOTES.emotes.some((e) => !lower.has(e.toLowerCase()))) {
+    // back empty; the list names emotes that exist, so a shortfall is worth one retry.
+    const has = (map) => new Set([...map.keys()].map((k) => k.toLowerCase()));
+    if (FEATURED_EMOTES.emotes.some((e) => !has(images).has(e.toLowerCase()))) {
       images = await emoteImages.getEmoteImageMap(String(channel.channelId), login);
     }
     // The picture map is keyed by each emote's canonical spelling.
     const byLower = new Map([...images.keys()].map((k) => [k.toLowerCase(), k]));
-    const candidates = cloud.emotes.map((e) => byLower.get(String(e.word).toLowerCase())).filter(Boolean);
+    const candidates = FEATURED_EMOTES.emotes.map((e) => byLower.get(e.toLowerCase())).filter(Boolean);
     const cached = await emoteBoardsRepo.getFresh(login, candidates);
     const boards = [];
     for (const emote of candidates) {
-      if (boards.length >= EMOTE_BOARDS) break;
       let doc = cached.get(emote);
       if (!doc) {
         let board = null;
@@ -195,7 +172,7 @@ router.get("/games/tile-fit/emotes.json", statsReadLimiter, async (req, res, nex
       }
       if (!doc.empty) boards.push({ emote, image: images.get(emote), mask: doc.mask, colors: doc.colors });
     }
-    res.json({ ok: true, channel: login, by: featured ? FEATURED_EMOTES.login : null, boards });
+    res.json({ ok: true, channel: login, boards });
   } catch (err) {
     next(err);
   }

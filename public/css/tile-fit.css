@@ -819,16 +819,10 @@ button.tf-exhibit:hover { transform: translateY(-3px); border-color: var(--lc); 
 .tf-era-15 .tf-stage { --tf-font: "Palatino Linotype", Palatino, Georgia, serif; --tf-ink: #fff7ed; --tf-glass: rgba(40, 20, 8, 0.6); }
 .tf-era-15 .tf-level-name { color: #fde68a; text-shadow: 0 2px 0 #7f1d1d, 0 4px 18px rgba(0, 0, 0, 0.6); }
 
-/* ---- level of the day table, emote boards on the map ---------------------------------- */
+/* ---- level of the day table, emote boards on the map ----------------------------------- */
 .tf-dialog-sub { margin: 1rem 0 0.4rem; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--tf-accent); }
-.tf-emote-channels { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }
-.tf-chip-btn { padding: 0.3rem 0.8rem; border-radius: 999px; font-size: 0.85rem; color: var(--tf-ink); background: var(--tf-glass); border: 1px solid color-mix(in srgb, var(--tf-accent) 40%, transparent); }
-.tf-chip-btn.tf-chip-on, .tf-chip-btn:hover { border-color: var(--tf-accent); color: var(--tf-accent); }
 .tf-emote-boards { text-align: center; color: var(--tf-ink-dim); font-size: 0.85rem; }
 .tf-stop-emote { width: 2rem; height: 2rem; object-fit: contain; }
-.tf-chip-btn.tf-chip-small { font-size: 0.75rem; padding: 0.2rem 0.7rem; }
-.tf-chip-btn.tf-chip-featured { border-color: #facc15; }
-.tf-chip-btn.tf-chip-featured.tf-chip-on { color: #facc15; box-shadow: 0 0 12px rgba(250, 204, 21, 0.35); }
 
 /* Phones: an assembled picture that twinkles or flickers does it with movement, not a filter. A
    filter animation on the whole board re-rasterises every textured cell every frame - the same
