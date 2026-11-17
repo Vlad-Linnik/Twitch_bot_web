@@ -211,7 +211,6 @@
       <section>
         <p class="recap-chapter"><span class="recap-chapter-n"><%= wordsN %></span><%= t('recap.chapters.words') %></p>
         <h2 class="<%= h2 %>"><%= t('recap.words.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.words }) %></h2>
-        <p class="<%= sub %>"><%= t('recap.words.sub') %></p>
 
         <% if (emoteTop.length) {
              const five = emoteTop.slice(0, 5);
@@ -246,10 +245,7 @@
 
         <% if (wordTop.length) {
              const fiveW = wordTop.slice(0, 5);
-             const maxW = Math.max(1, fiveW[0].n);
-             const curve = (d.words.curves || {})[fiveW[0].word] || [];
-             const cmax = Math.max(1, ...curve);
-             const pts = curve.map(function (v, k) { return (k * 10) + ',' + (25 - Math.round((v / cmax) * 22)); }); %>
+             const maxW = Math.max(1, fiveW[0].n); %>
           <h3 class="mt-12 text-xs font-semibold uppercase tracking-widest text-neutral-400"><%= t('recap.words.words') %></h3>
           <ol class="mt-4 grid gap-2">
             <% fiveW.forEach(function (w, i) { %>
@@ -258,9 +254,6 @@
                 <div class="relative flex h-full items-center gap-3 sm:gap-4 px-4 py-3">
                   <span class="recap-num w-6 shrink-0 text-lg <%= i === 0 ? 'text-amber-300' : 'text-neutral-400' %>"><%= i + 1 %></span>
                   <span class="min-w-0 flex-1 truncate font-black tracking-tight text-white <%= i === 0 ? 'text-4xl sm:text-5xl' : 'text-2xl sm:text-3xl' %>"><%= w.word %></span>
-                  <% if (i === 0 && pts.length) { %>
-                    <svg viewBox="0 0 110 27" class="hidden sm:block w-28 h-10 shrink-0 text-amber-300" aria-hidden="true"><polyline points="<%= pts.join(' ') %>" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>
-                  <% } %>
                   <span class="shrink-0 text-right recap-num <%= i === 0 ? 'text-2xl text-amber-300' : 'text-lg text-neutral-200' %>"><%= fmt(w.n) %></span>
                 </div>
               </li>

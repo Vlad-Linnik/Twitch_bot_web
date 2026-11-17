@@ -105,28 +105,6 @@ async function topAndTotal(db, collection, channel, start, end, limit) {
   return { top: res.top.map((r) => ({ word: r._id, n: r.n })), total: res.total[0]?.n || 0 };
 }
 
-// Monthly counts per entry of `groups` ([{word, forms}]), summed over its forms, keyed by `word`.
-async function monthlyCurves(db, collection, channel, groups, start, end) {
-  if (!groups.length) return {};
-  const owner = new Map();
-  for (const g of groups) for (const f of g.forms || [g.word]) owner.set(f, g.word);
-  const rows = await db
-    .collection(collection)
-    .aggregate([
-      { $match: { channel, word: { $in: [...owner.keys()] }, date: { $gte: start, $lt: end } } },
-      {
-        $group: {
-          _id: { w: "$word", m: { $month: { date: "$date", timezone: "+03:00" } } },
-          n: { $sum: "$count" },
-        },
-      },
-    ])
-    .toArray();
-  const curves = {};
-  for (const g of groups) curves[g.word] = new Array(12).fill(0);
-  for (const r of rows) curves[owner.get(r._id.w)][r._id.m - 1] += r.n;
-  return curves;
-}
 
 // Words the chat started saying this year, grouped by form (lib/annualRecap.js's groupWordForms).
 // "New" is decided per WORD, not per spelling: «дипе» first appearing this year means nothing if
@@ -520,11 +498,6 @@ async function buildChannelRecap(channelLogin, year) {
     })
     .slice(0, 20);
 
-  const [wordCurves, emoteCurves] = await Promise.all([
-    monthlyCurves(db, "ChatWordStats", channel, words.top.slice(0, 5), start, end),
-    monthlyCurves(db, "words", channel, emotes.top.slice(0, 5), start, end),
-  ]);
-
   // The channel's word counts for the personal page (db/annualRecapRepo.js's
   // AnnualRecapWordCounts). Written before the recap that names them, pruned after it is saved.
   const wordCountsAt = new Date();
@@ -544,8 +517,8 @@ async function buildChannelRecap(channelLogin, year) {
     hours: state.hours,
     topChatters,
     sortedCounts: recap.sortedCounts(state.users),
-    words: { top: words.top, curves: wordCurves },
-    emotes: { top: emotes.top, curves: emoteCurves },
+    words: { top: words.top },
+    emotes: { top: emotes.top },
     newWords: firstWords,
     loud,
     topClips,
