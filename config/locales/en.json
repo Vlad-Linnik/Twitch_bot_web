@@ -4145,7 +4145,7 @@
         "fastest": "Quickest to react",
         "mostActions": "Most punishments",
         "longestGiven": "Most timeout time handed out",
-        "presence": "Longest on stream"
+        "presence": "Watched over the chat longest"
       }
     },
     "footnote": "Built {{date}}. Counts messages in the channel's chat, shared-chat lines included. Streams are split on chat pauses longer than an hour and a half.",
@@ -4213,9 +4213,6 @@
         "sniper": "sniper hits",
         "self": "self-requested timeouts",
         "amnesty": "pardons"
-      },
-      "extras": {
-        "heading": "Also"
       },
       "privacy": {
         "shownNow": "You are shown in the channel's public recap (tops, pairs, new words).",

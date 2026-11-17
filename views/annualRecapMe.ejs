@@ -199,16 +199,6 @@
     </section>
     <% } %>
 
-    <% if (p.games.length) { %>
-    <section>
-      <p class="recap-chapter"><%= t('recap.me.extras.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.extras }) %></p>
-      <ul class="divide-y divide-white/10 border-y border-white/10 text-sm">
-        <% p.games.forEach(function (g) { const key = gameNameKey(g.game); %>
-          <li class="flex gap-2 py-2"><span class="text-neutral-100"><%= key ? t(key) : g.game %></span><span class="ml-auto text-neutral-300 tabular-nums"><%= fmt(g.bestScore) %></span></li>
-        <% }) %>
-      </ul>
-    </section>
-    <% } %>
   </div>
 
   <%# Sharing: public/js/recap-share.js draws a picture of this year (no punishments, nothing private)

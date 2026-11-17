@@ -469,20 +469,42 @@
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.siteGames') %></p>
       <h2 class="<%= h2 %>"><%= t('recap.siteGames.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.siteGames }) %></h2>
       <p class="<%= sub %>"><%= t('recap.siteGames.sub') %></p>
+      <%# One card per game: the hub's own thumbnail (data/gamesCatalog.js's preview, a static SVG
+          from our code) as the cover, the champion large, second and third under them. %>
       <ul class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <% view.siteGames.forEach(function (g) { %>
-          <li class="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <a href="<%= g.entry.url %>" class="block truncate text-lg font-bold text-white hover:underline"><%= t(g.titleKey || g.entry.nameKey) %></a>
-            <p class="text-xs text-neutral-400"><%= t('recap.siteGames.players', { n: fmt(g.players) }) %> · <%= t('recap.siteGames.unit.' + g.unit) %></p>
-            <ol class="mt-3 space-y-2">
-              <% g.top.forEach(function (u, i) { %>
-                <li class="flex items-center gap-2 min-w-0">
-                  <span class="recap-num w-5 shrink-0 text-base <%= i === 0 ? 'text-amber-300' : 'text-neutral-400' %>"><%= i + 1 %></span>
-                  <span class="min-w-0 flex-1 <%= i === 0 ? 'font-semibold' : '' %>"><%- person(u) %></span>
-                  <span class="shrink-0 tabular-nums <%= i === 0 ? 'text-amber-300 font-semibold' : 'text-neutral-300' %>" title="<%= t('recap.siteGames.unit.' + g.unit) %>"><%= fmt(u.score) %></span>
-                </li>
-              <% }) %>
-            </ol>
+        <% view.siteGames.forEach(function (g) { const champ = g.top[0]; const unit = t('recap.siteGames.unit.' + g.unit); %>
+          <li class="min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] flex flex-col">
+            <a href="<%= g.entry.url %>" class="group relative block h-32 overflow-hidden recap-game-cover">
+              <span class="absolute inset-0 grid place-items-center transition-transform duration-300 group-hover:scale-110" aria-hidden="true"><%- g.entry.preview %></span>
+              <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pt-8 pb-3">
+                <span class="block truncate text-lg font-extrabold tracking-tight text-white group-hover:underline"><%= t(g.titleKey || g.entry.nameKey) %></span>
+                <span class="text-xs text-neutral-300"><%= t('recap.siteGames.players', { n: fmt(g.players) }) %></span>
+              </span>
+              <span class="absolute right-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-purple-200"><%= unit %></span>
+            </a>
+            <div class="flex-1 p-4">
+              <div class="rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] px-3 py-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="recap-medal recap-medal-1" aria-label="1">1</span>
+                  <span class="min-w-0 flex-1 text-base font-bold"><%- person(champ, { size: 'md' }) %></span>
+                </div>
+                <p class="mt-2 flex items-baseline gap-2 pl-12">
+                  <span class="recap-num text-3xl text-amber-300"><%= fmt(champ.score) %></span>
+                  <span class="text-[11px] uppercase tracking-wider text-amber-200/70"><%= unit %></span>
+                </p>
+              </div>
+              <% if (g.top.length > 1) { %>
+                <ol class="mt-3 space-y-2 px-1" start="2">
+                  <% g.top.slice(1).forEach(function (u, k) { %>
+                    <li class="flex items-center gap-2.5 min-w-0 text-sm">
+                      <span class="recap-medal recap-medal-<%= k + 2 %>" aria-label="<%= k + 2 %>"><%= k + 2 %></span>
+                      <span class="min-w-0 flex-1"><%- person(u) %></span>
+                      <span class="shrink-0 tabular-nums text-neutral-300"><%= fmt(u.score) %></span>
+                    </li>
+                  <% }) %>
+                </ol>
+              <% } %>
+            </div>
           </li>
         <% }) %>
       </ul>
@@ -498,10 +520,10 @@
       <h2 class="<%= h2 %>"><%= t('recap.moderation.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.moderation }) %></h2>
       <p class="<%= sub %>"><%= t('recap.moderation.sub', { since: fmtDate(d.moderation.since, { day: 'numeric', month: 'long' }) }) %></p>
       <dl class="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <% [['deletes', a.delete || 0, 'recap-tile-delete'], ['timeouts', a.timeout || 0, 'recap-tile-timeout'], ['bans', a.ban || 0, 'recap-tile-ban'], ['duels', d.moderation.duel || 0, 'recap-tile-duel'], ['amnesty', d.unbans.approved || 0, 'recap-tile-amnesty']].forEach(function (s) { %>
+        <% [['deletes', a.delete || 0, 'recap-tile-delete', null], ['timeouts', a.timeout || 0, 'recap-tile-timeout', headingEmotes.tileTimeouts], ['bans', a.ban || 0, 'recap-tile-ban', headingEmotes.tileBans], ['duels', d.moderation.duel || 0, 'recap-tile-duel', null], ['amnesty', d.unbans.approved || 0, 'recap-tile-amnesty', headingEmotes.tileAmnesty]].forEach(function (s) { %>
           <div class="recap-tile <%= s[2] %> flex flex-col-reverse rounded-2xl px-4 py-4">
             <dt class="mt-1 text-xs sm:text-sm text-neutral-300"><%= t('recap.moderation.' + s[0]) %></dt>
-            <dd class="recap-num text-3xl sm:text-4xl"><%= fmt(s[1]) %></dd>
+            <dd class="recap-num text-3xl sm:text-4xl whitespace-nowrap"><%= fmt(s[1]) %><%- include('partials/recapHeadingEmote', { emote: s[3] }) %></dd>
           </div>
         <% }) %>
       </dl>

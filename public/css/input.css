@@ -3488,3 +3488,26 @@ html.js [data-quiz-rest] {
 .recap-tile-duel dd { color: rgb(233 213 255); }
 .recap-tile-amnesty { border-left-color: rgb(74 222 128); }
 .recap-tile-amnesty dd { color: rgb(187 247 208); }
+
+/* Site game champions on the year recap: the hub's game thumbnail as a cover, medals for the
+   podium. */
+.recap-game-cover {
+  background:
+    radial-gradient(80% 90% at 50% 0%, rgb(126 34 206 / 0.35), transparent 70%),
+    #0c0a10;
+}
+.recap-game-cover svg { width: 11rem; height: auto; }
+.recap-medal {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #0a0a0a;
+}
+.recap-medal-1 { width: 2.25rem; height: 2.25rem; font-size: 1rem; background: linear-gradient(180deg, rgb(253 230 138), rgb(217 119 6)); }
+.recap-medal-2 { background: linear-gradient(180deg, rgb(245 245 245), rgb(163 163 163)); }
+.recap-medal-3 { background: linear-gradient(180deg, rgb(253 186 116), rgb(180 83 9)); }

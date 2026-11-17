@@ -24,6 +24,7 @@ const { resolveHeadingEmotes } = require("../lib/recapHeadingEmotes");
 const { readableChatColor } = require("../lib/readableColor");
 const { getBoxArtUrls } = require("../twitch/gameBoxArt");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
+const gameCatalogRepo = require("../db/gameCatalogRepo");
 const axios = require("axios");
 const { isAllowedImageUrl } = require("../lib/emoteImageHosts");
 const { categoryKey } = require("../lib/streamHours");
@@ -73,9 +74,18 @@ function gameEntry(gameId) {
   );
 }
 
-function gameNameKey(gameId) {
-  return gameEntry(gameId)?.nameKey || null;
+// Catalog ids the site admin hid on /admin/games. Read at render time, so hiding a game takes it off
+// every recap at once, without a rebuild. Fail-soft: a read error hides nothing.
+async function hiddenGameIds() {
+  const settings = await gameCatalogRepo.getSettingsMap().catch(() => new Map());
+  return new Set([...settings.entries()].filter(([, v]) => v && v.hidden).map(([id]) => id));
 }
+
+// Only games of the catalog that are not hidden.
+const shownGame = (hidden) => (gameId) => {
+  const entry = gameEntry(gameId);
+  return Boolean(entry && !hidden.has(entry.id));
+};
 
 // Where a stream category leads on our site: the channel's own card for that game when there is one,
 // else the channel's games page. Nothing when the games section is off (a link to a 404), except for
@@ -168,9 +178,11 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
     const pairs = d.pairs.filter((p) => visible(p.aId) && visible(p.bId)).slice(0, 6);
     const newWords = d.newWords.filter((w) => visible(w.by?.userId)).slice(0, 8);
     const mod = d.moderation;
+    const isShownGame = shownGame(await hiddenGameIds());
     const siteGames = (d.siteGames || [])
+      .filter((g) => isShownGame(g.game))
       .map((g) => ({ ...g, ...siteGameMeta(g.game), entry: gameEntry(g.game), top: g.top.filter((u) => visible(u.userId)) }))
-      .filter((g) => g.entry && g.top.length);
+      .filter((g) => g.top.length);
     const cats = d.categories.list.slice(0, 8);
 
     // Everyone the page names gets an avatar and their chat colour; one batched profile read.
@@ -290,7 +302,6 @@ router.get("/:channel/recap/:year/me", recapPage, async (req, res, next) => {
       images,
       headingEmotes: resolveHeadingEmotes(images),
       profiles: partnerProfiles,
-      gameNameKey,
       messageBuckets: recap.MESSAGE_BUCKETS,
     });
   } catch (err) {

@@ -8,7 +8,7 @@
 //
 // The punishment half (timeouts, duels, the sniper, the Bureau's verdict) exists ONLY here, and
 // only the person themselves can open this page; the public recap shows sums.
-const { connect, connectWeb } = require("./connection");
+const { connect } = require("./connection");
 const recapRepo = require("./annualRecapRepo");
 const { emotePredicate } = require("./emotePredicate");
 const { extractWords, extractMentions } = require("../lib/textStats");
@@ -135,8 +135,7 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
   const attendance = recap.attendanceOf(channelRecap.data.sessions, timestamps, String(userId));
   const standing = recap.standingOf(channelRecap.data.sortedCounts, docs.length);
 
-  const web = await connectWeb();
-  const [modRows, unbanRows, games] = await Promise.all([
+  const [modRows, unbanRows] = await Promise.all([
     db
       .collection("ModeratorActionLogs")
       .find({ channel: login, userId: String(userId), timestamp: { $gte: start, $lt: end } })
@@ -146,11 +145,6 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
       .collection("UnbanRequests")
       .find({ channelId, userId: String(userId), "resolution.decidedAt": { $gte: start, $lt: end } })
       .project({ _id: 0, twitchStatus: 1 })
-      .toArray(),
-    web
-      .collection("GameScores")
-      .find({ userId: String(userId), achievedAt: { $gte: start, $lt: end } })
-      .project({ _id: 0, game: 1, bestScore: 1 })
       .toArray(),
   ]);
 
@@ -192,7 +186,6 @@ async function computeUserRecap(channelDoc, year, userId, channelRecap) {
     partners,
     punishments,
     amnesty,
-    games: games.sort((a, b) => String(a.game).localeCompare(String(b.game))),
   };
 }
 
