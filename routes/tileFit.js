@@ -79,11 +79,10 @@ router.post("/games/tile-fit/solve.json", gameScoreSubmitLimiter, async (req, re
     if (problem) return res.status(400).json({ ok: false, error: problem });
 
     const userId = req.user.userId;
-    // The level of the day has its own table, ranked by moves, and does not count as a level.
+    // The level of the day has its own table, first solve first, and does not count as a level.
     if (engine.isDaily(level)) {
       if (!days.isAroundToday(level, new Date())) return res.status(400).json({ ok: false, error: "day" });
-      const moves = Math.max(levelData.pieces.length, Math.min(999, Number.parseInt(req.body.moves, 10) || 999));
-      await tileFitDailyRepo.record(level, userId, moves);
+      await tileFitDailyRepo.record(level, userId);
       const [board, streak] = await Promise.all([dailyBoard(level, userId), tileFitDailyRepo.streak(userId, level, days.previousDay)]);
       return res.json({ ok: true, daily: { ...board, streak } });
     }
@@ -97,13 +96,59 @@ router.post("/games/tile-fit/solve.json", gameScoreSubmitLimiter, async (req, re
   }
 });
 
-// The table of one day: the ten fewest-moves solves, and the viewer's own place.
+// A guest's progress, sent once they log in: levels solved in the browser before there was an
+// account to credit. Each comes with its placement and is checked exactly like a live solve, so
+// this cannot credit a level nobody covered. Compact on the wire - [level, [rot, r, c, rot, r, c,
+// ...]] per level - to stay inside the site's 100 kB body limit for every level there is.
+const MAX_SYNC_LEVELS = 400;
+
+router.post("/games/tile-fit/sync.json", gameScoreSubmitLimiter, async (req, res, next) => {
+  if (!req.user) return res.status(401).json({ ok: false, error: "auth" });
+  next();
+}, verifyToken, async (req, res, next) => {
+  try {
+    if (Number.parseInt(req.body.version, 10) !== engine.LEVELS_VERSION) {
+      return res.status(409).json({ ok: false, error: "version" });
+    }
+    let proofs;
+    try {
+      proofs = JSON.parse(String(req.body.proofs || "[]"));
+    } catch (_) {
+      return res.status(400).json({ ok: false, error: "proofs" });
+    }
+    if (!Array.isArray(proofs) || proofs.length > MAX_SYNC_LEVELS) return res.status(400).json({ ok: false, error: "proofs" });
+    const accepted = [];
+    for (const entry of proofs) {
+      if (!Array.isArray(entry) || !Array.isArray(entry[1])) continue;
+      const level = Number(entry[0]);
+      if (engine.isDaily(level)) continue; // the level of the day is scored on its own day only
+      const levelData = engine.generateLevel(level);
+      if (!levelData) continue;
+      const flat = entry[1].map(Number);
+      const placements = [];
+      for (let i = 0; i + 2 < flat.length; i += 3) placements.push({ rot: flat[i], r: flat[i + 1], c: flat[i + 2] });
+      if (engine.checkSolution(levelData, placements) === null) accepted.push(level);
+    }
+    const userId = req.user.userId;
+    let solvedCount = (await tileFitProgressRepo.getSolved(userId)).length;
+    if (accepted.length) {
+      solvedCount = await tileFitProgressRepo.markSolvedMany(userId, accepted);
+      await gameScoresRepo.submitScore(GAME_KEY, userId, solvedCount);
+    }
+    const leaderboard = await buildLeaderboard(GAME_KEY, userId);
+    res.json({ ok: true, accepted, rejected: proofs.length - accepted.length, solvedCount, leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The table of one day: the ten earliest solves, and the viewer's own place.
 async function dailyBoard(day, userId) {
   const [rows, me] = await Promise.all([tileFitDailyRepo.top(day, 10), userId ? tileFitDailyRepo.mine(day, userId) : null]);
   const profiles = await profileCacheRepo.getOrFetchProfiles([...rows.map((r) => r.userId), ...(userId ? [String(userId)] : [])]);
   const nameOf = (id) => (profiles.get(String(id)) || {}).displayName || "…";
   return {
-    rows: rows.map((r, i) => ({ rank: i + 1, moves: r.moves, displayName: nameOf(r.userId), isMe: userId != null && r.userId === String(userId) })),
+    rows: rows.map((r, i) => ({ rank: i + 1, solvedAt: r.solvedAt, displayName: nameOf(r.userId), isMe: userId != null && r.userId === String(userId) })),
     me: me ? { ...me, displayName: nameOf(userId) } : null,
   };
 }

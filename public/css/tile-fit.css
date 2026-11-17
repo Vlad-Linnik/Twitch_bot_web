@@ -833,3 +833,4 @@ button.tf-exhibit:hover { transform: translateY(-3px); border-color: var(--lc); 
   .tf-board.tf-alive-flicker { animation: tf-live-wobble 2.4s ease-in-out infinite; }
   @keyframes tf-live-twinkle-move { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.04) rotate(3deg); } }
 }
+.tf-dialog-hint { margin: -0.2rem 0 0.5rem; font-size: 0.75rem; color: var(--tf-ink-dim); }

@@ -1733,12 +1733,13 @@
       "folkLevel": "Craft",
       "daily": "Level of the day",
       "dailyName": "Board of {{date}}",
-      "dailyResult": "Today's rank: {{rank}} · moves: {{moves}} · days in a row: {{streak}}",
-      "dailyLocal": "Moves: {{moves}} · days in a row: {{streak}}",
+      "dailyResult": "Today's place: {{rank}} · days in a row: {{streak}}",
+      "dailyLocal": "Days in a row: {{streak}}",
       "dailyEmpty": "Nobody has solved today's board yet — be the first!",
       "dailyTable": "Level of the day — today",
       "emotesTitle": "Emotes",
-      "emotesNone": "The emotes did not load just now — try opening the map again."
+      "emotesNone": "The emotes did not load just now — try opening the map again.",
+      "dailyMovesNote": "Whoever solves it first ranks highest."
     }
   },
   "statistics": {

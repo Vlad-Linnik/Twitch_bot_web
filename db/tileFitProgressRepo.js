@@ -41,4 +41,17 @@ async function markSolved(userId, level) {
   return value && Array.isArray(value.solved) ? value.solved.length : 1;
 }
 
-module.exports = { getSolved, markSolved };
+// Several levels at once (a guest's progress, verified, arriving after they log in). Returns the
+// number of distinct levels solved afterwards.
+async function markSolvedMany(userId, levels) {
+  const col = await ensureInitialized();
+  const doc = await col.findOneAndUpdate(
+    { userId: String(userId) },
+    { $addToSet: { solved: { $each: levels } }, $set: { updatedAt: new Date() } },
+    { upsert: true, returnDocument: "after", projection: { solved: 1 } }
+  );
+  const value = doc && doc.value !== undefined && doc.solved === undefined ? doc.value : doc;
+  return value && Array.isArray(value.solved) ? value.solved.length : 0;
+}
+
+module.exports = { getSolved, markSolved, markSolvedMany };

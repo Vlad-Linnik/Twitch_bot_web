@@ -279,6 +279,9 @@
   // ---------------------------------------------------------------------------------------------
   const STARS_KEY = "tileFit.stars";
   const SOLUTIONS_KEY = "tileFit.solutions";
+  // The placement each level was solved with, [rot, r, c, ...] per level - the proof a guest's
+  // progress needs before the server will count it once they log in.
+  const PROOFS_KEY = "tileFit.proofs";
   const MAX_SOLUTIONS_KEPT = 6;
 
   function pieceColor(era, level, i) {
@@ -1030,8 +1033,9 @@
         li.textContent = I18N.dailyEmpty;
         box.appendChild(li);
       }
-      json.rows.forEach((row) => box.appendChild(lbRow({ ...row, score: row.moves }, false)));
-      if (json.me && !json.rows.some((r) => r.isMe)) box.appendChild(lbRow({ ...json.me, score: json.me.moves }, true));
+      // The place says it all - the table is in the order people solved it.
+      json.rows.forEach((row) => box.appendChild(lbRow({ ...row, score: "" }, false)));
+      if (json.me && !json.rows.some((r) => r.isMe)) box.appendChild(lbRow({ ...json.me, score: "" }, true));
     } catch (_) {
       /* the table is a nicety; the main records still show */
     }
@@ -2071,6 +2075,9 @@
     if (counted) {
       solved.add(L.level);
       persistSolved();
+      const proofs = readJson(PROOFS_KEY) || {};
+      proofs[L.level] = pieces.flatMap((p) => [p.rot, p.placed.r, p.placed.c]);
+      writeJson(PROOFS_KEY, proofs);
     }
     let dailyText = "";
     if (isCustom(L.level) && customBoards.has(L.level)) {
@@ -2136,7 +2143,6 @@
     const body = new URLSearchParams({
       level: String(level.level),
       version: String(level.version),
-      moves: String(drops),
       placements: JSON.stringify(placements),
       _csrf: DATA.csrf || "",
     });
@@ -2152,7 +2158,7 @@
       if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || String(res.status));
       if (json.leaderboard) renderLeaderboard(json.leaderboard);
       if (json.daily) {
-        textEl.textContent = fmt(I18N.dailyResult, { rank: json.daily.me ? json.daily.me.rank : "—", moves: drops, streak: json.daily.streak });
+        textEl.textContent = fmt(I18N.dailyResult, { rank: json.daily.me ? json.daily.me.rank : "—", streak: json.daily.streak });
         return;
       }
       if (first && !textEl.textContent) textEl.textContent = I18N.saved;
@@ -2192,6 +2198,65 @@
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Progress made as a guest, credited after logging in: every level this browser solved that the
+  // account has not, sent with its placement for the server to check. Levels solved before
+  // placements were kept are rebuilt from the layout remembered for "another solution" - each set
+  // of cells is matched back to an unused piece and turn.
+  // ---------------------------------------------------------------------------------------------
+  function proofFromLayout(level, sig) {
+    const L0 = Engine.generateLevel(level);
+    if (!L0 || !sig) return null;
+    const used = new Set();
+    const out = new Array(L0.pieces.length);
+    for (const part of sig.split("|")) {
+      const cells = part.split(",").map((x) => x.split(".").map(Number));
+      const r0 = Math.min(...cells.map(([r]) => r));
+      const c0 = Math.min(...cells.map(([, c]) => c));
+      const shape = Engine.normalize(cells).join("|");
+      let found = false;
+      for (let i = 0; i < L0.pieces.length && !found; i++) {
+        if (used.has(i)) continue;
+        for (let rot = 0; rot < 4; rot++) {
+          if (Engine.rotate(L0.pieces[i].cells, rot).join("|") === shape) {
+            out[i] = [rot, r0, c0];
+            used.add(i);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) return null;
+    }
+    return out.some((x) => !x) ? null : out.flat();
+  }
+
+  async function syncGuestProgress() {
+    if (!DATA.loggedIn || !DATA.csrf) return;
+    const onServer = new Set(DATA.solved || []);
+    const proofs = readJson(PROOFS_KEY) || {};
+    const layouts = readJson(SOLUTIONS_KEY) || {};
+    const batch = [];
+    solved.forEach((n) => {
+      if (onServer.has(n) || isDaily(n) || isCustom(n)) return;
+      const proof = proofs[n] || proofFromLayout(n, (layouts[n] || [])[0]);
+      if (proof) batch.push([n, proof]);
+    });
+    if (!batch.length) return;
+    try {
+      const res = await fetch("/games/tile-fit/sync.json", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ version: String(DATA.levelsVersion), proofs: JSON.stringify(batch), _csrf: DATA.csrf }),
+        credentials: "same-origin",
+      });
+      const json = await res.json();
+      if (json.ok && json.leaderboard) renderLeaderboard(json.leaderboard);
+    } catch (_) {
+      /* tried again on the next visit */
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Boot: straight into play - the level that was open, otherwise the furthest one reached.
   // ---------------------------------------------------------------------------------------------
   rasterizeTextures();
@@ -2201,4 +2266,5 @@
   } else {
     startLevel(maxOpen());
   }
+  syncGuestProgress();
 })();
