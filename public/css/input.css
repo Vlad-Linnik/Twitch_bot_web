@@ -3468,3 +3468,23 @@ html.js [data-quiz-rest] {
   margin-left: 0.35em;
   vertical-align: -0.25em;
 }
+
+/* Year recap, second pass: emotes standing on columns, words written across their own bars, and
+   the moderation tiles coloured by weight - deleted messages, timeouts, bans. */
+.recap-emote-column-pic img { height: 3.5rem; width: auto; }
+@media (min-width: 640px) { .recap-emote-column-pic img { height: 5rem; } }
+.recap-emote-column-pic { font-size: 1.125rem; font-weight: 800; color: #fff; text-align: center; }
+.recap-emote-tile img { height: 2rem; width: auto; }
+.recap-word-fill { background: linear-gradient(90deg, rgb(126 34 206 / 0.55), rgb(192 132 252 / 0.25)); }
+.recap-word-fill-peak { background: linear-gradient(90deg, rgb(217 119 6 / 0.6), rgb(253 230 138 / 0.25)); }
+.recap-tile { border: 1px solid rgb(255 255 255 / 0.08); border-left-width: 4px; background: rgb(255 255 255 / 0.03); }
+.recap-tile-delete { border-left-color: rgb(125 211 252); }
+.recap-tile-delete dd { color: rgb(186 230 253); }
+.recap-tile-timeout { border-left-color: rgb(251 191 36); }
+.recap-tile-timeout dd { color: rgb(253 230 138); }
+.recap-tile-ban { border-left-color: rgb(248 113 113); }
+.recap-tile-ban dd { color: rgb(254 202 202); }
+.recap-tile-duel { border-left-color: rgb(192 132 252); }
+.recap-tile-duel dd { color: rgb(233 213 255); }
+.recap-tile-amnesty { border-left-color: rgb(74 222 128); }
+.recap-tile-amnesty dd { color: rgb(187 247 208); }

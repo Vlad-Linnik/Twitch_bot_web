@@ -4070,7 +4070,8 @@
       "order": "Order",
       "bot": "The bot",
       "moments": "Moments",
-      "clips": "Clips"
+      "clips": "Clips",
+      "siteGames": "Site games"
     },
     "total": {
       "messages": "messages",
@@ -4081,11 +4082,13 @@
     },
     "rhythm": {
       "heading": "Rhythm of the year",
-      "sub": "Messages by month and by hour (Moscow time).",
+      "sub": "Messages by month and by hour.",
       "monthsLabel": "Messages by month",
       "hoursLabel": "Messages by hour of day",
       "peakHourLabel": "The loudest hour",
-      "peakMonth": "The loudest month — {{month}}"
+      "peakMonth": "The loudest month — {{month}}",
+      "tzMsk": "Time: UTC+3 (Moscow)",
+      "tzLocal": "Your time ({tz})"
     },
     "chatters": {
       "heading": "Voices of the year",
@@ -4095,13 +4098,14 @@
       "heading": "Words and emotes of the year",
       "sub": "The curve shows how a word lived month by month.",
       "words": "Words",
-      "emotes": "Emotes"
+      "emotes": "Emotes",
+      "times": "{{n}} times"
     },
     "newWords": {
       "heading": "Words the chat invented",
       "sub": "They were not in the chat before this year — and then they caught on.",
       "uses": "{{n}} times this year",
-      "patientZero": "First written by {{name}}, {{date}}:"
+      "firstBy": "First:"
     },
     "pairs": {
       "heading": "Pairs of the year",
@@ -4122,7 +4126,9 @@
       "liveliest": "The chat was liveliest on “{{name}}” — {{n}} messages an hour.",
       "colName": "Category",
       "colHours": "Hours",
-      "colPerHour": "Msgs/hour"
+      "colPerHour": "Msgs/hour",
+      "hoursShort": "{{n}} h on air",
+      "perHourShort": "{{n}} msgs/h"
     },
     "moderation": {
       "heading": "Moderation",
@@ -4130,11 +4136,18 @@
       "timeouts": "timeouts",
       "bans": "bans",
       "deletes": "deleted messages",
-      "duels": "duels lost",
-      "sniper": "sniper shots",
+      "duels": "timeouts from lost duels (!muteduel)",
       "amnesty": "pardons",
       "fastest": "Fastest moderators",
-      "median": "{{s}} s median"
+      "median": "{{s}} s median",
+      "actionsCount": "{{n}} (bans: {{bans}})",
+      "hours": "{{n}} h",
+      "top": {
+        "fastest": "Quickest to react",
+        "mostActions": "Most punishments",
+        "longestGiven": "Most timeout time handed out",
+        "presence": "Longest on stream"
+      }
     },
     "footnote": "Built {{date}}. Counts messages in the channel's chat, shared-chat lines included. Streams are split on chat pauses longer than an hour and a half.",
     "me": {
@@ -4165,7 +4178,8 @@
         "messages": "Messages: {{n}} — more than {{share}}% of the chat. Rank {{rank}} of {{of}}.",
         "chronotype": "You write most {{label}}, peaking at {{hour}}.",
         "emote": "Your emote is",
-        "partner": "{{name}}: you wrote {{out}} times, they wrote {{in}}."
+        "partner": "{{name}}: you wrote {{out}} times, they wrote {{in}}.",
+        "chronotypeBand": "You write most {{label}}."
       },
       "times": "{{n}} times",
       "skip": "Show everything",
@@ -4196,7 +4210,7 @@
         "private": "Only you can see this.",
         "timeouts": "timeouts",
         "bans": "bans",
-        "duel": "duels lost",
+        "duel": "timeouts from lost duels (!muteduel)",
         "sniper": "sniper hits",
         "self": "self-requested timeouts",
         "amnesty": "pardons"
@@ -4230,6 +4244,48 @@
       "first": "Clip of the year",
       "views": "views",
       "meta": "{{name}} · {{date}}"
+    },
+    "units": {
+      "d": "d",
+      "h": "h",
+      "m": "min"
+    },
+    "siteGames": {
+      "heading": "Site game champions",
+      "sub": "The year's best results in the site's games among the people who wrote in this chat.",
+      "players": "players: {{n}}",
+      "durakOnline": "Durak online",
+      "unit": {
+        "rating": "rating",
+        "wins": "wins",
+        "best": "record"
+      }
+    },
+    "share": {
+      "eyebrow": "Share",
+      "heading": "Your year in one picture",
+      "button": "Make the picture",
+      "alt": "My {{year}} recap",
+      "download": "Download PNG",
+      "native": "Share…",
+      "copy": "Copy",
+      "copied": "Copied",
+      "hint": "Nothing from \"Your record\" is on the picture. Only you see it until you share it.",
+      "error": "Could not draw the picture — try again.",
+      "card": {
+        "kicker": "{{year}} recap",
+        "messages": "Messages",
+        "streams": "Streams",
+        "rank": "Rank in chat",
+        "rankOf": "of",
+        "emote": "My emote",
+        "word": "My word",
+        "partner": "Talked most with",
+        "peak": "Peak",
+        "days": "Days in chat",
+        "times": "times",
+        "footer": "#yearrecap"
+      }
     }
   },
   "notifications": {

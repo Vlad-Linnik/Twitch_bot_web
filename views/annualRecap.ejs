@@ -7,11 +7,21 @@
   const monthNames = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 15)).toLocaleString(loc, { month: 'short', timeZone: 'UTC' }));
   const monthLong = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 15)).toLocaleString(loc, { month: 'long', timeZone: 'UTC' }));
   const pct = (n, max) => Math.round((Number(n || 0) / Math.max(1, max)) * 100);
+  // A length of time as "3 д 4 ч" / "5 ч 20 мин" - the two largest units, the second only when not zero.
+  const fmtSpan = (ms) => {
+    const min = Math.round(Number(ms || 0) / 60000);
+    const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
+    const u = (k, n) => n + ' ' + t('recap.units.' + k);
+    if (d) return u('d', d) + (h ? ' ' + u('h', h) : '');
+    if (h) return u('h', h) + (m ? ' ' + u('m', m) : '');
+    return u('m', m);
+  };
   // Chapter numbers are counted as the page is drawn, so a chapter with no data leaves no gap.
   let chapterN = 0;
   const nextChapter = () => String(++chapterN).padStart(2, '0');
   const h2 = 'text-2xl sm:text-3xl font-extrabold tracking-tight text-white';
   const sub = 'mt-1 text-sm text-neutral-400 max-w-prose';
+  const person = (user, opts) => include('partials/recapUser', Object.assign({ user, profiles: view.profiles, channel, nameColor }, opts || {}));
 %>
 
 <main class="recap-page pt-14 max-w-4xl mx-auto px-4 sm:px-6 py-12">
@@ -68,14 +78,15 @@
     </a>
   </section>
 
-  <div class="mt-16 sm:mt-20 grid gap-16 sm:gap-24">
+  <div class="mt-16 sm:mt-20 grid grid-cols-1 gap-16 sm:gap-24">
 
-    <%# ── Rhythm ─────────────────────────────────────────────────────────── %>
+    <%# ── Rhythm. Hours are stored on the Moscow clock; public/js/recap-time.js turns the chart
+        and the peak to the reader's own time zone, and without JS the label says UTC+3. %>
     <% const maxM = Math.max(1, ...d.months); const peakM = d.months.indexOf(Math.max(...d.months));
        const maxH = Math.max(1, ...d.hours); const peakH = d.hours.indexOf(Math.max(...d.hours)); %>
     <section>
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.rhythm') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.rhythm.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.rhythm, images: view.images }) %></h2>
+      <h2 class="<%= h2 %>"><%= t('recap.rhythm.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.rhythm }) %></h2>
       <p class="<%= sub %>"><%= t('recap.rhythm.sub') %></p>
 
       <div class="mt-8 grid gap-10 md:grid-cols-[1.3fr_1fr] md:gap-12">
@@ -98,24 +109,25 @@
           </div>
         </div>
 
-        <div>
+        <div data-tz-hours="<%= JSON.stringify(d.hours.map(function (n) { return Number(n) || 0; })) %>">
           <p class="text-sm text-neutral-300"><%= t('recap.rhythm.peakHourLabel') %></p>
-          <p class="recap-num mt-1 text-3xl text-amber-300"><%= String(peakH).padStart(2, '0') %>:00</p>
+          <p class="recap-num mt-1 text-3xl text-amber-300" data-tz-peak><%= String(peakH).padStart(2, '0') %>:00</p>
           <div class="mt-4 flex items-end gap-[2px] h-40" role="img" aria-label="<%= t('recap.rhythm.hoursLabel') %>">
             <% d.hours.forEach(function (n, h) { %>
-              <div class="flex-1 rounded-sm <%= h === peakH ? 'recap-bar-peak' : '' %>"
+              <div class="flex-1 rounded-sm <%= h === peakH ? 'recap-bar-peak' : '' %>" data-tz-bar
                    style="height: <%= Math.max(2, pct(n, maxH)) %>%;<% if (h !== peakH) { %> background: rgb(192 132 252 / <%= (0.18 + 0.62 * n / maxH).toFixed(2) %>);<% } %>"
                    title="<%= String(h).padStart(2, '0') %>:00 — <%= fmt(n) %>"></div>
             <% }) %>
           </div>
           <div class="flex justify-between mt-2 text-[10px] sm:text-xs text-neutral-400 tabular-nums"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+          <p class="mt-2 text-xs text-neutral-400" data-tz-label data-local-label="<%= t('recap.rhythm.tzLocal') %>"><%= t('recap.rhythm.tzMsk') %></p>
         </div>
       </div>
     </section>
 
     <%# ── People ─────────────────────────────────────────────────────────── %>
     <% if (view.topChatters.length || view.pairs.length) { const peopleN = nextChapter(); %>
-    <div class="grid gap-14">
+    <div class="grid grid-cols-1 gap-14">
       <% if (view.topChatters.length) {
            const podium = view.topChatters.slice(0, 3);
            const rest = view.topChatters.slice(3);
@@ -125,18 +137,20 @@
            const podHeight = ['h-28 sm:h-36', 'h-20 sm:h-24', 'h-14 sm:h-16']; %>
       <section>
         <p class="recap-chapter"><span class="recap-chapter-n"><%= peopleN %></span><%= t('recap.chapters.people') %></p>
-        <h2 class="<%= h2 %>"><%= t('recap.chatters.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.chatters, images: view.images }) %></h2>
+        <h2 class="<%= h2 %>"><%= t('recap.chatters.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.chatters }) %></h2>
         <p class="<%= sub %>"><%= t('recap.chatters.sub') %></p>
 
         <ol class="mt-8 grid <%= podCols %> gap-2 sm:gap-4 items-end">
-          <% podium.forEach(function (u, i) { const p = view.profiles.get(String(u.userId)); %>
+          <% podium.forEach(function (u, i) { const p = view.profiles.get(String(u.userId)); const color = p ? nameColor(p.chatColor) : null; %>
             <li class="<%= podium.length === 3 ? podOrder[i] : '' %> flex flex-col items-center min-w-0 text-center">
-              <% if (p && p.avatarUrl) { %>
-                <img src="<%= p.avatarUrl %>" alt="" class="<%= i === 0 ? 'w-16 h-16 sm:w-24 sm:h-24 ring-amber-300' : 'w-12 h-12 sm:w-16 sm:h-16 ring-white/20' %> rounded-full ring-2" loading="lazy" />
-              <% } else { %>
-                <span class="<%= i === 0 ? 'w-16 h-16 sm:w-24 sm:h-24' : 'w-12 h-12 sm:w-16 sm:h-16' %> rounded-full bg-neutral-800"></span>
-              <% } %>
-              <a href="/<%= channel.channelLogin %>/user/<%= u.name %>" class="mt-2 max-w-full truncate text-sm sm:text-base font-semibold text-white hover:underline"><%= (p && p.displayName) || u.name %></a>
+              <a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent((p && p.login) || u.name) %>" class="group flex flex-col items-center min-w-0 max-w-full">
+                <% if (p && p.avatarUrl) { %>
+                  <img src="<%= p.avatarUrl %>" alt="" class="<%= i === 0 ? 'w-16 h-16 sm:w-24 sm:h-24 ring-amber-300' : 'w-12 h-12 sm:w-16 sm:h-16 ring-white/20' %> rounded-full ring-2" loading="lazy" />
+                <% } else { %>
+                  <span class="<%= i === 0 ? 'w-16 h-16 sm:w-24 sm:h-24' : 'w-12 h-12 sm:w-16 sm:h-16' %> rounded-full bg-neutral-800"></span>
+                <% } %>
+                <span class="mt-2 max-w-full truncate text-sm sm:text-base font-semibold group-hover:underline <%= color ? '' : 'text-white' %>"<% if (color) { %> style="color: <%= color %>"<% } %>><%= (p && p.displayName) || u.name %></span>
+              </a>
               <span class="text-xs sm:text-sm text-neutral-300 tabular-nums"><%= fmt(u.n) %></span>
               <div class="mt-2 w-full <%= podHeight[i] %> rounded-t-xl flex items-start justify-center pt-2 <%= i === 0 ? 'recap-podium-1' : 'bg-white/[0.06]' %>">
                 <span class="recap-num text-2xl sm:text-4xl <%= i === 0 ? 'text-neutral-950' : 'text-neutral-300' %>"><%= i + 1 %></span>
@@ -147,12 +161,11 @@
 
         <% if (rest.length) { %>
           <ol class="mt-6 grid sm:grid-cols-2 gap-x-8 gap-y-3" start="4">
-            <% rest.forEach(function (u, k) { const p = view.profiles.get(String(u.userId)); %>
-              <li class="grid grid-cols-[1.5rem_1.75rem_1fr_auto] items-center gap-x-3 min-w-0">
+            <% rest.forEach(function (u, k) { %>
+              <li class="grid grid-cols-[1.5rem_1fr_auto] items-center gap-x-3 min-w-0">
                 <span class="text-right text-sm text-neutral-400 tabular-nums"><%= k + 4 %></span>
-                <% if (p && p.avatarUrl) { %><img src="<%= p.avatarUrl %>" alt="" class="w-7 h-7 rounded-full" loading="lazy" /><% } else { %><span class="w-7 h-7 rounded-full bg-neutral-800"></span><% } %>
                 <span class="min-w-0">
-                  <a href="/<%= channel.channelLogin %>/user/<%= u.name %>" class="block truncate text-neutral-100 hover:text-white"><%= (p && p.displayName) || u.name %></a>
+                  <%- person(u) %>
                   <span class="mt-1 block h-1 rounded-full bg-white/[0.06]"><span class="block h-full rounded-full recap-bar" style="width: <%= pct(u.n, maxC) %>%"></span></span>
                 </span>
                 <span class="text-sm text-neutral-300 tabular-nums"><%= fmt(u.n) %></span>
@@ -166,15 +179,15 @@
       <% if (view.pairs.length) { const maxP = Math.max(1, view.pairs[0].total); %>
       <section>
         <% if (!view.topChatters.length) { %><p class="recap-chapter"><span class="recap-chapter-n"><%= peopleN %></span><%= t('recap.chapters.people') %></p><% } %>
-        <h2 class="<%= h2 %>"><%= t('recap.pairs.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.pairs, images: view.images }) %></h2>
+        <h2 class="<%= h2 %>"><%= t('recap.pairs.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.pairs }) %></h2>
         <p class="<%= sub %>"><%= t('recap.pairs.sub') %></p>
         <ul class="mt-6 grid sm:grid-cols-2 gap-x-8 border-t border-white/10">
           <% view.pairs.forEach(function (p, i) { %>
-            <li class="border-b border-white/10 py-3">
-              <div class="flex items-center gap-2 min-w-0 text-sm sm:text-base">
-                <span class="truncate font-semibold text-white"><%= p.a %></span>
+            <li class="border-b border-white/10 py-3 min-w-0">
+              <div class="flex items-center gap-2 min-w-0 text-sm sm:text-base font-semibold">
+                <span class="min-w-0 max-w-[45%]"><%- person({ userId: p.aId, name: p.a }) %></span>
                 <span class="recap-pair-link flex-1 min-w-4" aria-hidden="true"></span>
-                <span class="truncate font-semibold text-white"><%= p.b %></span>
+                <span class="min-w-0 max-w-[45%]"><%- person({ userId: p.bId, name: p.b }) %></span>
               </div>
               <div class="mt-2 flex items-center gap-3">
                 <span class="flex-1 h-1 rounded-full bg-white/[0.06]"><span class="block h-full rounded-full <%= i === 0 ? 'recap-bar-pink' : 'recap-bar' %>" style="width: <%= pct(p.total, maxP) %>%"></span></span>
@@ -188,71 +201,89 @@
     </div>
     <% } %>
 
-    <%# ── Words ──────────────────────────────────────────────────────────── %>
-    <% const wordBlocks = [['words', d.words], ['emotes', d.emotes]].filter(function (pair) { return pair[1].top.length; }); %>
-    <% if (wordBlocks.length || view.newWords.length) { const wordsN = nextChapter(); %>
-    <div class="grid gap-14">
-      <% if (wordBlocks.length) { %>
+    <%# ── Words. Emotes stand on columns as tall as their count, the five top words are wide bars
+        with the word written across them, and the next fifteen of each are tiles - room for the
+        picture or the word, not a line of small print. %>
+    <% const emoteTop = d.emotes.top || []; const wordTop = d.words.top || []; %>
+    <% if (emoteTop.length || wordTop.length || view.newWords.length) { const wordsN = nextChapter(); %>
+    <div class="grid grid-cols-1 gap-14">
+      <% if (emoteTop.length || wordTop.length) { %>
       <section>
         <p class="recap-chapter"><span class="recap-chapter-n"><%= wordsN %></span><%= t('recap.chapters.words') %></p>
-        <h2 class="<%= h2 %>"><%= t('recap.words.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.words, images: view.images }) %></h2>
+        <h2 class="<%= h2 %>"><%= t('recap.words.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.words }) %></h2>
         <p class="<%= sub %>"><%= t('recap.words.sub') %></p>
-        <div class="mt-8 grid gap-10 <%= wordBlocks.length > 1 ? 'md:grid-cols-2' : '' %>">
-          <% wordBlocks.forEach(function (pair) {
-               const kind = pair[0]; const block = pair[1];
-               const imgs = kind === 'emotes' ? view.images : null;
-               const spark = function (word) {
-                 const curve = block.curves[word] || [];
-                 const cmax = Math.max(1, ...curve);
-                 return curve.map(function (v, k) { return (k * 10) + ',' + (25 - Math.round((v / cmax) * 22)); });
-               };
-               const hero = block.top[0]; const heroPts = spark(hero.word);
-               const tail = block.top.slice(5, 20);
-               const tailMax = tail.length ? tail[0].n : 1; const tailMin = tail.length ? tail[tail.length - 1].n : 0; %>
-            <div class="min-w-0">
-              <h3 class="text-xs font-semibold uppercase tracking-widest text-neutral-400"><%= t('recap.words.' + kind) %></h3>
-              <div class="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 overflow-hidden">
-                <div class="flex items-end justify-between gap-4">
-                  <p class="<%= kind === 'emotes' ? 'recap-emote-hero' : 'recap-word-hero' %> min-w-0 break-words text-white"><%- include('partials/recapChatText', { text: hero.word, images: imgs }) %></p>
-                  <p class="shrink-0 text-right"><span class="recap-num block text-2xl text-amber-300"><%= fmt(hero.n) %></span></p>
+
+        <% if (emoteTop.length) {
+             const five = emoteTop.slice(0, 5);
+             const maxE = Math.max(1, five[0].n);
+             // rank 1 in the middle, the rest falling away to both sides
+             const order = [3, 1, 0, 2, 4].filter(function (i) { return i < five.length; }); %>
+          <h3 class="mt-8 text-xs font-semibold uppercase tracking-widest text-neutral-400"><%= t('recap.words.emotes') %></h3>
+          <ol class="mt-4 grid gap-2 sm:gap-4 items-end" style="grid-template-columns: repeat(<%= order.length %>, minmax(0, 1fr))">
+            <% order.forEach(function (i) { const e = five[i]; %>
+              <li class="flex flex-col items-center justify-end min-w-0">
+                <span class="recap-emote-column-pic"><%- include('partials/recapChatText', { text: e.word, images: view.images }) %></span>
+                <span class="mt-2 w-full rounded-t-2xl flex flex-col items-center justify-end px-1 pb-3 <%= i === 0 ? 'recap-podium-1 text-neutral-950' : 'recap-bar text-white' %>" style="height: <%= 7 + Math.round(9 * e.n / maxE) %>rem">
+                  <span class="recap-num text-xl sm:text-3xl"><%= i + 1 %></span>
+                  <span class="mt-1 max-w-full truncate text-xs sm:text-sm font-semibold"><%= e.word %></span>
+                  <span class="text-[11px] sm:text-xs opacity-80 tabular-nums"><%= t('recap.words.times', { n: fmt(e.n) }) %></span>
+                </span>
+              </li>
+            <% }) %>
+          </ol>
+          <% const eTail = emoteTop.slice(5, 20); if (eTail.length) { %>
+            <ol class="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2" start="6">
+              <% eTail.forEach(function (e, k) { %>
+                <li class="flex items-center gap-2 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <span class="text-xs text-neutral-500 tabular-nums"><%= k + 6 %></span>
+                  <span class="recap-emote-tile min-w-0 truncate"><%- include('partials/recapChatText', { text: e.word, images: view.images }) %></span>
+                  <span class="ml-auto text-xs text-neutral-300 tabular-nums"><%= fmt(e.n) %></span>
+                </li>
+              <% }) %>
+            </ol>
+          <% } %>
+        <% } %>
+
+        <% if (wordTop.length) {
+             const fiveW = wordTop.slice(0, 5);
+             const maxW = Math.max(1, fiveW[0].n);
+             const curve = (d.words.curves || {})[fiveW[0].word] || [];
+             const cmax = Math.max(1, ...curve);
+             const pts = curve.map(function (v, k) { return (k * 10) + ',' + (25 - Math.round((v / cmax) * 22)); }); %>
+          <h3 class="mt-12 text-xs font-semibold uppercase tracking-widest text-neutral-400"><%= t('recap.words.words') %></h3>
+          <ol class="mt-4 grid gap-2">
+            <% fiveW.forEach(function (w, i) { %>
+              <li class="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] <%= i === 0 ? 'min-h-20 sm:min-h-24' : 'min-h-14' %>">
+                <span class="absolute inset-y-0 left-0 <%= i === 0 ? 'recap-word-fill-peak' : 'recap-word-fill' %>" style="width: <%= Math.max(8, pct(w.n, maxW)) %>%" aria-hidden="true"></span>
+                <div class="relative flex h-full items-center gap-3 sm:gap-4 px-4 py-3">
+                  <span class="recap-num w-6 shrink-0 text-lg <%= i === 0 ? 'text-amber-300' : 'text-neutral-400' %>"><%= i + 1 %></span>
+                  <span class="min-w-0 flex-1 truncate font-black tracking-tight text-white <%= i === 0 ? 'text-4xl sm:text-5xl' : 'text-2xl sm:text-3xl' %>"><%= w.word %></span>
+                  <% if (i === 0 && pts.length) { %>
+                    <svg viewBox="0 0 110 27" class="hidden sm:block w-28 h-10 shrink-0 text-amber-300" aria-hidden="true"><polyline points="<%= pts.join(' ') %>" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>
+                  <% } %>
+                  <span class="shrink-0 text-right recap-num <%= i === 0 ? 'text-2xl text-amber-300' : 'text-lg text-neutral-200' %>"><%= fmt(w.n) %></span>
                 </div>
-                <% if (heroPts.length) { %>
-                  <svg viewBox="0 0 110 27" preserveAspectRatio="none" class="mt-4 block w-full h-14 text-amber-300" aria-hidden="true">
-                    <polygon points="0,27 <%= heroPts.join(' ') %> 110,27" fill="currentColor" fill-opacity="0.12" />
-                    <polyline points="<%= heroPts.join(' ') %>" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-                  </svg>
-                  <div class="mt-1 flex justify-between text-[10px] text-neutral-400"><span><%= monthNames[0] %></span><span><%= monthNames[11] %></span></div>
-                <% } %>
-              </div>
-              <ol class="mt-4 space-y-2" start="2">
-                <% block.top.slice(1, 5).forEach(function (w, i) { const pts = spark(w.word); %>
-                  <li class="flex items-center gap-3 min-w-0">
-                    <span class="w-4 text-right text-sm text-neutral-400 tabular-nums"><%= i + 2 %></span>
-                    <span class="min-w-0 truncate text-lg font-semibold text-neutral-100"><%- include('partials/recapChatText', { text: w.word, images: imgs }) %></span>
-                    <% if (pts.length) { %>
-                      <svg viewBox="0 0 110 27" class="ml-auto shrink-0 w-16 sm:w-20 h-5 text-purple-300" aria-hidden="true"><polyline points="<%= pts.join(' ') %>" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>
-                    <% } %>
-                    <span class="<%= pts.length ? '' : 'ml-auto' %> w-16 shrink-0 text-right text-sm text-neutral-300 tabular-nums"><%= fmt(w.n) %></span>
-                  </li>
-                <% }) %>
-              </ol>
-              <% if (tail.length) { %>
-                <p class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 leading-tight">
-                  <% tail.forEach(function (w) { const k = tailMax > tailMin ? (w.n - tailMin) / (tailMax - tailMin) : 0.5; %>
-                    <span class="text-neutral-300 <%= kind === 'emotes' ? 'recap-emote-chip' : '' %>" style="font-size: <%= (0.8 + 0.45 * k).toFixed(2) %>rem" title="<%= fmt(w.n) %>"><%- include('partials/recapChatText', { text: w.word, images: imgs }) %></span>
-                  <% }) %>
-                </p>
-              <% } %>
-            </div>
-          <% }) %>
-        </div>
+              </li>
+            <% }) %>
+          </ol>
+          <% const wTail = wordTop.slice(5, 20); if (wTail.length) { %>
+            <ol class="mt-3 flex flex-wrap gap-2" start="6">
+              <% wTail.forEach(function (w) { %>
+                <li class="flex items-baseline gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <span class="text-base sm:text-lg font-bold text-neutral-100"><%= w.word %></span>
+                  <span class="text-xs text-neutral-400 tabular-nums"><%= fmt(w.n) %></span>
+                </li>
+              <% }) %>
+            </ol>
+          <% } %>
+        <% } %>
       </section>
       <% } %>
 
       <% if (view.newWords.length) { %>
       <section>
-        <% if (!wordBlocks.length) { %><p class="recap-chapter"><span class="recap-chapter-n"><%= wordsN %></span><%= t('recap.chapters.words') %></p><% } %>
-        <h2 class="<%= h2 %>"><%= t('recap.newWords.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.newWords, images: view.images }) %></h2>
+        <% if (!emoteTop.length && !wordTop.length) { %><p class="recap-chapter"><span class="recap-chapter-n"><%= wordsN %></span><%= t('recap.chapters.words') %></p><% } %>
+        <h2 class="<%= h2 %>"><%= t('recap.newWords.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.newWords }) %></h2>
         <p class="<%= sub %>"><%= t('recap.newWords.sub') %></p>
         <ul class="mt-8 grid md:grid-cols-2 gap-x-10 gap-y-8">
           <% view.newWords.forEach(function (w) { const said = w.by && String(w.by.text || '').trim(); %>
@@ -262,8 +293,10 @@
                 <span class="shrink-0 text-sm text-amber-300 tabular-nums"><%= t('recap.newWords.uses', { n: fmt(w.n) }) %></span>
               </div>
               <% if (w.by) { %>
-                <p class="mt-2 text-sm text-neutral-400">
-                  <%= t('recap.newWords.patientZero', { name: w.by.name, date: fmtDate(w.by.at, { day: 'numeric', month: 'long' }) }) %>
+                <p class="mt-2 flex flex-wrap items-center gap-x-1.5 text-sm text-neutral-400">
+                  <span><%= t('recap.newWords.firstBy') %></span>
+                  <span class="min-w-0 max-w-full"><%- person({ userId: w.by.userId, name: w.by.name }) %></span>
+                  <span>· <%= fmtDate(w.by.at, { day: 'numeric', month: 'long' }) %></span>
                 </p>
                 <% if (said) { %>
                   <p class="recap-bubble mt-2 text-sm text-neutral-200 break-words"><%- include('partials/recapChatText', { text: w.by.text, images: view.images }) %></p>
@@ -282,7 +315,7 @@
     <% const topClips = d.topClips || []; if (topClips.length) { %>
     <section id="clips" data-embed-parent="<%= view.embedParent %>">
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.clips') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.clips.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.clips, images: view.images }) %></h2>
+      <h2 class="<%= h2 %>"><%= t('recap.clips.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.clips }) %></h2>
       <p class="<%= sub %>"><%= t('recap.clips.sub') %></p>
       <% topClips.forEach(function (c, i) { const hero = i === 0; %>
         <% if (i === 1) { %><ol start="2" class="mt-6 grid gap-6 sm:grid-cols-2"><% } %>
@@ -319,7 +352,7 @@
     <% if (view.moments.length) { const csrfMoments = typeof csrfToken !== 'undefined' ? csrfToken : ''; %>
     <section id="moments">
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.moments') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.moments.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.moments, images: view.images }) %></h2>
+      <h2 class="<%= h2 %>"><%= t('recap.moments.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.moments }) %></h2>
       <p class="<%= sub %>"><%= t('recap.moments.sub') %></p>
       <ul class="mt-6 grid gap-6 sm:grid-cols-2" data-recap-moments data-embed-parent="<%= view.embedParent %>">
         <% view.moments.forEach(function (m, i) { %>
@@ -339,7 +372,7 @@
             <div class="mt-3 flex items-start gap-3">
               <div class="min-w-0 flex-1">
                 <p class="text-sm text-neutral-300">
-                  <%= fmtDate(m.at, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) %><% if (m.category) { %> · <%= m.category %><% } %>
+                  <time datetime="<%= new Date(m.at).toISOString() %>" data-local-time><%= fmtDate(m.at, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) %></time><% if (m.category) { %> · <%= m.category %><% } %>
                 </p>
                 <p class="mt-0.5 truncate font-semibold text-white"><%= m.clip.title %></p>
                 <% if (m.chant) { %>
@@ -369,7 +402,7 @@
       <div class="grid gap-12 <%= view.commands.length && view.firstChatters.length ? 'md:grid-cols-[1.3fr_1fr]' : '' %>">
         <% if (view.commands.length) { const maxCmd = Math.max(1, view.commands[0].n); %>
         <div class="min-w-0">
-          <h2 class="<%= h2 %>"><%= t('recap.commands.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.commands, images: view.images }) %></h2>
+          <h2 class="<%= h2 %>"><%= t('recap.commands.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.commands }) %></h2>
           <p class="<%= sub %>"><%= t('recap.commands.sub') %></p>
           <ol class="recap-terminal mt-6 rounded-2xl border border-white/10 bg-black/60 p-4 sm:p-5 space-y-2.5 text-sm">
             <% view.commands.forEach(function (c, i) { %>
@@ -387,13 +420,13 @@
         <% } %>
         <% if (view.firstChatters.length) { %>
         <div class="min-w-0">
-          <h2 class="<%= h2 %>"><%= t('recap.first.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.first, images: view.images }) %></h2>
+          <h2 class="<%= h2 %>"><%= t('recap.first.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.first }) %></h2>
           <p class="<%= sub %>"><%= t('recap.first.sub') %></p>
           <ol class="mt-6 divide-y divide-white/10 border-y border-white/10">
             <% view.firstChatters.forEach(function (f, i) { %>
               <li class="flex items-center gap-3 py-3 min-w-0">
                 <span class="recap-num w-14 shrink-0 <%= i === 0 ? 'text-3xl text-amber-300' : 'text-2xl text-neutral-300' %>">×<%= f.n %></span>
-                <span class="min-w-0 truncate <%= i === 0 ? 'text-lg font-semibold text-white' : 'text-neutral-100' %>"><%= f.name %></span>
+                <span class="min-w-0 <%= i === 0 ? 'text-lg font-semibold' : '' %>"><%- person({ userId: f.userId, name: f.name }, { size: i === 0 ? 'md' : 'sm' }) %></span>
                 <span class="sr-only"><%= t('recap.first.times', { n: f.n }) %></span>
               </li>
             <% }) %>
@@ -404,61 +437,104 @@
     </section>
     <% } %>
 
-    <%# ── Games ──────────────────────────────────────────────────────────── %>
-    <% if (d.categories.list.length) {
-         const cats = d.categories.list.slice(0, 8);
-         const maxHours = Math.max(1, ...cats.map(function (c) { return c.hours; }));
+    <%# ── Games: the stream's categories with their box art; a category opens the channel's card
+        for that game on our site, or its games page (routes/annualRecap.js's categoryLinks). %>
+    <% if (view.cats.length) {
+         const maxHours = Math.max(1, ...view.cats.map(function (c) { return c.hours; }));
          const liveliest = d.categories.list.filter(function (c) { return c.hours >= 5; }).slice().sort(function (a, b) { return b.perHour - a.perHour; })[0]; %>
     <section>
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.games') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.categories.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.categories, images: view.images }) %></h2>
+      <h2 class="<%= h2 %>"><%= t('recap.categories.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.categories }) %></h2>
       <p class="<%= sub %>"><%= t('recap.categories.sub', { since: fmtDate(d.categories.since, { day: 'numeric', month: 'long' }) }) %></p>
       <% if (liveliest) { %>
         <p class="mt-6 rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] px-5 py-4 text-base sm:text-lg text-amber-100"><%= t('recap.categories.liveliest', { name: liveliest.name, n: fmt(Math.round(liveliest.perHour)) }) %></p>
       <% } %>
-      <div class="mt-6 flex justify-end gap-6 text-xs text-neutral-400">
-        <span><%= t('recap.categories.colHours') %></span><span class="w-20 text-right whitespace-nowrap"><%= t('recap.categories.colPerHour') %></span>
-      </div>
-      <ol class="mt-2 space-y-3">
-        <% cats.forEach(function (c, i) { %>
-          <li class="min-w-0">
-            <div class="flex items-baseline gap-6 min-w-0">
-              <span class="min-w-0 flex-1 truncate <%= i === 0 ? 'text-lg font-semibold text-white' : 'text-neutral-100' %>"><%= c.name %></span>
-              <span class="shrink-0 tabular-nums text-neutral-200"><%= fmt(Math.round(c.hours)) %></span>
-              <span class="w-20 shrink-0 text-right tabular-nums text-neutral-400"><%= fmt(Math.round(c.perHour)) %></span>
-            </div>
-            <span class="mt-1 block h-1.5 rounded-full bg-white/[0.05]"><span class="block h-full rounded-full <%= i === 0 ? 'recap-bar-peak' : 'recap-bar' %>" style="width: <%= Math.max(1, pct(c.hours, maxHours)) %>%"></span></span>
+      <ol class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <% view.cats.forEach(function (c, i) { const Tag = c.href ? 'a' : 'div'; %>
+          <li class="min-w-0 <%= i === 0 ? 'col-span-2 row-span-2' : '' %>">
+            <<%= Tag %> <% if (c.href) { %>href="<%= c.href %>"<% } %> class="group relative block overflow-hidden rounded-2xl border <%= i === 0 ? 'border-amber-300/60' : 'border-white/10' %> bg-neutral-900">
+              <% if (c.art) { %>
+                <img src="<%= c.art %>" alt="" loading="lazy" class="aspect-[3/4] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+              <% } else { %>
+                <span class="aspect-[3/4] w-full grid place-items-center bg-gradient-to-br from-purple-900/60 to-neutral-900 text-4xl font-black text-white/30" aria-hidden="true"><%= c.name.charAt(0) %></span>
+              <% } %>
+              <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 pt-8 pb-3">
+                <span class="block truncate font-bold text-white <%= i === 0 ? 'text-lg sm:text-2xl' : 'text-sm' %> <%= c.href ? 'group-hover:underline' : '' %>"><%= i + 1 %>. <%= c.name %></span>
+                <span class="mt-0.5 block text-xs text-neutral-300 tabular-nums"><%= t('recap.categories.hoursShort', { n: fmt(Math.round(c.hours)) }) %> · <%= t('recap.categories.perHourShort', { n: fmt(Math.round(c.perHour)) }) %></span>
+                <span class="mt-2 block h-1 rounded-full bg-white/15"><span class="block h-full rounded-full <%= i === 0 ? 'recap-bar-peak' : 'recap-bar' %>" style="width: <%= Math.max(2, pct(c.hours, maxHours)) %>%"></span></span>
+              </span>
+            </<%= Tag %>>
           </li>
         <% }) %>
       </ol>
     </section>
     <% } %>
 
-    <%# ── Moderation ─────────────────────────────────────────────────────── %>
-    <% if (d.moderation.since) { const a = d.moderation.actions; %>
+    <%# ── The site's own games: the best results among this chat's people, per game. %>
+    <% if (view.siteGames.length) { %>
+    <section>
+      <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.siteGames') %></p>
+      <h2 class="<%= h2 %>"><%= t('recap.siteGames.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.siteGames }) %></h2>
+      <p class="<%= sub %>"><%= t('recap.siteGames.sub') %></p>
+      <ul class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <% view.siteGames.forEach(function (g) { %>
+          <li class="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <a href="<%= g.entry.url %>" class="block truncate text-lg font-bold text-white hover:underline"><%= t(g.titleKey || g.entry.nameKey) %></a>
+            <p class="text-xs text-neutral-400"><%= t('recap.siteGames.players', { n: fmt(g.players) }) %> · <%= t('recap.siteGames.unit.' + g.unit) %></p>
+            <ol class="mt-3 space-y-2">
+              <% g.top.forEach(function (u, i) { %>
+                <li class="flex items-center gap-2 min-w-0">
+                  <span class="recap-num w-5 shrink-0 text-base <%= i === 0 ? 'text-amber-300' : 'text-neutral-400' %>"><%= i + 1 %></span>
+                  <span class="min-w-0 flex-1 <%= i === 0 ? 'font-semibold' : '' %>"><%- person(u) %></span>
+                  <span class="shrink-0 tabular-nums <%= i === 0 ? 'text-amber-300 font-semibold' : 'text-neutral-300' %>" title="<%= t('recap.siteGames.unit.' + g.unit) %>"><%= fmt(u.score) %></span>
+                </li>
+              <% }) %>
+            </ol>
+          </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
+    <%# ── Moderation. The tiles read left to right from the lightest measure to the heaviest -
+        deleted messages, timeouts, bans - each in its own colour, then the duel timeouts and
+        the pardons, which are neither. %>
+    <% if (d.moderation.since) { const a = d.moderation.actions; const tops = view.modTops; %>
     <section>
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.order') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.moderation.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.moderation, images: view.images }) %></h2>
+      <h2 class="<%= h2 %>"><%= t('recap.moderation.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.moderation }) %></h2>
       <p class="<%= sub %>"><%= t('recap.moderation.sub', { since: fmtDate(d.moderation.since, { day: 'numeric', month: 'long' }) }) %></p>
-      <dl class="mt-6 grid grid-cols-2 sm:grid-cols-3 border-t border-l border-white/10">
-        <% [['timeouts', a.timeout || 0], ['bans', a.ban || 0], ['deletes', a.delete || 0], ['duels', d.moderation.duel], ['sniper', d.moderation.sniper], ['amnesty', d.unbans.approved]].forEach(function (s) { %>
-          <div class="flex flex-col-reverse border-r border-b border-white/10 px-4 py-4 sm:px-5 sm:py-5">
-            <dt class="mt-1 text-xs sm:text-sm text-neutral-400"><%= t('recap.moderation.' + s[0]) %></dt>
-            <dd class="recap-num text-3xl sm:text-4xl <%= s[1] ? 'text-white' : 'text-neutral-500' %>"><%= fmt(s[1]) %></dd>
+      <dl class="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <% [['deletes', a.delete || 0, 'recap-tile-delete'], ['timeouts', a.timeout || 0, 'recap-tile-timeout'], ['bans', a.ban || 0, 'recap-tile-ban'], ['duels', d.moderation.duel || 0, 'recap-tile-duel'], ['amnesty', d.unbans.approved || 0, 'recap-tile-amnesty']].forEach(function (s) { %>
+          <div class="recap-tile <%= s[2] %> flex flex-col-reverse rounded-2xl px-4 py-4">
+            <dt class="mt-1 text-xs sm:text-sm text-neutral-300"><%= t('recap.moderation.' + s[0]) %></dt>
+            <dd class="recap-num text-3xl sm:text-4xl"><%= fmt(s[1]) %></dd>
           </div>
         <% }) %>
       </dl>
-      <% if (view.mods.length) { %>
-        <h3 class="mt-8 mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-400"><%= t('recap.moderation.fastest') %></h3>
-        <ol class="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-          <% view.mods.forEach(function (m, i) { const p = view.profiles.get(String(m.userId)); %>
-            <li class="flex items-center gap-3 min-w-0">
-              <% if (p && p.avatarUrl) { %><img src="<%= p.avatarUrl %>" alt="" class="w-7 h-7 rounded-full" loading="lazy" /><% } else { %><span class="w-7 h-7 rounded-full bg-neutral-800"></span><% } %>
-              <span class="min-w-0 truncate <%= i === 0 ? 'font-semibold text-white' : 'text-neutral-100' %>"><%= (p && (p.displayName || p.login)) || m.userId %></span>
-              <span class="ml-auto shrink-0 tabular-nums <%= i === 0 ? 'text-amber-300' : 'text-neutral-300' %>"><%= t('recap.moderation.median', { s: (m.medianMs / 1000).toFixed(1) }) %></span>
-            </li>
+      <% const topLists = [
+           ['fastest', function (m) { return t('recap.moderation.median', { s: (m.medianMs / 1000).toFixed(1) }); }],
+           ['mostActions', function (m) { return t('recap.moderation.actionsCount', { n: fmt(m.bans + m.timeouts), bans: fmt(m.bans) }); }],
+           ['longestGiven', function (m) { return fmtSpan(m.timeoutMs); }],
+           ['presence', function (m) { return t('recap.moderation.hours', { n: fmt(Math.round(m.hours)) }); }],
+         ].filter(function (l) { return (tops[l[0]] || []).length; }); %>
+      <% if (topLists.length) { %>
+        <div class="mt-8 grid gap-8 sm:grid-cols-2">
+          <% topLists.forEach(function (l) { %>
+            <div class="min-w-0">
+              <h3 class="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-400"><%= t('recap.moderation.top.' + l[0]) %></h3>
+              <ol class="space-y-2 text-sm">
+                <% tops[l[0]].forEach(function (m, i) { %>
+                  <li class="flex items-center gap-2 min-w-0">
+                    <span class="recap-num w-4 shrink-0 <%= i === 0 ? 'text-amber-300' : 'text-neutral-500' %>"><%= i + 1 %></span>
+                    <span class="min-w-0 flex-1 <%= i === 0 ? 'font-semibold' : '' %>"><%- person({ userId: m.userId, name: m.userId }) %></span>
+                    <span class="shrink-0 tabular-nums <%= i === 0 ? 'text-amber-300' : 'text-neutral-300' %>"><%= l[1](m) %></span>
+                  </li>
+                <% }) %>
+              </ol>
+            </div>
           <% }) %>
-        </ol>
+        </div>
       <% } %>
     </section>
     <% } %>
@@ -468,12 +544,12 @@
     <% if (view.picks.length) { %>
     <section>
       <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.bot') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.picks.heading') %><%- include('partials/recapHeadingEmote', { name: headingEmotes.picks, images: view.images }) %></h2>
+      <h2 class="<%= h2 %>"><%= t('recap.picks.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.picks }) %></h2>
       <p class="<%= sub %>"><%= t('recap.picks.sub') %></p>
       <ul class="mt-6 grid gap-6">
         <% view.picks.forEach(function (p) { %>
           <li class="grid gap-2">
-            <p class="text-xs text-neutral-400"><%= p.login %> · <%= fmtDate(p.createdAt, { day: 'numeric', month: 'long' }) %></p>
+            <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-400"><span class="min-w-0"><%- person({ userId: p.userId, name: p.login }) %></span><span>· <%= fmtDate(p.createdAt, { day: 'numeric', month: 'long' }) %></span></p>
             <p class="recap-bubble max-w-[85%] text-sm text-neutral-200 break-words"><%- include('partials/recapChatText', { text: p.question, images: view.images }) %></p>
             <p class="recap-bubble recap-bubble-bot max-w-[85%] justify-self-end text-sm sm:text-base text-white break-words"><%- include('partials/recapChatText', { text: p.answer, images: view.images }) %></p>
           </li>
@@ -499,4 +575,5 @@
 </main>
 
 <script src="<%= asset('/js/recap-moments.js') %>" defer></script>
+<script src="<%= asset('/js/recap-time.js') %>" defer></script>
 <%- include('partials/foot') %>

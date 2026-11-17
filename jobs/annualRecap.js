@@ -9,7 +9,7 @@
 // Runs from the admin panel's button, and once a day for every channel whose recap section is
 // switched on: the current year keeps growing until it ends, and a finished year gets one last
 // build after its final day.
-const { connect } = require("../db/connection");
+const { connect, connectWeb } = require("../db/connection");
 const channelsRepo = require("../db/channelsRepo");
 const recapRepo = require("../db/annualRecapRepo");
 const { emotePredicate } = require("../db/emotePredicate");
@@ -278,6 +278,55 @@ async function loudMomentsWithClips(db, channel, channelId, minutes, samples, lo
   }
 }
 
+// Hours each moderator spent on the channel's streams this year, from the bot's daily
+// ModUpTimeStats rows (channelId is a string, except a few legacy rows written as a number). The
+// broadcaster is there whenever there is a stream, which is not what this top is about.
+async function modPresence(db, channelId, start, end, botMods) {
+  const rows = await db
+    .collection("ModUpTimeStats")
+    .aggregate([
+      { $match: { channelId: { $in: [channelId, Number(channelId)] }, timestamp: { $gte: start, $lt: end } } },
+      { $group: { _id: "$userId", hours: { $sum: "$hours" }, days: { $sum: 1 } } },
+      { $sort: { hours: -1 } },
+      { $limit: 15 },
+    ])
+    .toArray();
+  return rows
+    .filter((r) => String(r._id) !== String(channelId) && !botMods.has(String(r._id).toLowerCase()))
+    .slice(0, 10)
+    .map((r) => ({ userId: String(r._id), hours: r.hours, days: r.days }));
+}
+
+// The best results in the site's own games, among people who wrote in this chat this year. A score
+// counts for the year it was set (achievedAt); per-channel game variants of another channel
+// (higher-lower-words-<other>) are left out. Higher is better in every game, Durak's rating too.
+const SITE_GAMES_TOP = 3;
+async function siteGameTops(users, login, start, end) {
+  const web = await connectWeb();
+  const rows = await web
+    .collection("GameScores")
+    .find({ achievedAt: { $gte: start, $lt: end } })
+    .project({ _id: 0, game: 1, userId: 1, bestScore: 1, achievedAt: 1 })
+    .toArray();
+  const byGame = new Map();
+  for (const r of rows) {
+    const game = String(r.game);
+    const variant = /^(higher-lower-(?:words|emotes)|guess-chatter)-(.+)$/.exec(game);
+    if (variant && variant[2] !== login) continue;
+    const user = users.get(String(r.userId));
+    if (!user) continue;
+    if (!byGame.has(game)) byGame.set(game, []);
+    byGame.get(game).push({ userId: String(r.userId), name: user.name, score: r.bestScore, at: r.achievedAt });
+  }
+  return [...byGame.entries()]
+    .map(([game, list]) => ({
+      game,
+      players: list.length,
+      top: list.sort((a, b) => b.score - a.score || a.at - b.at).slice(0, SITE_GAMES_TOP),
+    }))
+    .sort((a, b) => b.players - a.players);
+}
+
 async function buildChannelRecap(channelLogin, year) {
   const db = await connect();
   const login = String(channelLogin).toLowerCase();
@@ -368,7 +417,7 @@ async function buildChannelRecap(channelLogin, year) {
     db
       .collection("ModeratorActionLogs")
       .find({ channel: login, timestamp: { $gte: start, $lt: end } })
-      .project({ _id: 0, action: 1, reason: 1, modID: 1, TTA: 1, timestamp: 1 })
+      .project({ _id: 0, action: 1, reason: 1, modID: 1, TTA: 1, timestamp: 1, durationMs: 1 })
       .toArray(),
     db
       .collection("UnbanRequests")
@@ -377,19 +426,30 @@ async function buildChannelRecap(channelLogin, year) {
       .toArray(),
   ]);
 
-  const moderation = { actions: {}, duel: 0, sniper: 0, self: 0, since: null, fastest: [] };
+  const moderation = { actions: {}, duel: 0, sniper: 0, self: 0, since: null, fastest: [], mostActions: [], longestGiven: [], presence: [] };
   const ttaByMod = new Map();
+  const tallyByMod = new Map(); // modID -> { bans, timeouts, deletes, timeoutMs }
   // Bots hold moderator rights and answer in milliseconds, so they would top "fastest moderators"
   // every time. modID is an id (or a login on legacy rows), hence both spellings.
   const bots = await getKnownBotIdentifiers();
   const botMods = new Set([...bots.ids, ...bots.logins].map(String));
   for (const row of modRows) {
     if (!moderation.since || row.timestamp < moderation.since) moderation.since = row.timestamp;
-    moderation.actions[row.action] = (moderation.actions[row.action] || 0) + 1;
     const kind = reasonKind(row.reason);
     if (kind) {
       moderation[kind] += 1;
       continue; // a duel or a sniper shot is not a moderator reacting to anything
+    }
+    moderation.actions[row.action] = (moderation.actions[row.action] || 0) + 1;
+    if (row.modID && !botMods.has(String(row.modID).toLowerCase())) {
+      const id = String(row.modID);
+      let t = tallyByMod.get(id);
+      if (!t) tallyByMod.set(id, (t = { bans: 0, timeouts: 0, deletes: 0, timeoutMs: 0 }));
+      if (row.action === "ban") t.bans += 1;
+      else if (row.action === "timeout") {
+        t.timeouts += 1;
+        t.timeoutMs += Number(row.durationMs) || 0;
+      } else if (row.action === "delete") t.deletes += 1;
     }
     if (typeof row.TTA === "number" && row.TTA > 0 && row.modID && !botMods.has(String(row.modID).toLowerCase())) {
       const id = String(row.modID);
@@ -402,6 +462,22 @@ async function buildChannelRecap(channelLogin, year) {
     .map(([userId, v]) => ({ userId, medianMs: median(v), actions: v.length }))
     .sort((a, b) => a.medianMs - b.medianMs)
     .slice(0, 10);
+
+  // Three more tops of the moderators, each answering its own question: who acted most (bans and
+  // timeouts), who gave the most time in timeouts (a ban has no length and is left out of that one),
+  // and who was there longest (ModUpTimeStats - hours present on stream, the bot's own reading).
+  const tallies = [...tallyByMod.entries()].map(([userId, t]) => ({ userId, ...t }));
+  moderation.mostActions = tallies
+    .filter((t) => t.bans + t.timeouts > 0)
+    .sort((a, b) => b.bans + b.timeouts - (a.bans + a.timeouts))
+    .slice(0, 10)
+    .map((t) => ({ userId: t.userId, bans: t.bans, timeouts: t.timeouts }));
+  moderation.longestGiven = tallies
+    .filter((t) => t.timeoutMs > 0)
+    .sort((a, b) => b.timeoutMs - a.timeoutMs)
+    .slice(0, 10)
+    .map((t) => ({ userId: t.userId, timeoutMs: t.timeoutMs, timeouts: t.timeouts }));
+  moderation.presence = await modPresence(db, channelId, start, end, botMods);
 
   const unbans = { approved: 0, denied: 0 };
   for (const r of unbanRows) if (r.twitchStatus in unbans) unbans[r.twitchStatus] += 1;
@@ -485,6 +561,10 @@ async function buildChannelRecap(channelLogin, year) {
     firstChatters,
     moderation,
     unbans,
+    siteGames: await siteGameTops(state.users, login, start, end).catch((err) => {
+      console.error(`[annualRecap] ${login} ${year}: site game tops failed:`, err.message);
+      return [];
+    }),
     wordCountsAt,
     buildMs: { scan: scanMs, total: Date.now() - t0 },
   };

@@ -1,5 +1,4 @@
-<%# The emote after a recap heading (lib/recapHeadingEmotes.js). Drawn only when the channel has a
-    picture for it; otherwise nothing - never the bare name. Sized to the heading's own text.
-    Params: name (emote name or undefined), images (Map name -> url). -%>
-<% const headingUrl = name && images && typeof images.get === 'function' ? images.get(name) : null; -%>
-<% if (headingUrl) { %><img src="<%= headingUrl %>" alt="<%= name %>" title="<%= name %>" loading="lazy" class="recap-heading-emote" /><% } -%>
+<%# The emote after a recap heading (lib/recapHeadingEmotes.js's resolveHeadingEmotes). Nothing
+    when the channel cannot draw it - never the bare name. Sized to the heading's own text.
+    Params: emote ({ name, url } or undefined). -%>
+<% if (emote && emote.url) { %><img src="<%= emote.url %>" alt="<%= emote.name %>" title="<%= emote.name %>" loading="lazy" class="recap-heading-emote" /><% } -%>

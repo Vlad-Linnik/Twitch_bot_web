@@ -206,4 +206,24 @@ async function getUserRecap(channelDoc, year, userId, channelRecap) {
   return data;
 }
 
-module.exports = { getUserRecap, computeUserRecap };
+// Map<login, userId> for the logins a recap names by login only (the people someone @-mentioned).
+// Logins change, so the nickname history is searched too; a login nobody has had is left out.
+async function userIdsByLogin(logins) {
+  const wanted = [...new Set(logins.filter(Boolean).map((l) => String(l).toLowerCase()))];
+  if (!wanted.length) return new Map();
+  const db = await connect();
+  const rows = await db
+    .collection("UserIdentities")
+    .find({ $or: [{ currentUserName: { $in: wanted } }, { "nicknames.name": { $in: wanted } }] })
+    .project({ _id: 0, userId: 1, currentUserName: 1, "nicknames.name": 1 })
+    .toArray();
+  const out = new Map();
+  // A current name wins over an old one: the login someone holds today is theirs.
+  for (const r of rows) if (wanted.includes(r.currentUserName)) out.set(r.currentUserName, String(r.userId));
+  for (const r of rows) {
+    for (const n of r.nicknames || []) if (wanted.includes(n.name) && !out.has(n.name)) out.set(n.name, String(r.userId));
+  }
+  return out;
+}
+
+module.exports = { getUserRecap, computeUserRecap, userIdsByLogin };

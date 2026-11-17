@@ -20,7 +20,13 @@ const { buildChannelNav } = require("../lib/channelNav");
 const recap = require("../lib/annualRecap");
 const gamesCatalog = require("../data/gamesCatalog");
 const { isKnownBotName } = require("../config/knownBots");
-const { RECAP_HEADING_EMOTES } = require("../lib/recapHeadingEmotes");
+const { resolveHeadingEmotes } = require("../lib/recapHeadingEmotes");
+const { readableChatColor } = require("../lib/readableColor");
+const { getBoxArtUrls } = require("../twitch/gameBoxArt");
+const mediaItemsRepo = require("../db/mediaItemsRepo");
+const axios = require("axios");
+const { isAllowedImageUrl } = require("../lib/emoteImageHosts");
+const { categoryKey } = require("../lib/streamHours");
 const { canEditSectionAt } = require("../middleware/permissions");
 const { canModerateDiscussion } = require("../lib/discussion");
 
@@ -57,14 +63,52 @@ function parseYear(raw) {
 
 // GameScores keys carry suffixes the catalog does not ("durak-multiplayer", per-channel
 // "higher-lower-words-<login>"); the catalog entry whose id the key starts with names it.
-function gameNameKey(gameId) {
+function gameEntry(gameId) {
   const id = String(gameId);
-  const entry = gamesCatalog
-    .slice()
-    .sort((a, b) => b.id.length - a.id.length)
-    .find((g) => id === g.id || id.startsWith(`${g.id}-`));
-  return entry ? entry.nameKey : null;
+  return (
+    gamesCatalog
+      .slice()
+      .sort((a, b) => b.id.length - a.id.length)
+      .find((g) => id === g.id || id.startsWith(`${g.id}-`)) || null
+  );
 }
+
+function gameNameKey(gameId) {
+  return gameEntry(gameId)?.nameKey || null;
+}
+
+// Where a stream category leads on our site: the channel's own card for that game when there is one,
+// else the channel's games page. Nothing when the games section is off (a link to a 404), except for
+// the site admin, who previews switched-off sections anyway.
+async function categoryLinks(channel, names, permission) {
+  if (!channel.gamesEnabled && permission !== 0) return new Map();
+  const base = `/${channel.channelLogin}/games`;
+  const items = await mediaItemsRepo.listForGrid(channel.channelLogin, "game", ["accepted", "done"]).catch(() => []);
+  const byKey = new Map();
+  for (const item of items) {
+    for (const name of [item.external?.twitchCategoryName, item.title]) {
+      if (name && !byKey.has(categoryKey(name))) byKey.set(categoryKey(name), `${base}/${item._id}`);
+    }
+  }
+  return new Map(names.map((n) => [n, byKey.get(categoryKey(n)) || base]));
+}
+
+// What a site game's GameScores number is. The online games keep an Elo rating there (realtime/
+// durakElo.js, quickMatchManager), the offline Durak a count of wins, every other game its record -
+// three different things that must not share a caption. Online Durak shares its catalog card with
+// the offline one, so it gets a name of its own.
+const RATING_GAMES = new Set(["durak-multiplayer", "battleship", "pong", "connect-four", "sunduchki-multiplayer", "backgammon"]);
+function siteGameMeta(gameId) {
+  const id = String(gameId);
+  if (id === "durak-multiplayer") return { unit: "rating", titleKey: "recap.siteGames.durakOnline" };
+  if (id === "durak") return { unit: "wins", titleKey: null };
+  return { unit: RATING_GAMES.has(id) ? "rating" : "best", titleKey: null };
+}
+
+const notBot = (profiles) => (m) => {
+  const p = profiles.get(String(m.userId));
+  return !isKnownBotName(p?.login) && !isKnownBotName(p?.displayName) && !isKnownBotName(m.userId);
+};
 
 router.get("/:channel/recap", recapPage, async (req, res, next) => {
   try {
@@ -121,22 +165,38 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([userId, n]) => ({ userId, n, name: d.topChatters.find((u) => u.userId === userId)?.name || null }));
-    const profiles = await profileCacheRepo
-      .getOrFetchProfiles([
-        ...topChatters.map((u) => u.userId),
-        ...firstChatters.map((u) => u.userId),
-        ...d.moderation.fastest.map((m) => m.userId),
-      ])
-      .catch(() => new Map());
+    const pairs = d.pairs.filter((p) => visible(p.aId) && visible(p.bId)).slice(0, 6);
+    const newWords = d.newWords.filter((w) => visible(w.by?.userId)).slice(0, 8);
+    const mod = d.moderation;
+    const siteGames = (d.siteGames || [])
+      .map((g) => ({ ...g, ...siteGameMeta(g.game), entry: gameEntry(g.game), top: g.top.filter((u) => visible(u.userId)) }))
+      .filter((g) => g.entry && g.top.length);
+    const cats = d.categories.list.slice(0, 8);
+
+    // Everyone the page names gets an avatar and their chat colour; one batched profile read.
+    const [profiles, boxArt, catLinks] = await Promise.all([
+      profileCacheRepo
+        .getOrFetchProfiles([
+          ...topChatters.map((u) => u.userId),
+          ...firstChatters.map((u) => u.userId),
+          ...pairs.flatMap((p) => [p.aId, p.bId]),
+          ...newWords.map((w) => w.by?.userId),
+          ...["fastest", "mostActions", "longestGiven", "presence"].flatMap((k) => (mod[k] || []).map((m) => m.userId)),
+          ...siteGames.flatMap((g) => g.top.map((u) => u.userId)),
+          ...picks.map((p) => p.userId),
+        ].filter(Boolean))
+        .catch(() => new Map()),
+      getBoxArtUrls(cats.map((c) => c.name)).catch(() => new Map()),
+      categoryLinks(channel, cats.map((c) => c.name), req.permission),
+    ]);
 
     // The job already leaves bots out (by id); this second check, by resolved name, also cleans a
     // recap built before it did, and still holds if the job's id lookup failed that night.
-    const mods = d.moderation.fastest
-      .filter((m) => {
-        const p = profiles.get(String(m.userId));
-        return !isKnownBotName(p?.login) && !isKnownBotName(p?.displayName) && !isKnownBotName(m.userId);
-      })
-      .slice(0, 5);
+    const modTops = {};
+    for (const k of ["fastest", "mostActions", "longestGiven", "presence"]) {
+      modTops[k] = (mod[k] || []).filter(notBot(profiles)).slice(0, 5);
+    }
+    const mods = modTops.fastest;
 
     // A first chatter outside the top list has no stored login; the profile names them.
     for (const f of firstChatters) if (!f.name) f.name = profiles.get(f.userId)?.login || f.userId;
@@ -149,13 +209,19 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
       years,
       year,
       preview: res.locals.sectionPreview,
-      headingEmotes: RECAP_HEADING_EMOTES,
+      headingEmotes: resolveHeadingEmotes(images),
+      nameColor: readableChatColor,
       view: {
         topChatters,
         firstChatters,
         mods,
-        pairs: d.pairs.filter((p) => visible(p.aId) && visible(p.bId)).slice(0, 6),
-        newWords: d.newWords.filter((w) => visible(w.by?.userId)).slice(0, 8),
+        modTops,
+        siteGames,
+        // Box art comes sized for a small chart (144x192); the recap's cards are larger, and Twitch
+        // serves the same art at any size from the same template.
+        cats: cats.map((c) => ({ ...c, art: (boxArt.get(c.name) || "").replace(/-\d+x\d+\.(jpg|png)$/, "-285x380.$1") || null, href: catLinks.get(c.name) || null })),
+        pairs,
+        newWords,
         commands: d.commands.slice(0, 8).map((c) => ({ ...c, topUserId: visible(c.topUserId) ? c.topUserId : null })),
         picks: picks.filter((p) => visible(p.userId)),
         moments: (d.loud || []).filter((m) => !hiddenMoments.has(new Date(m.at).toISOString())).slice(0, MOMENTS_SHOWN),
@@ -185,17 +251,25 @@ router.get("/:channel/recap/:year/me", recapPage, async (req, res, next) => {
       year,
       recapDoc: doc,
       preview: res.locals.sectionPreview,
-      headingEmotes: RECAP_HEADING_EMOTES,
+      headingEmotes: {},
+      nameColor: readableChatColor,
     };
     if (!req.user) return res.render("annualRecapMe", { ...common, needLogin: true });
     if (!personalLimiter(String(req.user.userId))) return res.status(429).send("Too many requests");
 
-    const [personal, optedOut, images, broadcaster] = await Promise.all([
+    const [personal, optedOut, images, broadcaster, me] = await Promise.all([
       userService.getUserRecap(channel, year, req.user.userId, doc),
       recapRepo.isOptedOut(req.user.userId),
       imagesFor(channel),
       profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+      profileCacheRepo.getOrFetchProfile(req.user.userId).catch(() => null),
     ]);
+
+    // Partners are stored by login (that is what an @-mention carries); their ids, for the avatar and
+    // chat colour, come from the nickname history.
+    const partnerIds = personal.empty ? new Map() : await userService.userIdsByLogin((personal.partners || []).map((p) => p.login));
+    const partnerProfiles = await profileCacheRepo.getOrFetchProfiles([...partnerIds.values()]).catch(() => new Map());
+    if (!personal.empty) for (const p of personal.partners || []) p.userId = partnerIds.get(p.login) || null;
 
     const quiz = personal.empty
       ? []
@@ -209,15 +283,79 @@ router.get("/:channel/recap/:year/me", recapPage, async (req, res, next) => {
       ...common,
       broadcaster,
       needLogin: false,
+      shareCard: personal.empty ? null : shareCardData({ personal, channel, year, broadcaster, me, images, partnerProfiles, user: req.user }),
       personal,
       quiz,
       optedOut,
       images,
+      headingEmotes: resolveHeadingEmotes(images),
+      profiles: partnerProfiles,
       gameNameKey,
       messageBuckets: recap.MESSAGE_BUCKETS,
     });
   } catch (err) {
     next(err);
+  }
+});
+
+// What the shareable picture of a personal recap shows (public/js/recap-share.js draws it). Only
+// what the person would show anyone: no punishments, no Bureau, nothing from the private record.
+// Picture URLs go through /recap/img so the canvas stays exportable.
+function viaProxy(url) {
+  return url && isAllowedImageUrl(url) ? `/recap/img?u=${encodeURIComponent(url)}` : null;
+}
+
+function shareCardData({ personal: p, channel, year, broadcaster, me, images, partnerProfiles, user }) {
+  const emoteUrl = (name) => viaProxy(images.get(name));
+  const partner = p.partners[0] || null;
+  const partnerProfile = partner && partner.userId ? partnerProfiles.get(String(partner.userId)) : null;
+  return {
+    year,
+    channel: { login: channel.channelLogin, avatar: viaProxy(broadcaster?.avatarUrl) },
+    user: {
+      name: me?.displayName || user.displayName || p.name,
+      avatar: viaProxy(me?.avatarUrl || user.avatarUrl),
+      color: readableChatColor(me?.chatColor),
+    },
+    messages: p.messages,
+    rank: p.standing.rank,
+    of: p.standing.of,
+    streams: { attended: p.attendance.attended, of: p.attendance.of, streak: p.attendance.longestStreak },
+    activeDays: p.activeDays,
+    peakHourMsk: p.chronotype.peakHour,
+    emotes: p.emotes.slice(0, 3).map((e) => ({ name: e.name, n: e.n, url: emoteUrl(e.name) })),
+    word: p.words[0] ? { text: p.words[0].word, n: p.words[0].n } : null,
+    partner: partner
+      ? { name: partnerProfile?.displayName || partner.login, avatar: viaProxy(partnerProfile?.avatarUrl), n: partner.out + partner.in }
+      : null,
+  };
+}
+
+// Same-origin copies of the pictures the share card draws (avatars, emotes). A canvas that drew a
+// cross-origin image without CORS cannot be exported, and not every emote CDN sends CORS headers.
+// Only hosts the page itself may load pictures from (lib/emoteImageHosts.js), only images, small.
+const imgLimiter = createSimpleLimiter({ windowMs: 60 * 1000, max: 120 });
+const IMG_MAX_BYTES = 2 * 1024 * 1024;
+router.get("/recap/img", async (req, res) => {
+  const url = typeof req.query.u === "string" ? req.query.u : "";
+  if (!isAllowedImageUrl(url)) return res.status(400).end();
+  if (!imgLimiter(req.ip || "?")) return res.status(429).end();
+  try {
+    const upstream = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 8000,
+      maxContentLength: IMG_MAX_BYTES,
+      maxRedirects: 0,
+      validateStatus: (st) => st === 200,
+    });
+    const type = String(upstream.headers["content-type"] || "");
+    if (!/^image\/(png|jpeg|gif|webp|avif)$/.test(type.split(";")[0].trim())) return res.status(415).end();
+    res.set("Content-Type", type);
+    res.set("Cache-Control", "public, max-age=86400");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.send(Buffer.from(upstream.data));
+  } catch {
+    res.status(502).end();
   }
 });
 

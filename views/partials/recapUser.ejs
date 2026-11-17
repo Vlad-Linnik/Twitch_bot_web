@@ -1,0 +1,17 @@
+<%# One person on the year recap: avatar, name in their chat colour, a link to their statistics page.
+    Params: user ({ userId, name }), profiles (Map userId -> TwitchProfileCache doc), channel,
+    nameColor (lib/readableColor.js's readableChatColor), size ('sm' | 'md'; default 'sm'),
+    nameClass (extra classes for the name). A person the profile cache does not know yet still gets
+    a monogram and a link by login. -%>
+<%
+  const ruP = profiles && typeof profiles.get === 'function' ? profiles.get(String(user.userId)) : null;
+  const ruLogin = String((ruP && ruP.login) || user.name || '').toLowerCase();
+  const ruName = (ruP && ruP.displayName) || user.name || ruLogin;
+  const ruColor = ruP ? nameColor(ruP.chatColor) : null;
+  const ruBox = (typeof size !== 'undefined' && size === 'md') ? 'w-9 h-9 text-sm' : 'w-6 h-6 text-[11px]';
+  const ruExtra = typeof nameClass !== 'undefined' ? nameClass : '';
+-%>
+<a href="/<%= channel.channelLogin %>/user/<%= encodeURIComponent(ruLogin) %>" class="inline-flex items-center gap-2 min-w-0 max-w-full group">
+  <% if (ruP && ruP.avatarUrl) { %><img src="<%= ruP.avatarUrl %>" alt="" loading="lazy" class="<%= ruBox %> shrink-0 rounded-full ring-1 ring-white/15" /><% } else { %><span class="<%= ruBox %> shrink-0 rounded-full bg-neutral-800 grid place-items-center font-semibold text-neutral-300" aria-hidden="true"><%= ruName.charAt(0).toUpperCase() %></span><% } %>
+  <span class="min-w-0 truncate group-hover:underline underline-offset-2 <%= ruColor ? '' : 'text-neutral-100' %> <%= ruExtra %>"<% if (ruColor) { %> style="color: <%= ruColor %>"<% } %>><%= ruName %></span>
+</a>
