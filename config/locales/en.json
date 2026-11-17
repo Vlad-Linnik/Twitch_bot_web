@@ -4120,7 +4120,7 @@
       "times": "{{n}} times"
     },
     "categories": {
-      "heading": "Games of the year",
+      "heading": "Category of the year",
       "sub": "Data since {{since}} — the stream category was not recorded before.",
       "liveliest": "The chat was liveliest on “{{name}}” — {{n}} messages an hour.",
       "colName": "Category",
