@@ -255,7 +255,6 @@
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colMovies') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colGames') %></th>
             <th class="text-left font-medium px-4 py-2"><%= t('admin.colRecap') %></th>
-            <th class="px-4 py-2"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-neutral-800">
@@ -266,121 +265,41 @@
               </td>
               <td class="px-4 py-2 text-neutral-500 font-mono text-xs"><%= ch.ownerId %></td>
               <td class="px-4 py-2 text-neutral-500 whitespace-nowrap"><%= ch.consentedAt ? new Date(ch.consentedAt).toLocaleDateString(dateLocale) : '—' %></td>
-              <td class="px-4 py-2">
-                <% if (ch.enabled) { %>
-                  <span class="text-green-400"><%= t('admin.enabledYes') %></span>
-                <% } else { %>
-                  <span class="text-neutral-500"><%= t('admin.enabledNo') %></span>
-                <% } %>
-              </td>
-              <td class="px-4 py-2">
-                <% if (ch.showOnHomepage === false) { %>
-                  <span class="text-neutral-500"><%= t('admin.homepageNo') %></span>
-                <% } else { %>
-                  <span class="text-green-400"><%= t('admin.homepageYes') %></span>
-                <% } %>
-              </td>
-              <td class="px-4 py-2">
-                <% if (ch.newsEnabled) { %>
-                  <span class="text-green-400"><%= t('admin.newsYes') %></span>
-                <% } else { %>
-                  <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
-                <% } %>
-              </td>
-              <td class="px-4 py-2">
-                <% if (ch.moviesEnabled) { %>
-                  <span class="text-green-400"><%= t('admin.newsYes') %></span>
-                <% } else { %>
-                  <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
-                <% } %>
-              </td>
-              <td class="px-4 py-2">
-                <% if (ch.gamesEnabled) { %>
-                  <span class="text-green-400"><%= t('admin.newsYes') %></span>
-                <% } else { %>
-                  <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
-                <% } %>
-              </td>
-              <td class="px-4 py-2">
-                <% if (ch.recapEnabled) { %>
-                  <span class="text-green-400"><%= t('admin.newsYes') %></span>
-                <% } else { %>
-                  <span class="text-neutral-500"><%= t('admin.newsNo') %></span>
-                <% } %>
-                <% const builtAt = typeof recapBuilt !== 'undefined' && recapBuilt[ch.channelLogin]; %>
-                <div class="text-[11px] text-neutral-500 whitespace-nowrap">
-                  <% if (typeof recapBuilding !== 'undefined' && recapBuilding[ch.channelLogin]) { %>
-                    <%= t('admin.recapBuilding') %>
-                  <% } else if (builtAt) { %>
-                    <%= t('admin.recapBuiltAt', { when: builtAt.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-GB', { timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short' }) }) %>
-                  <% } else { %>
-                    <%= t('admin.recapNotBuilt') %>
+              <%# Each switch is one button that shows the current state; its title says what a click
+                  does. One control per column, so the state is not written twice. %>
+              <% [
+                   ['toggle', 'enabled', ch.enabled, 'admin.enabledYes', 'admin.enabledNo', 'admin.disable', 'admin.enable', true],
+                   ['toggle-homepage', 'showOnHomepage', ch.showOnHomepage !== false, 'admin.homepageYes', 'admin.homepageNo', 'admin.hideFromHomepage', 'admin.showOnHomepage', false],
+                   ['toggle-news', 'newsEnabled', !!ch.newsEnabled, 'admin.newsYes', 'admin.newsNo', 'admin.newsDisable', 'admin.newsEnable', false],
+                   ['toggle-movies', 'moviesEnabled', !!ch.moviesEnabled, 'admin.newsYes', 'admin.newsNo', 'admin.moviesDisable', 'admin.moviesEnable', false],
+                   ['toggle-games', 'gamesEnabled', !!ch.gamesEnabled, 'admin.newsYes', 'admin.newsNo', 'admin.gamesDisable', 'admin.gamesEnable', false],
+                   ['toggle-recap', 'recapEnabled', !!ch.recapEnabled, 'admin.newsYes', 'admin.newsNo', 'admin.recapDisable', 'admin.recapEnable', false],
+                 ].forEach(function (sw) { const on = sw[2]; %>
+                <td class="px-4 py-2 align-top whitespace-nowrap">
+                  <form method="post" action="/admin/channels/<%= ch.channelLogin %>/<%= sw[0] %>" data-transition="instant" class="inline-block">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <input type="hidden" name="<%= sw[1] %>" value="<%= on ? '0' : '1' %>" />
+                    <button type="submit" title="<%= t(on ? sw[5] : sw[6]) %>"
+                            class="px-3 py-1.5 rounded-md border text-xs font-medium transition-colors <%= on ? (sw[7] ? 'border-green-800 bg-green-500/10 text-green-400 hover:border-red-800 hover:bg-red-500/10 hover:text-red-400' : 'border-green-800 bg-green-500/10 text-green-400 hover:bg-green-500/20') : 'border-neutral-700 text-neutral-500 hover:border-green-800 hover:text-green-400' %>"><%= t(on ? sw[3] : sw[4]) %></button>
+                  </form>
+                  <% if (sw[0] === 'toggle-recap') { const builtAt = typeof recapBuilt !== 'undefined' && recapBuilt[ch.channelLogin]; %>
+                    <form method="post" action="/admin/channels/<%= ch.channelLogin %>/recap-rebuild" data-transition="instant" class="inline-block">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                      <button type="submit" class="px-3 py-1.5 rounded-md border border-purple-900 text-purple-300 hover:bg-purple-500/10 text-xs font-medium transition-colors"><%= t('admin.recapRebuild') %></button>
+                    </form>
+                    <div class="mt-1 text-[11px] text-neutral-500">
+                      <% if (typeof recapBuilding !== 'undefined' && recapBuilding[ch.channelLogin]) { %>
+                        <%= t('admin.recapBuilding') %>
+                      <% } else if (builtAt) { %>
+                        <%= t('admin.recapBuiltAt', { when: builtAt.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-GB', { timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short' }) }) %>
+                        · <a href="/<%= ch.channelLogin %>/recap" class="text-purple-300 hover:text-purple-200 underline"><%= t('admin.recapOpen') %></a>
+                      <% } else { %>
+                        <%= t('admin.recapNotBuilt') %>
+                      <% } %>
+                    </div>
                   <% } %>
-                  <% if (builtAt) { %>
-                    · <a href="/<%= ch.channelLogin %>/recap" class="text-purple-300 hover:text-purple-200 underline"><%= t('admin.recapOpen') %></a>
-                  <% } %>
-                </div>
-              </td>
-              <td class="px-4 py-2 text-right whitespace-nowrap">
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-homepage" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <input type="hidden" name="showOnHomepage" value="<%= ch.showOnHomepage === false ? '1' : '0' %>" />
-                  <% if (ch.showOnHomepage === false) { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.showOnHomepage') %></button>
-                  <% } else { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.hideFromHomepage') %></button>
-                  <% } %>
-                </form>
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-news" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <input type="hidden" name="newsEnabled" value="<%= ch.newsEnabled ? '0' : '1' %>" />
-                  <% if (ch.newsEnabled) { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.newsDisable') %></button>
-                  <% } else { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.newsEnable') %></button>
-                  <% } %>
-                </form>
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-movies" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <input type="hidden" name="moviesEnabled" value="<%= ch.moviesEnabled ? '0' : '1' %>" />
-                  <% if (ch.moviesEnabled) { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.moviesDisable') %></button>
-                  <% } else { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.moviesEnable') %></button>
-                  <% } %>
-                </form>
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-games" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <input type="hidden" name="gamesEnabled" value="<%= ch.gamesEnabled ? '0' : '1' %>" />
-                  <% if (ch.gamesEnabled) { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.gamesDisable') %></button>
-                  <% } else { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.gamesEnable') %></button>
-                  <% } %>
-                </form>
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle-recap" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <input type="hidden" name="recapEnabled" value="<%= ch.recapEnabled ? '0' : '1' %>" />
-                  <% if (ch.recapEnabled) { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-neutral-700 text-neutral-400 hover:bg-neutral-500/10 text-xs font-medium transition-colors"><%= t('admin.recapDisable') %></button>
-                  <% } else { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.recapEnable') %></button>
-                  <% } %>
-                </form>
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/recap-rebuild" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="px-3 py-1.5 rounded-md border border-purple-900 text-purple-300 hover:bg-purple-500/10 text-xs font-medium transition-colors"><%= t('admin.recapRebuild') %></button>
-                </form>
-                <form method="post" action="/admin/channels/<%= ch.channelLogin %>/toggle" data-transition="instant" class="inline-block">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <input type="hidden" name="enabled" value="<%= ch.enabled ? '0' : '1' %>" />
-                  <% if (ch.enabled) { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-red-900 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors"><%= t('admin.disable') %></button>
-                  <% } else { %>
-                    <button type="submit" class="px-3 py-1.5 rounded-md border border-green-900 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"><%= t('admin.enable') %></button>
-                  <% } %>
-                </form>
-              </td>
+                </td>
+              <% }) %>
             </tr>
           <% }) %>
           <% if (channels.length === 0) { %>
