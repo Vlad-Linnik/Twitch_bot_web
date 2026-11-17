@@ -114,6 +114,9 @@
 .tf-btn:active { transform: scale(0.94); }
 .tf-btn:focus-visible { outline: 2px solid var(--tf-accent); outline-offset: 2px; }
 .tf-btn:disabled { opacity: 0.35; pointer-events: none; }
+.tf-btn .tf-btn-slash { display: none; }
+.tf-btn.tf-btn-off { opacity: 0.6; }
+.tf-btn.tf-btn-off .tf-btn-slash { display: inline; }
 
 .tf-tools {
   position: absolute;
@@ -233,6 +236,12 @@
   transition: filter 0.2s;
 }
 .tf-slot .tf-piece { position: relative; }
+/* Only the cells themselves take the pointer, never the empty corners of a piece's box - so the
+   piece grabbed is the one whose cell is under the cursor, even where boxes overlap. */
+.tf-piece { pointer-events: none; }
+.tf-pcell { pointer-events: auto; }
+.tf-drag-layer .tf-pcell { pointer-events: none; }
+.tf-piece.tf-loose { z-index: 3; }
 .tf-drag-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
 .tf-drag-layer .tf-piece { position: absolute; cursor: grabbing; }
 

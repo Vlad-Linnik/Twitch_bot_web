@@ -1,10 +1,11 @@
 // "Укладка" (/games/tile-fit) - the browser half. Levels come from window.TileFitEngine
 // (public/js/games/engines/tileFitEngine.js), the same file the server checks solutions with.
 //
-// A piece dropped over the board stays exactly where it was dropped, even when it does not fit:
-// it shakes, buzzes, and its clashing cells turn red until it is moved. Only a piece let go
-// entirely outside the board goes back to the shelf. A level is solved when every board cell is
-// covered and nothing on the board is red.
+// A piece dropped over the board snaps into the grid only when it fits there. One that does not
+// fit is left "loose" exactly where it was let go - no snapping - on top of the others: it shakes,
+// buzzes, and the cells that would clash turn red until it is moved. Only a piece let go entirely
+// outside the board goes back to the shelf. Since only a fitting piece ever enters the grid,
+// pieces in the grid never overlap, and a level is solved when the grid is full.
 //
 // The player never sees how many levels there are: the map shows the levels already opened and
 // one unknown stop ahead, and eras appear on it only once they are reached.
@@ -204,6 +205,285 @@
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Music: one piece per era. Seven are CC0 recordings (public/sounds/tile-fit/, CREDITS.md
+  // there); for Antiquity, the Age of Steam and Cyberpunk nothing suitable and light enough was
+  // found, so those are composed live here with the same WebAudio as the sound effects - a lyre
+  // over a drone, a clockwork music-box waltz, a synthwave groove. Browsers allow sound only after
+  // a gesture, so nothing plays until the first press on the stage. The shared volume slider
+  // scales it, the note button in the corner switches it off (remembered in this browser).
+  // ---------------------------------------------------------------------------------------------
+  const MUSIC_FILES = {
+    0: "stone-age.ogg",
+    1: "egypt.mp3",
+    3: "middle-ages.mp3",
+    4: "renaissance.ogg",
+    6: "electric-age.mp3",
+    7: "space-age.mp3",
+    8: "digital-age.mp3",
+  };
+  const MUSIC_LEVEL = 0.4; // music sits under the effects
+  const MUSIC_FADE = 1.2; // seconds
+
+  const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12); // MIDI note -> Hz (timing never depends on it)
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  function voice(out, t, { freq, dur, type = "sine", gain = 0.2, attack = 0.005, filter, detune = 0 }) {
+    const ac = audio;
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    osc.detune.setValueAtTime(detune, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = osc;
+    if (filter) {
+      const f = ac.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.setValueAtTime(filter, t);
+      osc.connect(f);
+      node = f;
+    }
+    node.connect(g).connect(out);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  let noiseBuf = null;
+  function hit(out, t, { dur, gain, freq, type = "highpass", q = 1 }) {
+    const ac = audio;
+    if (!noiseBuf) {
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf;
+    const f = ac.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(out);
+    src.start(t);
+    src.stop(t + dur + 0.05);
+  }
+
+  // Each composer gets the step number, its time, the output node and the step length.
+  const COMPOSERS = {
+    // Antiquity: a plucked lyre arpeggiating modal chords over a low drone, a stray melody above.
+    2: {
+      bpm: 72,
+      perBeat: 2,
+      step(i, t, out, sd) {
+        const chords = [[62, 65, 69, 74], [57, 60, 64, 69], [60, 64, 67, 72], [62, 65, 69, 74]];
+        const chord = chords[Math.floor(i / 16) % chords.length];
+        if (i % 32 === 0) voice(out, t, { freq: NOTE(38), dur: sd * 34, gain: 0.07, attack: 1.5 });
+        voice(out, t, { freq: NOTE(chord[i % 4]), dur: 1.4, type: "triangle", gain: 0.09, filter: 2400 });
+        if (i % 4 === 2 && Math.random() < 0.55) {
+          const scale = [74, 76, 77, 79, 81, 83, 84];
+          voice(out, t, { freq: NOTE(pick(scale)), dur: 2.2, gain: 0.06, attack: 0.02 });
+        }
+      },
+    },
+    // Age of steam: a clockwork music box in 3/4 - bass, two chord ticks, bell melody, the gear.
+    5: {
+      bpm: 132,
+      perBeat: 2,
+      step(i, t, out, sd) {
+        const bars = [[57, 60, 64], [62, 65, 69], [64, 68, 71], [57, 60, 64]];
+        const beat = Math.floor(i / 2) % 3;
+        const chord = bars[Math.floor(i / 6) % bars.length];
+        if (i % 2 === 0) {
+          if (beat === 0) voice(out, t, { freq: NOTE(chord[0] - 24), dur: 0.5, type: "square", gain: 0.06, filter: 500 });
+          else chord.forEach((n) => voice(out, t, { freq: NOTE(n), dur: 0.18, type: "triangle", gain: 0.035, filter: 1800 }));
+          hit(out, t, { dur: 0.03, gain: 0.05, freq: 6000 });
+        }
+        if (Math.random() < 0.6) {
+          const f = NOTE(pick(chord) + 24);
+          voice(out, t, { freq: f, dur: 0.9, gain: 0.05 });
+          voice(out, t, { freq: f * 3, dur: 0.25, gain: 0.012 });
+        }
+        if (i % 48 === 47) hit(out, t, { dur: 0.9, gain: 0.025, freq: 2500, type: "bandpass", q: 0.6 });
+      },
+    },
+    // Cyberpunk: synthwave - filtered saw bass in octaves, a wide pad, kick/snare/hats, an arp.
+    9: {
+      bpm: 96,
+      perBeat: 4,
+      step(i, t, out, sd) {
+        const prog = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
+        const chord = prog[Math.floor(i / 16) % prog.length];
+        const s = i % 16;
+        voice(out, t, { freq: NOTE(chord[0] - 12 + (s % 2 ? 12 : 0)), dur: sd * 0.9, type: "sawtooth", gain: 0.05, filter: 700 });
+        if (s === 0) {
+          chord.forEach((n) => [-8, 8].forEach((d) =>
+            voice(out, t, { freq: NOTE(n), dur: sd * 16, type: "sawtooth", gain: 0.018, attack: 0.5, filter: 1400, detune: d })));
+        }
+        if (s % 8 === 0) voice(out, t, { freq: 140, dur: 0.25, gain: 0.25 });
+        if (s % 8 === 4) hit(out, t, { dur: 0.18, gain: 0.12, freq: 1800, type: "bandpass", q: 0.8 });
+        if (s % 4 === 2) hit(out, t, { dur: 0.05, gain: 0.05, freq: 8000 });
+        if (s % 2 === 0 && Math.random() < 0.45) {
+          voice(out, t, { freq: NOTE(pick(chord) + 12), dur: sd * 3, type: "triangle", gain: 0.04, filter: 3000 });
+        }
+      },
+    },
+  };
+
+  const music = (() => {
+    const KEY = "tileFit.music";
+    let enabled = readJsonEarly(KEY) !== false;
+    let started = false;
+    let eraNow = null;
+    let current = null; // {stop(), setGain()}
+
+    const level = () => vol() * MUSIC_LEVEL;
+
+    function fileTrack(name) {
+      const el = new Audio("/sounds/tile-fit/" + name);
+      el.loop = true;
+      el.preload = "auto";
+      el.volume = 0;
+      el.play().catch(() => {});
+      let target = level();
+      const t0 = performance.now();
+      const fadeIn = setInterval(() => {
+        const k = Math.min(1, (performance.now() - t0) / (MUSIC_FADE * 1000));
+        el.volume = Math.min(1, target * k);
+        if (k >= 1) clearInterval(fadeIn);
+      }, 50);
+      return {
+        setGain(v) {
+          target = v;
+          el.volume = Math.min(1, v);
+        },
+        stop() {
+          clearInterval(fadeIn);
+          const from = el.volume;
+          const t1 = performance.now();
+          const out = setInterval(() => {
+            const k = Math.min(1, (performance.now() - t1) / (MUSIC_FADE * 1000));
+            el.volume = Math.max(0, from * (1 - k));
+            if (k >= 1) {
+              clearInterval(out);
+              el.pause();
+              el.removeAttribute("src");
+              el.load();
+            }
+          }, 50);
+        },
+        pause: () => el.pause(),
+        resume: () => el.play().catch(() => {}),
+      };
+    }
+
+    function composedTrack(c) {
+      const ac = ctx();
+      if (!ac) return null;
+      const out = ac.createGain();
+      out.gain.setValueAtTime(0.0001, ac.currentTime);
+      out.gain.exponentialRampToValueAtTime(Math.max(0.0001, level()), ac.currentTime + MUSIC_FADE);
+      out.connect(ac.destination);
+      const sd = 60 / c.bpm / c.perBeat;
+      let i = 0;
+      let next = ac.currentTime + 0.1;
+      // Look-ahead scheduling: notes are queued a quarter second ahead on the audio clock, so a
+      // busy main thread (a drag, a redraw) never makes the music stumble.
+      const timer = setInterval(() => {
+        if (ac.state !== "running") return;
+        if (next < ac.currentTime) next = ac.currentTime + 0.05;
+        while (next < ac.currentTime + 0.25) {
+          c.step(i++, next, out, sd);
+          next += sd;
+        }
+      }, 60);
+      return {
+        setGain(v) {
+          out.gain.setTargetAtTime(Math.max(0.0001, v), ac.currentTime, 0.1);
+        },
+        stop() {
+          clearInterval(timer);
+          out.gain.setTargetAtTime(0.0001, ac.currentTime, MUSIC_FADE / 4);
+          setTimeout(() => out.disconnect(), MUSIC_FADE * 1500);
+        },
+        pause() {},
+        resume() {},
+      };
+    }
+
+    function play() {
+      if (current) current.stop();
+      current = null;
+      if (!started || !enabled || eraNow === null) return;
+      current = MUSIC_FILES[eraNow] ? fileTrack(MUSIC_FILES[eraNow]) : COMPOSERS[eraNow] ? composedTrack(COMPOSERS[eraNow]) : null;
+    }
+
+    return {
+      setEra(e) {
+        if (e === eraNow) return;
+        eraNow = e;
+        play();
+      },
+      start() {
+        if (started) return;
+        started = true;
+        play();
+      },
+      toggle() {
+        enabled = !enabled;
+        writeJsonEarly(KEY, enabled);
+        play();
+        return enabled;
+      },
+      isOn: () => enabled,
+      updateVolume() {
+        if (current) current.setGain(level());
+      },
+      pause() {
+        if (current) current.pause();
+      },
+      resume() {
+        if (current) current.resume();
+      },
+    };
+  })();
+
+  function readJsonEarly(key) {
+    try {
+      return JSON.parse(localStorage.getItem(key) || "null");
+    } catch (_) {
+      return null;
+    }
+  }
+  function writeJsonEarly(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (_) {
+      /* storage blocked - the switch lasts for this tab only */
+    }
+  }
+
+  const musicBtn = $("tf-music");
+  function drawMusicButton() {
+    musicBtn.setAttribute("aria-pressed", music.isOn() ? "true" : "false");
+    musicBtn.classList.toggle("tf-btn-off", !music.isOn());
+  }
+  musicBtn.addEventListener("click", () => {
+    ctx();
+    music.start();
+    music.toggle();
+    drawMusicButton();
+  });
+  drawMusicButton();
+  // The first press anywhere on the stage is the gesture that lets the music begin.
+  root.addEventListener("pointerdown", () => music.start(), { capture: true });
+  if (window.gameVolume) window.gameVolume.onChange(() => music.updateVolume());
+  document.addEventListener("visibilitychange", () => (document.hidden ? music.pause() : music.resume()));
+
+  // ---------------------------------------------------------------------------------------------
   // Progress
   // ---------------------------------------------------------------------------------------------
   const SOLVED_KEY = "tileFit.solved";
@@ -359,7 +639,9 @@
   // Play state
   // ---------------------------------------------------------------------------------------------
   let L = null; // the level from the engine
-  let pieces = []; // {i, cells, rot, placed: {r,c}|null, color, el, slot}
+  // placed: {r, c} in the grid (always a fit); loose: {x, y} in cell units, unsnapped (never a
+  // fit); at most one of the two is set, neither means "on the shelf".
+  let pieces = []; // {i, cells, rot, placed, loose, color, el, slot}
   let history = [];
   let cs = 48; // board cell size, px
   let ts = 26; // shelf cell size, px
@@ -377,7 +659,11 @@
     return { w, h };
   };
 
-  const snapshot = () => pieces.map((p) => ({ rot: p.rot, placed: p.placed ? { ...p.placed } : null }));
+  const snapshot = () => pieces.map((p) => ({
+    rot: p.rot,
+    placed: p.placed ? { ...p.placed } : null,
+    loose: p.loose ? { ...p.loose } : null,
+  }));
 
   function pushHistory() {
     history.push(snapshot());
@@ -389,6 +675,8 @@
     state.forEach((s, i) => {
       pieces[i].rot = ((s.rot % 4) + 4) % 4;
       pieces[i].placed = s.placed ? { r: s.placed.r, c: s.placed.c } : null;
+      pieces[i].loose = !s.placed && s.loose && Number.isFinite(s.loose.x) && Number.isFinite(s.loose.y)
+        ? { x: s.loose.x, y: s.loose.y } : null;
     });
   }
 
@@ -415,11 +703,13 @@
     history = [];
     undoBtn.disabled = true;
     const era = applyTheme(n);
+    music.setEra(eraIndex(n));
     pieces = L.pieces.map((pc, i) => ({
       i,
       cells: pc.cells,
       rot: pc.startRotation,
       placed: null,
+      loose: null,
       color: pieceColor(era, n, i),
       el: null,
       slot: null,
@@ -558,11 +848,15 @@
   }
 
   function seat(p) {
-    if (p.placed) {
+    p.el.classList.toggle("tf-loose", !!p.loose);
+    if (p.placed || p.loose) {
+      const x = p.placed ? p.placed.c : p.loose.x;
+      const y = p.placed ? p.placed.r : p.loose.y;
       drawPiece(p, cs);
-      p.el.style.left = p.placed.c * cs + "px";
-      p.el.style.top = p.placed.r * cs + "px";
-      if (p.el.parentNode !== boardEl) boardEl.appendChild(p.el);
+      p.el.style.left = x * cs + "px";
+      p.el.style.top = y * cs + "px";
+      // A loose piece is re-appended so the last one dropped lies on top.
+      if (p.loose || p.el.parentNode !== boardEl) boardEl.appendChild(p.el);
       p.slot.classList.add("tf-empty");
     } else {
       drawPiece(p, ts);
@@ -573,51 +867,53 @@
     }
   }
 
+  // Grid cells taken by pieces in the grid, optionally leaving one piece out.
+  function takenCells(except) {
+    const taken = new Set();
+    pieces.forEach((p) => {
+      if (p.placed && p !== except) shapeOf(p).forEach(([dr, dc]) => taken.add(p.placed.r + dr + ":" + (p.placed.c + dc)));
+    });
+    return taken;
+  }
+
+  function fitsAt(cells, r0, c0, except) {
+    const taken = takenCells(except);
+    return cells.every(([dr, dc]) => {
+      const r = r0 + dr;
+      const c = c0 + dc;
+      return r >= 0 && r < L.rows && c >= 0 && c < L.cols && L.mask[r][c] && !taken.has(r + ":" + c);
+    });
+  }
+
   function renderAll() {
     pieces.forEach(seat);
     validate();
     updateStatus();
   }
 
-  // Marks every clashing cell red. A cell clashes when it is off the board's shape or shares a
-  // board cell with another piece. Also counts how much of the board is covered cleanly.
+  // Grid pieces never clash (they only get there by fitting), so only loose pieces are marked: the
+  // cells that would collide at the nearest grid spot turn red. Solved = the grid is full.
   function validate() {
-    const count = new Map();
+    const taken = takenCells(null);
     pieces.forEach((p) => {
-      if (!p.placed) return;
-      shapeOf(p).forEach(([dr, dc]) => {
-        const k = p.placed.r + dr + ":" + (p.placed.c + dc);
-        count.set(k, (count.get(k) || 0) + 1);
-      });
-    });
-    let allValid = true;
-    pieces.forEach((p) => {
-      if (!p.placed) {
-        p.el.classList.remove("tf-invalid");
+      p.el.classList.toggle("tf-invalid", !!p.loose);
+      if (!p.loose) {
         p.el.querySelectorAll(".tf-bad").forEach((e) => e.classList.remove("tf-bad"));
         return;
       }
-      let bad = false;
+      const r0 = Math.round(p.loose.y);
+      const c0 = Math.round(p.loose.x);
       p.el.querySelectorAll(".tf-pcell").forEach((pc) => {
-        const r = p.placed.r + Number(pc.dataset.r);
-        const c = p.placed.c + Number(pc.dataset.c);
+        const r = r0 + Number(pc.dataset.r);
+        const c = c0 + Number(pc.dataset.c);
         const off = r < 0 || r >= L.rows || c < 0 || c >= L.cols || !L.mask[r][c];
-        const clash = off || count.get(r + ":" + c) > 1;
-        pc.classList.toggle("tf-bad", clash);
-        if (clash) bad = true;
+        pc.classList.toggle("tf-bad", off || taken.has(r + ":" + c));
       });
-      p.el.classList.toggle("tf-invalid", bad);
-      if (bad) allValid = false;
     });
-    let covered = 0;
-    count.forEach((n, k) => {
-      const [r, c] = k.split(":").map(Number);
-      if (r >= 0 && r < L.rows && c >= 0 && c < L.cols && L.mask[r][c]) covered++;
-    });
-    return { complete: allValid && covered === L.area };
+    return { complete: taken.size === L.area };
   }
 
-  const isPieceValid = (p) => p.placed && !p.el.classList.contains("tf-invalid");
+  const isPieceValid = (p) => !!p.placed;
 
   function updateStatus() {
     statusEl.textContent = solvedNow ? "" : fmt(I18N.piecesLeft, { n: pieces.filter((p) => !p.placed).length });
@@ -648,15 +944,30 @@
   // ---------------------------------------------------------------------------------------------
   // Rotation
   // ---------------------------------------------------------------------------------------------
-  function rotatePiece(p) {
+  // A piece on the board turns around the cell that was clicked: that cell stays exactly where it
+  // is, so four turns bring the piece back to the same spot. (Turning around the middle meant
+  // rounding a half-cell offset every time, and the piece walked away a cell per turn.)
+  function rotatePiece(p, pivot) {
     if (solvedNow) return;
     pushHistory();
     const before = dims(shapeOf(p));
     p.rot = (p.rot + 1) % 4;
-    if (p.placed) {
-      // Turn around the piece's middle rather than its corner, so it stays where the eye is.
-      p.placed.r += Math.round((before.h - before.w) / 2);
-      p.placed.c += Math.round((before.w - before.h) / 2);
+    if (p.placed || p.loose) {
+      const pv = pivot || { r: Math.floor((before.h - 1) / 2), c: Math.floor((before.w - 1) / 2) };
+      // Clockwise, local (r, c) becomes (c, h - 1 - r).
+      const dy = pv.r - pv.c;
+      const dx = pv.c - (before.h - 1 - pv.r);
+      const y = (p.placed ? p.placed.r : p.loose.y) + dy;
+      const x = (p.placed ? p.placed.c : p.loose.x) + dx;
+      const r = Math.round(y);
+      const c = Math.round(x);
+      if (fitsAt(shapeOf(p), r, c, p)) {
+        p.placed = { r, c };
+        p.loose = null;
+      } else {
+        p.placed = null;
+        p.loose = { x, y };
+      }
       seat(p);
       afterChange(p);
     } else {
@@ -671,6 +982,13 @@
   // ---------------------------------------------------------------------------------------------
   let press = null; // {p, x, y, id}
   let drag = null; // {p, fx, fy, x, y, before}
+  let lastDragEnd = 0;
+
+  // The clicked cell in the piece's own coordinates, for turning around it.
+  function cellFromEvent(e) {
+    const pc = e.target.closest && e.target.closest(".tf-pcell");
+    return pc ? { r: Number(pc.dataset.r), c: Number(pc.dataset.c) } : null;
+  }
 
   function pieceFromEvent(e) {
     const el = e.target.closest && e.target.closest(".tf-piece");
@@ -687,14 +1005,27 @@
     ctx();
     e.preventDefault();
     if (e.button === 2) {
-      rotatePiece(p);
+      rotatePiece(p, cellFromEvent(e));
       return;
     }
     if (e.button !== 0) return;
-    press = { p, x: e.clientX, y: e.clientY, id: e.pointerId };
+    press = { p, x: e.clientX, y: e.clientY, id: e.pointerId, cell: cellFromEvent(e) };
   });
 
   window.addEventListener("pointermove", (e) => {
+    // The right button pressed while the left is held arrives as a pointermove (a chorded button
+    // change), not as a pointerdown: it turns the held piece - lifting it first if it was only
+    // pressed and not yet dragged.
+    if (e.button === 2 && e.buttons & 2 && e.buttons & 1) {
+      if (press && e.pointerId === press.id) {
+        beginDrag(press, e.clientX, e.clientY);
+        press = null;
+      }
+      if (drag && e.pointerId === drag.id) {
+        rotateDragged();
+        return;
+      }
+    }
     if (drag && e.pointerId === drag.id) {
       moveDrag(e.clientX, e.clientY);
       return;
@@ -711,9 +1042,9 @@
       return;
     }
     if (press && e.pointerId === press.id) {
-      const p = press.p;
+      const { p, cell } = press;
       press = null;
-      rotatePiece(p);
+      rotatePiece(p, cell);
     }
   });
 
@@ -725,7 +1056,7 @@
   function beginDrag(pr, x, y) {
     const p = pr.p;
     const rect = p.el.getBoundingClientRect();
-    const cur = p.placed ? cs : ts;
+    const cur = p.placed || p.loose ? cs : ts;
     drag = {
       p,
       id: pr.id,
@@ -741,8 +1072,9 @@
     p.el.classList.remove("tf-shake", "tf-pop", "tf-invalid");
     p.el.querySelectorAll(".tf-bad").forEach((c) => c.classList.remove("tf-bad"));
     dragLayer.appendChild(p.el);
-    if (p.placed) {
+    if (p.placed || p.loose) {
       p.placed = null;
+      p.loose = null;
       validate();
     }
     p.slot.classList.add("tf-empty");
@@ -781,10 +1113,7 @@
     clearGhost();
     const t = snapTarget();
     if (!t.onBoard) return;
-    const taken = new Set();
-    pieces.forEach((p) => {
-      if (p.placed && p !== drag.p) shapeOf(p).forEach(([dr, dc]) => taken.add(p.placed.r + dr + ":" + (p.placed.c + dc)));
-    });
+    const taken = takenCells(drag.p);
     let fits = true;
     const targets = [];
     t.cells.forEach(([dr, dc]) => {
@@ -814,17 +1143,27 @@
     moveDrag(x, y);
     const p = drag.p;
     const t = snapTarget();
+    const br = boardEl.getBoundingClientRect();
+    const looseAt = { x: (x - drag.fx * cs - br.left) / cs, y: (y - drag.fy * cs - br.top) / cs };
     history.push(drag.before);
     if (history.length > 200) history.shift();
     undoBtn.disabled = false;
     drag = null;
     clearGhost();
+    lastDragEnd = Date.now();
     if (t.onBoard) {
-      p.placed = { r: t.r, c: t.c };
+      if (fitsAt(t.cells, t.r, t.c, p)) {
+        p.placed = { r: t.r, c: t.c };
+        p.loose = null;
+      } else {
+        p.placed = null;
+        p.loose = looseAt;
+      }
       seat(p);
       afterChange(p);
     } else {
       p.placed = null;
+      p.loose = null;
       seat(p);
       sfx.back();
       afterChange(null);
@@ -863,15 +1202,11 @@
     rotateDragged();
   }, { passive: false });
 
-  // While a piece is held, the right button turns it instead of opening a menu.
-  window.addEventListener("mousedown", (e) => {
-    if (drag && e.button === 2) {
-      e.preventDefault();
-      rotateDragged();
-    }
-  });
+  // No context menu over the game, and none from a right button released just after the left one
+  // let a piece go.
+  root.addEventListener("contextmenu", (e) => e.preventDefault());
   window.addEventListener("contextmenu", (e) => {
-    if (drag) e.preventDefault();
+    if (drag || Date.now() - lastDragEnd < 600) e.preventDefault();
   });
 
   // ---------------------------------------------------------------------------------------------

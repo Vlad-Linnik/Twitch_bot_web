@@ -1013,7 +1013,9 @@
         "astronaut": "Космонавт",
         "lion": "Лев",
         "clown": "Клоун"
-      }
+      },
+      "music": "Музыка",
+      "musicCredits": "Музыка (CC0, OpenGameArt): Kistol, iamoneabe, RandomMind, Spring Spring, Tarush Singhal, wipics, cosmac. Античность, век пара и киберпанк звучат силами самой игры."
     }
   },
   "statistics": {
