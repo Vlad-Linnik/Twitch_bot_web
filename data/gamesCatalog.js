@@ -277,4 +277,22 @@ module.exports = [
         <circle cx="120" cy="76" r="11" fill="#3f3f46"/>
       </svg>`,
   },
+  {
+    id: "tile-fit",
+    url: "/games/tile-fit",
+    nameKey: "games.tileFit.name",
+    descKey: "games.tileFit.cardDescription",
+    preview: `
+      <svg width="150" height="90" viewBox="0 0 150 90" aria-hidden="true">
+        <g fill="#262626" stroke="#171717" stroke-width="1">
+          <rect x="20" y="15" width="20" height="20"/><rect x="40" y="15" width="20" height="20"/>
+          <rect x="20" y="35" width="20" height="20"/><rect x="40" y="35" width="20" height="20"/>
+          <rect x="20" y="55" width="20" height="20"/><rect x="40" y="55" width="20" height="20"/>
+          <rect x="60" y="55" width="20" height="20"/>
+        </g>
+        <path d="M20 15 h40 v20 h-20 v20 h-20 z" fill="#22d3ee" stroke="#0e7490" stroke-width="1.5"/>
+        <path d="M95 22 h40 v20 h-20 v20 h-20 z" fill="#22d3ee" opacity="0.85" stroke="#0e7490" stroke-width="1.5"/>
+        <path d="M95 62 h40 v14 h-40 z" fill="#38bdf8" opacity="0.8" stroke="#0369a1" stroke-width="1.5"/>
+      </svg>`,
+  },
 ];

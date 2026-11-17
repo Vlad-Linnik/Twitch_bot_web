@@ -1,0 +1,160 @@
+<%- include('partials/head', { title: t('games.tileFit.name') }) %>
+<%- include('partials/nav') %>
+<link rel="stylesheet" href="<%= asset('/css/tile-fit.css') %>" />
+
+<%# "Укладка" has its own interface rather than the site's game-page layout: one full-height stage
+    whose scenery, typeface and materials change with the era (public/css/tile-fit.css). Every
+    piece of it is drawn by public/js/games/tile-fit.js; the server only supplies text, progress
+    and the leaderboard. %>
+<main class="pt-14">
+  <div id="tf-root" class="tf-root tf-era-1">
+    <div class="tf-stage">
+      <div class="tf-scenery" aria-hidden="true"></div>
+
+      <header class="tf-head">
+        <button type="button" id="tf-open-map" class="tf-btn" title="<%= t('games.tileFit.mapTitle') %>" aria-label="<%= t('games.tileFit.mapTitle') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+        </button>
+        <div class="tf-title-block">
+          <p class="tf-kicker"><span id="tf-level-title"></span><span class="tf-kicker-dot">·</span><span id="tf-era-title" class="tf-era-name"></span></p>
+          <h1 id="tf-level-name" class="tf-level-name"></h1>
+          <p id="tf-special-chip" class="tf-chip" hidden></p>
+        </div>
+        <div class="tf-head-right">
+          <button type="button" id="tf-open-records" class="tf-btn" title="<%= t('games.tileFit.records') %>" aria-label="<%= t('games.tileFit.records') %>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+          </button>
+          <button type="button" id="tf-open-help" class="tf-btn" title="<%= t('games.tileFit.help') %>" aria-label="<%= t('games.tileFit.help') %>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 1 1 4.3 2.7c-.9.4-1.5 1.2-1.5 2.2v.3"/><path d="M12 18h.01"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section id="tf-play" class="tf-play">
+        <div id="tf-board-wrap" class="tf-board-wrap">
+          <div id="tf-board" class="tf-board"></div>
+        </div>
+        <p id="tf-status" class="tf-status"></p>
+        <div id="tf-tray" class="tf-tray"></div>
+      </section>
+
+      <div class="tf-tools">
+        <button type="button" id="tf-undo" class="tf-btn" title="<%= t('games.tileFit.undo') %>" aria-label="<%= t('games.tileFit.undo') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        </button>
+        <button type="button" id="tf-reset" class="tf-btn" title="<%= t('games.tileFit.reset') %>" aria-label="<%= t('games.tileFit.reset') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+      </div>
+
+      <%# The card over the stage when a level is solved. %>
+      <div id="tf-card" class="tf-card-layer" hidden>
+        <div class="tf-card">
+          <p id="tf-card-kicker" class="tf-card-kicker"></p>
+          <p id="tf-card-title" class="tf-card-title"></p>
+          <p id="tf-card-text" class="tf-card-text"></p>
+          <div class="tf-card-actions">
+            <button type="button" id="tf-card-secondary" class="tf-action tf-action-ghost"></button>
+            <button type="button" id="tf-card-primary" class="tf-action"></button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tf-splash" class="tf-splash" hidden aria-live="polite">
+        <p class="tf-splash-kicker"><%= t('games.tileFit.newEra') %></p>
+        <p id="tf-splash-name" class="tf-splash-name"></p>
+      </div>
+
+      <%# The map of eras: only the levels already opened are on it, plus one unknown stop ahead. %>
+      <section id="tf-map" class="tf-map" hidden>
+        <div class="tf-map-head">
+          <h2 class="tf-map-title"><%= t('games.tileFit.mapTitle') %></h2>
+          <span id="tf-solved-count" class="tf-map-count"></span>
+          <button type="button" id="tf-close-map" class="tf-btn" title="<%= t('games.tileFit.close') %>" aria-label="<%= t('games.tileFit.close') %>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div id="tf-map-path" class="tf-map-path"></div>
+      </section>
+    </div>
+
+    <dialog id="tf-records" class="tf-dialog">
+      <div class="tf-dialog-head">
+        <h2><%= t('games.tileFit.leaderboardTitle') %></h2>
+        <button type="button" class="tf-btn" data-close title="<%= t('games.tileFit.close') %>" aria-label="<%= t('games.tileFit.close') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <ol id="tf-lb-list" class="tf-lb">
+        <% if (leaderboard.rows.length === 0) { %>
+          <li class="tf-lb-empty"><%= t('games.tileFit.leaderboardEmpty') %></li>
+        <% } %>
+        <% leaderboard.rows.forEach(function(row) { %>
+          <li class="tf-lb-row<%= row.isMe ? ' tf-lb-me' : '' %>">
+            <span class="tf-lb-rank"><%= row.rank %></span>
+            <span class="tf-lb-name" <% if (row.color) { %>style="color: <%= row.color %>"<% } %>><%= row.displayName %></span>
+            <span class="tf-lb-score"><%= row.score %></span>
+          </li>
+        <% }) %>
+        <% if (leaderboard.myRow) { %>
+          <li class="tf-lb-row tf-lb-me tf-lb-sep">
+            <span class="tf-lb-rank"><%= leaderboard.myRow.rank %></span>
+            <span class="tf-lb-name" <% if (leaderboard.myRow.color) { %>style="color: <%= leaderboard.myRow.color %>"<% } %>><%= leaderboard.myRow.displayName %></span>
+            <span class="tf-lb-score"><%= leaderboard.myRow.score %></span>
+          </li>
+        <% } %>
+      </ol>
+      <% if (!user) { %>
+        <p class="tf-dialog-note">
+          <%= t('games.tileFit.loginToSave') %>
+          <a href="/auth/login?returnTo=<%= encodeURIComponent(currentUrl) %>"><%= t('nav.login') %></a>
+        </p>
+      <% } %>
+    </dialog>
+
+    <dialog id="tf-help" class="tf-dialog">
+      <div class="tf-dialog-head">
+        <h2><%= t('games.tileFit.howTitle') %></h2>
+        <button type="button" class="tf-btn" data-close title="<%= t('games.tileFit.close') %>" aria-label="<%= t('games.tileFit.close') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <ul class="tf-help">
+        <li><%= t('games.tileFit.howDrag') %></li>
+        <li><span><%= t('games.tileFit.howRotate') %></span><kbd><%= t('games.tileFit.howRotateKeys') %></kbd></li>
+        <li><span><%= t('games.tileFit.howBack') %></span><kbd><%= t('games.tileFit.howBackKeys') %></kbd></li>
+      </ul>
+      <p class="tf-dialog-note"><%= t('games.tileFit.hint') %></p>
+    </dialog>
+  </div>
+</main>
+
+<script id="tf-data" type="application/json"><%- safeJson({
+  levelsVersion: levelsVersion,
+  solved: solved,
+  loggedIn: !!user,
+  csrf: user ? csrfToken : null,
+  names: t('games.tileFit.levelNames'),
+  i18n: {
+    levelLabel: t('games.tileFit.levelLabel'),
+    solvedCount: t('games.tileFit.solvedCount'),
+    unknownLevel: t('games.tileFit.unknownLevel'),
+    allSolved: t('games.tileFit.allSolved'),
+    saved: t('games.tileFit.saved'),
+    saveFailed: t('games.tileFit.saveFailed'),
+    piecesLeft: t('games.tileFit.piecesLeft'),
+    leaderboardEmpty: t('games.tileFit.leaderboardEmpty'),
+    special: t('games.tileFit.special'),
+    next: t('games.tileFit.next'),
+    toLevels: t('games.tileFit.toLevels'),
+    solvedTitle: t('games.tileFit.solvedTitle'),
+    figureDone: t('games.tileFit.figureDone'),
+    eras: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (i) { return t('games.tileFit.era' + i); }),
+  },
+}) %></script>
+
+<%- include('partials/gameVolumeControl') %>
+<script src="<%= asset('/js/games/gameVolume.js') %>" defer></script>
+<script src="<%= asset('/js/games/engines/tileFitEngine.js') %>"></script>
+<script src="<%= asset('/js/games/tile-fit.js') %>" defer></script>
+<%- include('partials/foot') %>

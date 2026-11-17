@@ -1,0 +1,650 @@
+/* "Укладка" (/games/tile-fit). The game has its own interface, not the site's game-page layout:
+   a full-height stage whose scenery, typeface and materials evolve over ten eras of ten levels,
+   from the stone age to cyberpunk. public/js/games/tile-fit.js puts one .tf-era-<1..10> class on
+   #tf-root plus --tf-accent, and gives every piece its own colour in --tf-pc (set on the piece
+   element itself, so the era rules below must be written on .tf-piece/.tf-pcell, where that
+   variable exists - a custom property declared on #tf-root would resolve before --tf-pc does).
+
+   Every texture is an inline SVG noise filter or a gradient: no image files. */
+
+.tf-root {
+  --tf-accent: #a855f7;
+  --tf-cs: 48px;
+  --tx-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  --tx-strata: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='s'><feTurbulence type='fractalNoise' baseFrequency='.004 .11' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45  0 0 0 0 .25  0 0 0 0 .08  0 0 0 1.6 -.5'/></filter><rect width='100%' height='100%' filter='url(%23s)'/></svg>");
+  --tx-speckle-dark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='d'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 22 -13.6'/></filter><rect width='100%' height='100%' filter='url(%23d)'/></svg>");
+  --tx-speckle-light: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='l'><feTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='2' seed='21' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 22 -13.8'/></filter><rect width='100%' height='100%' filter='url(%23l)'/></svg>");
+  --tx-clouds: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='c'><feTurbulence type='turbulence' baseFrequency='.03' numOctaves='4' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1.2 -.35'/></filter><rect width='100%' height='100%' filter='url(%23c)'/></svg>");
+  --tx-patina: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='.045' numOctaves='4' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .25  0 0 0 0 .62  0 0 0 0 .52  0 0 0 3.2 -1.85'/></filter><rect width='100%' height='100%' filter='url(%23p)'/></svg>");
+  --tx-veins: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='v'><feTurbulence type='turbulence' baseFrequency='.012 .02' numOctaves='5' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .32  0 0 0 0 .3  0 0 0 0 .28  -5 0 0 0 1.05'/></filter><rect width='100%' height='100%' filter='url(%23v)'/></svg>");
+  --tx-wood: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='240'><filter id='w'><feTurbulence type='fractalNoise' baseFrequency='.006 .16' numOctaves='3' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .18  0 0 0 0 .09  0 0 0 0 .03  0 0 0 1.6 -.55'/></filter><rect width='100%' height='100%' filter='url(%23w)'/></svg>");
+  --tx-brushed: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='b'><feTurbulence type='fractalNoise' baseFrequency='.003 .9' numOctaves='2' seed='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .7 -.2'/></filter><rect width='100%' height='100%' filter='url(%23b)'/></svg>");
+  --tx-circuit: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' fill='none' stroke='white' stroke-opacity='.35' stroke-width='1.2'><path d='M0 12h14l6 6h10M30 18v14l6 6h12M8 48V34l6-6h8M48 8H36l-4-4V0'/><circle cx='30' cy='18' r='2' fill='white' fill-opacity='.45'/><circle cx='22' cy='28' r='2' fill='white' fill-opacity='.45'/></svg>");
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* =========================================================================================
+   STAGE
+   ========================================================================================= */
+
+.tf-stage {
+  --tf-font: Georgia, "Times New Roman", serif;
+  --tf-ink: #f5ead7;
+  --tf-ink-dim: rgba(245, 234, 215, 0.6);
+  --tf-glass: rgba(20, 14, 8, 0.55);
+  position: relative;
+  min-height: calc(100vh - 3.5rem);
+  min-height: calc(100dvh - 3.5rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--tf-ink);
+  isolation: isolate;
+}
+.tf-scenery {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transition: opacity 0.6s;
+  background: #120c07;
+}
+
+/* ---- head: map button, the level's name, records and help ----------------------------- */
+
+.tf-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.25rem;
+}
+.tf-head-right { display: flex; gap: 0.5rem; }
+.tf-title-block { text-align: center; min-width: 0; }
+.tf-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--tf-ink-dim);
+}
+.tf-kicker-dot { margin: 0 0.6em; opacity: 0.6; }
+.tf-era-name { color: var(--tf-accent); }
+.tf-level-name {
+  font-family: var(--tf-font);
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  line-height: 1.05;
+  margin-top: 0.15rem;
+  color: var(--tf-ink);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  overflow-wrap: anywhere;
+}
+.tf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #111;
+  background: var(--tf-accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--tf-accent) 55%, transparent);
+}
+.tf-chip[hidden] { display: none; }
+
+/* ---- round glass buttons ---------------------------------------------------------------- */
+
+.tf-btn {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  color: var(--tf-ink);
+  background: var(--tf-glass);
+  border: 1px solid color-mix(in srgb, var(--tf-accent) 45%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: transform 0.12s, border-color 0.15s, background 0.15s;
+}
+.tf-btn svg { width: 1.25rem; height: 1.25rem; }
+.tf-btn:hover { border-color: var(--tf-accent); transform: translateY(-1px); }
+.tf-btn:active { transform: scale(0.94); }
+.tf-btn:focus-visible { outline: 2px solid var(--tf-accent); outline-offset: 2px; }
+.tf-btn:disabled { opacity: 0.35; pointer-events: none; }
+
+.tf-tools {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 5;
+}
+
+/* ---- play area: board in the middle, the shelf of pieces under it ----------------------- */
+
+.tf-play {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+}
+.tf-board-wrap {
+  width: 100%;
+  max-width: 760px;
+  display: grid;
+  place-items: center;
+  padding: 1rem 1rem 0.25rem;
+}
+.tf-status {
+  min-height: 1.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  color: var(--tf-ink-dim);
+  text-align: center;
+}
+.tf-tray {
+  width: 100%;
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 1rem 1.5rem;
+  padding: 1.25rem 4.5rem 4.5rem;
+  min-height: 160px;
+  background: linear-gradient(180deg, transparent, var(--tf-glass) 30%);
+  border-top: 1px solid color-mix(in srgb, var(--tf-accent) 25%, transparent);
+}
+.tf-slot { position: relative; display: grid; place-items: center; }
+.tf-slot.tf-empty { opacity: 0; pointer-events: none; }
+
+/* The figure's features: drawn faintly under the pieces as a guide, then over them once it is
+   assembled. */
+.tf-marks {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.4;
+  color: var(--tf-ink);
+  transition: opacity 0.4s;
+}
+.tf-marks.tf-marks-on { z-index: 4; opacity: 1; color: #1a1a1a; animation: tf-marks-in 0.8s 0.5s ease-out both; }
+.tf-era-8 .tf-marks.tf-marks-on, .tf-era-9 .tf-marks.tf-marks-on, .tf-era-10 .tf-marks.tf-marks-on { color: #fff; filter: drop-shadow(0 0 3px #fff); }
+@keyframes tf-marks-in { from { opacity: 0; transform: scale(0.96); } }
+
+/* Every tenth level: the era's ornament. Its cells carry an inlaid rim in the era's accent and a
+   slow shimmer that runs across the board diagonally (--d is set per cell from r + c). */
+.tf-board.tf-ornate .tf-cell {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tf-accent) 55%, transparent), inset 0 0 14px color-mix(in srgb, var(--tf-accent) 22%, transparent);
+  animation: tf-shimmer 4.5s ease-in-out infinite;
+  animation-delay: var(--d, 0s);
+}
+.tf-board.tf-ornate { filter: drop-shadow(0 0 18px color-mix(in srgb, var(--tf-accent) 35%, transparent)); }
+@keyframes tf-shimmer {
+  0%, 70%, 100% { filter: brightness(1); }
+  80% { filter: brightness(1.35) saturate(1.2); }
+}
+
+/* =========================================================================================
+   BOARD + PIECES
+   ========================================================================================= */
+
+.tf-board {
+  position: relative;
+  touch-action: none;
+}
+
+.tf-cell {
+  position: absolute;
+  width: var(--tf-cs);
+  height: var(--tf-cs);
+  background-color: #2a2a2a;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: filter 0.2s;
+}
+.tf-cell.tf-alt { background-color: #232323; }
+.tf-root .tf-board .tf-cell { transition: filter 0.2s, opacity 0.6s; }
+.tf-root .tf-cell.tf-ghost-ok { filter: brightness(1.45); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tf-accent) 85%, white); }
+.tf-root .tf-cell.tf-ghost-bad { filter: brightness(1.25); box-shadow: inset 0 0 0 2px rgba(248, 113, 113, 0.95); }
+.tf-board .tf-cell.tf-win-wave { animation: tf-wave 0.9s ease-out both; }
+.tf-root .tf-cell.tf-ghost-ok, .tf-root .tf-cell.tf-ghost-bad { animation: none; }
+
+@keyframes tf-wave {
+  0% { filter: brightness(1); }
+  35% { filter: brightness(2.2) saturate(1.5); }
+  100% { filter: brightness(1); }
+}
+
+/* ---- pieces ------------------------------------------------------------------------------ */
+
+.tf-piece {
+  position: absolute;
+  touch-action: none;
+  cursor: grab;
+  z-index: 2;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.55));
+  transition: filter 0.2s;
+}
+.tf-slot .tf-piece { position: relative; }
+.tf-drag-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+.tf-drag-layer .tf-piece { position: absolute; cursor: grabbing; }
+
+.tf-pcell {
+  position: absolute;
+  --edge-hi: rgba(255, 255, 255, 0.35);
+  --edge-lo: rgba(0, 0, 0, 0.45);
+  --edge-w: 2px;
+  --p-rad: 0px;
+  background-color: var(--tf-pc);
+}
+/* The outline runs only along the piece's outer edges and its outer corners are the only ones
+   rounded, so a piece reads as one slab rather than a row of squares. */
+.tf-pcell.e-t { border-top: var(--edge-w) solid var(--edge-hi); }
+.tf-pcell.e-l { border-left: var(--edge-w) solid var(--edge-hi); }
+.tf-pcell.e-b { border-bottom: var(--edge-w) solid var(--edge-lo); }
+.tf-pcell.e-r { border-right: var(--edge-w) solid var(--edge-lo); }
+.tf-pcell.r-tl { border-top-left-radius: var(--p-rad); }
+.tf-pcell.r-tr { border-top-right-radius: var(--p-rad); }
+.tf-pcell.r-bl { border-bottom-left-radius: var(--p-rad); }
+.tf-pcell.r-br { border-bottom-right-radius: var(--p-rad); }
+
+/* =========================================================================================
+   ERAS
+   ========================================================================================= */
+
+/* 1. Stone age - sandstone: warm, grainy, edges worn round. Board: packed earth. */
+.tf-era-1 .tf-cell { background-color: #6b5236; background-image: var(--tx-clouds), var(--tx-grain); background-size: 220px 220px, 160px 160px; background-blend-mode: soft-light, overlay; box-shadow: inset 0 0 0 1px rgba(40, 25, 10, 0.4); }
+.tf-era-1 .tf-cell.tf-alt { background-color: #614a30; }
+.tf-era-1 .tf-pcell {
+  --edge-hi: rgba(255, 240, 205, 0.6); --edge-lo: rgba(90, 55, 20, 0.7); --edge-w: 3px; --p-rad: 8px;
+  background-image: radial-gradient(ellipse at 30% 25%, rgba(255, 245, 220, 0.3), transparent 65%), var(--tx-clouds), var(--tx-grain), var(--tx-grain);
+  background-size: auto, 220px 220px, 160px 160px, 70px 70px;
+  background-blend-mode: normal, soft-light, overlay, soft-light;
+}
+
+/* 2. Ancient Egypt - glazed faience in lapis, turquoise and carnelian, framed in gold. Board:
+   limestone blocks. */
+.tf-era-2 .tf-cell { background-color: #b49a6c; background-image: var(--tx-clouds), var(--tx-grain); background-size: 220px, 160px; background-blend-mode: soft-light, overlay; box-shadow: inset 0 0 0 1px rgba(90, 65, 30, 0.55); }
+.tf-era-2 .tf-cell.tf-alt { background-color: #a88d60; }
+.tf-era-2 .tf-pcell {
+  --edge-hi: #f4d27a; --edge-lo: #a6781f; --edge-w: 3px; --p-rad: 2px;
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.38), transparent 40%, rgba(0, 0, 0, 0.18)), var(--tx-clouds), var(--tx-grain);
+  background-size: auto, 220px 220px, 160px 160px;
+  background-blend-mode: normal, soft-light, overlay;
+}
+
+/* 3. Antiquity - polished marble with gold-leaf edges. Board: dark green marble. */
+.tf-era-3 .tf-cell { background-color: #22302a; background-image: var(--tx-veins); background-size: 260px; }
+.tf-era-3 .tf-cell.tf-alt { background-color: #1b2621; }
+.tf-era-3 .tf-pcell {
+  --edge-hi: #e9c46a; --edge-lo: #b08a2e; --edge-w: 2px; --p-rad: 2px;
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.4), transparent 40%), var(--tx-veins), var(--tx-grain);
+  background-size: auto, 260px 260px, 160px 160px;
+  background-blend-mode: normal, multiply, soft-light;
+}
+
+/* 4. Middle ages - oak planks bound in black iron. Board: flagstones. */
+.tf-era-4 .tf-cell { background-color: #47413a; background-image: var(--tx-clouds), var(--tx-grain); background-size: 220px, 160px; background-blend-mode: soft-light, overlay; border-radius: 4px; box-shadow: inset 0 0 0 2px #1d1a17; }
+.tf-era-4 .tf-cell.tf-alt { background-color: #3d3832; }
+.tf-era-4 .tf-pcell {
+  --edge-hi: #26272b; --edge-lo: #16171a; --edge-w: 3px; --p-rad: 1px;
+  background-image: var(--tx-wood), var(--tx-wood), var(--tx-grain);
+  background-size: 300px 240px, 300px 60px, 160px 160px;
+  background-blend-mode: multiply, multiply, overlay;
+}
+
+/* 5. Renaissance - fresco on plaster in earth pigments, gilded rims. Board: terracotta floor. */
+.tf-era-5 .tf-cell { background-color: #8a4b32; background-image: var(--tx-grain), var(--tx-clouds); background-size: 160px, 220px; background-blend-mode: overlay, soft-light; box-shadow: inset 0 0 0 2px rgba(240, 225, 200, 0.18); }
+.tf-era-5 .tf-cell.tf-alt { background-color: #7c4029; }
+.tf-era-5 .tf-pcell {
+  --edge-hi: #f1d488; --edge-lo: #9c7424; --edge-w: 2px; --p-rad: 3px;
+  background-image: radial-gradient(ellipse at 40% 30%, rgba(255, 250, 235, 0.35), transparent 70%), var(--tx-clouds), var(--tx-clouds), var(--tx-grain);
+  background-size: auto, 220px 220px, 90px 90px, 160px 160px;
+  background-blend-mode: normal, soft-light, soft-light, overlay;
+}
+
+/* 6. Age of steam - brass and copper, brushed and riveted. Board: sooty iron plates. */
+.tf-era-6 .tf-cell { background-color: #363431; background-image: var(--tx-brushed), var(--tx-grain); background-size: 200px, 160px; background-blend-mode: soft-light, overlay; box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.07), inset -1px -1px 0 rgba(0, 0, 0, 0.6); }
+.tf-era-6 .tf-cell.tf-alt { background-color: #2f2d2a; }
+.tf-era-6 .tf-pcell {
+  --edge-hi: rgba(255, 228, 160, 0.8); --edge-lo: rgba(70, 35, 8, 0.85); --edge-w: 2px; --p-rad: 4px;
+  background-image: linear-gradient(180deg, rgba(255, 240, 200, 0.35), transparent 40%, rgba(0, 0, 0, 0.2)), var(--tx-brushed), var(--tx-grain);
+  background-size: auto, 200px 200px, 160px 160px;
+  background-blend-mode: normal, soft-light, overlay;
+}
+.tf-era-4 .tf-pcell::after,
+.tf-era-6 .tf-pcell::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  background:
+    radial-gradient(circle, #e5e7eb 0 1.2px, #374151 1.8px 2.6px, transparent 3px) top left / 7px 7px no-repeat,
+    radial-gradient(circle, #e5e7eb 0 1.2px, #374151 1.8px 2.6px, transparent 3px) top right / 7px 7px no-repeat,
+    radial-gradient(circle, #e5e7eb 0 1.2px, #374151 1.8px 2.6px, transparent 3px) bottom left / 7px 7px no-repeat,
+    radial-gradient(circle, #e5e7eb 0 1.2px, #374151 1.8px 2.6px, transparent 3px) bottom right / 7px 7px no-repeat;
+  opacity: 0.8;
+}
+
+/* 7. Electric age - glossy enamel with chrome trim. Board: black lacquer with gold inlay. */
+.tf-era-7 .tf-cell { background-color: #151515; box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.28); }
+.tf-era-7 .tf-cell.tf-alt { background-color: #1c1c1c; }
+.tf-era-7 .tf-pcell {
+  --edge-hi: #f1f5f9; --edge-lo: #8b98a8; --edge-w: 2px; --p-rad: 8px;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0, rgba(255, 255, 255, 0.08) 42%, transparent 48%, rgba(0, 0, 0, 0.18));
+}
+.tf-era-7 .tf-piece { filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.6)); }
+
+/* 8. Space age - moulded plastic, round and glossy, on a starfield. */
+.tf-era-8 .tf-cell { background-color: #0e1430; background-image: radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.7) 0 0.8px, transparent 1.3px), radial-gradient(circle at 75% 70%, rgba(255, 255, 255, 0.5) 0 0.6px, transparent 1px); box-shadow: inset 0 0 0 1px rgba(148, 163, 255, 0.18); }
+.tf-era-8 .tf-cell.tf-alt { background-color: #111938; }
+.tf-era-8 .tf-pcell {
+  --edge-hi: rgba(255, 255, 255, 0.9); --edge-lo: rgba(0, 0, 0, 0.3); --edge-w: 2px; --p-rad: 14px;
+  background-image: radial-gradient(ellipse at 35% 25%, rgba(255, 255, 255, 0.65), transparent 45%), linear-gradient(180deg, transparent 60%, rgba(0, 0, 0, 0.15));
+}
+.tf-era-8 .tf-piece { filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5)); }
+
+/* 9. Digital age - tinted glass over a circuit. Board: a printed circuit board. */
+.tf-era-9 .tf-cell { background-color: #0d3a24; background-image: var(--tx-circuit); background-size: 48px 48px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.tf-era-9 .tf-cell.tf-alt { background-color: #0b311f; }
+.tf-era-9 .tf-pcell {
+  --edge-hi: color-mix(in srgb, var(--tf-pc) 45%, white); --edge-lo: color-mix(in srgb, var(--tf-pc) 60%, black); --edge-w: 2px; --p-rad: 6px;
+  background-color: color-mix(in srgb, var(--tf-pc) 78%, transparent);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.35), transparent 45%), var(--tx-circuit);
+  background-size: auto, 48px 48px;
+}
+.tf-era-9 .tf-piece { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--tf-pc) 60%, transparent)) drop-shadow(0 3px 3px rgba(0, 0, 0, 0.5)); }
+
+/* 10. Cyberpunk - dark glass, neon edges, scanlines, a glitch when a piece lands. */
+.tf-era-10 .tf-cell { background-color: #0a0814; box-shadow: inset 0 0 0 1px rgba(0, 240, 255, 0.16); }
+.tf-era-10 .tf-cell.tf-alt { background-color: #0e0a1c; box-shadow: inset 0 0 0 1px rgba(255, 43, 214, 0.14); }
+.tf-era-10 .tf-pcell {
+  --edge-hi: var(--tf-pc); --edge-lo: var(--tf-pc); --edge-w: 2px; --p-rad: 0px;
+  background-color: color-mix(in srgb, var(--tf-pc) 16%, #06030d);
+  background-image:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--tf-pc) 22%, transparent) 0 1px, transparent 1px 4px),
+    radial-gradient(ellipse at center, color-mix(in srgb, var(--tf-pc) 30%, transparent), transparent 70%);
+}
+.tf-era-10 .tf-piece { filter: drop-shadow(0 0 4px var(--tf-pc)) drop-shadow(0 0 12px color-mix(in srgb, var(--tf-pc) 55%, transparent)); }
+.tf-era-10 .tf-piece.tf-pop { animation: tf-glitch 0.32s steps(2, end) both; }
+
+@keyframes tf-glitch {
+  0% { transform: translate(3px, -1px); clip-path: inset(0 0 55% 0); }
+  25% { transform: translate(-4px, 1px); clip-path: inset(40% 0 0 0); }
+  50% { transform: translate(2px, 0); clip-path: inset(15% 0 30% 0); }
+  75% { transform: translate(-1px, 0); clip-path: none; }
+  100% { transform: none; clip-path: none; }
+}
+
+/* ---- piece states (after the eras, and more specific, so they win) --------------------- */
+
+.tf-root .tf-drag-layer .tf-piece { filter: drop-shadow(0 16px 14px rgba(0, 0, 0, 0.6)) brightness(1.08); }
+.tf-root.tf-era-9 .tf-drag-layer .tf-piece,
+.tf-root.tf-era-10 .tf-drag-layer .tf-piece { filter: drop-shadow(0 0 8px var(--tf-pc)) drop-shadow(0 16px 14px rgba(0, 0, 0, 0.6)); }
+.tf-root .tf-piece.tf-invalid { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.9)); }
+.tf-root .tf-pcell.tf-bad { background-color: #dc2626; --edge-hi: #fca5a5; --edge-lo: #7f1d1d; }
+.tf-root .tf-piece.tf-invalid .tf-pcell:not(.tf-bad) { filter: saturate(0.6) brightness(0.85); }
+.tf-root .tf-piece.tf-shake { animation: tf-shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+.tf-piece.tf-pop { animation: tf-pop 0.22s ease-out both; }
+
+@keyframes tf-shake {
+  10%, 90% { transform: translate(-2px, 0) rotate(-0.6deg); }
+  20%, 80% { transform: translate(5px, 0) rotate(0.8deg); }
+  30%, 50%, 70% { transform: translate(-8px, 1px) rotate(-1.2deg); }
+  40%, 60% { transform: translate(8px, -1px) rotate(1.2deg); }
+}
+@keyframes tf-pop {
+  0% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* =========================================================================================
+   OVERLAYS: cards, era splash, map, dialogs
+   ========================================================================================= */
+
+.tf-card-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: end center;
+  padding: 1rem 1rem 1.5rem;
+  background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.55));
+  animation: tf-fade 0.3s ease-out both;
+}
+/* The card sits low, over the emptied shelf, so the assembled figure stays in view. */
+.tf-card-layer[hidden] { display: none; }
+.tf-card {
+  width: min(26rem, 100%);
+  text-align: center;
+  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--tf-glass) 80%, #000);
+  border: 1px solid color-mix(in srgb, var(--tf-accent) 60%, transparent);
+  box-shadow: 0 0 50px color-mix(in srgb, var(--tf-accent) 25%, transparent), 0 20px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: tf-rise 0.45s 0.05s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.tf-card-kicker { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--tf-accent); }
+.tf-card-title { font-family: var(--tf-font); font-size: 1.9rem; line-height: 1.1; margin: 0.35rem 0 0.5rem; }
+.tf-card-text { color: var(--tf-ink-dim); font-size: 0.95rem; min-height: 1.2em; }
+.tf-card-actions { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
+.tf-action {
+  padding: 0.65rem 1.4rem;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #111;
+  background: var(--tf-accent);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--tf-accent) 45%, transparent);
+  transition: transform 0.12s, filter 0.15s;
+}
+.tf-action:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.tf-action[hidden] { display: none; }
+.tf-action-ghost { color: var(--tf-ink); background: transparent; border: 1px solid color-mix(in srgb, var(--tf-ink) 35%, transparent); box-shadow: none; }
+
+.tf-splash {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.35) 70%);
+  animation: tf-splash 2.6s ease-in-out both;
+}
+.tf-splash[hidden] { display: none; }
+.tf-splash-kicker { font-size: 0.8rem; letter-spacing: 0.4em; text-transform: uppercase; color: var(--tf-ink-dim); }
+.tf-splash-name { font-family: var(--tf-font); font-size: clamp(2.4rem, 8vw, 5rem); color: var(--tf-accent); text-shadow: 0 0 40px color-mix(in srgb, var(--tf-accent) 50%, transparent); }
+@keyframes tf-splash {
+  0% { opacity: 0; letter-spacing: 0.3em; }
+  20%, 75% { opacity: 1; letter-spacing: 0.02em; }
+  100% { opacity: 0; }
+}
+
+/* ---- the map: one winding trail of stops, era by era ------------------------------------ */
+
+.tf-map {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  overflow-y: auto;
+  background: color-mix(in srgb, #000 70%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: tf-fade 0.25s ease-out both;
+}
+.tf-map[hidden] { display: none; }
+.tf-map-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8), transparent);
+}
+.tf-map-title { font-family: var(--tf-font); font-size: 1.6rem; flex: 1; }
+.tf-map-count { color: var(--tf-ink-dim); font-size: 0.85rem; letter-spacing: 0.08em; }
+.tf-map-path { max-width: 34rem; margin: 0 auto; padding: 0.5rem 1rem 4rem; }
+.tf-map-era { position: relative; padding: 1rem 0 0.5rem; }
+.tf-map-era-name {
+  text-align: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin: 0.5rem 0 1rem;
+}
+.tf-map-era-name::before, .tf-map-era-name::after { content: "—"; margin: 0 0.75em; opacity: 0.5; }
+.tf-stop {
+  --x: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto 0.6rem;
+  transform: translateX(calc(var(--x) * 1px));
+  text-align: left;
+  color: var(--tf-ink);
+}
+.tf-stop-node {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #111;
+  background: var(--lc);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 18px color-mix(in srgb, var(--lc) 45%, transparent);
+  transition: transform 0.15s;
+}
+.tf-stop.tf-special .tf-stop-node { border-radius: 0.6rem; transform: rotate(45deg); }
+.tf-stop.tf-special .tf-stop-node span { transform: rotate(-45deg); }
+.tf-stop:hover .tf-stop-node { transform: scale(1.08); }
+.tf-stop.tf-special:hover .tf-stop-node { transform: rotate(45deg) scale(1.08); }
+.tf-stop-label { display: flex; flex-direction: column; line-height: 1.2; }
+.tf-stop-name { font-family: var(--tf-font); font-size: 1.05rem; }
+.tf-stop-sub { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--tf-ink-dim); }
+.tf-stop.tf-open .tf-stop-node { background: transparent; color: var(--lc); border: 2px solid var(--lc); }
+.tf-stop.tf-current .tf-stop-node { animation: tf-pulse 1.6s ease-in-out infinite; }
+.tf-stop.tf-unknown { cursor: default; opacity: 0.55; }
+.tf-stop.tf-unknown .tf-stop-node { background: transparent; color: var(--tf-ink-dim); border: 2px dashed var(--tf-ink-dim); box-shadow: none; }
+@keyframes tf-pulse { 50% { box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 30px var(--lc); } }
+
+/* ---- dialogs (records, help) ------------------------------------------------------------ */
+
+.tf-dialog {
+  width: min(24rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.25rem;
+  border-radius: 1.25rem;
+  color: var(--tf-ink);
+  background: color-mix(in srgb, var(--tf-glass) 70%, #0b0b0b);
+  border: 1px solid color-mix(in srgb, var(--tf-accent) 50%, transparent);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+.tf-dialog::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
+.tf-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+.tf-dialog-head h2 { font-family: var(--tf-font); font-size: 1.4rem; }
+.tf-dialog-note { margin-top: 0.9rem; font-size: 0.8rem; color: var(--tf-ink-dim); }
+.tf-dialog-note a { color: var(--tf-accent); }
+.tf-lb { display: flex; flex-direction: column; gap: 0.15rem; }
+.tf-lb-row { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem; }
+.tf-lb-me { background: color-mix(in srgb, var(--tf-accent) 18%, transparent); }
+.tf-lb-sep { margin-top: 0.4rem; }
+.tf-lb-rank { width: 1.5rem; text-align: right; color: var(--tf-ink-dim); font-variant-numeric: tabular-nums; }
+.tf-lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-lb-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tf-lb-empty { color: var(--tf-ink-dim); font-size: 0.9rem; }
+.tf-help { display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.92rem; }
+.tf-help li { display: flex; justify-content: space-between; gap: 1rem; }
+.tf-help kbd { font-family: inherit; font-size: 0.75rem; color: var(--tf-ink-dim); text-align: right; }
+
+@keyframes tf-fade { from { opacity: 0; } }
+@keyframes tf-rise { from { opacity: 0; transform: translateY(14px) scale(0.92); } }
+
+.tf-spark {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: var(--sc);
+  box-shadow: 0 0 8px var(--sc);
+  animation: tf-spark 0.9s ease-out forwards;
+  z-index: 25;
+}
+@keyframes tf-spark { to { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; } }
+
+/* =========================================================================================
+   ERA SCENERY AND TYPE - the world around the board evolves with the pieces
+   ========================================================================================= */
+
+.tf-era-1 .tf-scenery { background: radial-gradient(ellipse at 50% 110%, rgba(255, 140, 50, 0.35), transparent 55%), radial-gradient(ellipse at 50% -20%, rgba(120, 90, 60, 0.35), transparent 60%), linear-gradient(180deg, #2a1d12, #120b06); }
+.tf-era-1 .tf-stage { --tf-font: Georgia, "Times New Roman", serif; }
+.tf-era-1 .tf-level-name { letter-spacing: 0.06em; text-transform: uppercase; }
+
+.tf-era-2 .tf-scenery { background: radial-gradient(circle at 78% 18%, rgba(255, 214, 140, 0.55) 0 3%, rgba(255, 190, 90, 0.18) 9%, transparent 22%), linear-gradient(180deg, #1d1633 0%, #4a3220 62%, #8c6a3c 100%); }
+.tf-era-2 .tf-stage { --tf-font: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; --tf-glass: rgba(30, 20, 10, 0.55); }
+.tf-era-2 .tf-level-name { letter-spacing: 0.12em; text-transform: uppercase; color: #f4d27a; }
+
+.tf-era-3 .tf-scenery { background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 40px, transparent 40px 120px), radial-gradient(ellipse at 50% 0%, rgba(120, 170, 220, 0.25), transparent 60%), linear-gradient(180deg, #13263a, #0a121c); }
+.tf-era-3 .tf-stage { --tf-font: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; --tf-ink: #f4f1ea; --tf-glass: rgba(10, 20, 32, 0.55); }
+.tf-era-3 .tf-level-name { letter-spacing: 0.18em; text-transform: uppercase; font-weight: 400; }
+
+.tf-era-4 .tf-scenery { background: radial-gradient(ellipse at 0% 50%, rgba(255, 130, 40, 0.28), transparent 40%), radial-gradient(ellipse at 100% 50%, rgba(255, 130, 40, 0.28), transparent 40%), linear-gradient(180deg, #1c1813, #0d0b08); }
+.tf-era-4 .tf-stage { --tf-font: "Old English Text MT", "Palatino Linotype", Palatino, Georgia, serif; }
+
+.tf-era-5 .tf-scenery { background: radial-gradient(ellipse at 50% 30%, rgba(230, 180, 90, 0.25), transparent 60%), radial-gradient(ellipse at 50% 120%, rgba(0, 0, 0, 0.8), transparent 60%), linear-gradient(180deg, #3a2417, #170e08); }
+.tf-era-5 .tf-stage { --tf-font: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; --tf-ink: #f8ecd4; }
+.tf-era-5 .tf-level-name { font-style: italic; }
+
+.tf-era-6 .tf-scenery { background: radial-gradient(ellipse at 30% 20%, rgba(214, 165, 82, 0.2), transparent 50%), radial-gradient(ellipse at 80% 90%, rgba(120, 120, 120, 0.2), transparent 50%), linear-gradient(180deg, #221c15, #0f0c09); }
+.tf-era-6 .tf-stage { --tf-font: Rockwell, "Roboto Slab", "Courier New", serif; }
+.tf-era-6 .tf-level-name { text-transform: uppercase; letter-spacing: 0.04em; }
+
+.tf-era-7 .tf-scenery { background: repeating-conic-gradient(from 0deg at 50% 115%, rgba(212, 175, 55, 0.09) 0deg 3deg, transparent 3deg 9deg), linear-gradient(180deg, #0c0c0c, #050505); }
+.tf-era-7 .tf-stage { --tf-font: Futura, "Century Gothic", "Trebuchet MS", sans-serif; --tf-ink: #f2ead8; --tf-glass: rgba(10, 10, 10, 0.6); }
+.tf-era-7 .tf-level-name { text-transform: uppercase; letter-spacing: 0.3em; font-weight: 300; }
+
+.tf-era-8 .tf-scenery { background: radial-gradient(circle at 20% 30%, #fff 0 1px, transparent 1.5px) 0 0 / 97px 89px, radial-gradient(circle at 60% 70%, rgba(255, 255, 255, 0.7) 0 1px, transparent 1.5px) 0 0 / 131px 113px, radial-gradient(ellipse at 75% 25%, rgba(140, 90, 255, 0.3), transparent 45%), radial-gradient(ellipse at 15% 85%, rgba(60, 140, 255, 0.25), transparent 45%), linear-gradient(180deg, #0b0f26, #04050d); }
+.tf-era-8 .tf-stage { --tf-font: "Trebuchet MS", "Century Gothic", sans-serif; --tf-ink: #eef2ff; --tf-glass: rgba(10, 14, 40, 0.55); }
+.tf-era-8 .tf-level-name { font-weight: 700; letter-spacing: 0.02em; }
+
+.tf-era-9 .tf-scenery { background: linear-gradient(rgba(56, 189, 248, 0.06) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, rgba(56, 189, 248, 0.06) 1px, transparent 1px) 0 0 / 32px 32px, radial-gradient(ellipse at 50% 40%, rgba(16, 80, 60, 0.4), transparent 60%), #050c0a; }
+.tf-era-9 .tf-stage { --tf-font: Consolas, "Courier New", monospace; --tf-ink: #e0f2fe; --tf-glass: rgba(4, 18, 14, 0.6); }
+
+.tf-era-10 .tf-scenery {
+  background:
+    linear-gradient(180deg, transparent 62%, rgba(255, 43, 214, 0.25) 62.3%, transparent 63%),
+    repeating-linear-gradient(90deg, rgba(0, 240, 255, 0.12) 0 1px, transparent 1px 60px) 0 100% / 100% 38% no-repeat,
+    repeating-linear-gradient(0deg, rgba(255, 43, 214, 0.12) 0 1px, transparent 1px 28px) 0 100% / 100% 38% no-repeat,
+    radial-gradient(ellipse at 50% 62%, rgba(255, 43, 214, 0.35), transparent 50%),
+    linear-gradient(180deg, #0a0418, #12052a 60%, #05020c);
+}
+.tf-era-10 .tf-stage { --tf-font: Consolas, "Courier New", monospace; --tf-ink: #f5f3ff; --tf-glass: rgba(8, 3, 18, 0.65); }
+.tf-era-10 .tf-level-name { text-transform: uppercase; letter-spacing: 0.08em; text-shadow: 2px 0 #00f0ff, -2px 0 #ff2bd6, 0 0 24px rgba(255, 43, 214, 0.6); }
+.tf-era-10 .tf-btn { box-shadow: 0 0 12px rgba(255, 43, 214, 0.35); }
+
+@media (max-width: 640px) {
+  .tf-tray { padding: 1rem 0.75rem 5rem; }
+  .tf-btn { width: 2.5rem; height: 2.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-root .tf-piece.tf-shake, .tf-piece.tf-pop, .tf-cell.tf-win-wave, .tf-spark, .tf-splash, .tf-stop.tf-current .tf-stop-node { animation-duration: 0.01s; }
+}
