@@ -1,0 +1,74 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + st('stats.title') }) %>
+<%- include('partials/nav') %>
+
+<%# A section's charts (routes/mediaSection.js's /stats): over the watched / played list. Every chart
+    is server-drawn (partials/charts/*), so the page needs no script and no chart library. %>
+<main class="pt-14 max-w-5xl mx-auto px-6 py-12 media-theme-<%= sec.theme %> media-stats">
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
+
+  <% if (sectionPreview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3"><%= st('previewNotice') %></div>
+  <% } %>
+
+  <a href="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('backToGrid') %></a>
+  <h2 class="text-2xl font-bold text-stone-100 mb-6"><%= st('stats.title') %></h2>
+
+  <% if (!total) { %>
+    <p class="text-center text-stone-500 text-sm py-16"><%= st('empty.done') %></p>
+  <% } else { %>
+    <%# The headline numbers first: they answer "how much / how good" before any chart is read. %>
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      <% [
+        [st('stats.cards'), total],
+        [st('ratingStreamer'), streamer.average !== null ? streamer.average.toFixed(1) : '—'],
+        [st('ratingViewers'), viewers.average !== null ? viewers.average.toFixed(1) : '—'],
+        [st('stats.viewerVotes'), viewers.total],
+      ].forEach(function(tile) { %>
+        <div class="rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/5 px-4 py-3">
+          <dt class="text-xs text-stone-400"><%= tile[0] %></dt>
+          <dd class="mt-1 text-3xl font-extrabold tabular-nums text-stone-100"><%= tile[1] %></dd>
+        </div>
+      <% }) %>
+    </dl>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <% [['streamer', streamer], ['viewers', viewers]].forEach(function(entry) { const data = entry[1]; %>
+        <section class="rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/5 p-5">
+          <h3 class="text-base font-bold text-stone-100"><%= st('stats.breakdown.' + entry[0]) %></h3>
+          <p class="text-xs text-stone-400 mb-5"><%= st('stats.breakdownHint', { count: data.total }) %></p>
+          <% if (data.total) { %>
+            <%- include('partials/charts/ratingBars', { data, label: st('stats.breakdown.' + entry[0]), height: 'md' }) %>
+          <% } else { %>
+            <p class="py-10 text-center text-sm text-stone-500"><%= st('ratingNone') %></p>
+          <% } %>
+        </section>
+      <% }) %>
+
+      <% if (split.total) { %>
+        <section class="rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/5 p-5">
+          <h3 class="text-base font-bold text-stone-100 mb-5"><%= st('stats.split.' + split.label) %></h3>
+          <%- include('partials/charts/donut', {
+            parts: split.parts.map(function(p) { return { label: st((split.label === 'type' ? 'type.' : 'gameState.') + p.key), count: p.count, share: p.share, slot: split.order.indexOf(p.key) + 1 }; }),
+            total: split.total,
+            centerLabel: st('stats.cards'),
+          }) %>
+        </section>
+      <% } %>
+
+      <% if (genres.items.length) { %>
+        <section class="rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/5 p-5">
+          <h3 class="text-base font-bold text-stone-100"><%= st('stats.genres') %></h3>
+          <p class="text-xs text-stone-400 mb-5"><%= st('stats.genresHint', { count: genres.withGenres }) %></p>
+          <%- include('partials/charts/meterList', {
+            rows: genres.items,
+            peak: genres.peak,
+            href: function(name) { return '/' + channel.channelLogin + '/' + sec.path + '?genre=' + encodeURIComponent(name); },
+          }) %>
+          <% if (genres.more) { %><p class="mt-3 text-xs text-stone-500"><%= st('stats.genresMore', { count: genres.more }) %></p><% } %>
+        </section>
+      <% } %>
+    </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,30 @@
+<%#
+  Ten bars, one per mark 1-10, how often it was given (lib/mediaStats.js's breakdown). One series, so
+  one colour - the section's accent - and the title above names it; the count and share of a bar show
+  on hover (and in its title), the full numbers are in the table for screen readers.
+  Expects: data (breakdown), label (what is counted, for the table caption), height ("sm" | "md").
+%>
+<% const tall = typeof height === 'undefined' || height !== 'sm'; %>
+<figure class="m-0">
+  <div class="flex items-end gap-1 sm:gap-1.5 <%= tall ? 'h-36' : 'h-20' %>" aria-hidden="true">
+    <% data.bars.forEach(function(bar) { %>
+      <% const h = data.peak ? (bar.count / data.peak) * 100 : 0; %>
+      <div class="group relative flex-1 h-full flex flex-col justify-end" title="<%= bar.mark %>: <%= bar.count %> (<%= bar.share %>%)">
+        <span class="pointer-events-none absolute inset-x-0 text-center text-[11px] font-semibold tabular-nums text-stone-200 opacity-0 group-hover:opacity-100 transition-opacity"
+              style="bottom: calc(<%= h %>% + 4px)"><%= bar.count %></span>
+        <% if (bar.count) { %>
+          <div class="w-full rounded-t-[4px] bg-(--sec-accent) group-hover:bg-(--sec-accent-strong) transition-colors" style="height: max(<%= h %>%, 3px)"></div>
+        <% } else { %>
+          <div class="w-full h-px bg-stone-700"></div>
+        <% } %>
+      </div>
+    <% }) %>
+  </div>
+  <div class="flex gap-1 sm:gap-1.5 mt-1.5 border-t border-stone-800 pt-1" aria-hidden="true">
+    <% data.bars.forEach(function(bar) { %><span class="flex-1 text-center text-xs tabular-nums text-stone-400"><%= bar.mark %></span><% }) %>
+  </div>
+  <table class="sr-only">
+    <caption><%= label %></caption>
+    <% data.bars.forEach(function(bar) { %><tr><th scope="row"><%= bar.mark %></th><td><%= bar.count %></td><td><%= bar.share %>%</td></tr><% }) %>
+  </table>
+</figure>

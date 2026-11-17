@@ -259,6 +259,15 @@
           <% } %>
         </dl>
 
+        <% if (typeof viewerBreakdown !== 'undefined' && viewerBreakdown.total >= 2) { %>
+          <%# How the viewers' marks spread - the same counted ratings the average above is made of
+              (lib/mediaStats.js). From two marks: one bar of one is not a distribution. %>
+          <div class="media-item-charts mt-4 max-w-xl rounded-(--sec-radius-lg) bg-black/30 ring-1 ring-white/10 px-4 pt-3 pb-2">
+            <p class="text-[11px] text-stone-400 mb-3"><%= st('stats.breakdown.viewers') %> · <%= st('ratingCount', { count: viewerBreakdown.total }) %></p>
+            <%- include('partials/charts/ratingBars', { data: viewerBreakdown, label: st('stats.breakdown.viewers'), height: 'sm' }) %>
+          </div>
+        <% } %>
+
         <div class="mt-5 flex flex-wrap items-center gap-2">
           <% if (item.recordingUrl) { %>
             <a href="<%= item.recordingUrl %>" target="_blank" rel="noopener noreferrer nofollow"

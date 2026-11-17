@@ -1,0 +1,20 @@
+<%#
+  Named rows, each with a bar against the largest and its count (lib/mediaStats.js's topGenres). A
+  card has several genres, so these are not parts of one whole - a list of bars, not a ring.
+  Expects: rows ([{name, count, share}]), peak, href (row name -> link, or null).
+%>
+<ul class="space-y-2">
+  <% rows.forEach(function(row) { %>
+    <li class="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-sm" title="<%= row.name %>: <%= row.count %> (<%= row.share %>%)">
+      <% if (href) { %>
+        <a href="<%= href(row.name) %>" class="truncate text-stone-200 hover:text-(--sec-accent-soft)"><%= row.name %></a>
+      <% } else { %>
+        <span class="truncate text-stone-200"><%= row.name %></span>
+      <% } %>
+      <span class="h-2.5 rounded-full bg-stone-800 overflow-hidden" aria-hidden="true">
+        <span class="block h-full rounded-full bg-(--sec-accent)" style="width: <%= peak ? (row.count / peak) * 100 : 0 %>%"></span>
+      </span>
+      <span class="tabular-nums text-stone-400"><%= row.count %></span>
+    </li>
+  <% }) %>
+</ul>

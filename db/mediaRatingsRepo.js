@@ -61,4 +61,16 @@ async function deleteAllFor(itemId) {
   await col.deleteMany({ itemId: oid });
 }
 
-module.exports = { getUserRating, setRating, removeRating, deleteAllFor };
+// How many counted ratings gave each mark, over one card or many: Map<mark, count>. Only counted
+// ones - the same ratings the card's average is made of, so the chart and the number agree.
+async function markCounts(itemIds) {
+  const oids = (Array.isArray(itemIds) ? itemIds : [itemIds]).map((id) => toOid(String(id))).filter(Boolean);
+  if (!oids.length) return new Map();
+  const col = await ensureInitialized();
+  const rows = await col
+    .aggregate([{ $match: { itemId: { $in: oids }, counted: true } }, { $group: { _id: "$value", n: { $sum: 1 } } }])
+    .toArray();
+  return new Map(rows.map((r) => [r._id, r.n]));
+}
+
+module.exports = { getUserRating, setRating, removeRating, deleteAllFor, markCounts };

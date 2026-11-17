@@ -2055,7 +2055,24 @@
     "yourRatingStreamer": "Your score as the streamer",
     "rateStreamerSaved": "Saved as the streamer’s score.",
     "rateStreamerCleared": "Streamer score removed.",
-    "rateStreamerHint": "1 to 10 — this is the streamer’s score, kept apart from the viewers’. Click your star again to remove it."
+    "rateStreamerHint": "1 to 10 — this is the streamer’s score, kept apart from the viewers’. Click your star again to remove it.",
+    "stats": {
+      "title": "Statistics",
+      "cards": "Cards",
+      "viewerVotes": "Viewer ratings",
+      "breakdown": {
+        "streamer": "Streamer’s ratings",
+        "viewers": "Viewers’ ratings"
+      },
+      "breakdownHint": "How many times each score from 1 to 10 was given · {{count}} in all",
+      "split": {
+        "type": "Films, series and anime",
+        "gameState": "Game status"
+      },
+      "genres": "Genres",
+      "genresHint": "Cards with the genre · of {{count}} with genres",
+      "genresMore": "{{count}} more genres"
+    }
   },
   "gamesStream": {
     "titleSuffix": "games",
@@ -2138,6 +2155,9 @@
       "genres": "Genre",
       "tags": "Tags",
       "overview": "About the game"
+    },
+    "stats": {
+      "genresHint": "Games with the genre · of {{count}} with genres"
     }
   },
   "comments": {

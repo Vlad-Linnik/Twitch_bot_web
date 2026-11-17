@@ -48,6 +48,7 @@ const cursorPaging = require("../lib/cursorPaging");
 const { buildChannelNav } = require("../lib/channelNav");
 const { COMMENT_SORT_MODES } = require("../lib/commentValidation");
 const media = require("../lib/mediaValidation");
+const mediaStats = require("../lib/mediaStats");
 const { savePoster, deletePoster, gridPosterUrl, isPosterVisible } = require("../lib/mediaImage");
 const { parseCrop, normalizeCrop, posterCropStyle } = require("../lib/posterCrop");
 const suggestions = require("../lib/mediaSuggestions");
@@ -380,6 +381,36 @@ function createMediaSectionRouter(cfg) {
         restoreKey: parsed.cursor ? null : restoreKeyOf(channel, view),
         totalShown: rows.length,
         canEdit: editor,
+        sectionPreview: res.locals.sectionPreview,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // The section's charts (views/mediaStats.ejs): over the watched/played list - the streamer's and
+  // the viewers' marks 1-10, the split by type (films) or state (games), the most common genres.
+  // The viewers' marks are counted ratings only, the same ones every card's average is made of.
+  router.get(`/:channel/${SECTION}/stats`, page, async (req, res, next) => {
+    try {
+      const { channel, permission } = req;
+      const [rows, broadcaster] = await Promise.all([
+        mediaItemsRepo.listForGrid(channel.channelLogin, KIND, TABS.done.statuses),
+        profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+      ]);
+      const viewerMarks = await mediaRatingsRepo.markCounts(rows.map((r) => r._id));
+      const split = cfg.view.fields.mediaType
+        ? { field: "mediaType", order: media.MEDIA_TYPES, label: "type" }
+        : { field: "gameState", order: media.GAME_STATES, label: "gameState" };
+      res.render("mediaStats", {
+        channel,
+        broadcaster,
+        channelNav: buildChannelNav(channel, { permission, active: SECTION }),
+        total: rows.length,
+        streamer: mediaStats.streamerBreakdown(rows),
+        viewers: mediaStats.breakdown(viewerMarks),
+        split: { ...mediaStats.splitBy(rows, split.field, split.order), order: split.order, label: split.label },
+        genres: mediaStats.topGenres(rows),
         sectionPreview: res.locals.sectionPreview,
       });
     } catch (err) {
@@ -947,12 +978,13 @@ function createMediaSectionRouter(cfg) {
       if (!item || !canSeeCard(item, viewer)) return res.status(404).render("errors/404");
 
       const ownerHere = isChannelOwner(req);
-      const [broadcaster, thread, myRating, editor, myVote] = await Promise.all([
+      const [broadcaster, thread, myRating, editor, myVote, viewerMarks] = await Promise.all([
         profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
         discussion.threadPageLocals(req, res, channel, item),
         req.user ? mediaRatingsRepo.getUserRating(item._id, req.user.userId) : Promise.resolve(null),
         req.user ? canEdit(req) : Promise.resolve(false),
         req.user && suggestions.isVotable(item) ? mediaSuggestionVotesRepo.getUserVote(item._id, req.user.userId) : Promise.resolve(null),
+        item.ratings?.viewers?.count ? mediaRatingsRepo.markCounts(item._id) : Promise.resolve(new Map()),
       ]);
       const poster = posterFor(item, viewer);
       const [[decorated], info] = await Promise.all([
@@ -984,6 +1016,7 @@ function createMediaSectionRouter(cfg) {
         // The channel's owner rates with the same stars, but what they set is the streamer's score -
         // whatever their level on the site (an owner who is also a site admin is level 0, not 1,
         // and was being treated as a viewer). A rejected card is not rated.
+        viewerBreakdown: mediaStats.breakdown(viewerMarks),
         myRating: ownerHere
           ? item.ratings?.streamer ? { value: item.ratings.streamer, counted: true } : null
           : myRating ? { value: myRating.value, counted: myRating.counted } : null,

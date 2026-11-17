@@ -109,6 +109,17 @@ nav.media-tabs {
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* The categorical slots of the media charts' rings (views/partials/charts/donut.ejs): the first
+   three of the reference palette's dark steps, which pass every all-pairs check (lightness band,
+   chroma floor, colour-blind separation, normal-vision floor, 3:1 contrast) against the sections'
+   dark surface. A part keeps its slot by its value's position in the field's order, never by rank. */
+.media-stats,
+.media-item-charts {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+}
+
 /* The channel media sections (views/mediaGrid.ejs, mediaItem.ejs and their partials) draw every
    colour and shape that makes a section look like itself from these variables, set by a class on
    <main> (routes/movies.js and routes/gamesStream.js pick the theme). Films: gold on warm black,
