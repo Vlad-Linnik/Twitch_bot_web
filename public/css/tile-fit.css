@@ -5,7 +5,11 @@
    element itself, so the era rules below must be written on .tf-piece/.tf-pcell, where that
    variable exists - a custom property declared on #tf-root would resolve before --tf-pc does).
 
-   Every texture is an inline SVG noise filter or a gradient: no image files. */
+   Every texture is an inline SVG noise filter or a gradient: no image files. tile-fit.js draws
+   each --tx-* listed in its TEXTURE_VARS once into a bitmap of the SVG's own width x height and
+   swaps it in, because WebKit re-runs an SVG filter on every repaint. A background-size other
+   than that (grain at 70px, wood at 300x60) scales the picture either way - checked against
+   the SVG side by side in WebKit and Chromium - so the bitmap needs no per-size copy. */
 
 .tf-root {
   --tf-accent: #a855f7;
@@ -216,6 +220,8 @@
 .tf-root .tf-board .tf-cell { transition: filter 0.2s, opacity 0.6s; }
 .tf-root .tf-cell.tf-ghost-ok { filter: brightness(1.45); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tf-accent) 85%, white); }
 .tf-root .tf-cell.tf-ghost-bad { filter: brightness(1.25); box-shadow: inset 0 0 0 2px rgba(248, 113, 113, 0.95); }
+/* The lit copies of the cells a held piece would land on (tile-fit.js, drawGhost). */
+.tf-ghost-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .tf-board .tf-cell.tf-win-wave { animation: tf-wave 0.9s ease-out both; }
 .tf-root .tf-cell.tf-ghost-ok, .tf-root .tf-cell.tf-ghost-bad { animation: none; }
 
@@ -243,7 +249,9 @@
 .tf-drag-layer .tf-pcell { pointer-events: none; }
 .tf-piece.tf-loose { z-index: 3; }
 .tf-drag-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
-.tf-drag-layer .tf-piece { position: absolute; cursor: grabbing; }
+/* The held piece moves by transform (tile-fit.js, applyDrag); a layer of its own means it is
+   painted once when lifted and then only moved. */
+.tf-drag-layer .tf-piece { position: absolute; cursor: grabbing; will-change: transform; }
 
 .tf-pcell {
   position: absolute;
@@ -429,8 +437,11 @@
 }
 /* The card sits low, over the emptied shelf, so the assembled figure stays in view. */
 .tf-card-layer[hidden] { display: none; }
+/* The layer lets clicks through to the board (the clown's nose), only the card itself takes them. */
+.tf-card-layer { pointer-events: none; }
+.tf-card-layer .tf-card { pointer-events: auto; }
 .tf-card {
-  width: min(26rem, 100%);
+  width: min(36rem, 100%);
   text-align: center;
   padding: 1.75rem 1.5rem 1.5rem;
   border-radius: 1.25rem;
@@ -444,6 +455,15 @@
 .tf-card-kicker { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--tf-accent); }
 .tf-card-title { font-family: var(--tf-font); font-size: 1.9rem; line-height: 1.1; margin: 0.35rem 0 0.5rem; }
 .tf-card-text { color: var(--tf-ink-dim); font-size: 0.95rem; min-height: 1.2em; }
+/* The quote: large, in the era's typeface, fading in a beat after the card itself. */
+.tf-quote { margin: 0.9rem auto 0.2rem; max-width: 34rem; animation: tf-fade 1.2s 0.5s ease-out both; }
+.tf-quote[hidden] { display: none; }
+.tf-quote-text { font-family: var(--tf-font); font-size: 1.15rem; line-height: 1.45; font-style: italic; color: var(--tf-ink); quotes: "«" "»"; }
+.tf-quote-text::before { content: open-quote; color: var(--tf-accent); }
+.tf-quote-text::after { content: close-quote; color: var(--tf-accent); }
+.tf-quote-author { margin-top: 0.45rem; font-size: 0.8rem; letter-spacing: 0.04em; color: var(--tf-ink-dim); }
+.tf-quote-read { margin-top: 0.5rem; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tf-accent); opacity: 0.85; }
+.tf-quote-read:hover { opacity: 1; text-decoration: underline; }
 .tf-card-actions { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
 .tf-action {
   padding: 0.65rem 1.4rem;
@@ -654,6 +674,168 @@
   .tf-btn { width: 2.5rem; height: 2.5rem; }
 }
 
+/* Touch screens (phones, tablets): what a phone's WebKit would otherwise repaint on the main
+   thread, over and over:
+   - the ornate board's shimmer animates `filter` on every cell, endlessly. In Playwright's
+     WebKit at 390x844 @3x an idle frame on level 40 took 931 ms with it, against 30 ms on a
+     plain level and 30 ms with it off. Its glow (`filter: drop-shadow` over the whole board) is
+     re-blurred on every repaint inside the board as well. Both go; the inlaid accent rim stays.
+   - the landing-spot layer gets a compositing layer of its own, so lighting a target paints only
+     the few lit cells and never the board or the pieces lying on it.
+   - a piece's drop-shadow is not faded in and out: `transition: filter` repainted the lifted
+     piece for 0.2 s at the start and end of every drag. */
+@media (hover: none) and (pointer: coarse) {
+  .tf-board.tf-ornate { filter: none; }
+  .tf-board.tf-ornate .tf-cell:not(.tf-win-wave) { animation: none; } /* the win wave still runs */
+  .tf-ghost-layer { will-change: transform; }
+  .tf-piece { transition: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tf-root .tf-piece.tf-shake, .tf-piece.tf-pop, .tf-cell.tf-win-wave, .tf-spark, .tf-splash, .tf-stop.tf-current .tf-stop-node { animation-duration: 0.01s; }
+}
+
+/* ---- stars on the solved card ---------------------------------------------------------- */
+.tf-stars { display: flex; justify-content: center; gap: 0.35rem; margin: 0.3rem 0 0.1rem; font-size: 1.9rem; line-height: 1; }
+.tf-stars[hidden] { display: none; }
+.tf-star { color: rgba(255, 255, 255, 0.15); transform: scale(0.6); transition: color 0.3s, transform 0.4s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.tf-star.tf-star-on { color: var(--tf-accent); text-shadow: 0 0 14px color-mix(in srgb, var(--tf-accent) 70%, transparent); transform: scale(1); }
+.tf-star:nth-child(2) { transition-delay: 0.25s; }
+.tf-star:nth-child(3) { transition-delay: 0.5s; }
+
+/* ---- living figures: the assembled picture moves --------------------------------------- */
+.tf-board.tf-alive { transform-origin: 50% 80%; }
+.tf-board.tf-alive-bounce { animation: tf-live-bounce 1.6s ease-in-out infinite; }
+.tf-board.tf-alive-fly { animation: tf-live-fly 2.4s ease-in-out infinite; }
+.tf-board.tf-alive-swim { animation: tf-live-swim 3s ease-in-out infinite; }
+.tf-board.tf-alive-flap { animation: tf-live-flap 0.9s ease-in-out infinite; transform-origin: 50% 50%; }
+.tf-board.tf-alive-float { animation: tf-live-float 3.2s ease-in-out infinite; }
+.tf-board.tf-alive-twinkle { animation: tf-live-twinkle 1.8s ease-in-out infinite; }
+.tf-board.tf-alive-flicker { animation: tf-live-flicker 2.2s steps(1, end) infinite; }
+.tf-board.tf-alive-wobble { animation: tf-live-wobble 2.4s ease-in-out infinite; }
+.tf-board.tf-alive-drive { animation: tf-live-drive 2.6s ease-in-out infinite; }
+@keyframes tf-live-drive { 0%, 100% { transform: translateX(0); } 8%, 12% { transform: translate(0, -2px); } 50% { transform: translateX(-28px); } }
+.tf-board.tf-alive-blink .tf-eye { transform-box: fill-box; transform-origin: center; animation: tf-live-blink 3.4s ease-in-out infinite; }
+@keyframes tf-live-bounce { 0%, 100% { transform: translateY(0) scale(1, 1); } 20% { transform: translateY(0) scale(1.04, 0.95); } 45% { transform: translateY(-14px) scale(0.98, 1.03); } 70% { transform: translateY(0) scale(1.03, 0.97); } }
+@keyframes tf-live-fly { 0%, 100% { transform: translateY(0); } 10%, 14% { transform: translate(-2px, 0); } 12%, 16% { transform: translate(2px, 0); } 55% { transform: translateY(-40px); } }
+@keyframes tf-live-swim { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-12px) rotate(-2deg); } 75% { transform: translateX(12px) rotate(2deg); } }
+@keyframes tf-live-flap { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(0.82); } }
+@keyframes tf-live-float { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-16px); opacity: 0.75; } }
+@keyframes tf-live-twinkle { 0%, 100% { filter: brightness(1); transform: rotate(0); } 50% { filter: brightness(1.5) drop-shadow(0 0 18px var(--tf-accent)); transform: rotate(3deg); } }
+@keyframes tf-live-flicker { 0%, 100% { filter: brightness(1); } 30% { filter: brightness(1.45) drop-shadow(0 0 22px #f97316); } 33% { filter: brightness(1.1); } 60% { filter: brightness(1.55) drop-shadow(0 0 26px #fb923c); } }
+@keyframes tf-live-wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+@keyframes tf-live-blink { 0%, 44%, 52%, 100% { transform: scaleY(1); } 48% { transform: scaleY(0.1); } }
+.tf-root[data-lang="en"] .tf-quote-text { quotes: "\201C" "\201D"; }
+@media (prefers-reduced-motion: reduce) { .tf-board.tf-alive, .tf-board.tf-alive-blink .tf-eye { animation: none !important; } }
+
+/* ---- museum ---------------------------------------------------------------------------- */
+.tf-museum-hall { max-width: 64rem; margin: 0 auto; padding: 0 1rem 4rem; }
+.tf-museum-room { margin-top: 1.5rem; }
+.tf-museum-room-name { font-family: var(--tf-font); font-size: 1.1rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--lc); text-align: center; margin-bottom: 0.9rem; }
+.tf-museum-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.9rem; }
+.tf-exhibit { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 0.9rem 0.7rem; border-radius: 0.9rem; text-align: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.25)); border: 1px solid color-mix(in srgb, var(--lc) 35%, transparent); transition: transform 0.15s, border-color 0.15s; }
+button.tf-exhibit:hover { transform: translateY(-3px); border-color: var(--lc); }
+.tf-mini { width: 100%; height: 5.5rem; }
+.tf-mini-cell { fill: var(--lc); }
+.tf-exhibit-unknown .tf-mini-cell { fill: rgba(255, 255, 255, 0.07); }
+.tf-mini-mark { fill: #141414; }
+.tf-mini-line { fill: none; stroke: #141414; stroke-width: 0.14; stroke-linecap: round; }
+.tf-exhibit-name { font-family: var(--tf-font); font-size: 0.95rem; color: var(--tf-ink); }
+.tf-exhibit-unknown .tf-exhibit-name { color: var(--tf-ink-dim); }
+.tf-exhibit-quote { font-size: 0.68rem; line-height: 1.35; color: var(--tf-ink-dim); font-style: italic; }
+
+/* ---- easter eggs -------------------------------------------------------------------------- */
+.tf-egg { display: none; position: absolute; z-index: 1; border-radius: 50%; transform: translate(-50%, -50%); cursor: default; background: transparent; }
+.tf-era-2 .tf-egg-sun { display: block; left: 78%; top: 18%; width: 90px; height: 90px; }
+.tf-era-8 .tf-egg-moon { display: block; left: 12%; top: 24%; width: 46px; height: 46px;
+  background: radial-gradient(circle at 38% 38%, #f1f5f9, #cbd5e1 55%, #94a3b8 75%); box-shadow: 0 0 24px rgba(226, 232, 240, 0.35); opacity: 0.85; }
+.tf-egg:hover { filter: brightness(1.15); }
+.tf-marks .tf-nose { pointer-events: auto; cursor: pointer; }
+
+/* =========================================================================================
+   ERAS 11-14 - past the hundredth level
+   ========================================================================================= */
+
+/* 11. Solarpunk - green glass set in light wood. Board: moss. Scenery: a green dawn. */
+.tf-era-11 .tf-cell { background-color: #2f4a26; background-image: var(--tx-clouds), var(--tx-grain); background-size: 220px, 160px; background-blend-mode: soft-light, overlay; box-shadow: inset 0 0 0 1px rgba(10, 30, 5, 0.5); }
+.tf-era-11 .tf-cell.tf-alt { background-color: #294220; }
+.tf-era-11 .tf-pcell {
+  --edge-hi: #d9b77e; --edge-lo: #8a5a2b; --edge-w: 3px; --p-rad: 9px;
+  background-color: color-mix(in srgb, var(--tf-pc) 82%, transparent);
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.45), transparent 40%), radial-gradient(ellipse at 70% 80%, rgba(255, 255, 200, 0.25), transparent 60%);
+}
+.tf-era-11 .tf-scenery { background: repeating-conic-gradient(from 200deg at 80% -10%, rgba(255, 230, 140, 0.08) 0deg 4deg, transparent 4deg 12deg), radial-gradient(ellipse at 80% 0%, rgba(253, 224, 71, 0.35), transparent 50%), linear-gradient(180deg, #1d3b2a, #0d1f14); }
+.tf-era-11 .tf-stage { --tf-font: "Segoe UI", "Trebuchet MS", sans-serif; --tf-ink: #f0fdf4; --tf-glass: rgba(10, 30, 15, 0.55); }
+.tf-era-11 .tf-level-name { font-weight: 300; letter-spacing: 0.06em; }
+
+/* 12. Mars - white habitat panels with orange trim. Board: rust regolith. */
+.tf-era-12 .tf-cell { background-color: #7c2d12; background-image: var(--tx-clouds), var(--tx-grain); background-size: 220px, 160px; background-blend-mode: soft-light, overlay; }
+.tf-era-12 .tf-cell.tf-alt { background-color: #6c2710; }
+.tf-era-12 .tf-pcell {
+  --edge-hi: #fff7ed; --edge-lo: #9a3412; --edge-w: 2px; --p-rad: 3px;
+  background-image: linear-gradient(90deg, transparent 47%, rgba(0, 0, 0, 0.12) 47% 53%, transparent 53%), linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 45%, rgba(0, 0, 0, 0.12));
+}
+.tf-era-12 .tf-scenery { background: radial-gradient(circle at 18% 16%, #e7e5e4 0 6px, transparent 7px), radial-gradient(circle at 26% 24%, #a8a29e 0 3px, transparent 4px), radial-gradient(ellipse at 50% 110%, rgba(234, 88, 12, 0.35), transparent 55%), linear-gradient(180deg, #431407 0%, #9a3412 70%, #c2410c 100%); }
+.tf-era-12 .tf-stage { --tf-font: Bahnschrift, "Segoe UI", sans-serif; --tf-ink: #fff7ed; --tf-glass: rgba(40, 12, 4, 0.55); }
+.tf-era-12 .tf-level-name { text-transform: uppercase; letter-spacing: 0.2em; }
+
+/* 13. Quantum - iridescent pieces that never sit still in colour. Board: dark probability grid. */
+.tf-era-13 .tf-cell { background-color: #0b0a14; background-image: radial-gradient(circle at 50% 50%, rgba(192, 132, 252, 0.25) 0 1.5px, transparent 2px); box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.15); }
+.tf-era-13 .tf-cell.tf-alt { background-color: #0f0d1c; }
+.tf-era-13 .tf-pcell {
+  --edge-hi: color-mix(in srgb, var(--tf-pc) 40%, white); --edge-lo: color-mix(in srgb, var(--tf-pc) 50%, black); --edge-w: 2px; --p-rad: 5px;
+  background-image: conic-gradient(from 0deg, rgba(255, 0, 128, 0.25), rgba(0, 255, 255, 0.25), rgba(255, 255, 0, 0.2), rgba(255, 0, 128, 0.25));
+}
+/* The colour shift happens once, when a piece lands (tf-pop), not continuously: an infinite filter
+   animation on every piece re-rasterises all of them every frame, which phones cannot afford. */
+.tf-era-13 .tf-piece.tf-pop { animation: tf-quantum 0.6s ease-out both; }
+@keyframes tf-quantum { from { filter: hue-rotate(180deg) brightness(1.4); } }
+.tf-era-13 .tf-scenery { background: repeating-radial-gradient(circle at 30% 40%, rgba(167, 139, 250, 0.07) 0 2px, transparent 2px 22px), repeating-radial-gradient(circle at 70% 60%, rgba(34, 211, 238, 0.07) 0 2px, transparent 2px 22px), #06050c; }
+.tf-era-13 .tf-stage { --tf-font: Consolas, "Courier New", monospace; --tf-ink: #ede9fe; --tf-glass: rgba(10, 6, 24, 0.6); }
+.tf-era-13 .tf-level-name { font-weight: 300; letter-spacing: 0.12em; }
+
+/* 14. Ruins - the stone age again, with circuitry fossilised in the sandstone. */
+.tf-era-14 .tf-cell { background-color: #5e4a32; background-image: var(--tx-clouds), var(--tx-grain); background-size: 220px, 160px; background-blend-mode: soft-light, overlay; box-shadow: inset 0 0 0 1px rgba(40, 25, 10, 0.45); }
+.tf-era-14 .tf-cell.tf-alt { background-color: #54412b; }
+.tf-era-14 .tf-pcell {
+  --edge-hi: rgba(255, 240, 205, 0.55); --edge-lo: rgba(90, 55, 20, 0.7); --edge-w: 3px; --p-rad: 8px;
+  background-image: var(--tx-circuit), radial-gradient(ellipse at 30% 25%, rgba(255, 245, 220, 0.25), transparent 65%), var(--tx-clouds), var(--tx-grain);
+  background-size: 48px 48px, auto, 220px 220px, 160px 160px;
+  background-blend-mode: multiply, normal, soft-light, overlay;
+}
+.tf-era-14 .tf-scenery { background: linear-gradient(180deg, transparent 70%, rgba(20, 12, 6, 0.85) 70.5%), repeating-linear-gradient(90deg, transparent 0 40px, rgba(20, 12, 6, 0.7) 40px 52px, transparent 52px 90px) 0 62% / 100% 12% no-repeat, radial-gradient(ellipse at 50% 100%, rgba(255, 140, 50, 0.3), transparent 55%), linear-gradient(180deg, #3a2a1c, #140c06); }
+.tf-era-14 .tf-stage { --tf-font: Georgia, "Times New Roman", serif; }
+.tf-era-14 .tf-level-name { letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* 15. Folk crafts - painted, lacquered wood in a log house by the stove. */
+.tf-era-15 .tf-cell { background-color: #6b4423; background-image: var(--tx-wood), var(--tx-grain); background-size: 300px 60px, 160px; background-blend-mode: multiply, overlay; box-shadow: inset 0 0 0 1px rgba(40, 20, 5, 0.5); }
+.tf-era-15 .tf-cell.tf-alt { background-color: #613d1f; }
+.tf-era-15 .tf-pcell {
+  --edge-hi: rgba(255, 255, 255, 0.6); --edge-lo: rgba(0, 0, 0, 0.35); --edge-w: 2px; --p-rad: 6px;
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.38), transparent 38%, rgba(0, 0, 0, 0.12));
+}
+.tf-era-15 .tf-scenery { background: radial-gradient(ellipse at 10% 100%, rgba(255, 120, 40, 0.35), transparent 45%), repeating-linear-gradient(180deg, #4a2f17 0 34px, #3b2512 34px 38px), #3b2512; }
+.tf-era-15 .tf-stage { --tf-font: "Palatino Linotype", Palatino, Georgia, serif; --tf-ink: #fff7ed; --tf-glass: rgba(40, 20, 8, 0.6); }
+.tf-era-15 .tf-level-name { color: #fde68a; text-shadow: 0 2px 0 #7f1d1d, 0 4px 18px rgba(0, 0, 0, 0.6); }
+
+/* ---- level of the day table, emote boards on the map ---------------------------------- */
+.tf-dialog-sub { margin: 1rem 0 0.4rem; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--tf-accent); }
+.tf-emote-channels { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }
+.tf-chip-btn { padding: 0.3rem 0.8rem; border-radius: 999px; font-size: 0.85rem; color: var(--tf-ink); background: var(--tf-glass); border: 1px solid color-mix(in srgb, var(--tf-accent) 40%, transparent); }
+.tf-chip-btn.tf-chip-on, .tf-chip-btn:hover { border-color: var(--tf-accent); color: var(--tf-accent); }
+.tf-emote-boards { text-align: center; color: var(--tf-ink-dim); font-size: 0.85rem; }
+.tf-stop-emote { width: 2rem; height: 2rem; object-fit: contain; }
+.tf-chip-btn.tf-chip-small { font-size: 0.75rem; padding: 0.2rem 0.7rem; }
+.tf-chip-btn.tf-chip-featured { border-color: #facc15; }
+.tf-chip-btn.tf-chip-featured.tf-chip-on { color: #facc15; box-shadow: 0 0 12px rgba(250, 204, 21, 0.35); }
+
+/* Phones: an assembled picture that twinkles or flickers does it with movement, not a filter. A
+   filter animation on the whole board re-rasterises every textured cell every frame - the same
+   cost as the ornate shimmer, measured at ~930 ms per idle frame in WebKit - and the picture stays
+   on screen for as long as the player reads the quote. */
+@media (hover: none) and (pointer: coarse) {
+  .tf-board.tf-alive-twinkle { animation: tf-live-twinkle-move 1.8s ease-in-out infinite; }
+  .tf-board.tf-alive-flicker { animation: tf-live-wobble 2.4s ease-in-out infinite; }
+  @keyframes tf-live-twinkle-move { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.04) rotate(3deg); } }
 }

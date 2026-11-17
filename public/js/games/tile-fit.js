@@ -61,12 +61,97 @@
     { accent: "#a5b4fc", sound: "plastic", palette: ["#f4f4f5", "#f97316", "#38bdf8", "#facc15", "#ef4444", "#e5e7eb"] },
     { accent: "#38bdf8", sound: "digital", palette: ["#38bdf8", "#a78bfa", "#34d399", "#60a5fa", "#22d3ee", "#f472b6"] },
     { accent: "#ff2bd6", sound: "digital", palette: ["#ff2bd6", "#00f0ff", "#f9f871", "#8b5cf6", "#ff5c00", "#39ff14"] },
+    { accent: "#84cc16", sound: "wood", palette: ["#65a30d", "#16a34a", "#ca8a04", "#0d9488", "#4d7c0f", "#a3e635"] },
+    { accent: "#fb923c", sound: "plastic", palette: ["#f5f5f4", "#ea580c", "#a8a29e", "#fbbf24", "#e7e5e4", "#c2410c"] },
+    { accent: "#c084fc", sound: "digital", palette: ["#a78bfa", "#22d3ee", "#f0abfc", "#818cf8", "#5eead4", "#e879f9"] },
+    { accent: "#d6b77e", sound: "stone", palette: ["#d9b77e", "#c99c62", "#e3c592", "#b98a55", "#d3a86c", "#c4a274"] },
+    // Folk crafts: a side branch, not a step on the line (see FOLK_ERA).
+    { accent: "#ef4444", sound: "wood", palette: ["#dc2626", "#facc15", "#16a34a", "#1d4ed8", "#f8fafc", "#0c0a09"] },
   ];
+  const MAIN_ERAS = 14;
 
-  const eraIndex = (level) => Math.min(ERAS.length - 1, Math.floor((level - 1) / 10));
+  // A secret level is dressed in the era it was found in.
+  const SECRET_ERA = { 1001: 1, 1002: 7, 1003: 6, 4500: 4 };
+  const isSecret = (level) => SECRET_ERA[level] !== undefined;
+  // The folk-craft branch (201-210) opens once level 30 is solved and is walked in order.
+  const FOLK_FIRST = 201;
+  const FOLK_LAST = 210;
+  const FOLK_GATE = 30;
+  const FOLK_ERA = 14;
+  const isFolk = (level) => level >= FOLK_FIRST && level <= FOLK_LAST;
+  // The level of the day wears one of the first ten eras, a different one each day; a channel's
+  // emote boards are shown in glossy enamel, which keeps the emote's own colours readable.
+  const isDaily = (level) => Engine.isDaily(level);
+  const isCustom = (level) => level >= 5000 && level <= 5999;
+  const CUSTOM_ERA = 6;
+  const eraIndex = (level) =>
+    isSecret(level) ? SECRET_ERA[level]
+      : isFolk(level) ? FOLK_ERA
+        : isDaily(level) ? level % 10
+          : isCustom(level) ? CUSTOM_ERA
+            : Math.min(MAIN_ERAS - 1, Math.floor((level - 1) / 10));
+  const customBoards = new Map(); // id -> {emote, channel, image}
+  function todayNumber() {
+    const d = new Date();
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
   const eraOf = (level) => ERAS[eraIndex(level)];
   const eraName = (level) => I18N.eras[eraIndex(level)] || "";
-  const levelName = (level) => NAMES[Engine.nameKey(level)] || fmt(I18N.levelLabel, { n: level });
+  const levelName = (level) => {
+    if (isDaily(level)) {
+      const key = Engine.generateLevel(level).figureKey;
+      return key && NAMES[key] ? NAMES[key] : fmt(I18N.dailyName, { date: String(level % 100).padStart(2, "0") + "." + String(Math.floor(level / 100) % 100).padStart(2, "0") });
+    }
+    if (isCustom(level)) return (customBoards.get(level) || {}).emote || "?";
+    return NAMES[Engine.nameKey(level)] || fmt(I18N.levelLabel, { n: level });
+  };
+
+  // ---------------------------------------------------------------------------------------------
+  // Textures. The stylesheet draws every material from inline SVG noise (feTurbulence). WebKit
+  // does not keep a rendered SVG background: every repaint of an element that uses one runs the
+  // SVG filter again, at device resolution, for every layer - and a piece cell stacks up to four.
+  // Measured in Playwright's WebKit at an iPhone's 390x844 @3x, one drag step over a Middle Ages
+  // board (level 35) took 2068 ms with the textures and 423 ms with background-image switched off;
+  // Chrome caches the raster, which is why desktops never showed it. So each texture is drawn
+  // once into a canvas at the device's pixel ratio and swapped in as a plain bitmap: same picture,
+  // and a repaint becomes an image copy. Until that is done (and wherever a browser refuses -
+  // a tainted canvas, no toBlob) the SVG stays in place, which is only slower, never wrong.
+  // ---------------------------------------------------------------------------------------------
+  const TEXTURE_VARS = ["--tx-grain", "--tx-clouds", "--tx-veins", "--tx-wood", "--tx-brushed", "--tx-circuit"];
+
+  function rasterizeTextures() {
+    if (!window.Promise || !HTMLCanvasElement.prototype.toBlob || !window.URL || !URL.createObjectURL) return;
+    const computed = getComputedStyle(root);
+    const scale = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+    const jobs = TEXTURE_VARS.map((name) => {
+      const value = computed.getPropertyValue(name).trim();
+      const m = /^url\(\s*(["'])(data:image\/svg\+xml[^]*)\1\s*\)$/.exec(value);
+      const size = m && /<svg[^>]*\swidth='(\d+)'\s+height='(\d+)'/.exec(m[2]);
+      if (!size) return Promise.resolve(null);
+      const w = Number(size[1]);
+      const h = Number(size[2]);
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(w * scale);
+            canvas.height = Math.round(h * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob((blob) => resolve(blob ? [name, URL.createObjectURL(blob)] : null), "image/png");
+          } catch (_) {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = m[2];
+      });
+    });
+    // Swapped in together: each property change repaints every textured element once.
+    Promise.all(jobs).then((done) => {
+      done.forEach((pair) => pair && root.style.setProperty(pair[0], `url("${pair[1]}")`));
+    });
+  }
 
   function applyTheme(level) {
     const era = eraOf(level);
@@ -75,6 +160,126 @@
     root.style.setProperty("--tf-accent", era.accent);
     return era;
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // Quotes: a solved level gets a line, the way a discovered technology does in a strategy game -
+  // a picture its own (Orwell for the piggy, Gagarin for the rocket), otherwise the era's own
+  // words, handed out in order so an era never repeats itself. A level that took many misplaced
+  // drops gets a consolation line about mistakes instead. Every quote is real and attributed to
+  // its source; a disputed one says "attributed to". The texts live in the locale files under
+  // games.tileFit.quotes.
+  // ---------------------------------------------------------------------------------------------
+  const QUOTE_FIGURES = {
+    piggy: "orwell", clown: "worldStage", fox: "tamed", owl: "minerva", elephant: "krylovElephant",
+    crown: "monomakh", castle: "coke", ghost: "horatio", teapot: "teaTime", key: "bacon",
+    rocket: "gagarin", astronaut: "armstrong", lion: "tipu", cat: "kiplingCat", fish: "fishProverb",
+    turtle: "tortoise", house: "homeProverb", mouse: "horaceMouse", chick: "chickens", ufo: "fermi",
+    dino: "lifeFinds", snowman: "tyutchev", robot: "asimovLaw", butterfly: "zhuangzi", whale: "ishmael",
+    star: "kant", hedgehog: "archilochus", doggy: "stael", plane: "kelvin", boat: "pompey",
+    tree: "fuller", cupcake: "cake", frog: "basho", apple: "appleProverb",
+    sunRa: "aten", moonRabbit: "goddard", bigTop: "chaplin", simplexAmulet: "voltaireBetter",
+    bee: "beesEinstein", rover: "curiosity", schrodinger: "schrodingerCat", ozymandias: "shelley",
+    dymkovo: "slowFar", samovar: "samovarSaying", khokhloma: "notGold", gzhel: "izbaPies", palekh: "beautySaves",
+    gorodets: "reapSow", lace: "measureSeven", zhostovo: "masterWork", matryoshka: "smallPrecious", shawl: "frostSun",
+    vase: "keats", locomotive: "thoreau", lightbulb: "edisonCandles", earth: "paleBlueDot", alien: "clarkeAlone",
+  };
+  const QUOTE_ERAS = [
+    ["laozi", "franklinTool", "fireProverb", "prutkovRoot", "prutkovEmbrace", "laborProverb", "confucius", "chekhov"],
+    ["herodotus", "pyramids", "ptahhotep", "napoleon", "champollion", "delphi", "sunTzu", "prutkovHappy"],
+    ["archimedesLever", "eureka", "hippocrates", "heraclitus", "protagoras", "socrates", "caesar"],
+    ["bernard", "benedictine", "dante", "occam"],
+    ["galileo", "leonardo", "hamlet", "michelangelo", "descartes"],
+    ["boulton", "newton", "lovelace", "franklinTime", "verne"],
+    ["edisonGenius", "faraday", "bell", "bender"],
+    ["tsiolkovsky", "perAspera", "saganCosmos", "kepler", "tereshkova", "adams", "haldane", "pascal"],
+    ["kay", "torvalds", "wheeler", "clarke", "picasso", "knuth", "hopper", "dijkstra"],
+    ["gibson", "dick", "turing", "asimovViolence", "wiener", "hawking", "mcluhan", "brand"],
+    ["sapling", "borrowed", "wildness", "lookDeep", "carson", "gandhiNeed", "baconNature", "leopold"],
+    ["muskMars", "saganSomewhere", "wells", "vonBraun", "hawkingStars", "clarke2", "kennedy", "heinlein"],
+    ["einsteinDice", "bohrReply", "feynman", "bohrPredict", "heisenberg", "planck", "itFromBit", "imagination"],
+    ["heraclitusRiver", "sicTransit", "eliotBeginning", "santayana", "marcus", "nietzsche", "eliotEnd", "solomonRing"],
+  ];
+  // The very last level closes the circle with its own line.
+  const QUOTE_LEVELS = { 140: "ecclesiastes" };
+  const QUOTE_MISTAKES = ["edisonFail", "wilde", "seneca", "apollo13", "beckett"];
+  const MANY_MISTAKES = 5;
+  const QUOTES = DATA.quotes || {};
+
+  function quoteIdFor(level, mistakes) {
+    if (mistakes >= MANY_MISTAKES) return QUOTE_MISTAKES[level % QUOTE_MISTAKES.length];
+    if (isDaily(level) || isCustom(level)) {
+      const key = Engine.generateLevel(level).figureKey;
+      if (key && QUOTE_FIGURES[key]) return QUOTE_FIGURES[key];
+      const pool = QUOTE_ERAS[eraIndex(level)] || QUOTE_ERAS[8];
+      return pool[level % pool.length];
+    }
+    if (QUOTE_LEVELS[level]) return QUOTE_LEVELS[level];
+    const own = QUOTE_FIGURES[Engine.nameKey(level)];
+    if (own) return own;
+    const era = eraIndex(level);
+    const pool = QUOTE_ERAS[era] || QUOTE_ERAS[QUOTE_ERAS.length - 1];
+    let k = 0;
+    for (let lv = era * 10 + 1; lv < level; lv++) if (!QUOTE_FIGURES[Engine.nameKey(lv)] && !QUOTE_LEVELS[lv]) k++;
+    return pool[k % pool.length];
+  }
+
+  // Read the quote out loud with the browser's own voice, in the page's language.
+  const quoteBtn = $("tf-quote-read");
+  let speaking = false;
+  function stopReading() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    speaking = false;
+    quoteBtn.textContent = I18N.readAloud;
+  }
+  function readQuote(q) {
+    if (!window.speechSynthesis || !q) return;
+    stopReading();
+    const u = new SpeechSynthesisUtterance(q.text + " … " + q.author);
+    u.lang = DATA.lang === "ru" ? "ru-RU" : "en-US";
+    u.rate = 0.9;
+    u.pitch = 0.95;
+    u.volume = Math.min(1, vol() * 1.6);
+    u.onend = stopReading;
+    speaking = true;
+    quoteBtn.textContent = I18N.stopReading;
+    window.speechSynthesis.speak(u);
+  }
+  let currentQuote = null;
+  quoteBtn.addEventListener("click", () => (speaking ? stopReading() : readQuote(currentQuote)));
+  if (!window.speechSynthesis) quoteBtn.hidden = true;
+
+  // ---------------------------------------------------------------------------------------------
+  // Living figures: an assembled picture moves for a moment - the rocket lifts off, the fish
+  // swims, the butterfly flaps, animals bounce and blink. Eyes are the figure's plain dots of
+  // eye size; a coloured dot (the clown's nose) never blinks.
+  // ---------------------------------------------------------------------------------------------
+  const MOTION = {
+    fly: ["rocket", "ufo", "astronaut", "plane"],
+    swim: ["fish", "whale", "boat", "octopus", "crab", "turtle"],
+    flap: ["butterfly", "owl", "chick", "bee"],
+    float: ["ghost", "umbrella"],
+    twinkle: ["star", "crown", "key", "sunRa", "earth", "simplexAmulet"],
+    flicker: ["pumpkin", "lightbulb"],
+    drive: ["locomotive", "rover"],
+    wobble: ["vase", "ozymandias", "schrodinger", "bigTop", "snowman", "teapot", "mug", "cupcake", "iceCream", "watermelon", "mushroom", "apple", "tree", "cactus", "house", "castle", "anchor"],
+  };
+  const BLINKERS = new Set(["piggy", "cat", "fox", "lion", "bunny", "bear", "mouse", "frog", "penguin", "doggy", "owl", "chick",
+    "crab", "octopus", "ghost", "clown", "robot", "dino", "elephant", "whale", "fish", "hedgehog", "moonRabbit"]);
+  function motionOf(name) {
+    for (const [m, list] of Object.entries(MOTION)) if (list.includes(name)) return m;
+    return "bounce";
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Mastery, kept in this browser only - it is a personal record, not a score anyone competes on:
+  //   1 star  - solved
+  //   2 stars - not one piece dropped where it did not fit
+  //   3 stars - that, and no undo or reset, and every piece put down exactly once
+  // A level solved again with a different layout counts as another solution found.
+  // ---------------------------------------------------------------------------------------------
+  const STARS_KEY = "tileFit.stars";
+  const SOLUTIONS_KEY = "tileFit.solutions";
+  const MAX_SOLUTIONS_KEPT = 6;
 
   function pieceColor(era, level, i) {
     return era.palette[(i + ((level - 1) % 10)) % era.palette.length];
@@ -197,6 +402,8 @@
   };
 
   function buzz(pattern) {
+    // Browsers refuse (and log) a vibration before the first real tap on the page.
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
     try {
       if (navigator.vibrate) navigator.vibrate(pattern);
     } catch (_) {
@@ -220,6 +427,8 @@
     6: "electric-age.mp3",
     7: "space-age.mp3",
     8: "digital-age.mp3",
+    // The ruins replay the very first era's music, slowed down: the circle closing.
+    13: { file: "stone-age.ogg", rate: 0.82 },
   };
   const MUSIC_LEVEL = 0.4; // music sits under the effects
   const MUSIC_FADE = 1.2; // seconds
@@ -333,6 +542,73 @@
     },
   };
 
+  // Solarpunk: a bright marimba over a soft pad, shakers.
+  COMPOSERS[10] = {
+    bpm: 100,
+    perBeat: 2,
+    step(i, t, out, sd) {
+      const scale = [60, 62, 64, 67, 69, 72, 74, 76];
+      const chords = [[60, 64, 67], [57, 60, 64], [65, 69, 72], [55, 59, 62]];
+      const chord = chords[Math.floor(i / 16) % chords.length];
+      if (i % 16 === 0) chord.forEach((n) => voice(out, t, { freq: NOTE(n - 12), dur: sd * 16, type: "triangle", gain: 0.03, attack: 0.6, filter: 900 }));
+      if (Math.random() < 0.7) {
+        const f = NOTE(i % 2 ? pick(scale) : pick(chord) + 12);
+        voice(out, t, { freq: f, dur: 0.5, gain: 0.08, filter: 3000 });
+        voice(out, t, { freq: f * 4, dur: 0.08, gain: 0.015 });
+      }
+      if (i % 2 === 1) hit(out, t, { dur: 0.06, gain: 0.03, freq: 7000 });
+    },
+  };
+  // Mars: thin air - a low drone, wind, and far-off telemetry bleeps.
+  COMPOSERS[11] = {
+    bpm: 60,
+    perBeat: 1,
+    step(i, t, out, sd) {
+      if (i % 8 === 0) {
+        voice(out, t, { freq: NOTE(33), dur: sd * 9, gain: 0.08, attack: 2 });
+        voice(out, t, { freq: NOTE(40), dur: sd * 9, gain: 0.04, attack: 3, detune: 6 });
+      }
+      if (i % 4 === 2) hit(out, t, { dur: sd * 3, gain: 0.02, freq: 500, type: "bandpass", q: 0.4 });
+      if (Math.random() < 0.3) voice(out, t + Math.random() * sd, { freq: NOTE(pick([84, 88, 91, 96])), dur: 0.12, type: "square", gain: 0.012, filter: 4000 });
+    },
+  };
+  // Quantum: glassy notes from a whole-tone scale, never quite settling.
+  COMPOSERS[12] = {
+    bpm: 84,
+    perBeat: 2,
+    step(i, t, out, sd) {
+      const scale = [60, 62, 64, 66, 68, 70, 72, 74, 76, 78];
+      if (i % 12 === 0) voice(out, t, { freq: NOTE(pick([36, 38, 40])), dur: sd * 12, gain: 0.05, attack: 1.5 });
+      if (Math.random() < 0.55) {
+        const f = NOTE(pick(scale));
+        voice(out, t, { freq: f, dur: 2.4, gain: 0.05, attack: 0.02 });
+        voice(out, t, { freq: f * 2.01, dur: 1.2, gain: 0.015 });
+      }
+    },
+  };
+
+  // Folk crafts: a plucked balalaika-like tune in a minor dance, with a soft stomp.
+  COMPOSERS[14] = {
+    bpm: 132,
+    perBeat: 2,
+    step(i, t, out, sd) {
+      const chords = [[57, 60, 64], [57, 60, 64], [52, 55, 59], [57, 60, 64]];
+      const chord = chords[Math.floor(i / 8) % chords.length];
+      const s = i % 8;
+      if (s % 4 === 0) {
+        voice(out, t, { freq: NOTE(chord[0] - 12), dur: 0.3, type: "triangle", gain: 0.09, filter: 900 });
+        hit(out, t, { dur: 0.08, gain: 0.05, freq: 180, type: "lowpass" });
+      }
+      if (s % 4 === 2) chord.forEach((n) => voice(out, t, { freq: NOTE(n), dur: 0.12, type: "sawtooth", gain: 0.02, filter: 2200 }));
+      if (Math.random() < 0.6) {
+        const f = NOTE(pick([69, 71, 72, 74, 76, 77, 79, 81]));
+        // A balalaika's tremolo: the same note plucked twice in quick succession.
+        voice(out, t, { freq: f, dur: 0.22, type: "sawtooth", gain: 0.03, filter: 2600 });
+        voice(out, t + sd / 2, { freq: f, dur: 0.18, type: "sawtooth", gain: 0.02, filter: 2600 });
+      }
+    },
+  };
+
   const music = (() => {
     const KEY = "tileFit.music";
     let enabled = readJsonEarly(KEY) !== false;
@@ -342,9 +618,15 @@
 
     const level = () => vol() * MUSIC_LEVEL;
 
-    function fileTrack(name) {
+    function fileTrack(entry) {
+      const name = typeof entry === "string" ? entry : entry.file;
       const el = new Audio("/sounds/tile-fit/" + name);
       el.loop = true;
+      if (entry.rate) {
+        el.preservesPitch = false;
+        el.webkitPreservesPitch = false;
+        el.playbackRate = entry.rate;
+      }
       el.preload = "auto";
       el.volume = 0;
       el.play().catch(() => {});
@@ -512,8 +794,26 @@
   // Levels open one after another: the next after the furthest solved one.
   function maxOpen() {
     let m = 0;
-    solved.forEach((n) => (m = Math.max(m, n)));
+    // Secret levels are numbered past the main line and must not open it.
+    solved.forEach((n) => {
+      if (n <= LAST) m = Math.max(m, n);
+    });
     return Math.min(LAST, m + 1);
+  }
+
+  const folkOpen = () => solved.has(FOLK_GATE);
+  // The furthest folk level the player may open (0 = the branch is still closed).
+  function folkMaxOpen() {
+    if (!folkOpen()) return 0;
+    let n = FOLK_FIRST;
+    while (n < FOLK_LAST && solved.has(n)) n++;
+    return n;
+  }
+  const isPlayable = (n) =>
+    n === todayNumber() ||
+    (n >= 1 && n <= maxOpen()) || (isFolk(n) && n <= folkMaxOpen()) || (isSecret(n) && foundSecretsEarly().has(n));
+  function foundSecretsEarly() {
+    return new Set(readJson("tileFit.secrets") || []);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -562,7 +862,10 @@
         num.textContent = String(n);
         name.textContent = levelName(n);
         const ornament = Engine.ORNAMENTS[n];
-        sub.textContent = ornament ? I18N.special : fmt(I18N.levelLabel, { n });
+        const st = (readJson(STARS_KEY) || {})[n] || 0;
+        const sols = ((readJson(SOLUTIONS_KEY) || {})[n] || []).length;
+        sub.textContent = (ornament ? I18N.special : fmt(I18N.levelLabel, { n })) +
+          (st ? "  " + "★".repeat(st) + "☆".repeat(3 - st) : "") + (sols > 1 ? "  ◆" + sols : "");
         if (ornament) stop.classList.add("tf-special");
         stop.classList.add(solved.has(n) ? "tf-solved" : "tf-open");
         if (n === currentLevel) stop.classList.add("tf-current");
@@ -576,8 +879,398 @@
       stop.append(node, label);
       (eraBox || mapPath).appendChild(stop);
     }
-    $("tf-solved-count").textContent = fmt(I18N.solvedCount, { n: solved.size });
+    if (folkOpen()) {
+      const box = document.createElement("div");
+      box.className = "tf-map-era";
+      const head = document.createElement("p");
+      head.className = "tf-map-era-name";
+      head.style.color = ERAS[FOLK_ERA].accent;
+      head.textContent = I18N.eras[FOLK_ERA];
+      box.appendChild(head);
+      const top = folkMaxOpen();
+      for (let n = FOLK_FIRST; n <= Math.min(FOLK_LAST, top + (top < FOLK_LAST && solved.has(top) ? 0 : 1)); n++) {
+        const unknown = n > top;
+        const stop = document.createElement("button");
+        stop.type = "button";
+        stop.className = "tf-stop " + (unknown ? "tf-unknown" : solved.has(n) ? "tf-solved" : "tf-open") + (n === currentLevel ? " tf-current" : "");
+        stop.style.setProperty("--x", Math.round(Math.sin(n * 1.3) * 70));
+        stop.style.setProperty("--lc", unknown ? "#888" : ERAS[FOLK_ERA].accent);
+        stop.innerHTML = '<span class="tf-stop-node"><span></span></span><span class="tf-stop-label"><span class="tf-stop-name"></span><span class="tf-stop-sub"></span></span>';
+        stop.querySelector(".tf-stop-node span").textContent = unknown ? "?" : "✿";
+        stop.querySelector(".tf-stop-name").textContent = unknown ? I18N.unknownLevel : levelName(n);
+        if (unknown) stop.disabled = true;
+        else {
+          const st = (readJson(STARS_KEY) || {})[n] || 0;
+          stop.querySelector(".tf-stop-sub").textContent = I18N.eras[FOLK_ERA] + (st ? "  " + "★".repeat(st) + "☆".repeat(3 - st) : "");
+          stop.addEventListener("click", () => {
+            closeMap();
+            startLevel(n);
+          });
+        }
+        box.appendChild(stop);
+      }
+      mapPath.appendChild(box);
+    }
+    if (foundSecrets.size) {
+      const box = document.createElement("div");
+      box.className = "tf-map-era";
+      const head = document.createElement("p");
+      head.className = "tf-map-era-name";
+      head.textContent = I18N.secrets;
+      box.appendChild(head);
+      [...foundSecrets].sort((a, b) => a - b).forEach((n, i) => {
+        const stop = document.createElement("button");
+        stop.type = "button";
+        stop.className = "tf-stop tf-special " + (solved.has(n) ? "tf-solved" : "tf-open");
+        stop.style.setProperty("--x", Math.round(Math.sin(i * 1.7) * 70));
+        stop.style.setProperty("--lc", ERAS[eraIndex(n)].accent);
+        stop.innerHTML = '<span class="tf-stop-node"><span>✦</span></span><span class="tf-stop-label"><span class="tf-stop-name"></span><span class="tf-stop-sub"></span></span>';
+        stop.querySelector(".tf-stop-name").textContent = levelName(n);
+        stop.querySelector(".tf-stop-sub").textContent = I18N.secret;
+        stop.addEventListener("click", () => {
+          closeMap();
+          startLevel(n);
+        });
+        box.appendChild(stop);
+      });
+      mapPath.appendChild(box);
+    }
+    if ((DATA.emoteChannels || []).length) {
+      const box = document.createElement("div");
+      box.className = "tf-map-era";
+      box.innerHTML = '<p class="tf-map-era-name"></p><div class="tf-emote-channels"></div><div class="tf-emote-channels tf-emote-choice"></div><div class="tf-emote-boards"></div>';
+      box.querySelector(".tf-map-era-name").textContent = I18N.emotesTitle;
+      const list = box.querySelector(".tf-emote-channels");
+      const boards = box.querySelector(".tf-emote-boards");
+      // The fixed set comes first and opens on its own.
+      const fav = document.createElement("button");
+      fav.type = "button";
+      fav.className = "tf-chip-btn tf-chip-on tf-chip-featured";
+      fav.textContent = I18N.emotesFeatured;
+      fav.addEventListener("click", () => {
+        list.querySelectorAll(".tf-chip-btn").forEach((x) => x.classList.toggle("tf-chip-on", x === fav));
+        box.querySelector(".tf-emote-choice").textContent = "";
+        loadEmoteBoards(null, boards, false, true);
+      });
+      list.appendChild(fav);
+      DATA.emoteChannels.forEach((ch) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tf-chip-btn";
+        b.textContent = "#" + ch;
+        b.addEventListener("click", () => {
+          list.querySelectorAll(".tf-chip-btn").forEach((x) => x.classList.toggle("tf-chip-on", x === b));
+          showEmoteChoice(ch);
+        });
+        list.appendChild(b);
+      });
+      // A logged-in player chooses between the channel's favourites and their own.
+      const choice = box.querySelector(".tf-emote-choice");
+      function showEmoteChoice(ch) {
+        choice.textContent = "";
+        const options = [[false, I18N.emotesChannel]];
+        if (DATA.loggedIn) options.push([true, I18N.emotesMine]);
+        options.forEach(([mine, label], i) => {
+          const t = document.createElement("button");
+          t.type = "button";
+          t.className = "tf-chip-btn tf-chip-small" + (i === 0 ? " tf-chip-on" : "");
+          t.textContent = label;
+          t.addEventListener("click", () => {
+            choice.querySelectorAll(".tf-chip-btn").forEach((x) => x.classList.toggle("tf-chip-on", x === t));
+            loadEmoteBoards(ch, boards, mine);
+          });
+          choice.appendChild(t);
+        });
+        loadEmoteBoards(ch, boards, false);
+      }
+      mapPath.appendChild(box);
+      loadEmoteBoards(null, boards, false, true);
+    }
+    $("tf-solved-count").textContent = fmt(I18N.solvedCount, { n: [...solved].filter((n) => n <= LAST).length });
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // Secrets: three levels off the map, found by poking the scenery - the sun over Egypt, the
+  // moon of the space age - or by honking the assembled clown's nose three times. Found ones are
+  // remembered in this browser and get their own row on the map and room in the museum.
+  // ---------------------------------------------------------------------------------------------
+  const SECRETS_KEY = "tileFit.secrets";
+  const foundSecrets = new Set((readJson(SECRETS_KEY) || []).filter((n) => isSecret(n)));
+  let honks = 0;
+
+  function discover(n) {
+    const fresh = !foundSecrets.has(n);
+    foundSecrets.add(n);
+    writeJson(SECRETS_KEY, [...foundSecrets]);
+    hideCard();
+    startLevel(n);
+    if (fresh) showSplash(n, I18N.secretFound, levelName(n));
+  }
+  root.querySelectorAll("[data-egg]").forEach((egg) => {
+    egg.addEventListener("click", () => {
+      if (cardOpen() || drag) return;
+      const n = Number(egg.dataset.egg);
+      if (L && eraIndex(L.level) === SECRET_ERA[n] && !isSecret(L.level)) discover(n);
+    });
+  });
+  // Typing the four digits 4500 anywhere on the page (outside a text field) finds the amulet.
+  let typed = "";
+  window.addEventListener("keydown", (e) => {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (!/^[0-9]$/.test(e.key)) return;
+    typed = (typed + e.key).slice(-4);
+    if (typed === "4500") {
+      typed = "";
+      discover(4500);
+    }
+  });
+  boardEl.addEventListener("click", (e) => {
+    if (!e.target.classList || !e.target.classList.contains("tf-nose") || !solvedNow) return;
+    tone({ type: "square", from: 330, to: 220, dur: 0.18, gain: 0.25 });
+    tone({ type: "square", from: 336, to: 224, dur: 0.18, gain: 0.15 });
+    if (++honks >= 3) {
+      honks = 0;
+      discover(1003);
+    }
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Level of the day: one board per calendar date for everyone. Its result is kept here for
+  // guests (fewest drops per day, and the run of consecutive days); for a logged-in player the
+  // server keeps the same and ranks the day.
+  // ---------------------------------------------------------------------------------------------
+  const DAILY_KEY = "tileFit.daily";
+  function prevDayNumber(n) {
+    const d = new Date(Math.floor(n / 10000), (Math.floor(n / 100) % 100) - 1, n % 100);
+    d.setDate(d.getDate() - 1);
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
+  function recordDailyLocally(day, moves) {
+    const data = readJson(DAILY_KEY) || {};
+    const best = data[day];
+    if (!best || moves < best) data[day] = moves;
+    writeJson(DAILY_KEY, data);
+    let streak = 0;
+    for (let d = day; data[d]; d = prevDayNumber(d)) streak++;
+    return fmt(I18N.dailyLocal, { moves, streak });
+  }
+  $("tf-open-daily").addEventListener("click", () => {
+    if (drag) return;
+    closeMap();
+    startLevel(todayNumber());
+  });
+
+  async function loadDailyTable() {
+    const box = $("tf-daily-list");
+    box.textContent = "";
+    try {
+      const res = await fetch("/games/tile-fit/daily.json?day=" + todayNumber(), { credentials: "same-origin" });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      if (!json.rows.length) {
+        const li = document.createElement("li");
+        li.className = "tf-lb-empty";
+        li.textContent = I18N.dailyEmpty;
+        box.appendChild(li);
+      }
+      json.rows.forEach((row) => box.appendChild(lbRow({ ...row, score: row.moves }, false)));
+      if (json.me && !json.rows.some((r) => r.isMe)) box.appendChild(lbRow({ ...json.me, score: json.me.moves }, true));
+    } catch (_) {
+      /* the table is a nicety; the main records still show */
+    }
+  }
+  $("tf-open-records").addEventListener("click", loadDailyTable);
+
+  // ---------------------------------------------------------------------------------------------
+  // Emote boards: a channel's most used emotes, shrunk into boards by the server. Listed on the map
+  // per channel; nothing about them is scored.
+  // ---------------------------------------------------------------------------------------------
+  const EMOTES_SOLVED_KEY = "tileFit.emotes";
+  async function loadEmoteBoards(channel, container, mine, featured) {
+    container.textContent = "…";
+    try {
+      const query = featured ? "featured=1" : "channel=" + encodeURIComponent(channel) + (mine ? "&mine=1" : "");
+      const res = await fetch("/games/tile-fit/emotes.json?" + query, { credentials: "same-origin" });
+      const json = await res.json();
+      container.textContent = "";
+      if (!json.ok || !json.boards.length) {
+        container.textContent = mine ? I18N.emotesNoneMine : I18N.emotesNone;
+        return;
+      }
+      const done = new Set(readJson(EMOTES_SOLVED_KEY) || []);
+      if (featured) channel = json.channel;
+      json.boards.forEach((b, i) => {
+        const id = 5000 + (hashString(channel + (mine ? ":me" : featured ? ":featured" : "")) % 50) * 10 + i;
+        customBoards.set(id, { emote: b.emote, channel, image: b.image });
+        Engine.registerCustom(id, { mask: b.mask, colors: b.colors });
+        const stop = document.createElement("button");
+        stop.type = "button";
+        stop.className = "tf-stop " + (done.has(channel + ":" + b.emote) ? "tf-solved" : "tf-open");
+        stop.style.setProperty("--x", Math.round(Math.sin(i * 1.4) * 60));
+        stop.style.setProperty("--lc", ERAS[CUSTOM_ERA].accent);
+        stop.innerHTML = '<span class="tf-stop-node"><img alt="" class="tf-stop-emote"></span><span class="tf-stop-label"><span class="tf-stop-name"></span></span>';
+        stop.querySelector("img").src = b.image;
+        stop.querySelector(".tf-stop-name").textContent = b.emote;
+        stop.addEventListener("click", () => {
+          closeMap();
+          startLevel(id);
+        });
+        container.appendChild(stop);
+      });
+    } catch (_) {
+      container.textContent = I18N.emotesNone;
+    }
+  }
+  function hashString(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Museum: every picture level of the eras reached so far. Assembled ones stand in the era's
+  // colour with their features and their quote; the rest are dark silhouettes with no name.
+  // Eras not reached yet are not in the building at all.
+  // ---------------------------------------------------------------------------------------------
+  const museumEl = $("tf-museum");
+  const museumHall = $("tf-museum-hall");
+
+  function miniFigure(level, assembled) {
+    const NS = "http://www.w3.org/2000/svg";
+    const L0 = Engine.generateLevel(level);
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `-0.5 -0.5 ${L0.cols + 1} ${L0.rows + 1}`);
+    svg.setAttribute("class", "tf-mini");
+    const add = (tag, attrs) => {
+      const e = document.createElementNS(NS, tag);
+      Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, String(v)));
+      svg.appendChild(e);
+    };
+    for (let r = 0; r < L0.rows; r++) {
+      for (let c = 0; c < L0.cols; c++) {
+        if (!L0.mask[r][c]) continue;
+        const pic = assembled && Engine.figurePaint(L0.name);
+        add("rect", { x: c, y: r, width: 1.02, height: 1.02, class: "tf-mini-cell", style: pic ? "fill:" + pic.palette[pic.paint[r][c]] : "" });
+      }
+    }
+    if (assembled) {
+      (L0.marks || []).forEach((m) => {
+        if (m[0] === "dot") add("circle", { cx: m[2], cy: m[1], r: m[3], class: "tf-mini-mark", style: typeof m[4] === "string" ? "fill:" + m[4] : "" });
+        else if (m[0] === "ring") add("ellipse", { cx: m[2], cy: m[1], rx: m[3], ry: m[4], class: "tf-mini-line" });
+        else if (m[0] === "line") add("line", { x1: m[2], y1: m[1], x2: m[4], y2: m[3], class: "tf-mini-line" });
+        else if (m[0] === "rect") add("rect", { x: m[2], y: m[1], width: m[4], height: m[3], class: "tf-mini-line" });
+      });
+    }
+    return svg;
+  }
+
+  function renderMuseum() {
+    museumHall.textContent = "";
+    const reachedEra = eraIndex(maxOpen());
+    const figs = [...Engine.figureLevels()].sort((a, b) => a[0] - b[0]);
+    let have = 0;
+    for (let e = 0; e <= Math.min(reachedEra, MAIN_ERAS - 1); e++) {
+      const inEra = figs.filter(([lv]) => eraIndex(lv) === e);
+      if (!inEra.length) continue;
+      const room = document.createElement("section");
+      room.className = "tf-museum-room";
+      room.style.setProperty("--lc", ERAS[e].accent);
+      const h = document.createElement("h3");
+      h.className = "tf-museum-room-name";
+      h.textContent = I18N.eras[e];
+      const shelf = document.createElement("div");
+      shelf.className = "tf-museum-shelf";
+      room.append(h, shelf);
+      inEra.forEach(([lv]) => {
+        const got = solved.has(lv);
+        if (got) have++;
+        const card = document.createElement(got ? "button" : "div");
+        card.className = "tf-exhibit" + (got ? "" : " tf-exhibit-unknown");
+        card.appendChild(miniFigure(lv, got));
+        const name = document.createElement("p");
+        name.className = "tf-exhibit-name";
+        name.textContent = got ? levelName(lv) : "?";
+        card.appendChild(name);
+        if (got) {
+          const q = QUOTES[quoteIdFor(lv, 0)];
+          if (q) {
+            const qp = document.createElement("p");
+            qp.className = "tf-exhibit-quote";
+            qp.textContent = "«" + q.text + "» — " + q.author;
+            card.appendChild(qp);
+          }
+          card.type = "button";
+          card.title = fmt(I18N.levelLabel, { n: lv });
+          card.addEventListener("click", () => {
+            museumEl.hidden = true;
+            startLevel(lv);
+          });
+        }
+        shelf.appendChild(card);
+      });
+      museumHall.appendChild(room);
+    }
+    if (folkOpen()) {
+      const room = document.createElement("section");
+      room.className = "tf-museum-room";
+      room.style.setProperty("--lc", ERAS[FOLK_ERA].accent);
+      room.innerHTML = '<h3 class="tf-museum-room-name"></h3><div class="tf-museum-shelf"></div>';
+      room.querySelector("h3").textContent = I18N.eras[FOLK_ERA];
+      for (let lv = FOLK_FIRST; lv <= FOLK_LAST; lv++) {
+        const got = solved.has(lv);
+        if (got) have++;
+        const card = document.createElement(got ? "button" : "div");
+        card.className = "tf-exhibit" + (got ? "" : " tf-exhibit-unknown");
+        card.appendChild(miniFigure(lv, got));
+        const name = document.createElement("p");
+        name.className = "tf-exhibit-name";
+        name.textContent = got ? levelName(lv) : "?";
+        card.appendChild(name);
+        if (got) {
+          card.type = "button";
+          card.addEventListener("click", () => {
+            museumEl.hidden = true;
+            startLevel(lv);
+          });
+        }
+        room.querySelector(".tf-museum-shelf").appendChild(card);
+      }
+      museumHall.appendChild(room);
+    }
+    if (foundSecrets.size) {
+      const room = document.createElement("section");
+      room.className = "tf-museum-room";
+      room.style.setProperty("--lc", "#e9c46a");
+      room.innerHTML = '<h3 class="tf-museum-room-name"></h3><div class="tf-museum-shelf"></div>';
+      room.querySelector("h3").textContent = I18N.secrets;
+      [...foundSecrets].sort((a, b) => a - b).forEach((lv) => {
+        const got = solved.has(lv);
+        if (got) have++;
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "tf-exhibit" + (got ? "" : " tf-exhibit-unknown");
+        card.appendChild(miniFigure(lv, got));
+        const name = document.createElement("p");
+        name.className = "tf-exhibit-name";
+        name.textContent = levelName(lv);
+        card.appendChild(name);
+        card.addEventListener("click", () => {
+          museumEl.hidden = true;
+          startLevel(lv);
+        });
+        room.querySelector(".tf-museum-shelf").appendChild(card);
+      });
+      museumHall.appendChild(room);
+    }
+    $("tf-museum-count").textContent = fmt(I18N.museumCount, { n: have });
+  }
+  $("tf-open-museum").addEventListener("click", () => {
+    cancelDrag();
+    renderMuseum();
+    museumEl.hidden = false;
+    museumEl.scrollTop = 0;
+  });
+  $("tf-close-museum").addEventListener("click", () => (museumEl.hidden = true));
 
   function openMap() {
     cancelDrag();
@@ -609,7 +1302,17 @@
   // ---------------------------------------------------------------------------------------------
   // The card over the stage (solved)
   // ---------------------------------------------------------------------------------------------
-  function showCard({ kicker, title, text, primary, onPrimary, secondary, onSecondary }) {
+  function showCard({ kicker, title, text, primary, onPrimary, secondary, onSecondary, quote, stars }) {
+    const starBox = $("tf-card-stars");
+    starBox.hidden = !stars;
+    starBox.querySelectorAll(".tf-star").forEach((st, i) => st.classList.toggle("tf-star-on", !!stars && i < stars));
+    const qBox = $("tf-card-quote");
+    currentQuote = quote || null;
+    qBox.hidden = !quote;
+    if (quote) {
+      $("tf-quote-text").textContent = quote.text;
+      $("tf-quote-author").textContent = quote.author;
+    }
     $("tf-card-kicker").textContent = kicker || "";
     $("tf-card-title").textContent = title || "";
     $("tf-card-text").textContent = text || "";
@@ -632,6 +1335,7 @@
   }
   function hideCard() {
     cardEl.hidden = true;
+    stopReading();
   }
   const cardOpen = () => !cardEl.hidden;
 
@@ -646,7 +1350,13 @@
   let cs = 48; // board cell size, px
   let ts = 26; // shelf cell size, px
   let solvedNow = false;
+  let mistakes = 0; // misplaced drops on this level, for the consolation quote
+  let drops = 0; // every drop onto the board
+  let takebacks = 0; // undos and resets
   let marksEl = null;
+  let cellEls = []; // [r][c] -> the board cell, or null outside the figure
+  let ghostEl = null; // the layer that shows where a held piece would land
+  let ghostKey = ""; // what the ghost layer shows now, so an unchanged target touches nothing
 
   const shapeOf = (p) => Engine.rotate(p.cells, p.rot);
   const dims = (cells) => {
@@ -685,7 +1395,8 @@
   }
 
   function setTitle(n) {
-    $("tf-level-title").textContent = fmt(I18N.levelLabel, { n });
+    $("tf-level-title").textContent = isSecret(n) ? I18N.secret : isFolk(n) ? I18N.folkLevel : isDaily(n) ? I18N.daily
+      : isCustom(n) ? "#" + ((customBoards.get(n) || {}).channel || "") : fmt(I18N.levelLabel, { n });
     $("tf-era-title").textContent = eraName(n);
     $("tf-level-name").textContent = levelName(n);
     const chip = $("tf-special-chip");
@@ -700,6 +1411,9 @@
     const enteringEra = currentLevel !== null && eraIndex(currentLevel) !== eraIndex(n);
     currentLevel = n;
     solvedNow = false;
+    mistakes = 0;
+    drops = 0;
+    takebacks = 0;
     history = [];
     undoBtn.disabled = true;
     const era = applyTheme(n);
@@ -707,6 +1421,7 @@
     pieces = L.pieces.map((pc, i) => ({
       i,
       cells: pc.cells,
+      colors: pc.colors || null,
       rot: pc.startRotation,
       placed: null,
       loose: null,
@@ -724,11 +1439,13 @@
     saveBoard();
 
     // A new era is announced the first time it is reached (and on the very first visit to it).
-    if ((enteringEra || n === 1) && (n - 1) % 10 === 0 && !solved.has(n)) showSplash(n);
+    if (!isSecret(n) && (enteringEra || n === 1) && (n - 1) % 10 === 0 && !solved.has(n)) showSplash(n);
+    else if (n === FOLK_FIRST && !solved.has(n)) showSplash(n);
   }
 
-  function showSplash(n) {
-    $("tf-splash-name").textContent = eraName(n);
+  function showSplash(n, kicker, name) {
+    $("tf-splash-kicker").textContent = kicker || I18N.newEra;
+    $("tf-splash-name").textContent = name || eraName(n);
     splashEl.hidden = false;
     splashEl.style.animation = "none";
     void splashEl.offsetWidth;
@@ -751,9 +1468,12 @@
     boardEl.textContent = "";
     // The era's closing ornament: the board itself shimmers in the era's accent.
     boardEl.classList.toggle("tf-ornate", !!L.ornament);
+    boardEl.className = boardEl.className.replace(/\btf-alive\S*/g, "").trim();
     boardEl.style.width = L.cols * cs + "px";
     boardEl.style.height = L.rows * cs + "px";
+    cellEls = [];
     for (let r = 0; r < L.rows; r++) {
+      cellEls.push(new Array(L.cols).fill(null));
       for (let c = 0; c < L.cols; c++) {
         if (!L.mask[r][c]) continue;
         const cell = document.createElement("div");
@@ -765,9 +1485,17 @@
         cell.dataset.r = r;
         cell.dataset.c = c;
         boardEl.appendChild(cell);
+        cellEls[r][c] = cell;
       }
     }
     drawMarks();
+    // Where a held piece would land is drawn here, after the marks and before any piece: above
+    // the cells and under the pieces, where the lit cells themselves used to be. Lighting a cell
+    // in place repainted it and every piece over it (with their drop-shadows), on each change.
+    ghostEl = document.createElement("div");
+    ghostEl.className = "tf-ghost-layer";
+    boardEl.appendChild(ghostEl);
+    ghostKey = "";
     trayEl.textContent = "";
     pieces.forEach((p) => {
       const slot = document.createElement("div");
@@ -804,7 +1532,11 @@
     };
     L.marks.forEach((m) => {
       // A dot may carry its own colour (the clown's red nose); the rest follow the theme's ink.
-      if (m[0] === "dot") el("circle", { cx: m[2], cy: m[1], r: m[3], fill: typeof m[4] === "string" ? m[4] : "currentColor" });
+      if (m[0] === "dot") {
+        const eye = typeof m[4] !== "string" && m[3] >= 0.19 && m[3] <= 0.32;
+        const nose = (L.figureKey || L.name) === "clown" && typeof m[4] === "string";
+        el("circle", { cx: m[2], cy: m[1], r: m[3], fill: typeof m[4] === "string" ? m[4] : "currentColor", class: eye ? "tf-eye" : nose ? "tf-nose" : "" });
+      }
       else if (m[0] === "ring") el("ellipse", { cx: m[2], cy: m[1], rx: m[3], ry: m[4], ...stroke });
       else if (m[0] === "line") el("line", { x1: m[2], y1: m[1], x2: m[4], y2: m[3], ...stroke });
       else if (m[0] === "rect") el("rect", { x: m[2], y: m[1], width: m[4], height: m[3], rx: 0.15, ...stroke });
@@ -813,16 +1545,31 @@
     marksEl = svg;
   }
 
+  // The piece's cells after its turns, each still knowing which original cell it is - a picture
+  // piece paints every cell its own colour, and the colour has to follow the cell round.
+  function cellsWithIndex(p) {
+    let out = p.cells.map(([r, c], i) => [r, c, i]);
+    for (let k = 0; k < p.rot; k++) out = out.map(([r, c, i]) => [c, -r, i]);
+    let minR = Infinity;
+    let minC = Infinity;
+    out.forEach(([r, c]) => {
+      minR = Math.min(minR, r);
+      minC = Math.min(minC, c);
+    });
+    return out.map(([r, c, i]) => [r - minR, c - minC, i]);
+  }
+
   function drawPiece(p, size) {
-    const cells = shapeOf(p);
+    const cells = cellsWithIndex(p);
     const set = new Set(cells.map(([r, c]) => r + ":" + c));
     const d = dims(cells);
     p.el.textContent = "";
     p.el.style.width = d.w * size + "px";
     p.el.style.height = d.h * size + "px";
-    cells.forEach(([r, c]) => {
+    cells.forEach(([r, c, idx]) => {
       const pc = document.createElement("div");
       pc.className = "tf-pcell";
+      if (p.colors && p.colors[idx]) pc.style.setProperty("--tf-pc", p.colors[idx]);
       const up = set.has(r - 1 + ":" + c);
       const down = set.has(r + 1 + ":" + c);
       const left = set.has(r + ":" + (c - 1));
@@ -849,6 +1596,7 @@
 
   function seat(p) {
     p.el.classList.toggle("tf-loose", !!p.loose);
+    p.el.style.transform = ""; // the drag offset, see moveDrag
     if (p.placed || p.loose) {
       const x = p.placed ? p.placed.c : p.loose.x;
       const y = p.placed ? p.placed.r : p.loose.y;
@@ -980,9 +1728,20 @@
   // ---------------------------------------------------------------------------------------------
   // Dragging
   // ---------------------------------------------------------------------------------------------
+  // A drag step costs nothing but a compositor move. The held piece sits at left/top 0 in the
+  // fixed drag layer and travels by transform, in a layer of its own (will-change in the
+  // stylesheet), so it is painted once when lifted and never again while it moves; left/top
+  // relaid the page and repainted the piece - textures, rivets, drop-shadow - on every event.
+  // Pointer events are folded into one update per animation frame (a phone can deliver them
+  // faster than it draws), the board's position is read once per drag rather than once per
+  // event, and the landing spot is drawn on its own layer and only when it changes. Measured in
+  // Chromium at 390x844 @3x with the CPU slowed 6x (Playwright's WebKit on Windows does not
+  // composite, so it cannot show this part): a drag step on level 35 went from a 66 ms median
+  // to 33 ms, which is the two-frame floor of the measurement itself.
   let press = null; // {p, x, y, id}
-  let drag = null; // {p, fx, fy, x, y, before}
+  let drag = null; // {p, id, fx, fy, x, y, br, before}
   let lastDragEnd = 0;
+  let dragFrame = 0;
 
   // The clicked cell in the piece's own coordinates, for turning around it.
   function cellFromEvent(e) {
@@ -1066,11 +1825,14 @@
       fy: (pr.y - rect.top) / cur,
       x,
       y,
+      br: boardEl.getBoundingClientRect(),
       before: snapshot(),
     };
     drawPiece(p, cs);
     p.el.classList.remove("tf-shake", "tf-pop", "tf-invalid");
     p.el.querySelectorAll(".tf-bad").forEach((c) => c.classList.remove("tf-bad"));
+    p.el.style.left = "0px";
+    p.el.style.top = "0px";
     dragLayer.appendChild(p.el);
     if (p.placed || p.loose) {
       p.placed = null;
@@ -1079,19 +1841,36 @@
     }
     p.slot.classList.add("tf-empty");
     sfx.pick();
-    moveDrag(x, y);
+    applyDrag();
   }
 
+  // Remembers where the pointer is and draws it with the next frame.
   function moveDrag(x, y) {
     drag.x = x;
     drag.y = y;
-    drag.p.el.style.left = x - drag.fx * cs + "px";
-    drag.p.el.style.top = y - drag.fy * cs + "px";
+    if (!dragFrame) dragFrame = requestAnimationFrame(applyDrag);
+  }
+
+  function applyDrag() {
+    if (dragFrame) cancelAnimationFrame(dragFrame);
+    dragFrame = 0;
+    if (!drag) return;
+    const left = drag.x - drag.fx * cs;
+    const top = drag.y - drag.fy * cs;
+    drag.p.el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
     drawGhost();
   }
 
+  // The page can scroll under a held piece (a wheel turns it, but a pinch or the browser's own
+  // chrome can still move things); the cached board position follows.
+  const refreshBoardRect = () => {
+    if (drag) drag.br = boardEl.getBoundingClientRect();
+  };
+  window.addEventListener("scroll", refreshBoardRect, { capture: true, passive: true });
+  window.addEventListener("resize", refreshBoardRect, { passive: true });
+
   function snapTarget() {
-    const br = boardEl.getBoundingClientRect();
+    const br = drag.br;
     const left = drag.x - drag.fx * cs;
     const top = drag.y - drag.fy * cs;
     const r = Math.round((top - br.top) / cs);
@@ -1106,13 +1885,17 @@
   }
 
   function clearGhost() {
-    boardEl.querySelectorAll(".tf-ghost-ok, .tf-ghost-bad").forEach((el) => el.classList.remove("tf-ghost-ok", "tf-ghost-bad"));
+    if (!ghostKey) return;
+    ghostKey = "";
+    if (ghostEl) ghostEl.textContent = "";
   }
 
   function drawGhost() {
-    clearGhost();
     const t = snapTarget();
-    if (!t.onBoard) return;
+    if (!t.onBoard) {
+      clearGhost();
+      return;
+    }
     const taken = takenCells(drag.p);
     let fits = true;
     const targets = [];
@@ -1120,10 +1903,19 @@
       const r = t.r + dr;
       const c = t.c + dc;
       if (r < 0 || r >= L.rows || c < 0 || c >= L.cols || !L.mask[r][c] || taken.has(r + ":" + c)) fits = false;
-      const cell = boardEl.querySelector(`.tf-cell[data-r="${r}"][data-c="${c}"]`);
-      if (cell) targets.push(cell);
+      if (cellEls[r] && cellEls[r][c]) targets.push([r, c]);
     });
-    targets.forEach((cell) => cell.classList.add(fits ? "tf-ghost-ok" : "tf-ghost-bad"));
+    const key = (fits ? "ok" : "bad") + targets.join(";");
+    if (key === ghostKey) return;
+    ghostKey = key;
+    ghostEl.textContent = "";
+    // Each highlight is a lit copy of the cell it covers (same material, same texture offset), so
+    // it looks exactly like the cell itself lighting up, while the cell is never touched.
+    targets.forEach(([r, c]) => {
+      const g = cellEls[r][c].cloneNode(false);
+      g.classList.add(fits ? "tf-ghost-ok" : "tf-ghost-bad");
+      ghostEl.appendChild(g);
+    });
   }
 
   function rotateDragged() {
@@ -1136,14 +1928,18 @@
     drag.fy = fy;
     drawPiece(drag.p, cs);
     sfx.rotate();
-    moveDrag(drag.x, drag.y);
+    applyDrag(); // now, not next frame: the redrawn shape must not show one frame at the old offset
   }
 
   function endDrag(x, y) {
-    moveDrag(x, y);
+    drag.x = x;
+    drag.y = y;
+    drag.br = boardEl.getBoundingClientRect();
+    if (dragFrame) cancelAnimationFrame(dragFrame);
+    dragFrame = 0;
     const p = drag.p;
     const t = snapTarget();
-    const br = boardEl.getBoundingClientRect();
+    const br = drag.br;
     const looseAt = { x: (x - drag.fx * cs - br.left) / cs, y: (y - drag.fy * cs - br.top) / cs };
     history.push(drag.before);
     if (history.length > 200) history.shift();
@@ -1152,12 +1948,14 @@
     clearGhost();
     lastDragEnd = Date.now();
     if (t.onBoard) {
+      drops++;
       if (fitsAt(t.cells, t.r, t.c, p)) {
         p.placed = { r: t.r, c: t.c };
         p.loose = null;
       } else {
         p.placed = null;
         p.loose = looseAt;
+        mistakes++;
       }
       seat(p);
       afterChange(p);
@@ -1214,6 +2012,7 @@
   // ---------------------------------------------------------------------------------------------
   function undo() {
     if (solvedNow || drag || cardOpen() || !history.length) return;
+    takebacks++;
     restore(history.pop());
     undoBtn.disabled = history.length === 0;
     renderAll();
@@ -1223,6 +2022,7 @@
 
   function resetBoard() {
     if (solvedNow || drag) return;
+    takebacks++;
     pushHistory();
     pieces.forEach((p) => (p.placed = null));
     renderAll();
@@ -1269,26 +2069,90 @@
     if (marksEl) marksEl.classList.add("tf-marks-on");
     sparks();
 
+    // A picture can be covered in more layouts than the one it was cut into; whichever the player
+    // found, the painting settles into place once the board is full - every cell takes the colour
+    // of the spot it covers.
+    const painting = Engine.figurePaint(L.custom ? L.name : L.figureKey || L.name);
+    if (painting) {
+      pieces.forEach((p) => {
+        p.el.querySelectorAll(".tf-pcell").forEach((pc) => {
+          const r = p.placed.r + Number(pc.dataset.r);
+          const c = p.placed.c + Number(pc.dataset.c);
+          const colour = painting.palette[painting.paint[r][c]];
+          if (colour) {
+            pc.style.transition = "background-color 0.8s ease " + (r + c) * 40 + "ms";
+            pc.style.setProperty("--tf-pc", colour);
+          }
+        });
+      });
+    }
+
+    const pictureKey = L.figureKey || L.name;
+    const isPicture = !!L.figureKey || !!L.secret || !!L.custom;
+    if (isPicture) {
+      setTimeout(() => {
+        if (!solvedNow) return;
+        boardEl.classList.add("tf-alive", "tf-alive-" + motionOf(pictureKey));
+        if (BLINKERS.has(pictureKey)) boardEl.classList.add("tf-alive-blink");
+      }, 1100);
+    }
+
+    const stars = mistakes > 0 ? 1 : takebacks === 0 && drops === pieces.length ? 3 : 2;
+    const allStars = readJson(STARS_KEY) || {};
+    const prevStars = allStars[L.level] || 0;
+    if (stars > prevStars) {
+      allStars[L.level] = stars;
+      writeJson(STARS_KEY, allStars);
+    }
+    const sig = pieces.map((p) => shapeOf(p).map(([r, c]) => (p.placed.r + r) + "." + (p.placed.c + c)).join(",")).sort().join("|");
+    const allSol = readJson(SOLUTIONS_KEY) || {};
+    const known = allSol[L.level] || [];
+    const newSolution = !known.includes(sig) && known.length > 0;
+    if (!known.includes(sig)) {
+      known.push(sig);
+      allSol[L.level] = known.slice(-MAX_SOLUTIONS_KEPT);
+      writeJson(SOLUTIONS_KEY, allSol);
+    }
+
     const first = !solved.has(L.level);
-    solved.add(L.level);
-    persistSolved();
+    const counted = !isDaily(L.level) && !isCustom(L.level);
+    if (counted) {
+      solved.add(L.level);
+      persistSolved();
+    }
+    let dailyText = "";
+    if (isCustom(L.level) && customBoards.has(L.level)) {
+      const cb = customBoards.get(L.level);
+      const done = new Set(readJson(EMOTES_SOLVED_KEY) || []);
+      done.add(cb.channel + ":" + cb.emote);
+      writeJson(EMOTES_SOLVED_KEY, [...done]);
+    }
+    if (isDaily(L.level)) dailyText = recordDailyLocally(L.level, drops);
     writeJson(BOARD_KEY, null);
 
-    const last = L.level >= LAST;
-    const isFigure = L.marks && Engine.FIGURE_NAMES.includes(L.name);
+    // Only the very last main level ends the game; secrets, the folk branch's end, the level of the
+    // day and emote boards are numbered past it but merely have no "next".
+    const finale = L.level === LAST;
+    const last = finale || isSecret(L.level) || L.level === FOLK_LAST;
+    const noNext = last || isDaily(L.level) || isCustom(L.level);
+    const isFigure = isPicture;
     const level = L.level;
     setTimeout(() => {
       if (!solvedNow || L.level !== level) return;
       showCard({
-        kicker: fmt(I18N.levelLabel, { n: level }),
+        // The same line the level's header shows - a secret, a craft, a channel's emote or the level
+        // of the day has no number the player should see.
+        kicker: $("tf-level-title").textContent,
         title: isFigure ? fmt(I18N.figureDone, { name: levelName(level) }) : I18N.solvedTitle,
-        text: last ? I18N.allSolved : "",
-        primary: last ? "" : I18N.next,
+        text: dailyText ? dailyText : finale ? I18N.allSolved : newSolution ? fmt(I18N.newSolution, { n: known.length }) : "",
+        stars,
+        primary: noNext ? "" : I18N.next,
         onPrimary: () => startLevel(level + 1),
         secondary: I18N.toLevels,
         onSecondary: openMap,
+        quote: QUOTES[quoteIdFor(level, mistakes)],
       });
-      if (DATA.loggedIn) submit(L, first);
+      if (DATA.loggedIn && !isCustom(level)) submit(L, first);
     }, isFigure ? 1500 : 950);
   }
 
@@ -1320,6 +2184,7 @@
     const body = new URLSearchParams({
       level: String(level.level),
       version: String(level.version),
+      moves: String(drops),
       placements: JSON.stringify(placements),
       _csrf: DATA.csrf || "",
     });
@@ -1334,6 +2199,10 @@
       const json = await res.json().catch(() => null);
       if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || String(res.status));
       if (json.leaderboard) renderLeaderboard(json.leaderboard);
+      if (json.daily) {
+        textEl.textContent = fmt(I18N.dailyResult, { rank: json.daily.me ? json.daily.me.rank : "—", moves: drops, streak: json.daily.streak });
+        return;
+      }
       if (first && !textEl.textContent) textEl.textContent = I18N.saved;
     } catch (_) {
       if (!textEl.textContent) textEl.textContent = I18N.saveFailed;
@@ -1373,9 +2242,9 @@
   // ---------------------------------------------------------------------------------------------
   // Boot: straight into play - the level that was open, otherwise the furthest one reached.
   // ---------------------------------------------------------------------------------------------
+  rasterizeTextures();
   const savedBoard = readJson(BOARD_KEY);
-  if (savedBoard && savedBoard.version === Engine.LEVELS_VERSION && savedBoard.level >= 1 &&
-      savedBoard.level <= maxOpen()) {
+  if (savedBoard && savedBoard.version === Engine.LEVELS_VERSION && isPlayable(savedBoard.level)) {
     startLevel(savedBoard.level);
   } else {
     startLevel(maxOpen());

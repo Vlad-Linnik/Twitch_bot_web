@@ -17,7 +17,10 @@
 // being a plain rectangle early on.
 "use strict";
 
-const LEVEL_COUNT = 100;
+const LEVEL_COUNT = 140;
+// The first hundred levels were laid out before the line was extended, and a level's board is
+// generated from its number: everything below keeps those hundred exactly as they were.
+const FIRST_LINE = 100;
 const LEVELS_VERSION = 1;
 const MAX_SIDE = 10;
 const SALT = 0x5eed7f17;
@@ -98,6 +101,16 @@ const SHAPES = {
     const shift = Math.max(1, Math.floor(w / 4));
     return r < half ? c < w - shift : c >= shift;
   },
+  // Two dense shapes for the levels past 100, where most outlines cannot hold 70+ cells in a
+  // 10 x 10 frame: holes punched on a 3-cell grid, and a thick ring around a central hole.
+  sieve: (r, c, w, h) => !(r % 3 === 1 && c % 3 === 1 && r < h - 1 && c < w - 1),
+  thickRing: (r, c, w, h) => {
+    const hw = Math.floor(w / 3);
+    const hh = Math.floor(h / 3);
+    const c0 = Math.floor((w - hw) / 2);
+    const r0 = Math.floor((h - hh) / 2);
+    return !(r >= r0 && r < r0 + hh && c >= c0 && c < c0 + hw);
+  },
   hourglass: (r, c, w, h) => {
     const mid = (h - 1) / 2;
     const d = Math.abs(r - mid);
@@ -113,7 +126,10 @@ const SHAPE_CYCLE = [
   "zigzag", "rect", "diamond", "ring", "hourglass", "heart",
 ];
 
+const SHAPE_CYCLE_LATE = ["sieve", "octagon", "cornerCut", "thickRing", "zigzag", "rect", "arch", "ell"];
+
 function shapeFor(level) {
+  if (level > FIRST_LINE) return SHAPE_CYCLE_LATE[(level - FIRST_LINE - 1) % SHAPE_CYCLE_LATE.length];
   if (level <= 6) return "rect";
   return SHAPE_CYCLE[(level - 7) % SHAPE_CYCLE.length];
 }
@@ -144,8 +160,41 @@ const ORNAMENTS = {
   70: { key: "fan", rows: ["#...#...#", "##..#..##", ".##.#.##.", "..#####..", "#########", "#########", "#########", ".#######."] },
   80: { key: "planet", rows: ["...####...", "..######..", ".###.####.", "##########", "####.#####", ".#####.##.", "..######..", "...####..."] },
   90: { key: "chip", rows: [".#.#.#.#.", "#########", ".#######.", "##.###.##", ".#######.", "##.###.##", ".#######.", "#########", ".#.#.#.#."] },
+  110: { key: "sunflower", rows: [".#.####.#.", "##########", ".########.", "####..####", "###....###", "###....###", "####..####", ".########.", "##########", ".#.####.#."] },
+  120: { key: "colonyDome", rows: ["...####...", "..######..", ".##.##.##.", ".########.", "##########", "##.####.##", "##########", "##########", "##########", "#.#.##.#.#"] },
+  130: { key: "interference", rows: ["##########", "#.#.##.#.#", "##########", "..######..", "###.##.###", "###.##.###", "..######..", "##########", "#.#.##.#.#", "##########"] },
+  140: { key: "ouroboros", rows: [".########.", "##########", "##########", "####..####", "###....###", "###....###", "####..####", "##########", "##########", ".########."] },
   100: { key: "core", rows: [".########.", "##......##", "#..####..#", "#.######.#", "####..##.#", "#.##..####", "#.######.#", "#..####..#", "##......##", ".########."] },
 };
+
+// Secret levels: not on the level line, not on the map until found (the browser decides how).
+// Numbered outside the main range so a main level can never collide with one.
+const SECRETS = {
+  1001: {
+    key: "sunRa",
+    rows: ["...####...", "##.####.##", "##########", ".########.", "...####..."],
+    marks: [["ring", 2.5, 5.0, 1.3, 1.3], ["dot", 2.5, 5.0, 0.3, "#f59e0b"]],
+  },
+  1002: {
+    key: "moonRabbit",
+    rows: [".#.#....", ".#.#....", ".###....", "#####...", ".######.", ".#######", "..######", "..##..##"],
+    marks: [["dot", 3.4, 2.2, 0.22], ["dot", 3.6, 0.5, 0.18, "#f472b6"]],
+  },
+  1003: {
+    key: "bigTop",
+    rows: ["....#....", "...###...", "..#####..", ".#######.", "#########", ".#######.", ".##...##.", ".##...##."],
+    marks: [["line", 0.8, 4.5, 5.6, 1.4], ["line", 0.8, 4.5, 5.6, 7.6], ["line", 0.8, 4.5, 5.6, 4.5], ["dot", 0.4, 4.5, 0.25, "#ef4444"]],
+  },
+  // A bronze amulet with a burning orange stone: number 4500, found by typing it.
+  4500: {
+    key: "simplexAmulet",
+    rows: ["....##....", ".########.", ".########.", "##########", "##########", "##########", "##########", ".########.", ".########.", "...####..."],
+    paint: ["....DD....", ".BBDBBDBB.", ".BDBBBBDB.", "BBBBOOBBBB", "BDBOYYOBDB", "BDBOYYOBDB", "BBBBOOBBBB", ".BDBBBBDB.", ".BBDBBDBB.", "...BBBB..."],
+    palette: { B: "#b08d57", D: "#6b4f2a", O: "#ea580c", Y: "#fde047" },
+    marks: [],
+  },
+};
+const SECRET_SIZES = { min: 3, max: 5 };
 
 const rowsToMask = (rows) => rows.map((row) => [...row].map((ch) => (ch === "#" ? 1 : 0)));
 
@@ -303,9 +352,126 @@ const FIGURES = {
     rows: ["..######..", ".########.", "##########", "##########", "##########", ".########.", "..######..", "...####..."],
     marks: [["ring", 3.2, 5.0, 3.4, 1.9], ["dot", 2.2, 2.6, 0.25]],
   },
+  // Pictures: a figure whose cells carry a pixel painting (`paint`, one palette letter per cell).
+  // Every piece shows its part of the picture, so the painting comes together as it is solved.
+  vase: {
+    rows: ["..##..", "..##..", "#.##.#", "######", ".####.", ".####.", "..##.."],
+    paint: ["..KK..", "..OO..", "K.OO.K", "KOOOOK", ".OKKO.", ".OOOO.", "..KK.."],
+    palette: { K: "#1c1917", O: "#c2410c" },
+    marks: [],
+  },
+  locomotive: {
+    rows: ["..#.....#.", "..#....###", "##########", "##########", "##########", ".##.##.##."],
+    paint: ["..K.....R.", "..K....RRR", "RRRRRRRRRR", "RRRRRRRYYR", "GGGGGGGGGG", ".KK.KK.KK."],
+    palette: { R: "#b91c1c", K: "#1f2937", Y: "#fde047", G: "#4b5563" },
+    marks: [],
+  },
+  lightbulb: {
+    rows: ["...####...", "..######..", ".########.", ".########.", "..######..", "...####...", "...####...", "...####..."],
+    paint: ["...YYYY...", "..YYYYYY..", ".YYYWYYYY.", ".YYWYYYYY.", "..YYYYYY..", "...YYYY...", "...GGGG...", "...GGGG..."],
+    palette: { Y: "#fde047", W: "#fffbeb", G: "#9ca3af" },
+    marks: [],
+  },
+  earth: {
+    rows: ["..####..", "########", "########", "########", "########", "########", "########", "..####.."],
+    paint: ["..WWWW..", "BBBGGBBB", "BBGGGBBB", "BGGGBBGB", "BBGBBGGB", "BBBBGGGB", "BBBBBGBB", "..WWWW.."],
+    palette: { B: "#2563eb", G: "#16a34a", W: "#f8fafc" },
+    marks: [],
+  },
+  alien: {
+    rows: ["...#..#...", "...#..#...", "..######..", ".########.", ".########.", "##########", "##########", "##.####.##", "#..#..#..#"],
+    paint: ["...G..G...", "...G..G...", "..GGGGGG..", ".GGWGGWGG.", ".GGKGGKGG.", "GGGGGGGGGG", "GGGKKKKGGG", "GG.GGGG.GG", "G..G..G..G"],
+    palette: { G: "#22c55e", W: "#f8fafc", K: "#052e16" },
+    marks: [],
+  },
+  bee: {
+    rows: [".###..###.", ".########.", ".########.", "..######..", ".########.", "##########", "##########", ".########.", "..######..", "....##...."],
+    paint: [".WWW..WWW.", ".WWWWWWWW.", ".WWWWWWWW.", "..YYKKYY..", ".YYKKYYKY.", "YKKYYKKYYK", "YKKYYKKYYK", ".YYKKYYKY.", "..YYKKYY..", "....KK...."],
+    palette: { W: "#e0f2fe", Y: "#facc15", K: "#1c1917" },
+    marks: [],
+  },
+  rover: {
+    rows: [".....###..", ".....###..", "......#...", "##########", "##########", "##########", "##########", "##########", ".########.", "###.##.###"],
+    paint: [".....KKK..", ".....KWK..", "......K...", "SSSSSSSSSS", "SSSSSSSSSS", "WWWWWWWWWW", "WWWRWWWWWW", "WWWWWWWWWW", ".GGGGGGGG.", "KKK.KK.KKK"],
+    palette: { K: "#27272a", W: "#f5f5f4", S: "#1e3a8a", R: "#dc2626", G: "#57534e" },
+    marks: [],
+  },
+  schrodinger: {
+    rows: [".#......#.", ".##....##.", ".########.", ".########.", ".########.", "##########", "##########", "##########", "##########", "##########"],
+    paint: [".K......K.", ".KK....KK.", ".KKKKKKKK.", ".KYKKKKYK.", ".KKKKKKKK.", "BBBBBBBBBB", "BBBWWWBBBB", "BBBBBWBBBB", "BBBBWWBBBB", "BBBBBBBBBB"],
+    palette: { K: "#111827", Y: "#a3e635", B: "#a16207", W: "#fef3c7" },
+    marks: [],
+  },
+  ozymandias: {
+    rows: ["..######..", ".########.", ".########.", ".########.", ".########.", ".########.", ".########.", "..######..", "##########", "##########"],
+    paint: ["..SSSSSS..", ".SSSSSSSS.", ".SSDSSDSS.", ".SSSSSSSS.", ".SSSSDSSS.", ".SSSSSSSS.", ".SSDDDDSS.", "..SSSSSS..", "SAASSSSAAS", "AAAAAAAAAA"],
+    palette: { S: "#a8a29e", D: "#44403c", A: "#d6b77e" },
+    marks: [],
+  },
+  // Folk crafts: a side branch of ten painted pictures, numbered 201-210 (see FOLK below).
+  dymkovo: {
+    rows: [".##......", "####.....", ".#######.", "..#######", "..######.", "..#.#..#."],
+    paint: [".WW......", "WWWW.....", ".WWWWWWW.", "..WRWOWWW", "..WWWWWW.", "..W.W..W."],
+    palette: { "W": "#fafaf9", "R": "#dc2626", "O": "#f59e0b" },
+    marks: [],
+  },
+  samovar: {
+    rows: ["...###...", "..#####..", ".#######.", ".########", ".########", "..#####..", "...###...", "..#####.."],
+    paint: ["...YYY...", "..YYYYY..", ".YYYYYYY.", ".YYRYRYYK", ".YYYYYYYK", "..YYYYY..", "...YYY...", "..YYYYY.."],
+    palette: { "Y": "#d4a017", "R": "#b91c1c", "K": "#3f2a14" },
+    marks: [],
+  },
+  khokhloma: {
+    rows: ["##########", "##########", ".########.", ".########.", "..######..", "...####..."],
+    paint: ["YYYYYYYYYY", "KKRKKKRKKK", ".KRRKKRRK.", ".KKYKKYKK.", "..KKKKKK..", "...YYYY..."],
+    palette: { "Y": "#eab308", "K": "#111111", "R": "#b91c1c" },
+    marks: [],
+  },
+  gzhel: {
+    rows: ["...##....", "..####...", ".######..", "#########", "#########", "########.", ".######..", "..####..."],
+    paint: ["...BB....", "..WWWW...", ".WWBBWW..", "WWBWWBWWB", "WBBWWBBWB", "WWBWWBWW.", ".WWBBWW..", "..WWWW..."],
+    palette: { "W": "#f8fafc", "B": "#1d4ed8" },
+    marks: [],
+  },
+  palekh: {
+    rows: ["########", "########", "########", "########", "########", "########"],
+    paint: ["YYYYYYYY", "YKKKKKKY", "YKRKKYKY", "YKKYKKKY", "YKKKKRKY", "YYYYYYYY"],
+    palette: { "Y": "#ca8a04", "K": "#0c0a09", "R": "#dc2626" },
+    marks: [],
+  },
+  gorodets: {
+    rows: ["...##...", "...##...", ".######.", "########", "########", "########", "########", ".######."],
+    paint: ["...YY...", "...YY...", ".YYYYYY.", "YYRRYGYY", "YRRRYGGY", "YYRRYYGY", "YYYYYYYY", ".YYYYYY."],
+    palette: { "Y": "#e9b25c", "R": "#b91c1c", "G": "#166534" },
+    marks: [],
+  },
+  lace: {
+    rows: ["..#####..", ".##.#.##.", "##.###.##", "#.#####.#", "###.#.###", "#.#####.#", "##.###.##", ".##.#.##.", "..#####.."],
+    paint: ["..WWWWW..", ".WW.W.WW.", "WW.WWW.WW", "W.WWWWW.W", "WWW.W.WWW", "W.WWWWW.W", "WW.WWW.WW", ".WW.W.WW.", "..WWWWW.."],
+    palette: { "W": "#f1f5f9" },
+    marks: [],
+  },
+  zhostovo: {
+    rows: ["..######..", ".########.", "##########", "##########", "##########", ".########.", "..######.."],
+    paint: ["..KKKKKK..", ".KKRRKGKK.", "KKRRRKGGKK", "KGKRRKKYKK", "KKGKKKYYKK", ".KKKKKKKK.", "..KKKKKK.."],
+    palette: { "K": "#0c0a09", "R": "#dc2626", "G": "#15803d", "Y": "#facc15" },
+    marks: [],
+  },
+  matryoshka: {
+    rows: ["..####..", ".######.", ".######.", ".######.", "..####..", ".######.", "########", "########", "########", ".######."],
+    paint: ["..RRRR..", ".RFFFFR.", ".RFKFKR.", ".RFFFFR.", "..RRRR..", ".YYYYYY.", "RYYGGYYR", "RYGRRGYR", "RYYGGYYR", ".RRRRRR."],
+    palette: { "R": "#dc2626", "F": "#fde7d4", "K": "#1c1917", "Y": "#facc15", "G": "#16a34a" },
+    marks: [],
+  },
+  shawl: {
+    rows: ["#########", "#########", "#########", "#########", "#########", "#########", "#########", "#########", "#########"],
+    paint: ["RRRRRRRRR", "RKKKKKKKR", "RKRRKGGKR", "RKRKKKGKR", "RKKKYKKKR", "RKGKKKRKR", "RKGGKRRKR", "RKKKKKKKR", "RRRRRRRRR"],
+    palette: { "R": "#b91c1c", "K": "#0c0a09", "G": "#15803d", "Y": "#facc15" },
+    marks: [],
+  },
   clown: {
     rows: ["....##....", ".##.##.##.", ".########.", ".########.", ".########.", ".########.", "..######..", "...####..."],
-    marks: [["dot", 0.5, 5.0, 0.25], ["line", 2.7, 2.6, 2.9, 3.8], ["line", 2.9, 6.2, 2.7, 7.4],
+    marks: [["dot", 0.5, 5.0, 0.25, "#facc15"], ["line", 2.7, 2.6, 2.9, 3.8], ["line", 2.9, 6.2, 2.7, 7.4],
       ["dot", 3.5, 3.5, 0.3], ["dot", 3.5, 6.5, 0.3], ["dot", 4.7, 5.0, 0.6, "#e11d48"],
       ["ring", 5.0, 2.4, 0.4, 0.4], ["ring", 5.0, 7.6, 0.4, 0.4], ["line", 5.6, 3.0, 6.3, 5.0], ["line", 6.3, 5.0, 5.6, 7.0]],
   },
@@ -324,7 +490,16 @@ const FIRST_FIGURE_LEVEL = 4;
 
 // Figures that belong to one particular level no matter what the matching below would pick. The
 // rest are matched around them.
-const PINNED_FIGURES = { 67: "clown" };
+// The folk-craft branch: off the main line, opened in the browser after level 30. Its pictures
+// live in FIGURES (for the painting) but never take part in the matching below.
+const FOLK = { 201: "dymkovo", 202: "samovar", 203: "khokhloma", 204: "gzhel", 205: "palekh", 206: "gorodets", 207: "lace", 208: "zhostovo", 209: "matryoshka", 210: "shawl" };
+const FOLK_KEYS = new Set(Object.values(FOLK));
+const FOLK_SIZES = { min: 3, max: 5 };
+
+const PINNED_FIGURES = {
+  23: "vase", 58: "locomotive", 64: "lightbulb", 67: "clown", 77: "earth", 85: "alien",
+  105: "bee", 115: "rover", 125: "schrodinger", 135: "ozymandias",
+};
 let figureByLevel = null;
 
 // level -> figure name. Pictures must not bend the straight difficulty line, so each figure goes
@@ -338,11 +513,11 @@ function figureLevels() {
   Object.entries(PINNED_FIGURES).forEach(([lv, name]) => figureByLevel.set(Number(lv), name));
   const pinned = new Set(Object.values(PINNED_FIGURES));
   const figs = Object.keys(FIGURES)
-    .filter((name) => !pinned.has(name))
+    .filter((name) => !pinned.has(name) && !FOLK_KEYS.has(name))
     .map((name) => ({ name, area: maskArea(figureMask(name)) }))
     .sort((a, b) => a.area - b.area || (a.name < b.name ? -1 : 1));
   const levels = [];
-  for (let lv = FIRST_FIGURE_LEVEL; lv <= LEVEL_COUNT; lv++) if (!ORNAMENTS[lv] && !PINNED_FIGURES[lv]) levels.push(lv);
+  for (let lv = FIRST_FIGURE_LEVEL; lv <= FIRST_LINE; lv++) if (!ORNAMENTS[lv] && !PINNED_FIGURES[lv]) levels.push(lv);
   const F = figs.length;
   const M = levels.length;
   // cost[i][j]: best total mismatch placing figures [0, i) within levels [0, j).
@@ -380,6 +555,8 @@ function figureLevels() {
 // belongs to its era however many pictures land in it. The words live in the locale files under
 // games.tileFit.levelNames.<key>.
 function nameKey(level) {
+  if (SECRETS[level]) return SECRETS[level].key;
+  if (FOLK[level]) return FOLK[level];
   const figs = figureLevels();
   if (ORNAMENTS[level]) return ORNAMENTS[level].key;
   if (figs.has(level)) return figs.get(level);
@@ -389,8 +566,11 @@ function nameKey(level) {
   return `e${era + 1}n${k}`;
 }
 
+// 8 cells at level 1 to 70 at level 100, then a gentler slope to 84 at level 140: a board is at
+// most 10 x 10, and past ~85 cells it would be a nearly solid square with nothing left to shape.
 function targetArea(level) {
-  return 8 + Math.round(((level - 1) * 62) / (LEVEL_COUNT - 1));
+  if (level <= FIRST_LINE) return 8 + Math.round(((level - 1) * 62) / (FIRST_LINE - 1));
+  return 70 + Math.round(((level - FIRST_LINE) * 14) / 40);
 }
 
 // Piece sizes by band. The bands are what make the curve feel straight: area grows every level,
@@ -462,12 +642,68 @@ const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
 // The board of a level: the shape's own width/height pair whose area lands closest to the
 // target, among boards no more than MAX_SIDE on a side and not too stretched.
-function pickBoard(level) {
+// ---------------------------------------------------------------------------
+// The level of the day: numbered by its date, YYYYMMDD, the same board for everyone that day.
+// Half the days get a shape, half a figure from the main line, at a mid-game size.
+// ---------------------------------------------------------------------------
+const DAILY_SIZES = { min: 3, max: 5 };
+const DAILY_SHAPES = ["cornerCut", "octagon", "plus", "ring", "ell", "tee", "arch", "stairs", "diamond", "zigzag", "hourglass", "heart", "sieve", "thickRing"];
+
+function isDaily(n) {
+  if (!Number.isInteger(n) || n < 20200101 || n > 20991231) return false;
+  const y = Math.floor(n / 10000);
+  const m = Math.floor(n / 100) % 100;
+  const d = n % 100;
+  if (m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+function dailyBoard(n) {
+  const rng = mulberry32((SALT ^ Math.imul(n, 0x85ebca6b)) >>> 0);
+  if (rng() < 0.5) {
+    const names = Object.keys(FIGURES).filter((k) => !FOLK_KEYS.has(k) && maskArea(figureMask(k)) >= 30);
+    const kind = names[randInt(rng, names.length)];
+    return { mask: figureMask(kind), kind, figure: true };
+  }
+  const kind = DAILY_SHAPES[randInt(rng, DAILY_SHAPES.length)];
+  return pickBoard(0, kind, 40 + randInt(rng, 21));
+}
+
+// ---------------------------------------------------------------------------
+// Boards made somewhere else at run time (a channel's emotes, drawn by the server from the
+// emote's picture): registered under an id in 5000-5999 with their mask and a colour per cell.
+// Only the browser registers them; nothing about them is scored.
+// ---------------------------------------------------------------------------
+const CUSTOM = new Map();
+const CUSTOM_SIZES = { min: 3, max: 5 };
+
+// A registered board's colours in the same {paint, palette} shape a picture figure has: the
+// "letters" are the colours themselves, and the palette maps each to itself.
+function customPaint(id) {
+  const b = CUSTOM.get(id);
+  if (!b || !b.colors) return null;
+  const palette = {};
+  b.colors.forEach((row) => row.forEach((c) => c && (palette[c] = c)));
+  return { paint: b.colors, palette };
+}
+
+function registerCustom(id, board) {
+  if (!Number.isInteger(id) || id < 5000 || id > 5999) return false;
+  CUSTOM.set(id, board);
+  cache.delete(id);
+  return true;
+}
+
+function pickBoard(level, kindOverride, targetOverride) {
+  if (CUSTOM.has(level)) return { mask: CUSTOM.get(level).mask, kind: "custom:" + level, custom: true };
+  if (isDaily(level)) return dailyBoard(level);
+  if (SECRETS[level]) return { mask: rowsToMask(SECRETS[level].rows), kind: SECRETS[level].key, secret: true };
+  if (FOLK[level]) return { mask: figureMask(FOLK[level]), kind: FOLK[level], figure: true };
   if (ORNAMENTS[level]) return { mask: rowsToMask(ORNAMENTS[level].rows), kind: ORNAMENTS[level].key, ornament: true };
   const figure = figureLevels().get(level);
   if (figure) return { mask: figureMask(figure), kind: figure, figure: true };
-  const kind = shapeFor(level);
-  const target = targetArea(level);
+  const kind = kindOverride || shapeFor(level);
+  const target = targetOverride || targetArea(level);
   let best = null;
   for (let h = 2; h <= MAX_SIDE; h++) {
     for (let w = 2; w <= MAX_SIDE; w++) {
@@ -654,13 +890,13 @@ const cache = new Map();
 
 function generateLevel(level) {
   const n = Number(level);
-  if (!Number.isInteger(n) || n < 1 || n > LEVEL_COUNT) return null;
+  if (!Number.isInteger(n) || ((n < 1 || n > LEVEL_COUNT) && !SECRETS[n] && !FOLK[n] && !isDaily(n) && !CUSTOM.has(n))) return null;
   if (cache.has(n)) return cache.get(n);
 
   const rng = mulberry32((SALT ^ Math.imul(n, 0x9e3779b1)) >>> 0);
   const board = pickBoard(n);
   const mask = board.mask;
-  const range = sizeRange(n);
+  const range = SECRETS[n] ? SECRET_SIZES : FOLK[n] ? FOLK_SIZES : isDaily(n) ? DAILY_SIZES : CUSTOM.has(n) ? CUSTOM_SIZES : sizeRange(n);
   const fillable = fillableSizes(range, maskArea(mask));
 
   let best = null;
@@ -674,7 +910,19 @@ function generateLevel(level) {
   }
   if (!best) throw new Error(`tile-fit: level ${n} could not be generated`);
 
-  const cut = best.pieces.map((cells) => ({ cells: normalize(cells) }));
+  const fig = board.custom ? customPaint(n) : board.secret ? SECRETS[n] : FIGURES[board.kind];
+  const paint = (board.figure || board.custom || board.secret) && fig && fig.paint ? fig.paint : null;
+  const cut = best.pieces.map((cells) => {
+    const norm = normalize(cells);
+    if (!paint) return { cells: norm };
+    let minR = Infinity;
+    let minC = Infinity;
+    cells.forEach(([r, c]) => {
+      minR = Math.min(minR, r);
+      minC = Math.min(minC, c);
+    });
+    return { cells: norm, colors: norm.map(([r, c]) => fig.palette[paint[r + minR][c + minC]] || null) };
+  });
 
   // The tray shows pieces in a shuffled order and a random turn, so the cut is not readable off
   // the tray's layout.
@@ -683,14 +931,22 @@ function generateLevel(level) {
     const j = randInt(rng, i + 1);
     [order[i], order[j]] = [order[j], order[i]];
   }
-  const pieces = order.map((i) => ({ cells: cut[i].cells, startRotation: randInt(rng, 4) }));
+  const pieces = order.map((i) => {
+    const pc = { cells: cut[i].cells, startRotation: randInt(rng, 4) };
+    if (cut[i].colors) pc.colors = cut[i].colors;
+    return pc;
+  });
 
   const result = {
     level: n,
     version: LEVELS_VERSION,
     shape: board.kind,
-    name: nameKey(n),
-    marks: board.figure ? FIGURES[board.kind].marks : [],
+    name: board.custom ? board.kind : isDaily(n) ? "daily" : nameKey(n),
+    daily: isDaily(n),
+    custom: !!board.custom,
+    marks: board.figure ? FIGURES[board.kind].marks : board.secret ? SECRETS[n].marks : [],
+    figureKey: board.figure ? board.kind : null,
+    secret: !!board.secret,
     rows: mask.length,
     cols: mask[0].length,
     mask,
@@ -740,6 +996,17 @@ const api = {
   shapeFor,
   nameKey,
   ORNAMENTS,
+  SECRETS,
+  FOLK,
+  // The painting of a picture figure (or a registered board), for drawing it whole, or null.
+  figurePaint: (name) => {
+    if (typeof name === "string" && name.startsWith("custom:")) return customPaint(Number(name.slice(7)));
+    const secret = Object.values(SECRETS).find((x) => x.key === name && x.paint);
+    if (secret) return { paint: secret.paint, palette: secret.palette };
+    return FIGURES[name] && FIGURES[name].paint ? { paint: FIGURES[name].paint, palette: FIGURES[name].palette } : null;
+  },
+  isDaily,
+  registerCustom,
   figureLevels,
   FIGURE_NAMES: Object.keys(FIGURES),
 };

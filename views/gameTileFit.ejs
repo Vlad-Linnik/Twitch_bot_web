@@ -7,9 +7,12 @@
     piece of it is drawn by public/js/games/tile-fit.js; the server only supplies text, progress
     and the leaderboard. %>
 <main class="pt-14">
-  <div id="tf-root" class="tf-root tf-era-1">
+  <div id="tf-root" class="tf-root tf-era-1" data-lang="<%= locale %>">
     <div class="tf-stage">
       <div class="tf-scenery" aria-hidden="true"></div>
+      <%# Easter eggs: invisible until their era, and even then only noticeable to the curious. %>
+      <button type="button" class="tf-egg tf-egg-sun" data-egg="1001" tabindex="-1" aria-hidden="true"></button>
+      <button type="button" class="tf-egg tf-egg-moon" data-egg="1002" tabindex="-1" aria-hidden="true"></button>
 
       <header class="tf-head">
         <button type="button" id="tf-open-map" class="tf-btn" title="<%= t('games.tileFit.mapTitle') %>" aria-label="<%= t('games.tileFit.mapTitle') %>">
@@ -21,6 +24,12 @@
           <p id="tf-special-chip" class="tf-chip" hidden></p>
         </div>
         <div class="tf-head-right">
+          <button type="button" id="tf-open-daily" class="tf-btn" title="<%= t('games.tileFit.daily') %>" aria-label="<%= t('games.tileFit.daily') %>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m10 15 1.5 1.5L15 13"/></svg>
+          </button>
+          <button type="button" id="tf-open-museum" class="tf-btn" title="<%= t('games.tileFit.museum') %>" aria-label="<%= t('games.tileFit.museum') %>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9 12 4l9 5"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/></svg>
+          </button>
           <button type="button" id="tf-music" class="tf-btn" aria-pressed="true" title="<%= t('games.tileFit.music') %>" aria-label="<%= t('games.tileFit.music') %>">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path class="tf-btn-slash" d="M3 3l18 18"/></svg>
           </button>
@@ -54,7 +63,13 @@
       <div id="tf-card" class="tf-card-layer" hidden>
         <div class="tf-card">
           <p id="tf-card-kicker" class="tf-card-kicker"></p>
+          <p id="tf-card-stars" class="tf-stars" hidden aria-hidden="true"><span class="tf-star">★</span><span class="tf-star">★</span><span class="tf-star">★</span></p>
           <p id="tf-card-title" class="tf-card-title"></p>
+          <figure id="tf-card-quote" class="tf-quote" hidden>
+            <blockquote id="tf-quote-text" class="tf-quote-text"></blockquote>
+            <figcaption class="tf-quote-author">— <span id="tf-quote-author"></span></figcaption>
+            <button type="button" id="tf-quote-read" class="tf-quote-read"><%= t('games.tileFit.readAloud') %></button>
+          </figure>
           <p id="tf-card-text" class="tf-card-text"></p>
           <div class="tf-card-actions">
             <button type="button" id="tf-card-secondary" class="tf-action tf-action-ghost"></button>
@@ -64,9 +79,20 @@
       </div>
 
       <div id="tf-splash" class="tf-splash" hidden aria-live="polite">
-        <p class="tf-splash-kicker"><%= t('games.tileFit.newEra') %></p>
+        <p id="tf-splash-kicker" class="tf-splash-kicker"><%= t('games.tileFit.newEra') %></p>
         <p id="tf-splash-name" class="tf-splash-name"></p>
       </div>
+
+      <section id="tf-museum" class="tf-map tf-museum" hidden>
+        <div class="tf-map-head">
+          <h2 class="tf-map-title"><%= t('games.tileFit.museum') %></h2>
+          <span id="tf-museum-count" class="tf-map-count"></span>
+          <button type="button" id="tf-close-museum" class="tf-btn" title="<%= t('games.tileFit.close') %>" aria-label="<%= t('games.tileFit.close') %>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div id="tf-museum-hall" class="tf-museum-hall"></div>
+      </section>
 
       <%# The map of eras: only the levels already opened are on it, plus one unknown stop ahead. %>
       <section id="tf-map" class="tf-map" hidden>
@@ -107,6 +133,8 @@
           </li>
         <% } %>
       </ol>
+      <h3 class="tf-dialog-sub"><%= t('games.tileFit.dailyTable') %></h3>
+      <ol id="tf-daily-list" class="tf-lb"></ol>
       <% if (!user) { %>
         <p class="tf-dialog-note">
           <%= t('games.tileFit.loginToSave') %>
@@ -139,11 +167,34 @@
   loggedIn: !!user,
   csrf: user ? csrfToken : null,
   names: t('games.tileFit.levelNames'),
+  quotes: t('games.tileFit.quotes'),
+  lang: locale,
+  emoteChannels: emoteChannels,
   i18n: {
     levelLabel: t('games.tileFit.levelLabel'),
     solvedCount: t('games.tileFit.solvedCount'),
     unknownLevel: t('games.tileFit.unknownLevel'),
     allSolved: t('games.tileFit.allSolved'),
+    readAloud: t('games.tileFit.readAloud'),
+    newSolution: t('games.tileFit.newSolution'),
+    museumCount: t('games.tileFit.museumCount'),
+    newEra: t('games.tileFit.newEra'),
+    secret: t('games.tileFit.secret'),
+    secrets: t('games.tileFit.secrets'),
+    secretFound: t('games.tileFit.secretFound'),
+    folkLevel: t('games.tileFit.folkLevel'),
+    daily: t('games.tileFit.daily'),
+    dailyName: t('games.tileFit.dailyName'),
+    dailyResult: t('games.tileFit.dailyResult'),
+    dailyLocal: t('games.tileFit.dailyLocal'),
+    dailyEmpty: t('games.tileFit.dailyEmpty'),
+    emotesTitle: t('games.tileFit.emotesTitle'),
+    emotesNone: t('games.tileFit.emotesNone'),
+    emotesNoneMine: t('games.tileFit.emotesNoneMine'),
+    emotesChannel: t('games.tileFit.emotesChannel'),
+    emotesMine: t('games.tileFit.emotesMine'),
+    emotesFeatured: t('games.tileFit.emotesFeatured'),
+    stopReading: t('games.tileFit.stopReading'),
     saved: t('games.tileFit.saved'),
     saveFailed: t('games.tileFit.saveFailed'),
     piecesLeft: t('games.tileFit.piecesLeft'),
@@ -153,7 +204,7 @@
     toLevels: t('games.tileFit.toLevels'),
     solvedTitle: t('games.tileFit.solvedTitle'),
     figureDone: t('games.tileFit.figureDone'),
-    eras: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (i) { return t('games.tileFit.era' + i); }),
+    eras: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(function (i) { return t('games.tileFit.era' + i); }),
   },
 }) %></script>
 

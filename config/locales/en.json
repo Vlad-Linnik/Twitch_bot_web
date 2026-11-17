@@ -857,7 +857,7 @@
       "toLevels": "Levels",
       "next": "Next level",
       "solvedTitle": "Level solved!",
-      "allSolved": "All hundred levels solved. Impressive.",
+      "allSolved": "Every level is solved. The circle has closed — and everything begins again.",
       "locked": "Solve the previous level first",
       "howTitle": "How to play",
       "howDrag": "Drag a piece onto the board",
@@ -1012,10 +1012,737 @@
         "pumpkin": "Pumpkin",
         "astronaut": "Astronaut",
         "lion": "Lion",
-        "clown": "Clown"
+        "clown": "Clown",
+        "sunRa": "Sun of Ra",
+        "moonRabbit": "Moon Rabbit",
+        "bigTop": "Big Top",
+        "vase": "Vase",
+        "locomotive": "Locomotive",
+        "lightbulb": "Light Bulb",
+        "earth": "Blue Planet",
+        "alien": "Alien",
+        "e11n1": "Sprout",
+        "e11n2": "Photosynthesis",
+        "e11n3": "Rooftop Garden",
+        "e11n4": "Wind Turbine",
+        "e11n5": "Solar Farm",
+        "e11n6": "Pollination",
+        "e11n7": "Green City",
+        "e11n8": "Symbiosis",
+        "e12n1": "Landing",
+        "e12n2": "Regolith",
+        "e12n3": "Red Dust",
+        "e12n4": "Ice Crater",
+        "e12n5": "Olympus Mons",
+        "e12n6": "Terraforming",
+        "e12n7": "Phobos and Deimos",
+        "e12n8": "Valles Marineris",
+        "e13n1": "Superposition",
+        "e13n2": "Entanglement",
+        "e13n3": "Uncertainty",
+        "e13n4": "Tunnelling",
+        "e13n5": "Qubit",
+        "e13n6": "Decoherence",
+        "e13n7": "Observer",
+        "e13n8": "Wave and Particle",
+        "e14n1": "Silence",
+        "e14n2": "Dust of Ages",
+        "e14n3": "Forgotten Code",
+        "e14n4": "Debris",
+        "e14n5": "Sandstorm",
+        "e14n6": "Echo",
+        "e14n7": "Last Signal",
+        "e14n8": "The Circle",
+        "sunflower": "Sunflower",
+        "colonyDome": "Colony Dome",
+        "interference": "Interference",
+        "ouroboros": "Ouroboros",
+        "bee": "Bee",
+        "rover": "Rover",
+        "schrodinger": "Schrödinger's Cat",
+        "ozymandias": "Ozymandias",
+        "dymkovo": "Dymkovo Horse",
+        "samovar": "Tula Samovar",
+        "khokhloma": "Khokhloma Bowl",
+        "gzhel": "Gzhel Teapot",
+        "palekh": "Palekh Box",
+        "gorodets": "Gorodets Board",
+        "lace": "Vologda Lace",
+        "zhostovo": "Zhostovo Tray",
+        "matryoshka": "Matryoshka",
+        "shawl": "Pavlovo Posad Shawl",
+        "simplexAmulet": "Simplex Amulet"
       },
       "music": "Music",
-      "musicCredits": "Music (CC0, OpenGameArt): Kistol, iamoneabe, RandomMind, Spring Spring, Tarush Singhal, wipics, cosmac. Antiquity, the Age of Steam and Cyberpunk are composed by the game itself."
+      "musicCredits": "Music (CC0, OpenGameArt): Kistol, iamoneabe, RandomMind, Spring Spring, Tarush Singhal, wipics, cosmac. Antiquity, the Age of Steam and Cyberpunk are composed by the game itself.",
+      "quotes": {
+        "laozi": {
+          "text": "A journey of a thousand miles begins with a single step.",
+          "author": "Laozi, Tao Te Ching"
+        },
+        "franklinTool": {
+          "text": "Man is a tool-making animal.",
+          "author": "Benjamin Franklin, as quoted by James Boswell"
+        },
+        "fireProverb": {
+          "text": "Fire is a good servant but a bad master.",
+          "author": "Proverb"
+        },
+        "prutkovRoot": {
+          "text": "Look to the root!",
+          "author": "Kozma Prutkov"
+        },
+        "prutkovEmbrace": {
+          "text": "No one can embrace the unembraceable.",
+          "author": "Kozma Prutkov"
+        },
+        "laborProverb": {
+          "text": "Patience and work grind through everything.",
+          "author": "Russian proverb"
+        },
+        "confucius": {
+          "text": "The noble man seeks within himself; the petty man seeks within others.",
+          "author": "Confucius, Analects"
+        },
+        "chekhov": {
+          "text": "Brevity is the sister of talent.",
+          "author": "Anton Chekhov, letter, 1889"
+        },
+        "herodotus": {
+          "text": "Egypt is the gift of the Nile.",
+          "author": "Herodotus, Histories"
+        },
+        "pyramids": {
+          "text": "Man fears time, yet time fears the pyramids.",
+          "author": "Arab proverb"
+        },
+        "ptahhotep": {
+          "text": "The limits of art are not reached; no artist's skills are perfect.",
+          "author": "The Instruction of Ptahhotep"
+        },
+        "napoleon": {
+          "text": "Soldiers, from the summit of these pyramids forty centuries look down upon you!",
+          "author": "Napoleon Bonaparte, 1798"
+        },
+        "champollion": {
+          "text": "I've got it!",
+          "author": "Jean-François Champollion, on deciphering the hieroglyphs, 1822"
+        },
+        "delphi": {
+          "text": "Know thyself.",
+          "author": "Inscription at the Temple of Apollo at Delphi"
+        },
+        "sunTzu": {
+          "text": "Know the enemy and know yourself, and in a hundred battles you will never be in peril.",
+          "author": "Sun Tzu, The Art of War"
+        },
+        "prutkovHappy": {
+          "text": "If you want to be happy, be so.",
+          "author": "Kozma Prutkov"
+        },
+        "archimedesLever": {
+          "text": "Give me a place to stand, and I will move the Earth.",
+          "author": "Archimedes, per Pappus of Alexandria"
+        },
+        "hippocrates": {
+          "text": "Life is short, art is long.",
+          "author": "Hippocrates, Aphorisms"
+        },
+        "heraclitus": {
+          "text": "Everything flows.",
+          "author": "Attributed to Heraclitus"
+        },
+        "protagoras": {
+          "text": "Man is the measure of all things.",
+          "author": "Protagoras, per Plato"
+        },
+        "socrates": {
+          "text": "I know that I know nothing.",
+          "author": "Attributed to Socrates, after Plato"
+        },
+        "bernard": {
+          "text": "We are like dwarfs sitting on the shoulders of giants.",
+          "author": "Bernard of Chartres, per John of Salisbury"
+        },
+        "benedictine": {
+          "text": "Pray and work.",
+          "author": "Benedictine motto"
+        },
+        "dante": {
+          "text": "Abandon all hope, ye who enter here.",
+          "author": "Dante Alighieri, Inferno"
+        },
+        "occam": {
+          "text": "Entities must not be multiplied beyond necessity.",
+          "author": "Occam's razor, attributed to William of Ockham"
+        },
+        "galileo": {
+          "text": "And yet it moves.",
+          "author": "Attributed to Galileo Galilei"
+        },
+        "leonardo": {
+          "text": "Simplicity is the ultimate sophistication.",
+          "author": "Attributed to Leonardo da Vinci"
+        },
+        "hamlet": {
+          "text": "To be, or not to be: that is the question.",
+          "author": "William Shakespeare, Hamlet"
+        },
+        "michelangelo": {
+          "text": "I saw the angel in the marble and carved until I set him free.",
+          "author": "Attributed to Michelangelo"
+        },
+        "descartes": {
+          "text": "I think, therefore I am.",
+          "author": "René Descartes, Discourse on the Method, 1637"
+        },
+        "boulton": {
+          "text": "I sell here, Sir, what all the world desires to have — power.",
+          "author": "Matthew Boulton, per James Boswell, 1776"
+        },
+        "newton": {
+          "text": "If I have seen further, it is by standing on the shoulders of giants.",
+          "author": "Isaac Newton, letter to Robert Hooke, 1675"
+        },
+        "lovelace": {
+          "text": "The Analytical Engine weaves algebraical patterns just as the Jacquard loom weaves flowers and leaves.",
+          "author": "Ada Lovelace, 1843"
+        },
+        "franklinTime": {
+          "text": "Time is money.",
+          "author": "Benjamin Franklin, Advice to a Young Tradesman, 1748"
+        },
+        "verne": {
+          "text": "Anything one man can imagine, other men can make real.",
+          "author": "Attributed to Jules Verne"
+        },
+        "edisonGenius": {
+          "text": "Genius is one per cent inspiration and ninety-nine per cent perspiration.",
+          "author": "Thomas Edison"
+        },
+        "faraday": {
+          "text": "Nothing is too wonderful to be true, if it be consistent with the laws of nature.",
+          "author": "Michael Faraday, laboratory journal, 1849"
+        },
+        "bell": {
+          "text": "Mr. Watson, come here, I want to see you.",
+          "author": "Alexander Graham Bell, the first telephone call, 1876"
+        },
+        "bender": {
+          "text": "The ice has broken, gentlemen of the jury!",
+          "author": "Ostap Bender (Ilf and Petrov, The Twelve Chairs), 1928"
+        },
+        "tsiolkovsky": {
+          "text": "The planet is the cradle of the mind, but one cannot live in the cradle forever.",
+          "author": "Konstantin Tsiolkovsky, 1911"
+        },
+        "perAspera": {
+          "text": "Through hardships to the stars.",
+          "author": "Latin saying"
+        },
+        "saganCosmos": {
+          "text": "We are a way for the cosmos to know itself.",
+          "author": "Carl Sagan, Cosmos, 1980"
+        },
+        "kepler": {
+          "text": "Provide ships or sails adapted to the heavenly breezes, and there will be some who will brave even that void.",
+          "author": "Johannes Kepler, letter to Galileo, 1610"
+        },
+        "tereshkova": {
+          "text": "Hey, sky, take off your hat!",
+          "author": "Valentina Tereshkova, 1963"
+        },
+        "paleBlueDot": {
+          "text": "Look again at that dot. That's here. That's home. That's us.",
+          "author": "Carl Sagan, Pale Blue Dot, 1994"
+        },
+        "adams": {
+          "text": "Space is big. Really big.",
+          "author": "Douglas Adams, The Hitchhiker's Guide to the Galaxy, 1979"
+        },
+        "kay": {
+          "text": "The best way to predict the future is to invent it.",
+          "author": "Alan Kay, 1971"
+        },
+        "torvalds": {
+          "text": "Talk is cheap. Show me the code.",
+          "author": "Linus Torvalds, 2000"
+        },
+        "wheeler": {
+          "text": "All problems in computer science can be solved by another level of indirection.",
+          "author": "David Wheeler"
+        },
+        "clarke": {
+          "text": "Any sufficiently advanced technology is indistinguishable from magic.",
+          "author": "Arthur C. Clarke, 1973"
+        },
+        "picasso": {
+          "text": "Computers are useless. They can only give you answers.",
+          "author": "Attributed to Pablo Picasso"
+        },
+        "knuth": {
+          "text": "Premature optimization is the root of all evil.",
+          "author": "Donald Knuth, 1974"
+        },
+        "hopper": {
+          "text": "It's easier to ask forgiveness than it is to get permission.",
+          "author": "Grace Hopper"
+        },
+        "dijkstra": {
+          "text": "Computer science is no more about computers than astronomy is about telescopes.",
+          "author": "Attributed to Edsger Dijkstra"
+        },
+        "gibson": {
+          "text": "The future is already here — it's just not very evenly distributed.",
+          "author": "William Gibson"
+        },
+        "dick": {
+          "text": "Reality is that which, when you stop believing in it, doesn't go away.",
+          "author": "Philip K. Dick, 1978"
+        },
+        "turing": {
+          "text": "We can only see a short distance ahead, but we can see plenty there that needs to be done.",
+          "author": "Alan Turing, 1950"
+        },
+        "asimovViolence": {
+          "text": "Violence is the last refuge of the incompetent.",
+          "author": "Isaac Asimov, Foundation"
+        },
+        "wiener": {
+          "text": "We have modified our environment so radically that we must now modify ourselves to exist in this new environment.",
+          "author": "Norbert Wiener, 1950"
+        },
+        "hawking": {
+          "text": "The development of full artificial intelligence could spell the end of the human race.",
+          "author": "Stephen Hawking, 2014"
+        },
+        "mcluhan": {
+          "text": "The medium is the message.",
+          "author": "Marshall McLuhan, 1964"
+        },
+        "brand": {
+          "text": "Information wants to be free.",
+          "author": "Stewart Brand, 1984"
+        },
+        "orwell": {
+          "text": "All animals are equal, but some animals are more equal than others.",
+          "author": "George Orwell, Animal Farm, 1945"
+        },
+        "worldStage": {
+          "text": "All the world's a stage, and all the men and women merely players.",
+          "author": "William Shakespeare, As You Like It"
+        },
+        "tamed": {
+          "text": "You become responsible, forever, for what you have tamed.",
+          "author": "The Fox (Antoine de Saint-Exupéry, The Little Prince)"
+        },
+        "minerva": {
+          "text": "The owl of Minerva spreads its wings only with the falling of the dusk.",
+          "author": "G. W. F. Hegel, Philosophy of Right, 1820"
+        },
+        "krylovElephant": {
+          "text": "The elephant I didn't notice at all.",
+          "author": "Ivan Krylov, The Curious One, 1814"
+        },
+        "monomakh": {
+          "text": "Oh, how heavy you are, Monomakh's cap!",
+          "author": "Alexander Pushkin, Boris Godunov, 1825"
+        },
+        "coke": {
+          "text": "A man's house is his castle.",
+          "author": "Edward Coke, 1628"
+        },
+        "horatio": {
+          "text": "There are more things in heaven and earth, Horatio, than are dreamt of in your philosophy.",
+          "author": "William Shakespeare, Hamlet"
+        },
+        "teaTime": {
+          "text": "It's always six o'clock now… it's always tea-time.",
+          "author": "The Hatter (Lewis Carroll, Alice's Adventures in Wonderland), 1865"
+        },
+        "bacon": {
+          "text": "Knowledge itself is power.",
+          "author": "Francis Bacon, 1597"
+        },
+        "gagarin": {
+          "text": "Let's go!",
+          "author": "Yuri Gagarin, 12 April 1961"
+        },
+        "armstrong": {
+          "text": "That's one small step for man, one giant leap for mankind.",
+          "author": "Neil Armstrong, 1969"
+        },
+        "tipu": {
+          "text": "Better to live one day as a lion than a hundred years as a sheep.",
+          "author": "Attributed to Tipu Sultan"
+        },
+        "kiplingCat": {
+          "text": "I am the Cat who walks by himself, and all places are alike to me.",
+          "author": "Rudyard Kipling, Just So Stories, 1902"
+        },
+        "fishProverb": {
+          "text": "Without effort you can't even pull a fish out of a pond.",
+          "author": "Russian proverb"
+        },
+        "tortoise": {
+          "text": "Slow but steady wins the race.",
+          "author": "Moral of Aesop's The Tortoise and the Hare"
+        },
+        "homeProverb": {
+          "text": "East or west, home is best.",
+          "author": "Proverb"
+        },
+        "horaceMouse": {
+          "text": "The mountains will labour, and a ridiculous mouse will be born.",
+          "author": "Horace, Ars Poetica"
+        },
+        "chickens": {
+          "text": "Don't count your chickens before they hatch.",
+          "author": "Proverb"
+        },
+        "fermi": {
+          "text": "Where is everybody?",
+          "author": "Enrico Fermi, 1950"
+        },
+        "lifeFinds": {
+          "text": "Life finds a way.",
+          "author": "Ian Malcolm, Jurassic Park, 1993"
+        },
+        "tyutchev": {
+          "text": "Not for nothing winter rages: its time has passed.",
+          "author": "Fyodor Tyutchev, 1836"
+        },
+        "asimovLaw": {
+          "text": "A robot may not injure a human being or, through inaction, allow a human being to come to harm.",
+          "author": "Isaac Asimov, Runaround, 1942"
+        },
+        "zhuangzi": {
+          "text": "Was I a man dreaming I was a butterfly, or a butterfly dreaming I am a man?",
+          "author": "After Zhuangzi"
+        },
+        "ishmael": {
+          "text": "Call me Ishmael.",
+          "author": "Herman Melville, Moby-Dick, 1851"
+        },
+        "kant": {
+          "text": "Two things fill the mind with ever new and increasing admiration: the starry heavens above me and the moral law within me.",
+          "author": "Immanuel Kant, Critique of Practical Reason, 1788"
+        },
+        "archilochus": {
+          "text": "The fox knows many things, but the hedgehog knows one big thing.",
+          "author": "Archilochus"
+        },
+        "stael": {
+          "text": "The more I see of men, the more I like dogs.",
+          "author": "Attributed to Madame de Staël"
+        },
+        "kelvin": {
+          "text": "Heavier-than-air flying machines are impossible.",
+          "author": "Attributed to Lord Kelvin, 1895"
+        },
+        "pompey": {
+          "text": "To sail is necessary; to live is not.",
+          "author": "Pompey, per Plutarch"
+        },
+        "fuller": {
+          "text": "He that plants trees loves others besides himself.",
+          "author": "Thomas Fuller, 1732"
+        },
+        "cake": {
+          "text": "Let them eat cake.",
+          "author": "Attributed to Marie Antoinette; in fact Rousseau, Confessions"
+        },
+        "basho": {
+          "text": "The old pond — a frog jumps in: the sound of water.",
+          "author": "Matsuo Bashō, 1686"
+        },
+        "appleProverb": {
+          "text": "The apple doesn't fall far from the tree.",
+          "author": "Proverb"
+        },
+        "edisonFail": {
+          "text": "I have not failed. I've just found ten thousand ways that won't work.",
+          "author": "Attributed to Thomas Edison"
+        },
+        "wilde": {
+          "text": "Experience is the name everyone gives to their mistakes.",
+          "author": "Oscar Wilde, Lady Windermere's Fan, 1892"
+        },
+        "seneca": {
+          "text": "To err is human.",
+          "author": "Attributed to Seneca"
+        },
+        "apollo13": {
+          "text": "Houston, we've had a problem.",
+          "author": "Jim Lovell, Apollo 13, 1970"
+        },
+        "beckett": {
+          "text": "Ever tried. Ever failed. No matter. Try again. Fail again. Fail better.",
+          "author": "Samuel Beckett, 1983"
+        },
+        "caesar": {
+          "text": "I came, I saw, I conquered.",
+          "author": "Julius Caesar, per Plutarch"
+        },
+        "eureka": {
+          "text": "Eureka!",
+          "author": "Archimedes, per Vitruvius"
+        },
+        "haldane": {
+          "text": "The universe is not only queerer than we suppose, but queerer than we can suppose.",
+          "author": "J. B. S. Haldane, 1927"
+        },
+        "pascal": {
+          "text": "The eternal silence of these infinite spaces frightens me.",
+          "author": "Blaise Pascal, Pensées"
+        },
+        "edisonCandles": {
+          "text": "We will make electricity so cheap that only the rich will burn candles.",
+          "author": "Attributed to Thomas Edison"
+        },
+        "aten": {
+          "text": "You rise beautifully on the horizon of heaven, O living Aten, beginning of life.",
+          "author": "Great Hymn to the Aten, 14th century BC"
+        },
+        "goddard": {
+          "text": "It is difficult to say what is impossible, for the dream of yesterday is the hope of today and the reality of tomorrow.",
+          "author": "Robert H. Goddard, 1904"
+        },
+        "chaplin": {
+          "text": "Life is a tragedy when seen in close-up, but a comedy in long-shot.",
+          "author": "Attributed to Charlie Chaplin"
+        },
+        "keats": {
+          "text": "Beauty is truth, truth beauty.",
+          "author": "John Keats, Ode on a Grecian Urn, 1819"
+        },
+        "thoreau": {
+          "text": "We do not ride on the railroad; it rides upon us.",
+          "author": "Henry David Thoreau, Walden, 1854"
+        },
+        "clarkeAlone": {
+          "text": "Two possibilities exist: either we are alone in the Universe or we are not. Both are equally terrifying.",
+          "author": "Attributed to Arthur C. Clarke"
+        },
+        "sapling": {
+          "text": "The best time to plant a tree was twenty years ago. The second best time is now.",
+          "author": "Chinese proverb"
+        },
+        "borrowed": {
+          "text": "We do not inherit the earth from our ancestors; we borrow it from our children.",
+          "author": "Proverb"
+        },
+        "wildness": {
+          "text": "In Wildness is the preservation of the World.",
+          "author": "Henry David Thoreau, Walking, 1862"
+        },
+        "lookDeep": {
+          "text": "Look deep into nature, and then you will understand everything better.",
+          "author": "Attributed to Albert Einstein"
+        },
+        "carson": {
+          "text": "Those who contemplate the beauty of the earth find reserves of strength that will endure as long as life lasts.",
+          "author": "Rachel Carson, The Sense of Wonder, 1965"
+        },
+        "gandhiNeed": {
+          "text": "Earth provides enough to satisfy every man's needs, but not every man's greed.",
+          "author": "Mahatma Gandhi, as quoted by Pyarelal"
+        },
+        "baconNature": {
+          "text": "Nature, to be commanded, must be obeyed.",
+          "author": "Francis Bacon, Novum Organum, 1620"
+        },
+        "leopold": {
+          "text": "We abuse land because we regard it as a commodity belonging to us.",
+          "author": "Aldo Leopold, 1949"
+        },
+        "beesEinstein": {
+          "text": "If the bee disappeared off the face of the earth, man would only have four years left to live.",
+          "author": "Wrongly attributed to Albert Einstein"
+        },
+        "muskMars": {
+          "text": "I would like to die on Mars. Just not on impact.",
+          "author": "Elon Musk, 2013"
+        },
+        "saganSomewhere": {
+          "text": "Somewhere, something incredible is waiting to be known.",
+          "author": "Attributed to Carl Sagan"
+        },
+        "wells": {
+          "text": "No one would have believed in the last years of the nineteenth century that this world was being watched keenly and closely.",
+          "author": "H. G. Wells, The War of the Worlds, 1898"
+        },
+        "vonBraun": {
+          "text": "I have learned to use the word 'impossible' with the greatest caution.",
+          "author": "Wernher von Braun"
+        },
+        "hawkingStars": {
+          "text": "Remember to look up at the stars and not down at your feet.",
+          "author": "Stephen Hawking, 2012"
+        },
+        "clarke2": {
+          "text": "The only way of discovering the limits of the possible is to venture a little way past them into the impossible.",
+          "author": "Arthur C. Clarke, 1962"
+        },
+        "kennedy": {
+          "text": "We choose to go to the Moon not because it is easy, but because it is hard.",
+          "author": "John F. Kennedy, 1962"
+        },
+        "heinlein": {
+          "text": "Reach low orbit and you're halfway to anywhere in the Solar System.",
+          "author": "Attributed to Robert A. Heinlein"
+        },
+        "curiosity": {
+          "text": "Curiosity is an everlasting flame that burns in everyone's mind.",
+          "author": "Clara Ma, the essay that named the Curiosity rover, 2009"
+        },
+        "einsteinDice": {
+          "text": "God does not play dice.",
+          "author": "Albert Einstein, letter to Max Born, 1926"
+        },
+        "bohrReply": {
+          "text": "Stop telling God what to do.",
+          "author": "Attributed to Niels Bohr"
+        },
+        "feynman": {
+          "text": "I think I can safely say that nobody understands quantum mechanics.",
+          "author": "Richard Feynman, The Character of Physical Law, 1965"
+        },
+        "bohrPredict": {
+          "text": "Prediction is very difficult, especially about the future.",
+          "author": "Attributed to Niels Bohr"
+        },
+        "heisenberg": {
+          "text": "What we observe is not nature itself, but nature exposed to our method of questioning.",
+          "author": "Werner Heisenberg, Physics and Philosophy, 1958"
+        },
+        "planck": {
+          "text": "Science advances one funeral at a time.",
+          "author": "Attributed to Max Planck"
+        },
+        "itFromBit": {
+          "text": "It from bit.",
+          "author": "John Archibald Wheeler, 1989"
+        },
+        "imagination": {
+          "text": "Imagination is more important than knowledge.",
+          "author": "Albert Einstein, 1929"
+        },
+        "schrodingerCat": {
+          "text": "The living and dead cat mixed or smeared out in equal parts.",
+          "author": "Erwin Schrödinger, 1935"
+        },
+        "heraclitusRiver": {
+          "text": "You cannot step into the same river twice.",
+          "author": "Heraclitus, per Plato"
+        },
+        "sicTransit": {
+          "text": "Thus passes the glory of the world.",
+          "author": "Latin saying"
+        },
+        "eliotBeginning": {
+          "text": "In my beginning is my end.",
+          "author": "T. S. Eliot, East Coker, 1940"
+        },
+        "santayana": {
+          "text": "Those who cannot remember the past are condemned to repeat it.",
+          "author": "George Santayana, 1905"
+        },
+        "marcus": {
+          "text": "Everything that exists is in a manner the seed of that which will be.",
+          "author": "Marcus Aurelius, Meditations"
+        },
+        "nietzsche": {
+          "text": "Everything goes, everything comes back; eternally rolls the wheel of being.",
+          "author": "Friedrich Nietzsche, Thus Spoke Zarathustra"
+        },
+        "eliotEnd": {
+          "text": "And the end of all our exploring will be to arrive where we started and know the place for the first time.",
+          "author": "T. S. Eliot, Little Gidding, 1942"
+        },
+        "solomonRing": {
+          "text": "This too shall pass.",
+          "author": "The parable of King Solomon's ring"
+        },
+        "ecclesiastes": {
+          "text": "What has been will be again, what has been done will be done again; there is nothing new under the sun.",
+          "author": "Ecclesiastes 1:9"
+        },
+        "shelley": {
+          "text": "Look on my Works, ye Mighty, and despair!",
+          "author": "Percy Bysshe Shelley, Ozymandias, 1818"
+        },
+        "slowFar": {
+          "text": "The slower you ride, the further you get.",
+          "author": "Russian proverb"
+        },
+        "samovarSaying": {
+          "text": "The samovar is boiling — it won't let you leave.",
+          "author": "Russian saying"
+        },
+        "notGold": {
+          "text": "All that glitters is not gold.",
+          "author": "Proverb"
+        },
+        "izbaPies": {
+          "text": "A house is fine not for its corners but for its pies.",
+          "author": "Russian proverb"
+        },
+        "beautySaves": {
+          "text": "Beauty will save the world.",
+          "author": "Fyodor Dostoevsky, The Idiot, 1869"
+        },
+        "reapSow": {
+          "text": "As you sow, so shall you reap.",
+          "author": "Proverb"
+        },
+        "measureSeven": {
+          "text": "Measure seven times, cut once.",
+          "author": "Russian proverb"
+        },
+        "masterWork": {
+          "text": "The work fears the master.",
+          "author": "Russian proverb"
+        },
+        "smallPrecious": {
+          "text": "The spool is small, but precious.",
+          "author": "Russian proverb"
+        },
+        "frostSun": {
+          "text": "Frost and sunshine; a wonderful day!",
+          "author": "Alexander Pushkin, Winter Morning, 1829"
+        },
+        "voltaireBetter": {
+          "text": "The best is the enemy of the good.",
+          "author": "Voltaire"
+        }
+      },
+      "readAloud": "Read aloud",
+      "stopReading": "Stop",
+      "newSolution": "A different solution! Solutions found: {{n}}",
+      "museum": "Museum",
+      "museumCount": "Assembled: {{n}}",
+      "secret": "Secret",
+      "secrets": "Secrets",
+      "secretFound": "Secret found",
+      "era11": "Solarpunk",
+      "era12": "Mars",
+      "era13": "Quantum Age",
+      "era14": "Ruins",
+      "era15": "Folk Crafts",
+      "folkLevel": "Craft",
+      "daily": "Level of the day",
+      "dailyName": "Board of {{date}}",
+      "dailyResult": "Today's rank: {{rank}} · moves: {{moves}} · days in a row: {{streak}}",
+      "dailyLocal": "Moves: {{moves}} · days in a row: {{streak}}",
+      "dailyEmpty": "Nobody has solved today's board yet — be the first!",
+      "dailyTable": "Level of the day — today",
+      "emotesTitle": "Channel emotes",
+      "emotesNone": "This channel has no emotes that make a board yet.",
+      "emotesChannel": "Channel favourites",
+      "emotesMine": "My emotes",
+      "emotesNoneMine": "None of your emotes in this channel make a board yet.",
+      "emotesFeatured": "★ vlad_261's favourite emotes"
     }
   },
   "statistics": {
