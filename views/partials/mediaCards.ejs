@@ -53,9 +53,6 @@
         </div>
 
         <div class="absolute inset-x-0 bottom-0 p-3">
-          <% if (card.extras && card.extras.gameState) { %>
-            <span class="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-(--sec-accent)/15 text-(--sec-accent-strong) text-[10px] font-medium ring-1 ring-(--sec-accent)/30"><%= st('gameState.' + card.extras.gameState) %></span>
-          <% } %>
           <% if (card.progress) { %>
             <span class="inline-block mb-1.5 px-1.5 py-0.5 rounded bg-(--sec-accent)/15 text-(--sec-accent-strong) text-[10px] font-medium tabular-nums ring-1 ring-(--sec-accent)/30">
               <% if (card.progress.kind === 'percent') { %><%= st('progressPercent', { done: card.progress.done }) %><% } else if (card.progress.total) { %><%= st('progressEpisodes', { done: card.progress.done, total: card.progress.total }) %><% } else { %><%= st('progressEpisodesOpen', { done: card.progress.done }) %><% } %>

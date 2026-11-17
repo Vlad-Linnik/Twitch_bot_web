@@ -97,7 +97,6 @@
           <% if (item.status === 'accepted') { %><span class="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30"><%= st('statusPlanned') %></span><% } %>
           <% if (item.status === 'suggested') { %><span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"><%= st('statusSuggested') %></span><% } %>
           <% if (item.status === 'rejected') { %><span class="px-2 py-0.5 rounded-full bg-stone-700/60 text-stone-200 ring-1 ring-white/10"><%= st('statusRejected') %></span><% } %>
-          <% if (item.extras && item.extras.gameState) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30"><%= st('gameState.' + item.extras.gameState) %></span><% } %>
           <% if (badge) { %><span class="px-2 py-0.5 rounded-full bg-(--sec-accent)/15 text-(--sec-accent-strong) ring-1 ring-(--sec-accent)/30 tabular-nums"><%= st('watchedLabel') %>: <%= badge %></span><% } %>
         </div>
 

@@ -87,7 +87,7 @@
         <input type="number" name="year" min="1870" max="2100" step="1" value="<%= val('year') %>" class="<%= input %>" />
       </label>
       <%# The section decides which of its own fields exist (sec.fields - routes/movies.js,
-          routes/gamesStream.js): a film's type and IMDb id, a game's state, Steam id and Twitch
+          routes/gamesStream.js): a film's type and IMDb id, a game's Steam id and Twitch
           category. The server reads only the fields of its own kind either way. %>
       <% if (sec.fields.mediaType) { %>
       <label class="block">
@@ -95,17 +95,6 @@
         <select name="mediaType" data-media-type class="<%= input %>">
           <% mediaTypes.forEach(function(type) { %>
             <option value="<%= type %>"<%= v.mediaType === type ? ' selected' : '' %>><%= st('type.' + type) %></option>
-          <% }) %>
-        </select>
-      </label>
-      <% } %>
-      <% if (sec.fields.gameState && !suggesting) { %>
-      <label class="block">
-        <span class="block text-xs text-neutral-500 mb-1"><%= st('form.gameState') %></span>
-        <select name="gameState" class="<%= input %>">
-          <option value=""><%= st('form.gameStateNone') %></option>
-          <% ['playing', 'completed', 'dropped'].forEach(function(state) { %>
-            <option value="<%= state %>"<%= v.gameState === state ? ' selected' : '' %>><%= st('gameState.' + state) %></option>
           <% }) %>
         </select>
       </label>

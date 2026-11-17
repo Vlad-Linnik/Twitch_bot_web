@@ -44,11 +44,11 @@
         </section>
       <% }) %>
 
-      <% if (split.total) { %>
+      <% if (split && split.total) { %>
         <section class="rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/5 p-5">
           <h3 class="text-base font-bold text-stone-100 mb-5"><%= st('stats.split.' + split.label) %></h3>
           <%- include('partials/charts/donut', {
-            parts: split.parts.map(function(p) { return { label: st((split.label === 'type' ? 'type.' : 'gameState.') + p.key), count: p.count, share: p.share, slot: split.order.indexOf(p.key) + 1 }; }),
+            parts: split.parts.map(function(p) { return { label: st('type.' + p.key), count: p.count, share: p.share, slot: split.order.indexOf(p.key) + 1 }; }),
             total: split.total,
             centerLabel: st('stats.cards'),
           }) %>

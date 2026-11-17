@@ -89,7 +89,6 @@ async function create(doc) {
     nsfw: Boolean(doc.nsfw),
     recordingUrl: doc.recordingUrl || null,
     progress: doc.progress || null,
-    gameState: doc.gameState || null,
     ratings: { streamer: doc.streamerRating ?? null, viewers: { sum: 0, count: 0 }, external: null },
     review: doc.review || null,
     commentCount: 0,

@@ -2066,8 +2066,7 @@
       },
       "breakdownHint": "How many times each score from 1 to 10 was given · {{count}} in all",
       "split": {
-        "type": "Films, series and anime",
-        "gameState": "Game status"
+        "type": "Films, series and anime"
       },
       "genres": "Genres",
       "genresHint": "Cards with the genre · of {{count}} with genres",
@@ -2089,11 +2088,6 @@
       "done": "Nothing played yet."
     },
     "backToGrid": "All games",
-    "gameState": {
-      "playing": "Playing",
-      "completed": "Completed",
-      "dropped": "Dropped"
-    },
     "onStream": "On stream",
     "lastOnStream": "last on {{date}}",
     "hoursShort": "{{n}} h",
@@ -2104,8 +2098,6 @@
         "done": "Played"
       },
       "poster": "Cover",
-      "gameState": "Progress",
-      "gameStateNone": "— not set —",
       "steam": "Steam (store link or app id)",
       "twitchCategory": "Twitch category",
       "twitchCategoryHint": "As it is named on Twitch: hours on stream are counted by it.",

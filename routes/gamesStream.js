@@ -3,8 +3,8 @@
 // own games - a different thing that happens to share the word.)
 //   - search: Twitch categories first (the name the game was streamed under, Russian included),
 //     Steam second (store link, art, review score) - lib/mediaSources/;
-//   - the form's own fields: where the channel is with it (playing / completed / dropped), the
-//     Steam app id or store link, the Twitch category - no film type, no episodes, no IMDb;
+//   - the form's own fields: the Steam app id or store link and the Twitch category - no film
+//     type, no episodes, no IMDb;
 //   - hours on stream and "last played", from the bot's 5-minute samples (db/streamHoursRepo.js),
 //     computed per request and usable as a sort; the editor's form lists the categories that were on
 //     stream with no card yet;
@@ -53,14 +53,13 @@ module.exports = createMediaSectionRouter({
     posterSource: "steam",
     // = --sec-aspect of the games theme (public/css/input.css); the cover crop is kept to it.
     posterAspect: 3 / 4,
-    fields: { mediaType: false, progress: false, imdbId: false, gameState: true, steam: true, twitchCategory: true },
+    fields: { mediaType: false, progress: false, imdbId: false, steam: true, twitchCategory: true },
   },
   parseForm: (body, opts) => media.parseMediaForm(body, { ...opts, kind: "game" }),
   parseSuggestionForm: (body) => suggestions.parseSuggestionForm(body, { kind: "game" }),
   formValues: (item) => ({
     steamAppId: item.external?.steamAppId || "",
     twitchCategoryName: item.external?.twitchCategoryName || "",
-    gameState: item.gameState || "",
   }),
   externalIds,
   // A card with a Steam app but no score or no genres/tags yet: ask for an early pass instead of
@@ -71,7 +70,6 @@ module.exports = createMediaSectionRouter({
   editSet(value, item, picked) {
     const ids = externalIds(value, picked);
     const set = {
-      gameState: value.gameState,
       "external.steamAppId": ids.steamAppId ?? null,
       "external.twitchCategoryName": ids.twitchCategoryName ?? null,
     };
@@ -114,7 +112,7 @@ module.exports = createMediaSectionRouter({
     const links = [];
     if (item.external?.steamAppId) links.push({ href: steam.storeUrl(item.external.steamAppId), label: "Steam" });
     if (item.external?.twitchCategoryName) links.push({ href: twitchDirectoryUrl(item.external.twitchCategoryName), label: "Twitch" });
-    return { minutes: item.streamMinutes || 0, lastSeen: item.streamLastSeen || null, gameState: item.gameState || null, links };
+    return { minutes: item.streamMinutes || 0, lastSeen: item.streamLastSeen || null, links };
   },
   // "Played on stream, no card yet" - the editor's quick picks on the new-card form.
   async formExtras(channel) {

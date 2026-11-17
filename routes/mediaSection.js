@@ -389,7 +389,7 @@ function createMediaSectionRouter(cfg) {
   });
 
   // The section's charts (views/mediaStats.ejs): over the watched/played list - the streamer's and
-  // the viewers' marks 1-10, the split by type (films) or state (games), the most common genres.
+  // the viewers' marks 1-10, the split by type (films only), the most common genres.
   // The viewers' marks are counted ratings only, the same ones every card's average is made of.
   router.get(`/:channel/${SECTION}/stats`, page, async (req, res, next) => {
     try {
@@ -399,9 +399,10 @@ function createMediaSectionRouter(cfg) {
         profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
       ]);
       const viewerMarks = await mediaRatingsRepo.markCounts(rows.map((r) => r._id));
+      // Films split by type; games have nothing to split by, so their page has no ring.
       const split = cfg.view.fields.mediaType
-        ? { field: "mediaType", order: media.MEDIA_TYPES, label: "type" }
-        : { field: "gameState", order: media.GAME_STATES, label: "gameState" };
+        ? { ...mediaStats.splitBy(rows, "mediaType", media.MEDIA_TYPES), order: media.MEDIA_TYPES, label: "type" }
+        : null;
       res.render("mediaStats", {
         channel,
         broadcaster,
@@ -409,7 +410,7 @@ function createMediaSectionRouter(cfg) {
         total: rows.length,
         streamer: mediaStats.streamerBreakdown(rows),
         viewers: mediaStats.breakdown(viewerMarks),
-        split: { ...mediaStats.splitBy(rows, split.field, split.order), order: split.order, label: split.label },
+        split,
         genres: mediaStats.topGenres(rows),
         sectionPreview: res.locals.sectionPreview,
       });
@@ -705,7 +706,7 @@ function createMediaSectionRouter(cfg) {
       if (value.status === "done" && item.status !== "done") set.doneAt = new Date();
       if (poster) set.poster = poster;
       else if (keptCrop !== undefined) set["poster.crop"] = keptCrop;
-      // The section's own fields and ids (an IMDb or Steam id, a game's state); the config also clears
+      // The section's own fields and ids (an IMDb or Steam id); the config also clears
       // an outside rating that belonged to an id the card no longer has.
       Object.assign(set, cfg.editSet(value, item, picked));
       // A new pick is possibly another film: its info replaces the old one's.

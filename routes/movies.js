@@ -37,7 +37,7 @@ module.exports = createMediaSectionRouter({
     defaultMediaType: "film",
     // = --sec-aspect of the movies theme (public/css/input.css); the cover crop is kept to it.
     posterAspect: 2 / 3,
-    fields: { mediaType: true, progress: true, imdbId: true, gameState: false, steam: false, twitchCategory: false },
+    fields: { mediaType: true, progress: true, imdbId: true, steam: false, twitchCategory: false },
   },
   parseForm: (body, opts) => media.parseMediaForm(body, opts),
   parseSuggestionForm: (body) => suggestions.parseSuggestionForm(body),
