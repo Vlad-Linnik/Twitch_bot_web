@@ -30,13 +30,40 @@
   let timer = null;
   let controller = null;
 
+  // The order button (asc/desc): a submit button, so it is not in FormData - its state lives in
+  // data-sort-dir and goes into the request here.
+  const dirButton = form.querySelector("[data-sort-dir]");
+
   // The form's values, without the empty ones - the same view list.json reads.
   function currentParams() {
     const params = new URLSearchParams();
     for (const [k, v] of new FormData(form)) {
       if (typeof v === "string" && v.trim() !== "") params.set(k, v.trim());
     }
+    if (dirButton && dirButton.dataset.sortDir === "asc") params.set("dir", "asc");
     return params;
+  }
+
+  function paintDir() {
+    const asc = dirButton.dataset.sortDir === "asc";
+    dirButton.value = asc ? "desc" : "asc";
+    const label = asc ? dirButton.dataset.labelAsc : dirButton.dataset.labelDesc;
+    dirButton.title = label;
+    dirButton.setAttribute("aria-label", label);
+    for (const arrow of dirButton.querySelectorAll("[data-arrow]")) {
+      const lit = arrow.dataset.arrow === (asc ? "asc" : "desc");
+      arrow.classList.toggle("text-(--sec-accent)", lit);
+      arrow.classList.toggle("text-stone-500", !lit);
+    }
+  }
+  if (dirButton) {
+    dirButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      dirButton.dataset.sortDir = dirButton.dataset.sortDir === "asc" ? "desc" : "asc";
+      paintDir();
+      clearTimeout(timer);
+      refresh();
+    });
   }
 
   // The tab links keep the current search and filters, as they do on a server-rendered page.

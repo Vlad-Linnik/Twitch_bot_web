@@ -2071,7 +2071,9 @@
       "genres": "Genres",
       "genresHint": "Cards with the genre · of {{count}} with genres",
       "genresMore": "{{count}} more genres"
-    }
+    },
+    "sortDesc": "Descending",
+    "sortAsc": "Ascending"
   },
   "gamesStream": {
     "titleSuffix": "games",

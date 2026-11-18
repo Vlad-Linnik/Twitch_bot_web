@@ -2071,7 +2071,9 @@
       "genres": "Жанры",
       "genresHint": "Сколько карточек с этим жанром · из {{count}} с жанрами",
       "genresMore": "И ещё жанров: {{count}}"
-    }
+    },
+    "sortDesc": "По убыванию",
+    "sortAsc": "По возрастанию"
   },
   "gamesStream": {
     "titleSuffix": "игры",

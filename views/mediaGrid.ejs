@@ -117,6 +117,18 @@
           <% }) %>
         </select>
       </label>
+      <%# The order of the sort. A submit button carrying the OTHER direction, so without JS a click
+          reloads in that order; public/js/media-grid.js flips it in place instead. The lit arrow is
+          the current order: down = descending (best / newest first), up = ascending. %>
+      <button type="submit" name="dir" value="<%= view.dir === 'asc' ? 'desc' : 'asc' %>" data-sort-dir="<%= view.dir %>"
+              data-label-desc="<%= st('sortDesc') %>" data-label-asc="<%= st('sortAsc') %>"
+              title="<%= st(view.dir === 'asc' ? 'sortAsc' : 'sortDesc') %>" aria-label="<%= st(view.dir === 'asc' ? 'sortAsc' : 'sortDesc') %>"
+              class="group inline-flex items-center justify-center w-9 h-8 rounded-full bg-(--sec-surface) border border-stone-700 hover:border-(--sec-accent) focus-visible:outline-2 focus-visible:outline-(--sec-accent) transition-colors">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path data-arrow="asc" stroke="currentColor" class="<%= view.dir === 'asc' ? 'text-(--sec-accent)' : 'text-stone-500' %>" d="M8 18V5M4.5 8.5 8 5l3.5 3.5"/>
+          <path data-arrow="desc" stroke="currentColor" class="<%= view.dir === 'asc' ? 'text-stone-500' : 'text-(--sec-accent)' %>" d="M16 6v13M12.5 15.5 16 19l3.5-3.5"/>
+        </svg>
+      </button>
       <noscript><button type="submit" class="px-4 py-1.5 rounded-full bg-stone-800 text-stone-200 hover:bg-stone-700 text-sm"><%= st('searchSubmit') %></button></noscript>
     </div>
   </form>

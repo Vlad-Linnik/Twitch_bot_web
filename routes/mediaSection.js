@@ -237,7 +237,9 @@ function createMediaSectionRouter(cfg) {
     // card saved without info never matches one.
     const type = cfg.view.fields.mediaType && media.MEDIA_TYPES.includes(query.type) ? query.type : "";
     const genre = typeof query.genre === "string" ? query.genre.trim().slice(0, 60) : "";
-    return { tab, sort, q, type, genre };
+    // The order: "desc" (the sort as written - best, newest first) unless asked for "asc".
+    const dir = query.dir === "asc" ? "asc" : "desc";
+    return { tab, sort, q, type, genre, dir };
   }
 
   // The genres and the tags a tab's cards carry, each most common first - the options of the grid's
@@ -263,17 +265,18 @@ function createMediaSectionRouter(cfg) {
 
   // The whole filtered, sorted list for one grid view; portions are sliced from it.
   // Returns { rows, genres }: rows filtered and sorted, genres from the whole tab (genresOf).
-  async function gridRows(channel, { tab, sort, q, type, genre }) {
+  async function gridRows(channel, { tab, sort, q, type, genre, dir }) {
     let rows = await mediaItemsRepo.listForGrid(channel.channelLogin, KIND, TABS[tab].statuses);
     // Section-specific facts computed per request (a game's hours on stream), before sorting: one of
     // them may be the sort key.
     if (cfg.decorateRows) rows = await cfg.decorateRows(channel, rows);
-    const spec = media.SORTS[sort];
+    const spec = media.orderedSort(sort, dir);
     const filtered = rows
       .filter((r) => matchesQuery(r, q))
       .filter((r) => !type || r.mediaType === type)
       .filter((r) => !genre || labelsOf(r).includes(genre))
       .map(media.withSortKeys)
+      .map(media.placeMissing(spec))
       .sort(cursorPaging.compareBySpec(spec));
     return { rows: filtered, genres: genresOf(rows) };
   }
@@ -321,28 +324,29 @@ function createMediaSectionRouter(cfg) {
     return suggestions.canSuggest({ loggedIn: true, permission: req.permission, chatted }) ? { allowed: true } : { allowed: false, reason: "chat" };
   }
 
-  function gridUrl(channel, { tab, sort, q, type, genre }, extra = {}) {
+  function gridUrl(channel, { tab, sort, q, type, genre, dir }, extra = {}) {
     const params = new URLSearchParams();
     if (tab !== "done") params.set("tab", tab);
     if (sort !== TABS[tab].defaultSort) params.set("sort", sort);
     if (q) params.set("q", q);
     if (type) params.set("type", type);
     if (genre) params.set("genre", genre);
+    if (dir === "asc") params.set("dir", "asc");
     for (const [k, v] of Object.entries(extra)) params.set(k, v);
     const qs = params.toString();
     return `/${channel.channelLogin}/${SECTION}${qs ? `?${qs}` : ""}`;
   }
 
   const listSrcOf = (channel, view) =>
-    `/${channel.channelLogin}/${SECTION}/list.json?${new URLSearchParams({ tab: view.tab, sort: view.sort, q: view.q, type: view.type, genre: view.genre })}`;
+    `/${channel.channelLogin}/${SECTION}/list.json?${new URLSearchParams({ tab: view.tab, sort: view.sort, q: view.q, type: view.type, genre: view.genre, dir: view.dir })}`;
   const restoreKeyOf = (channel, view) =>
-    `${SECTION}:${channel.channelLogin}:${view.tab}:${view.sort}:${view.q}:${view.type}:${view.genre}`;
+    `${SECTION}:${channel.channelLogin}:${view.tab}:${view.sort}:${view.dir}:${view.q}:${view.type}:${view.genre}`;
 
   router.get(`/:channel/${SECTION}`, page, async (req, res, next) => {
     try {
       const { channel, permission } = req;
       const view = readGridQuery(req.query, permission);
-      const spec = media.SORTS[view.sort];
+      const spec = media.orderedSort(view.sort, view.dir);
       const parsed = cursorPaging.parseCursor(spec, req.query.cursor);
       if (parsed.error) return res.status(400).render("errors/400", { backHref: gridUrl(channel, view) });
 
@@ -367,7 +371,7 @@ function createMediaSectionRouter(cfg) {
         tabs: visibleTabs(permission).map((key) => ({
           key,
           count: TABS[key].statuses.reduce((n, st) => n + (counts[st] || 0), 0),
-          href: gridUrl(channel, { ...view, tab: key, sort: TABS[key].defaultSort }),
+          href: gridUrl(channel, { ...view, tab: key, sort: TABS[key].defaultSort, dir: "desc" }),
         })),
         genres: genres.genres,
         tags: genres.tags,
@@ -424,7 +428,7 @@ function createMediaSectionRouter(cfg) {
     try {
       const { channel } = req;
       const view = readGridQuery(req.query, req.permission);
-      const spec = media.SORTS[view.sort];
+      const spec = media.orderedSort(view.sort, view.dir);
       const { rows } = await gridRows(channel, view);
 
       let portion;
