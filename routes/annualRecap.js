@@ -144,10 +144,9 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
     const { channel } = req;
     const year = parseYear(req.params.year);
     if (!year) return res.status(404).render("errors/404");
-    const [doc, years, picks, hiddenMoments, momentsModerator] = await Promise.all([
+    const [doc, years, hiddenMoments, momentsModerator] = await Promise.all([
       recapRepo.getChannelRecap(channel.channelLogin, year),
       recapRepo.listYears(channel.channelLogin),
-      recapRepo.listPicks(channel.channelLogin, year),
       recapRepo.hiddenMomentsOf(channel.channelLogin, year),
       canModerateMoments(req),
     ]);
@@ -160,7 +159,6 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
       ...d.newWords.map((w) => w.by?.userId),
       ...Object.keys(d.firstChatters),
       ...d.commands.map((c) => c.topUserId),
-      ...picks.map((p) => p.userId),
     ];
     const [hidden, broadcaster, images] = await Promise.all([
       recapRepo.optedOutAmong(idsShown),
@@ -195,7 +193,6 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
           ...newWords.map((w) => w.by?.userId),
           ...["fastest", "mostActions", "longestGiven", "presence"].flatMap((k) => (mod[k] || []).map((m) => m.userId)),
           ...siteGames.flatMap((g) => g.top.map((u) => u.userId)),
-          ...picks.map((p) => p.userId),
         ].filter(Boolean))
         .catch(() => new Map()),
       getBoxArtUrls(cats.map((c) => c.name)).catch(() => new Map()),
@@ -235,7 +232,6 @@ router.get("/:channel/recap/:year", recapPage, async (req, res, next) => {
         pairs,
         newWords,
         commands: d.commands.slice(0, 8).map((c) => ({ ...c, topUserId: visible(c.topUserId) ? c.topUserId : null })),
-        picks: picks.filter((p) => visible(p.userId)),
         moments: (d.loud || []).filter((m) => !hiddenMoments.has(new Date(m.at).toISOString())).slice(0, MOMENTS_SHOWN),
         momentsModerator,
         // Twitch's clip player refuses to load unless told which site embeds it.

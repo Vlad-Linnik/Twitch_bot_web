@@ -56,17 +56,6 @@
                 <td class="px-3 py-2 text-neutral-300"><%= r.login %></td>
                 <td class="px-3 py-2 text-neutral-400 max-w-xs"><%= r.question %></td>
                 <td class="px-3 py-2 text-neutral-200 max-w-md">
-                  <%# The star: this answer goes into the channel's year recap (routes/adminAi.js's
-                      /pick). Only for answers chat actually saw. %>
-                  <% if (r.sent !== false && r.answer) { const isPicked = picked && picked.has(String(r._id)); %>
-                    <form method="post" action="/admin/ai/log/<%= r._id %>/pick" class="float-right ml-2" data-transition="instant">
-                      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                      <input type="hidden" name="channel" value="<%= selected %>" />
-                      <input type="hidden" name="picked" value="<%= isPicked ? '0' : '1' %>" />
-                      <button type="submit" title="<%= isPicked ? t('admin.ai.recapUnpick') : t('admin.ai.recapPick') %>"
-                              class="text-lg leading-none <%= isPicked ? 'text-amber-400' : 'text-neutral-600 hover:text-amber-300' %>"><%= isPicked ? '★' : '☆' %></button>
-                    </form>
-                  <% } %>
                   <%= r.answer %>
                   <% if (r.sent === false) { %>
                     <span class="ml-1 text-xs text-amber-500"><%= t('admin.ai.notSent') %></span>

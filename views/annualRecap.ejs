@@ -554,25 +554,6 @@
     </section>
     <% } %>
 
-    <%# ── The bot: its best answers, picked by hand in the admin panel's AI journal
-        (routes/adminAi.js's /pick). Drawn as the exchange chat saw: question left, answer right. %>
-    <% if (view.picks.length) { %>
-    <section>
-      <p class="recap-chapter"><span class="recap-chapter-n"><%= nextChapter() %></span><%= t('recap.chapters.bot') %></p>
-      <h2 class="<%= h2 %>"><%= t('recap.picks.heading') %><%- include('partials/recapHeadingEmote', { emote: headingEmotes.picks }) %></h2>
-      <p class="<%= sub %>"><%= t('recap.picks.sub') %></p>
-      <ul class="mt-6 grid gap-6">
-        <% view.picks.forEach(function (p) { %>
-          <li class="grid gap-2">
-            <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-400"><span class="min-w-0"><%- person({ userId: p.userId, name: p.login }) %></span><span>· <%= fmtDate(p.createdAt, { day: 'numeric', month: 'long' }) %></span></p>
-            <p class="recap-bubble max-w-[85%] text-sm text-neutral-200 break-words"><%- include('partials/recapChatText', { text: p.question, images: view.images }) %></p>
-            <p class="recap-bubble recap-bubble-bot max-w-[85%] justify-self-end text-sm sm:text-base text-white break-words"><%- include('partials/recapChatText', { text: p.answer, images: view.images }) %></p>
-          </li>
-        <% }) %>
-      </ul>
-    </section>
-    <% } %>
-
     <%# ── Ending: hand over to the personal recap ────────────────────────── %>
     <section class="recap-hero relative overflow-hidden rounded-3xl border border-white/10 px-5 py-10 sm:px-10 text-center">
       <p class="relative recap-eyebrow"><%= t('recap.me.lead') %></p>

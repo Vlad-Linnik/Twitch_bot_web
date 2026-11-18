@@ -18,8 +18,6 @@ const aiFilterRepo = require("../db/aiFilterRepo");
 const aiCacheRepo = require("../db/aiCacheRepo");
 const aiLogRepo = require("../db/aiLogRepo");
 const aiMemoryRepo = require("../db/aiMemoryRepo");
-const annualRecapRepo = require("../db/annualRecapRepo");
-const { currentYear } = require("../lib/annualRecap");
 const userStatsRepo = require("../db/userStatsRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -450,32 +448,14 @@ router.get("/admin/ai/log", requireAdmin, async (req, res, next) => {
       aiLogRepo.spendSince(startOfToday()),
       channelsRepo.listAll(),
     ]);
-    const picked = await annualRecapRepo.pickedAmong(rows.map((r) => r._id)).catch(() => new Set());
     res.render("adminAiLog", {
       tab: "ai",
       aiTab: "log",
       rows,
-      picked,
       today,
       channels,
       selected: req.query.channel || "",
     });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// The star in the journal: "this one goes into the channel's year recap". Picking is by hand on
-// purpose - "the best answer" is taste, and no field on the row predicts it.
-router.post("/admin/ai/log/:id/pick", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const row = await aiLogRepo.getById(req.params.id);
-    if (!row) return res.status(404).json({ ok: false, error: "not_found" });
-    const picked = req.body.picked === "1";
-    await annualRecapRepo.setPick(row, currentYear(row.createdAt), picked, req.user?.login || null);
-    if ((req.get("accept") || "").includes("application/json")) return res.json({ ok: true, picked });
-    const back = typeof req.body.channel === "string" && req.body.channel ? `?channel=${encodeURIComponent(req.body.channel)}` : "";
-    res.redirect(`/admin/ai/log${back}#log-${row._id}`);
   } catch (err) {
     next(err);
   }

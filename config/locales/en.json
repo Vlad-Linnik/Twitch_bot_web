@@ -3097,9 +3097,7 @@
         "unknown": "refused: no such login on this channel",
         "self": "refused: asked about themselves",
         "protected": "refused: this person cannot be muted"
-      },
-      "recapPick": "Into the channel's year recap",
-      "recapUnpick": "Remove from the year recap"
+      }
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",
@@ -4082,7 +4080,6 @@
       "rituals": "Rituals",
       "games": "Games",
       "order": "Order",
-      "bot": "The bot",
       "moments": "Moments",
       "clips": "Clips",
       "siteGames": "Site games"
@@ -4234,10 +4231,6 @@
         "hide": "Hide me from public recaps",
         "show": "Show me again"
       }
-    },
-    "picks": {
-      "heading": "The bot's best answers",
-      "sub": "Picked by hand."
     },
     "moments": {
       "heading": "Moments of the year",
