@@ -22,7 +22,7 @@
   </p>
 
   <form method="get" action="/admin/ai/log" class="mb-6">
-    <select name="channel" onchange="this.form.submit()"
+    <select name="channel" autocomplete="off" onchange="this.form.submit()"
             class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
       <option value=""><%= t('admin.ai.allChannels') %></option>
       <% channels.forEach(function (c) { %>

@@ -17,7 +17,7 @@
 
   <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
     <form method="get" action="/admin/news" class="flex items-center gap-2">
-      <select name="channel" onchange="this.form.submit()"
+      <select name="channel" autocomplete="off" onchange="this.form.submit()"
               class="rounded-md bg-neutral-950 border border-neutral-700 text-sm text-neutral-200 px-2 py-1.5 focus:outline-none focus:border-purple-600">
         <option value=""<%= channelFilter ? '' : ' selected' %>><%= t('admin.news.allChannels') %></option>
         <% channels.forEach(function(c) { %>

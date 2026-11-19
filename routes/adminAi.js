@@ -31,13 +31,21 @@ const LOG_PAGE_SIZE = 100;
 // Какой канал открывать, когда в адресе он не указан. НЕ первый по алфавиту: каналы
 // сортируются по логину, и первым легко оказывается тот, на котором ИИ вообще не включён -
 // страница тогда честно сообщает «бот ничего не запомнил», но про не тот канал, и выглядит это
-// как потерянные данные. Берём первый канал с включёнными ИИ-ответами: именно его данные тут и
-// курируют. Если таких нет, поведение прежнее.
+// как потерянные данные.
+//
+// Первым берётся канал, у которого в памяти ЕСТЬ факты. Одного «ИИ включён» мало: когда ИИ
+// включили на новом канале, раньше по алфавиту, страница по умолчанию открыла его пустую память,
+// а все факты лежали у соседнего - и это снова выглядело как пропажа. Дальше - первый с
+// включённым ИИ, и только потом первый вообще.
 async function defaultChannel(channels) {
   if (!channels.length) return null;
-  const configs = await Promise.all(channels.map((c) => channelConfigRepo.getConfig(c.channelLogin)));
+  const [configs, counts] = await Promise.all([
+    Promise.all(channels.map((c) => channelConfigRepo.getConfig(c.channelLogin))),
+    Promise.all(channels.map((c) => aiMemoryRepo.countForChannel(c.channelLogin))),
+  ]);
+  const withFacts = channels.find((c, i) => counts[i] > 0);
   const withAi = channels.find((c, i) => configs[i].ai && configs[i].ai.enabled);
-  return (withAi || channels[0]).channelLogin;
+  return (withFacts || withAi || channels[0]).channelLogin;
 }
 
 function startOfToday() {
