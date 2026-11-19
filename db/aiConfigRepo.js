@@ -20,7 +20,7 @@ const DEFAULT_AI_CONFIG = {
   // Master switch. Starts off: the feature spends money, so it has to be turned on deliberately
   // once the persona and the limits have actually been looked at.
   enabled: false,
-  model: "claude-haiku-4-5",
+  model: "gemini-3.5-flash-lite",
   // Requests per day across ALL channels, not per channel. This is the real brake on spend - the
   // filter matches on exact text, so for the first weeks it lets nearly everything through.
   dailyRequestLimit: 200,
