@@ -28,7 +28,11 @@ const DEFAULT_AI_CONFIG = {
   // commands.directmsg.cooldownMs: that one means "don't repeat the same brush-off", this one
   // means "don't burn the budget and don't flood chat" - tuning one must not move the other.
   cooldownMs: 15000,
+  // Срок тайм-аута по ступеням тяжести, которую называет модель. timeoutSeconds - средняя
+  // ступень: под этим именем срок жил, пока ступеней не было.
+  timeoutSecondsLight: 60,
   timeoutSeconds: 600,
+  timeoutSecondsSevere: 3600,
   // "observe" writes what it WOULD have done to the log and times nobody out; "enforce" acts.
   // Starts in observe so the decision to enforce can be made from real cases - the same staging
   // the solo-game anti-cheat used.

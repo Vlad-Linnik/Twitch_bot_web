@@ -2884,8 +2884,6 @@
     "ai": {
       "tabSettings": "Settings",
       "tabChannels": "Channels",
-      "tabFilter": "Filter",
-      "tabCache": "Cache",
       "tabLog": "Journal",
       "tabVerdicts": "Punishments",
       "tabMemory": "Channel memory",
@@ -2938,7 +2936,6 @@
       "todayHeading": "Today",
       "todayRequests": "Requests",
       "todayCost": "Spent",
-      "filterSize": "Filter entries",
       "limitReached": "Daily limit reached. Until midnight the bot falls back to its scripted replies.",
       "masterSwitch": "AI replies enabled",
       "masterSwitchHint": "The master switch. Off stops replies on every channel at once. The bot only answers while the channel is live: off air a mention falls through to the scripted replies, exactly as it does with the feature switched off.",
@@ -2962,14 +2959,25 @@
       "punishObserve": "Observe - record only",
       "punishEnforce": "Enforce - actually time out",
       "tallySoFar": "Agree / disagree / unreviewed:",
-      "timeoutSeconds": "Timeout length, sec",
+      "timeoutTiers": "Timeout length by severity, sec",
+      "timeoutTiersHint": "The model names how severe the offence is; the length comes from here. Light is never longer than medium and severe never shorter: the order is evened out on save. The ceiling is 14 days.",
+      "timeoutLight": "Light",
+      "timeoutMedium": "Medium",
+      "timeoutSevere": "Severe",
+      "severity": {
+        "light": "light",
+        "medium": "medium",
+        "severe": "severe"
+      },
       "persona": "Persona",
       "systemPrompt": "Rules (system prompt)",
-      "systemPromptHint": "The whole rule text sent to the model before every call. Read-only: the rules live in the bot's code and are changed there. The persona is appended to them as a separate paragraph.",
+      "systemPromptHint": "The whole rule text sent to the model before every call. The persona is appended to them as a separate paragraph.",
       "systemPromptWarning": "This is policy: what is worth remembering, whom to believe, when to punish, how to talk. The field mechanics (remember, rememberAbout, rememberKeys, forget and the shared numbering of the memory lists) are not part of it — the bot appends them to any text. The hard bans (links, \"@\", a leading \"!\", length) are enforced by the sanitizer after the model, not by this text.",
       "systemPromptBuiltinInUse": "The bot's built-in rules are in effect.",
-      "systemPromptCustom": "Rules stored in the database are in effect instead of the built-in ones - policy updates from the code do not reach the bot, including blocks added later. The field mechanics arrive from the code either way. This text can no longer be changed from the site: the rules are read-only.",
+      "systemPromptCustom": "Custom rules saved here are in effect instead of the built-in ones: policy updates in the bot code do not reach it, including blocks added later. The field mechanics arrive from the code either way.",
       "systemPromptBuiltinUnknown": "The built-in text is not known yet - the bot writes it on its next start.",
+      "systemPromptReset": "Return to the built-in rules from the bot code",
+      "systemPromptEditHint": "An edit reaches the bot within a few seconds, no restart needed. Text saved unchanged stays the built-in rules; an empty field also returns to them.",
       "personaHint": "The part of the prompt shared by every channel: who the bot is and how it talks. The rules and prohibitions live in code and this field does not override them.",
       "channelsHint": "AI is enabled per channel. A new channel starts switched off.",
       "colChannel": "Channel",
@@ -2992,7 +3000,6 @@
       "directmsgCooldown": "Brush-off reply cooldown, sec",
       "insultCumulative": "Banned-word stacking window, sec",
       "insultCumulativeHint": "A repeat offence inside this window lengthens the timeout.",
-      "filterHint": "Messages not worth spending a request on. Matching is exact, so \"hi\" and \"hi!\" are two different entries. Entries are per channel: the model writes them itself, and a shared table would serve an answer it invented in one chat to every other one. Text and answer can be corrected in place.",
       "colText": "Message",
       "colAnswer": "Reply",
       "colHits": "Hits",
@@ -3002,21 +3009,11 @@
       "pending": "needs review",
       "approve": "Approve",
       "unapprove": "Disable",
-      "filterPending": "Canned replies awaiting review: %s. Until approved, the bot does not serve them.",
       "logSelfTimeout": "timeout on request",
-      "filterEditError": {
-        "duplicate": "An entry with that text already exists - the edit was cancelled rather than silently dropping one of the two answers.",
-        "empty": "Neither the text nor the answer can be empty: the bot serves a filter entry without asking the model, so a blank one counts a hit and then falls through to the model anyway. Use Delete to remove the entry.",
-        "failed": "The edit could not be saved - there is no longer an entry with that text."
-      },
-      "filterEmpty": "The filter is empty so far.",
       "source": {
         "ai": "model",
         "admin": "by hand"
       },
-      "cacheHint": "Ready answers the model marked as durable. The cache is per channel: the same question has different right answers in different chats.",
-      "clearCache": "Clear this channel cache",
-      "cacheEmpty": "This channel cache is empty.",
       "logHint": "Every mention handled. Today:",
       "allChannels": "All channels",
       "logEmpty": "No entries yet.",
@@ -3039,7 +3036,6 @@
         "budget": "daily limit reached",
         "error": "error"
       },
-      "cacheFixed": "fixed by the bot",
       "cacheFix": {
         "delete": "cached answer was stale — deleted",
         "replace": "cached answer was stale — rewritten"

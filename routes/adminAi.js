@@ -1,6 +1,5 @@
 // Tier-0 admin pages for the AI mention replies: the global settings, the per-channel fine
-// settings that moved off the channel owner's own page, and the six tables the feature keeps -
-// filter, answer cache, memory, call journal.
+// settings that moved off the channel owner's own page, the channel memory and the call journal.
 //
 // WHY THIS IS ADMIN-ONLY. The channel owner keeps what is theirs: the banned-word list, the reply
 // phrases, and the on/off switches for both. Everything here either spends the project's API
@@ -14,8 +13,6 @@ const { settingsWriteLimiter } = require("../middleware/rateLimiters");
 const channelsRepo = require("../db/channelsRepo");
 const channelConfigRepo = require("../db/channelConfigRepo");
 const aiConfigRepo = require("../db/aiConfigRepo");
-const aiFilterRepo = require("../db/aiFilterRepo");
-const aiCacheRepo = require("../db/aiCacheRepo");
 const aiLogRepo = require("../db/aiLogRepo");
 const aiMemoryRepo = require("../db/aiMemoryRepo");
 const userStatsRepo = require("../db/userStatsRepo");
@@ -53,10 +50,9 @@ function startOfToday() {
 
 router.get("/admin/ai", requireAdmin, async (req, res, next) => {
   try {
-    const [config, today, filterCount, tally] = await Promise.all([
+    const [config, today, tally] = await Promise.all([
       aiConfigRepo.getConfig(),
       aiLogRepo.spendSince(startOfToday()),
-      aiFilterRepo.count(),
       aiLogRepo.reviewTally(),
     ]);
     res.render("adminAi", {
@@ -64,7 +60,6 @@ router.get("/admin/ai", requireAdmin, async (req, res, next) => {
       aiTab: "settings",
       config,
       today,
-      filterCount,
       tally,
       validation: aiValidation,
       // Построчная сверка действующих правил со встроенными. Сравнивается ровно тот текст, что
@@ -105,6 +100,10 @@ router.post("/admin/ai", settingsWriteLimiter, requireAdmin, verifyToken, async 
         model: parsed.model,
         dailyRequestLimit: parsed.dailyRequestLimit,
         punishMode: parsed.punishMode,
+        // Сам текст правил в журнал не кладётся (до двадцати тысяч знаков на каждое сохранение),
+        // только факт, что он поменялся, и чьи правила в силе после.
+        systemPromptChanged: parsed.systemPrompt !== String(existing.systemPrompt || ""),
+        customSystemPrompt: Boolean(parsed.systemPrompt),
       },
     });
     res.redirect("/admin/ai?saved=1");
@@ -200,149 +199,9 @@ router.post(
   }
 );
 
-// --- filter -------------------------------------------------------------------------------------
-
-router.get("/admin/ai/filter", requireAdmin, async (req, res, next) => {
-  try {
-    // Тот же выбор канала по умолчанию, что у кэша и памяти: первый с включёнными ИИ-ответами,
-    // а не первый по алфавиту.
-    const channels = await channelsRepo.listAll();
-    const selected = req.query.channel || (await defaultChannel(channels));
-    const entries = selected ? await aiFilterRepo.listForChannel(selected) : [];
-    // Неразобранные - наверх: строка, которую бот предложил, но никто не смотрел, в чат не уходит,
-    // и единственное, что с ней можно сделать, - это посмотреть.
-    entries.sort((a, b) => Number(Boolean(a.approved)) - Number(Boolean(b.approved)));
-    res.render("adminAiFilter", {
-      tab: "ai",
-      aiTab: "filter",
-      channels,
-      selected,
-      entries,
-      pending: entries.filter((e) => e.approved !== true).length,
-      editError: String(req.query.error || ""),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/filter", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const key = await aiFilterRepo.upsert({ channelLogin: channel, text: req.body.text, answer: req.body.answer, source: "admin" });
-    if (key) {
-      await adminActionLogsRepo.logAction({ admin: req.user, action: "ai.filter.upsert", target: channel + "/" + key });
-    }
-    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Правка строки на месте. Раньше страница умела только добавлять и удалять, а исправить ответ,
-// который написала модель, можно было лишь набрав его текст-ключ заново в форме добавления - то
-// есть вслепую и с риском завести вторую строку вместо правки первой.
-router.post("/admin/ai/filter/edit", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const result = await aiFilterRepo.updateEntry({
-      channelLogin: channel,
-      text: req.body.text,
-      newText: req.body.newText,
-      answer: req.body.answer,
-    });
-    if (result.ok) {
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: "ai.filter.edit",
-        target: channel + "/" + String(req.body.text || ""),
-        details: { after: result.key, answer: String(req.body.answer || "").slice(0, 500) },
-      });
-    }
-    const failed = result.ok ? "" : "&error=" + encodeURIComponent(result.reason || "failed");
-    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}${failed}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Согласование строки. Бот отдаёт из фильтра только согласованные - заготовка отвечает вечно, всем
-// и без модели, а предлагает её один разговор с одним человеком. Кнопка работает в обе стороны:
-// снять согласование - это выключить строку, не потеряв ни текста, ни счётчика попаданий.
-router.post("/admin/ai/filter/approve", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    const approved = req.body.approved === "on" || req.body.approved === "1";
-    const ok = await aiFilterRepo.setApproved(channel, req.body.text, approved);
-    if (ok) {
-      await adminActionLogsRepo.logAction({
-        admin: req.user,
-        action: approved ? "ai.filter.approve" : "ai.filter.unapprove",
-        target: channel + "/" + String(req.body.text || ""),
-      });
-    }
-    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/filter/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const channel = String(req.body.channel || "");
-    await aiFilterRepo.remove(channel, req.body.text);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.filter.delete",
-      target: channel + "/" + String(req.body.text || ""),
-    });
-    res.redirect(`/admin/ai/filter?channel=${encodeURIComponent(channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// --- answer cache -------------------------------------------------------------------------------
-
-router.get("/admin/ai/cache", requireAdmin, async (req, res, next) => {
-  try {
-    const channels = await channelsRepo.listAll();
-    const selected = req.query.channel || (await defaultChannel(channels));
-    const entries = selected ? await aiCacheRepo.listForChannel(selected) : [];
-    res.render("adminAiCache", { tab: "ai", aiTab: "cache", channels, selected, entries });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/cache/delete", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    await aiCacheRepo.remove(req.body.channel, req.body.text);
-    res.redirect(`/admin/ai/cache?channel=${encodeURIComponent(req.body.channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/admin/ai/cache/clear", settingsWriteLimiter, requireAdmin, verifyToken, async (req, res, next) => {
-  try {
-    const removed = await aiCacheRepo.clearChannel(req.body.channel);
-    await adminActionLogsRepo.logAction({
-      admin: req.user,
-      action: "ai.cache.clear",
-      target: String(req.body.channel || ""),
-      details: { removed },
-    });
-    res.redirect(`/admin/ai/cache?channel=${encodeURIComponent(req.body.channel)}`);
-  } catch (err) {
-    next(err);
-  }
-});
-
 // --- channel memory -----------------------------------------------------------------------------
 
-// The facts the bot wrote for itself, curated the same way the answer cache is: one channel at a
-// time, one row at a time. Adding by hand is here too - the memory is one list whichever side
+// The facts the bot wrote for itself, curated one channel at a time, one row at a time. Adding by hand is here too - the memory is one list whichever side
 // filled a row, and a fact typed here is simply a row the bot's rotation will never evict.
 router.get("/admin/ai/memory", requireAdmin, async (req, res, next) => {
   try {

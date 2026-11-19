@@ -23,7 +23,7 @@
   <%# --- today's spend ------------------------------------------------- %>
   <section class="mb-12">
     <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.ai.todayHeading') %></h2>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
         <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.todayRequests') %></div>
         <div class="text-xl font-semibold tabular-nums <%= today.requests >= config.dailyRequestLimit ? 'text-amber-400' : 'text-neutral-100' %>">
@@ -33,10 +33,6 @@
       <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
         <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.todayCost') %></div>
         <div class="text-xl font-semibold tabular-nums text-neutral-100">$<%= (today.costUsd || 0).toFixed(3) %></div>
-      </div>
-      <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3">
-        <div class="text-xs text-neutral-500 mb-1"><%= t('admin.ai.filterSize') %></div>
-        <div class="text-xl font-semibold tabular-nums text-neutral-100"><%= filterCount %></div>
       </div>
     </div>
     <% if (today.requests >= config.dailyRequestLimit) { %>
@@ -149,11 +145,21 @@
             <a href="/admin/ai/memory" class="text-purple-400 hover:text-purple-300"><%= t('admin.ai.memoryLink') %></a>
           </p>
         </div>
+        <%# Срок по ступеням тяжести, которую называет модель. timeoutSeconds - средняя ступень: под
+            этим именем срок жил, пока ступеней не было. %>
         <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.timeoutSeconds') %></label>
-          <input type="number" name="timeoutSeconds" value="<%= config.timeoutSeconds %>"
-                 min="<%= validation.BOUNDS.timeoutSeconds.min %>" max="<%= validation.BOUNDS.timeoutSeconds.max %>"
-                 class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.timeoutTiers') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.timeoutTiersHint') %></p>
+          <div class="flex flex-wrap gap-4">
+            <% [['timeoutSecondsLight', 'timeoutLight'], ['timeoutSeconds', 'timeoutMedium'], ['timeoutSecondsSevere', 'timeoutSevere']].forEach(function (f) { %>
+              <label class="block">
+                <span class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.' + f[1]) %></span>
+                <input type="number" name="<%= f[0] %>" value="<%= config[f[0]] %>"
+                       min="<%= validation.BOUNDS.timeoutSeconds.min %>" max="<%= validation.BOUNDS.timeoutSeconds.max %>"
+                       class="w-32 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-500" />
+              </label>
+            <% }); %>
+          </div>
         </div>
 
       </div>
@@ -171,32 +177,33 @@
     <section class="mb-12">
       <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.ai.systemPrompt') %></h2>
       <p class="text-neutral-500 text-sm mb-2"><%= t('admin.ai.systemPromptHint') %></p>
-      <%# ТОЛЬКО ЧТЕНИЕ. Правила живут в коде бота, и меняются они там; сюда их публикует сам бот
-          при старте (aiStore.publishBuiltinPrompt), поэтому показанный текст - это тот же текст,
-          который уходит в модель, а не копия из этого репозитория. Поля формы здесь нет вовсе:
-          страница осталась ровно тем, ради чего её открывают, - посмотреть, что именно уходит в
-          модель. Механика полей (remember, forget и нумерация памяти) в этот текст не входит и
-          здесь не показана: бот дописывает её сам, и в панели её не правят тем более. %>
+      <%# В поле лежат действующие правила: свои, а если своих нет - встроенные, которые бот сам
+          публикует при старте (aiStore.publishBuiltinPrompt). Текст, сохранённый без изменений,
+          записывается пустым (parseSystemPrompt), то есть сохранение лимита не замораживает копию
+          встроенных правил. Механика полей (remember, forget и нумерация памяти) сюда не входит:
+          бот дописывает её сам к любому тексту. %>
       <p class="text-neutral-500 text-xs mb-3"><%= t('admin.ai.systemPromptWarning') %></p>
-      <%# Чьи правила в силе. Своих правил панель больше не заводит, но сохранённые прежней формой
-          не стёрты и продолжают работать у бота - и тогда эта подпись единственное место, где это
-          видно. %>
+      <%# Чьи правила в силе. Свои правила отрезают бота от правок политики в коде, и эта подпись
+          - место, где это видно. %>
       <p class="text-xs mb-2 <%= config.systemPrompt ? 'text-purple-400' : 'text-neutral-600' %>">
         <%= config.systemPrompt ? t('admin.ai.systemPromptCustom') : t('admin.ai.systemPromptBuiltinInUse') %>
       </p>
-      <% const effectivePrompt = config.systemPrompt || config.builtinSystemPrompt; %>
-      <% if (effectivePrompt) { %>
-        <pre class="w-full max-h-[32rem] overflow-y-auto rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-400 font-mono leading-relaxed whitespace-pre-wrap"><%= effectivePrompt %></pre>
-      <% } else { %>
-        <%# Ни своих правил, ни опубликованного ботом текста: показывать нечего, и это единственный
-            случай, когда страница не может ответить, что уходит в модель. %>
-        <p class="text-xs text-neutral-600"><%= t('admin.ai.systemPromptBuiltinUnknown') %></p>
+      <% if (!config.systemPrompt && !config.builtinSystemPrompt) { %>
+        <p class="text-xs text-neutral-600 mb-2"><%= t('admin.ai.systemPromptBuiltinUnknown') %></p>
+      <% } %>
+      <textarea name="systemPrompt" rows="20" maxlength="<%= validation.MAX_SYSTEM_PROMPT_LEN %>" spellcheck="false"
+                class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-purple-500"><%= config.systemPrompt || config.builtinSystemPrompt %></textarea>
+      <p class="text-neutral-600 text-xs mt-1"><%= t('admin.ai.systemPromptEditHint') %></p>
+      <% if (config.systemPrompt) { %>
+        <label class="mt-3 flex items-center gap-2 text-sm text-neutral-300">
+          <input type="checkbox" name="systemPromptReset" class="rounded border-neutral-700 bg-neutral-900 text-purple-600 focus:ring-purple-500" />
+          <%= t('admin.ai.systemPromptReset') %>
+        </label>
       <% } %>
 
       <%# Сверка со встроенными правилами. Свёрнута по умолчанию: страницу открывают чаще ради
-          лимита, чем ради правил, а с правилами только для чтения отличия и вовсе появляются лишь
-          у канала, чей текст остался в базе от прежней формы. Ради этого случая блок и остаётся:
-          иначе разницу между работающими правилами и кодом не увидеть нигде. %>
+          лимита, чем ради правил. Показывает, чем сохранённые правила отличаются от кода - в том
+          числе блоки, появившиеся в коде уже после того, как свои правила сохранили. %>
       <% if (promptDiff) { %>
         <details class="mt-4 rounded-lg border border-neutral-800 bg-neutral-900/40">
           <summary class="cursor-pointer select-none px-4 py-3 text-sm text-neutral-300">
