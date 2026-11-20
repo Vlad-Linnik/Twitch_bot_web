@@ -2948,7 +2948,7 @@
       "dailyLimit": "Requests per day",
       "dailyLimitHint": "Shared across all channels. Cache and filter hits do not count - they never reach the model.",
       "cooldown": "Per-channel cooldown, sec",
-      "cooldownHint": "Minimum gap between two AI replies in one chat.",
+      "cooldownHint": "Minimum gap between AI requests in one chat. It holds while a request is in flight and after a model failure; once the model has answered, the next question can be asked right away.",
       "requestTimeout": "Request timeout, sec",
       "requestTimeoutHint": "How long to wait for the model (up to 30 s). A reply is still sent if it arrives within this time plus 2 seconds, and is never treated as late before 10 seconds. Slow models such as gemini-3.8-flash need 20–30 s. With a fallback model there can be two attempts, and the reply window covers both.",
       "memoryHeading": "Memory",
