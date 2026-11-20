@@ -54,6 +54,11 @@ const COLD_WAIT_MS = 700;
 const RETRY_AFTER_FAILURE_MS = 60_000;
 
 const http = axios.create({ timeout: FETCH_TIMEOUT_MS });
+// FFZ builds a room's answer on demand and caches it: measured 2026-11-20, the first request for
+// #mistercop took 21.8s and the next ones 0.19s. Under the process-wide 15s timeout the cold
+// request was aborted every time, so the picture fetch failed on every attempt. Nobody waits on this call
+// (the result is cached), so it gets room for the cold build.
+const ROOM_TIMEOUT_MS = 45_000;
 
 const globalCache = {};
 // One memo per source; the ones identical for every channel keep theirs on `.value` (see
@@ -217,7 +222,7 @@ async function fetchFfzGlobalImages() {
 
 async function fetchFfzChannelImages(broadcasterId) {
   try {
-    const { data } = await http.get(`${FFZ_API}/room/id/${broadcasterId}`);
+    const { data } = await http.get(`${FFZ_API}/room/id/${broadcasterId}`, { timeout: ROOM_TIMEOUT_MS });
     return ffzImagesFromSets(data, false);
   } catch (err) {
     if (err.response?.status === 404) return new Map();

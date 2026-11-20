@@ -2942,12 +2942,15 @@
       "budgetHeading": "Model and budget",
       "model": "Model",
       "modelHint": "Every model in the list is a Gemini model with Google’s free tier; the bot needs GEMINI_API_KEY in its .env, and without it falls back to its scripted replies and says nothing about it. The free tier is bounded by request count rather than money (limits live in AI Studio), and Google trains on what is sent: viewer messages and the memory about them. Flash-Lite is the fastest and lightest; 3.6 and 3.8 Flash are smarter but slower.",
+      "fallbackModel": "Fallback model",
+      "fallbackModelHint": "If the main model does not answer (timeout, 503/429 overload, network drop), the question is retried on the fallback right away and the answer still goes to chat. If the main model fails twice within 10 minutes, the fallback is asked first for the next 10 minutes. The same model as the main one means a plain retry. Configuration errors (wrong model or key) are not retried.",
+      "fallbackModelNone": "No fallback",
       "dailyLimit": "Requests per day",
       "dailyLimitHint": "Shared across all channels. Cache and filter hits do not count - they never reach the model.",
       "cooldown": "Per-channel cooldown, sec",
       "cooldownHint": "Minimum gap between two AI replies in one chat.",
       "requestTimeout": "Request timeout, sec",
-      "requestTimeoutHint": "How long to wait for the model (up to 30 s). A reply is still sent if it arrives within this time plus 2 seconds, and is never treated as late before 10 seconds. Slow models such as gemini-3.8-flash need 20–30 s.",
+      "requestTimeoutHint": "How long to wait for the model (up to 30 s). A reply is still sent if it arrives within this time plus 2 seconds, and is never treated as late before 10 seconds. Slow models such as gemini-3.8-flash need 20–30 s. With a fallback model there can be two attempts, and the reply window covers both.",
       "memoryHeading": "Memory",
       "memoryPairs": "Question/answer pairs in context",
       "memoryPairsHint": "How many past exchanges with the same viewer the model sees.",
@@ -3093,7 +3096,8 @@
         "unknown": "refused: no such login on this channel",
         "self": "refused: asked about themselves",
         "protected": "refused: this person cannot be muted"
-      }
+      },
+      "logFallback": "answered by fallback"
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",

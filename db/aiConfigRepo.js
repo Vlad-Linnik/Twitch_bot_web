@@ -40,6 +40,10 @@ const DEFAULT_AI_CONFIG = {
   // Hard ceiling on one call. A chat answer that arrives late is worse than none, so the budget
   // is small and there are no SDK retries behind it.
   requestTimeoutMs: 8000,
+  // Модель для запасного запроса и для переключения, когда основная падает раз за разом
+  // (TwitchBot/games/aiFallback.js). flash-lite - самая быстрая из бесплатных; совпав с основной, она даёт
+  // просто повтор того же запроса. Пусто - запасной нет, сбой сразу уходит скриптовым фразам.
+  fallbackModel: "gemini-3.5-flash-lite",
   memoryPairs: 5,
   memoryTtlDays: 30,
   // Whether the bot may add to the memory on its own. Off leaves the memory in place and still

@@ -72,6 +72,17 @@
         </div>
 
         <div class="px-4 py-3">
+          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.fallbackModel') %></label>
+          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.fallbackModelHint') %></p>
+          <select name="fallbackModel" class="w-full sm:w-72 rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+            <option value="<%= validation.FALLBACK_NONE %>" <%= !config.fallbackModel ? 'selected' : '' %>><%= t('admin.ai.fallbackModelNone') %></option>
+            <% validation.MODELS.forEach(function (m) { %>
+              <option value="<%= m %>" <%= config.fallbackModel === m ? 'selected' : '' %>><%= m %></option>
+            <% }); %>
+          </select>
+        </div>
+
+        <div class="px-4 py-3">
           <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.dailyLimit') %></label>
           <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.dailyLimitHint') %></p>
           <input type="number" name="dailyRequestLimit" value="<%= config.dailyRequestLimit %>"
