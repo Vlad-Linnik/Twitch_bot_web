@@ -142,7 +142,8 @@
     "channelSelectApply": "Show",
     "viewingDefaults": "Showing standard, unmodified signatures.",
     "viewingChannelPrefix": "Showing this channel's actual setup for",
-    "disabledBadge": "disabled on this channel",
+    "disabledBadge": "disabled",
+    "enabledBadge": "enabled",
     "section": {
       "everyone": "For everyone",
       "moderators": "For moderators"
@@ -163,7 +164,8 @@
       "chatStats": "Chat stats",
       "moderation": "Moderation",
       "miniGames": "Mini-games",
-      "channelCustom": "Custom commands added on this channel"
+      "channelCustom": "Custom commands added on this channel",
+      "channelCustomUngrouped": "Other channel commands"
     },
     "desc": {
       "addvar": "Create a variable starting at 0; add mod to restrict updates to mods.",

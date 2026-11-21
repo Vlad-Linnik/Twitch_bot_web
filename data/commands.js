@@ -19,17 +19,6 @@
 // !muteaccept).
 module.exports = [
   {
-    categoryKey: "commands.category.variables",
-    commands: [
-      { signature: "!addvar #name [mod]", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addvar", useCaseKey: "commands.useCase.addvar", configKey: "addvar" },
-      { signature: "!delvar #name", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.delvar", useCaseKey: "commands.useCase.delvar", configKey: "delvar" },
-      { signature: "!vars", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.vars", useCaseKey: "commands.useCase.vars", configKey: "vars" },
-      { signature: "#name / #name + N / #name - N", accessKey: "commands.access.allExceptionListed", cooldown: "10s", descriptionKey: "commands.desc.varUpdate", useCaseKey: "commands.useCase.varUpdate", configKey: "varUpdate" },
-      { signature: "!addexception username", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addexception", useCaseKey: "commands.useCase.addexception", configKey: "exception", signatureField: "signature" },
-      { signature: "!remexception username", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.remexception", useCaseKey: "commands.useCase.remexception", configKey: "exception", signatureField: "remSignature" },
-    ],
-  },
-  {
     categoryKey: "commands.category.chatStats",
     commands: [
       { signature: "!topchatters [day|week|month|all]", accessKey: "commands.access.all", cooldown: "15s", descriptionKey: "commands.desc.topchatters", useCaseKey: "commands.useCase.topchatters", configKey: "topchatters" },
@@ -59,6 +48,18 @@ module.exports = [
       { signature: "!muteduel [@user] [seconds]", accessKey: "commands.access.all", cooldown: "50s", descriptionKey: "commands.desc.muteduel", useCaseKey: "commands.useCase.muteduel", configKey: "muteduel", signatureField: "signature" },
       { signature: "!muteaccept", accessKey: "commands.access.all", cooldown: null, descriptionKey: "commands.desc.muteaccept", useCaseKey: "commands.useCase.muteaccept", configKey: "muteduel", signatureField: "acceptSignature", noCooldownOverride: true },
       { signature: "!совет", accessKey: "commands.access.all", cooldown: null, descriptionKey: "commands.desc.sovet", useCaseKey: "commands.useCase.sovet" },
+    ],
+  },
+  // Last on purpose: its one all-access row ends the "everyone" section, right before "moderators".
+  {
+    categoryKey: "commands.category.variables",
+    commands: [
+      { signature: "!addvar #name [mod]", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addvar", useCaseKey: "commands.useCase.addvar", configKey: "addvar" },
+      { signature: "!delvar #name", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.delvar", useCaseKey: "commands.useCase.delvar", configKey: "delvar" },
+      { signature: "!vars", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.vars", useCaseKey: "commands.useCase.vars", configKey: "vars" },
+      { signature: "#name / #name + N / #name - N", accessKey: "commands.access.allExceptionListed", cooldown: "10s", descriptionKey: "commands.desc.varUpdate", useCaseKey: "commands.useCase.varUpdate", configKey: "varUpdate" },
+      { signature: "!addexception username", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.addexception", useCaseKey: "commands.useCase.addexception", configKey: "exception", signatureField: "signature" },
+      { signature: "!remexception username", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.remexception", useCaseKey: "commands.useCase.remexception", configKey: "exception", signatureField: "remSignature" },
     ],
   },
 ];

@@ -68,7 +68,7 @@
                        data-commands-nav-link
                        data-target="<%= group.anchorId %>"
                        class="block pl-3 -ml-px border-l-2 border-transparent text-neutral-500 hover:text-neutral-200 transition-colors">
-                      <%= t(group.categoryKey) %>
+                      <%= group.title || t(group.categoryKey) %>
                     </a>
                   </li>
                 <% }) %>
@@ -95,7 +95,7 @@
 
           <% section.groups.forEach(function(group) { %>
             <section class="mb-10 scroll-mt-20" id="<%= group.anchorId %>" data-command-group>
-              <h3 class="text-lg font-semibold mb-3 <%= isModSection ? 'text-amber-300' : 'text-neutral-100' %>"><%= t(group.categoryKey) %></h3>
+              <h3 class="text-lg font-semibold mb-3 <%= isModSection ? 'text-amber-300' : 'text-neutral-100' %>"><%= group.title || t(group.categoryKey) %></h3>
               <div class="rounded-lg border overflow-hidden <%= isModSection ? 'border-amber-700/50' : 'border-neutral-800' %>">
                 <div class="overflow-x-auto">
                 <table class="w-full text-sm">
@@ -116,8 +116,12 @@
                       <tr class="<%= isModSection ? 'odd:bg-amber-950/10 even:bg-amber-950/5' : 'odd:bg-neutral-950 even:bg-neutral-900/40' %><%= cmd.enabled === false ? ' opacity-50' : '' %>" data-command-row data-search-text="<%= searchText %>">
                         <td class="px-4 py-2 font-mono text-purple-300 whitespace-nowrap">
                           <%= cmd.signature %>
-                          <% if (cmd.enabled === false) { %>
-                            <span class="ml-2 rounded bg-red-500/10 text-red-400 text-[11px] px-1.5 py-0.5 align-middle whitespace-nowrap"><%= t('commands.disabledBadge') %></span>
+                          <% if (showStatus) { %>
+                            <% if (cmd.enabled === false) { %>
+                              <span class="ml-2 rounded bg-red-500/10 text-red-400 text-[11px] px-1.5 py-0.5 align-middle whitespace-nowrap"><%= t('commands.disabledBadge') %></span>
+                            <% } else { %>
+                              <span class="ml-2 rounded bg-emerald-500/10 text-emerald-400 text-[11px] px-1.5 py-0.5 align-middle whitespace-nowrap"><%= t('commands.enabledBadge') %></span>
+                            <% } %>
                           <% } %>
                           <% if (cmd.isCustom) {
                                const customBadges = [];
