@@ -59,6 +59,9 @@
   if (frame) {
     frame.addEventListener("load", function () {
       post({ type: "weather-settings", settings: formSettings() });
+      // The overlay is not told a hidden city's name by the server (lib/weatherWidget.js's
+      // publicCityName); the owner's preview is, so ticking "City" shows it before saving.
+      if (form.dataset.cityName) post({ type: "weather-city", city: form.dataset.cityName });
     });
   }
 

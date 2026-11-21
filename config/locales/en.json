@@ -4349,7 +4349,7 @@
       "linkHeading": "OBS link",
       "linkIntro": "In OBS, add a \"Browser\" source and paste this link.",
       "linkHint": "Recommended source size: 640×220. The background is transparent; text and picture scale to the source.",
-      "secretWarning": "Keep this link to yourself: it shows which city you chose. If it leaks, issue a new one.",
+      "secretWarning": "Anyone with this link can open your widget, but sees only what the stream shows: a hidden city is not sent through it. If the link leaks, issue a new one.",
       "regenerate": "Issue a new link",
       "regenerateConfirm": "The old link will stop working and the OBS source will need updating. Continue?",
       "show": "What to show",

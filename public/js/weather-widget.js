@@ -62,6 +62,9 @@
 
   var settings = Object.assign({ style: "realistic", animations: true, transitions: true, units: "c", transparent: false }, boot.settings || {});
   var city = boot.city || "";
+  // The city the setup page's preview was told (a postMessage from this origin). It outranks the
+  // server's answer, which leaves a hidden city's name out.
+  var previewCity = null;
   var live = null; // the last reading from the server: { reading, error }
   var previewing = false;
   var shown = null; // the state on screen: { scene, night }
@@ -640,7 +643,7 @@
       })
       .then(function (data) {
         if (data.settings) applySettings(data.settings);
-        if (typeof data.city === "string") city = data.city;
+        if (typeof data.city === "string") city = previewCity !== null ? previewCity : data.city;
         live = { reading: data.reading || null, error: data.error || null };
         if (!previewing) showLive();
         setTimeout(poll, data.reading ? POLL_MS : RETRY_MS);
@@ -674,7 +677,7 @@
     } else if (msg.type === "weather-settings") {
       applySettings(msg.settings || {});
     } else if (msg.type === "weather-city") {
-      city = String(msg.city || "");
+      city = previewCity = String(msg.city || "");
       if (shownReading) {
         shownReading.city = city;
         cityEl.textContent = city;

@@ -65,7 +65,7 @@ function overlayBootstrap(t, config) {
       unavailable: t("weatherWidget.overlay.unavailable"),
     },
     settings: config.settings,
-    city: config.city ? config.city.name : "",
+    city: weather.publicCityName(config),
   };
 }
 
@@ -78,6 +78,8 @@ router.get("/:channel/settings/widgets/weather", requireLevel(1), settingsNav("w
       channel,
       config,
       cityLabel: weather.cityLabel(config.city),
+      // The setup page is the owner's: its preview may show the name even while the widget hides it.
+      cityName: config.city ? config.city.name : "",
       link: overlayLink(req, config.key),
       previewCodes: weather.PREVIEW_CODES,
       saved: ["settings", "link"].includes(req.query.saved) ? req.query.saved : null,
@@ -185,7 +187,7 @@ router.get("/obs/weather/:key/data", async (req, res) => {
   try {
     const config = await weatherWidgetRepo.findByKey(req.params.key);
     if (!config) return res.status(404).json({ error: "notFound" });
-    const base = { settings: config.settings, city: config.city ? config.city.name : "" };
+    const base = { settings: config.settings, city: weather.publicCityName(config) };
     if (!config.city) return res.json({ ...base, reading: null, error: "noCity" });
     try {
       const current = await openMeteo.currentConditions(config.city.lat, config.city.lon);
