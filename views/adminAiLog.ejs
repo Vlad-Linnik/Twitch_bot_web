@@ -60,6 +60,25 @@
                   <% if (r.sent === false) { %>
                     <span class="ml-1 text-xs text-amber-500"><%= t('admin.ai.notSent') %></span>
                   <% } %>
+                  <%# Почему модель не ответила. Бот пишет причину в каждую строку-ошибку, а без этого
+                      блока журнал показывал только «ошибка» - таймаут, перегрузку 503 и неверный
+                      ключ было не различить. С запасной моделью (TwitchBot/games/aiFallback.js) -
+                      каждая попытка отдельно: какая модель, сколько ждали, что вернула. %>
+                  <% if (r.error || (Array.isArray(r.attempts) && r.attempts.some(function (a) { return a && a.error; }))) { %>
+                    <div class="text-xs text-red-400/90 mt-1 space-y-0.5 break-words">
+                      <% if (Array.isArray(r.attempts) && r.attempts.length) { %>
+                        <% r.attempts.forEach(function (a) { %>
+                          <p>
+                            <span class="text-neutral-400"><%= a.model %></span>
+                            <span class="text-neutral-600 tabular-nums">· <%= (Math.round((a.ms || 0) / 100) / 10) %> <%= t('admin.ai.secondsShort') %></span>
+                            · <%= a.error ? String(a.error).slice(0, 300) : t('admin.ai.attemptOk') %>
+                          </p>
+                        <% }); %>
+                      <% } else { %>
+                        <p title="<%= r.error %>"><%= t('admin.ai.logError') %>: <%= String(r.error).slice(0, 300) %></p>
+                      <% } %>
+                    </div>
+                  <% } %>
                   <%# What this call did to the channel memory. Shown here rather than only on the
                       memory page so a fact can be traced back to the exchange that produced it. %>
                   <% if (r.similarTo) { %>

@@ -3097,7 +3097,9 @@
         "self": "refused: asked about themselves",
         "protected": "refused: this person cannot be muted"
       },
-      "logFallback": "answered by fallback"
+      "logFallback": "answered by fallback",
+      "logError": "reason",
+      "attemptOk": "answered"
     },
     "title": "Admin panel",
     "subtitle": "Bot-join requests, channels, and service health.",
