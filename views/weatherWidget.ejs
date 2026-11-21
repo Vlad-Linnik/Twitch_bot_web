@@ -1,0 +1,94 @@
+<!doctype html>
+<%#
+  The OBS weather widget (routes/widgets.js). Like the donation media player, deliberately NOT
+  built on partials/head + nav + foot: OBS composites this over the stream, so the page is a
+  transparent box with the widget in it and nothing else. Its CSP is its own.
+
+  The scene is a stack of layers - sky, stars, sun, moon, clouds, a canvas for rain and snow,
+  fog, lightning - whose strengths public/js/weather-widget.js eases between. Both looks
+  ("minimal" and "realistic") are the same stack; the body class decides how each layer is drawn.
+%>
+<html lang="<%= locale %>">
+<head>
+  <meta charset="utf-8" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weather · <%= channelLogin %></title>
+  <link rel="stylesheet" href="<%= asset('/css/weather-widget.css') %>" />
+</head>
+<body class="style-realistic" data-key="<%= key %>" data-bootstrap="<%= JSON.stringify(bootstrap) %>">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="cloud-fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff" />
+        <stop offset="0.55" stop-color="#eef2f7" />
+        <stop offset="1" stop-color="#b9c3cf" />
+      </linearGradient>
+      <linearGradient id="bolt-fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fffbe0" />
+        <stop offset="1" stop-color="#ffd23f" />
+      </linearGradient>
+      <symbol id="cloud" viewBox="0 0 100 60">
+        <path d="M26 54 a15 15 0 0 1 -1 -30 a21 21 0 0 1 39 -6 a15 15 0 0 1 22 13 a12 12 0 0 1 -2 23 z" />
+      </symbol>
+    </defs>
+  </svg>
+
+  <div id="widget" class="widget is-hidden">
+    <div id="scene" class="scene">
+      <div class="sky sky-day"></div>
+      <div class="sky sky-night"></div>
+      <div class="sky sky-overcast"></div>
+      <div class="sky sky-storm"></div>
+      <div class="stars"></div>
+
+      <div class="body sun">
+        <div class="sun-rays"></div>
+        <div class="sun-core"></div>
+        <svg class="line-icon" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="17" />
+          <g class="line-rays">
+            <line x1="50" y1="8" x2="50" y2="20" /><line x1="50" y1="80" x2="50" y2="92" />
+            <line x1="8" y1="50" x2="20" y2="50" /><line x1="80" y1="50" x2="92" y2="50" />
+            <line x1="20.3" y1="20.3" x2="28.8" y2="28.8" /><line x1="71.2" y1="71.2" x2="79.7" y2="79.7" />
+            <line x1="20.3" y1="79.7" x2="28.8" y2="71.2" /><line x1="71.2" y1="28.8" x2="79.7" y2="20.3" />
+          </g>
+        </svg>
+      </div>
+
+      <div class="body moon">
+        <div class="moon-core"><i></i><i></i><i></i></div>
+        <svg class="line-icon" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M62 18 A32 32 0 1 0 82 66 A26 26 0 0 1 62 18 Z" />
+        </svg>
+      </div>
+
+      <canvas id="precip" class="precip"></canvas>
+
+      <% for (let i = 0; i < 4; i++) { %>
+        <div class="cloud cloud-<%= i %>" data-slot="<%= i %>">
+          <div class="cloud-drift"><svg viewBox="0 0 100 60" aria-hidden="true"><use href="#cloud" /></svg></div>
+        </div>
+      <% } %>
+
+      <div class="fog fog-0"></div>
+      <div class="fog fog-1"></div>
+      <div class="fog fog-2"></div>
+
+      <div class="bolt">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M58 2 L26 54 H47 L36 98 L76 40 H55 L68 2 Z" /></svg>
+      </div>
+      <div class="flash"></div>
+    </div>
+
+    <div class="info">
+      <div class="temp"><span id="temp">--</span><span class="deg">°</span><span id="unit" class="unit"></span></div>
+      <div id="desc" class="desc"></div>
+      <div id="city" class="city"></div>
+      <div id="details" class="details"></div>
+    </div>
+  </div>
+
+  <script src="<%= asset('/js/weather-widget.js') %>"></script>
+</body>
+</html>

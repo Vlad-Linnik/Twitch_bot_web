@@ -1,0 +1,151 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('weatherWidget.setup.title') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The owner's weather widget setup (routes/widgets.js): city, look, motion, and the OBS link. The
+  preview on the right is the real overlay page in a frame; public/js/weather-widget-setup.js
+  drives it with postMessage, so the look and the preview conditions show before anything is saved.
+%>
+<%
+  const inputClass = 'w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
+  const labelClass = 'block text-xs uppercase tracking-wide text-neutral-500 mb-1';
+  const buttonClass = 'px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium';
+  const ghostButtonClass = 'px-3 py-2 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-sm';
+  const dangerButtonClass = 'px-3 py-2 rounded-md border border-red-900 hover:border-red-700 text-red-400 text-sm';
+  const s = config.settings;
+  // The frame loads the overlay by path and without ?lang: this page's own language cookie
+  // already applies, and the i18n redirect that strips ?lang would cost a round trip.
+  const framePath = link.replace(/^https?:\/\/[^/]+/, '').replace(/\?.*$/, '');
+  const toggles = ['animations', 'transitions', 'transparent'];
+  const fields = ['icon', 'temp', 'desc', 'city', 'feels', 'wind', 'humidity'];
+%>
+
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-5xl mx-auto px-6 pt-8 pb-16">
+
+  <header class="mb-8">
+    <h1 class="settings-heading text-3xl font-bold text-neutral-100 mb-1"><%= t('weatherWidget.setup.title') %></h1>
+    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('weatherWidget.setup.subtitle') %></p>
+  </header>
+
+  <% if (saved) { %>
+    <p class="mb-6 rounded-lg border border-green-800/50 bg-green-900/20 text-green-400 px-4 py-2.5 text-sm"><%= t('weatherWidget.setup.saved.' + saved) %></p>
+  <% } %>
+
+  <!-- Preview -->
+  <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('weatherWidget.setup.previewHeading') %></h2>
+    <p class="text-sm text-neutral-500 mb-4"><%= t('weatherWidget.setup.previewIntro') %></p>
+    <div class="rounded-lg overflow-hidden border border-neutral-800 mb-4 bg-gradient-to-br from-sky-900 via-slate-700 to-emerald-900">
+      <iframe id="weather-preview" src="<%= framePath %>" title="<%= t('weatherWidget.setup.previewHeading') %>" width="640" height="220" class="block w-full max-w-[640px] aspect-[64/22] border-0 bg-transparent"></iframe>
+    </div>
+    <div class="flex flex-wrap gap-2" id="weather-preview-buttons" hidden>
+      <% previewCodes.forEach(function (p) { %>
+        <button type="button" class="<%= ghostButtonClass %>" data-preview-code="<%= p.code %>" data-preview-day="<%= p.isDay ? '1' : '0' %>" data-preview-temp="<%= p.temp %>"><%= t('weatherWidget.preview.' + p.key) %></button>
+      <% }) %>
+      <button type="button" class="<%= ghostButtonClass %> border-purple-700 text-purple-300" data-preview-live><%= t('weatherWidget.preview.live') %></button>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <form method="post" action="/<%= channel.channelLogin %>/settings/widgets/weather" class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6 space-y-6" autocomplete="off" id="weather-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="hidden" name="action" value="save" />
+
+    <div id="city" class="scroll-mt-24">
+      <label for="weather-city" class="<%= labelClass %>"><%= t('weatherWidget.setup.city') %></label>
+      <div class="relative">
+        <input id="weather-city" name="cityQuery" type="text" value="<%= cityLabel %>" class="<%= inputClass %>" placeholder="<%= t('weatherWidget.setup.cityPlaceholder') %>" maxlength="80" spellcheck="false" />
+        <ul id="weather-city-results" class="absolute z-20 left-0 right-0 mt-1 rounded-md border border-neutral-700 bg-neutral-950 shadow-lg overflow-hidden" hidden></ul>
+      </div>
+      <input type="hidden" name="cityName" value="" />
+      <input type="hidden" name="cityAdmin1" value="" />
+      <input type="hidden" name="cityCountry" value="" />
+      <input type="hidden" name="cityLat" value="" />
+      <input type="hidden" name="cityLon" value="" />
+      <% if (error) { %>
+        <p class="mt-2 text-sm text-red-400"><%= t('weatherWidget.setup.errors.' + error) %></p>
+      <% } else if (!config.city) { %>
+        <p class="mt-2 text-sm text-amber-300/90"><%= t('weatherWidget.setup.noCityYet') %></p>
+      <% } %>
+      <p class="text-xs text-neutral-500 mt-1" data-city-hint data-searching="<%= t('weatherWidget.setup.searching') %>" data-nothing="<%= t('weatherWidget.setup.nothingFound') %>" data-failed="<%= t('weatherWidget.setup.errors.cityLookup') %>"><%= t('weatherWidget.setup.cityHint') %></p>
+    </div>
+
+    <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.style') %></legend>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <% ['realistic', 'minimal'].forEach(function (style) { %>
+          <label class="flex gap-3 items-start rounded-lg border border-neutral-800 bg-neutral-950 p-4 cursor-pointer has-[:checked]:border-purple-600">
+            <input type="radio" name="style" value="<%= style %>" class="mt-1 accent-purple-600" <%= s.style === style ? 'checked' : '' %> />
+            <span>
+              <span class="block text-sm font-medium text-neutral-100"><%= t('weatherWidget.style.' + style) %></span>
+              <span class="block text-xs text-neutral-500 mt-0.5"><%= t('weatherWidget.style.' + style + 'Hint') %></span>
+            </span>
+          </label>
+        <% }) %>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.show') %></legend>
+      <p class="text-xs text-neutral-500 mb-3"><%= t('weatherWidget.setup.showHint') %></p>
+      <div class="flex flex-wrap gap-2">
+        <% fields.forEach(function (f) { %>
+          <label class="flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 cursor-pointer has-[:checked]:border-purple-600">
+            <input type="checkbox" name="show_<%= f %>" value="1" class="accent-purple-600" <%= s.show[f] ? 'checked' : '' %> />
+            <%= t('weatherWidget.field.' + f) %>
+          </label>
+        <% }) %>
+      </div>
+    </fieldset>
+
+    <fieldset class="space-y-3">
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.behaviour') %></legend>
+      <% toggles.forEach(function (name) { %>
+        <label class="flex gap-3 items-start cursor-pointer">
+          <input type="checkbox" name="<%= name %>" value="1" class="mt-1 accent-purple-600" <%= s[name] ? 'checked' : '' %> />
+          <span>
+            <span class="block text-sm text-neutral-200"><%= t('weatherWidget.setup.toggle.' + name) %></span>
+            <span class="block text-xs text-neutral-500"><%= t('weatherWidget.setup.toggle.' + name + 'Hint') %></span>
+          </span>
+        </label>
+      <% }) %>
+    </fieldset>
+
+    <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.units') %></legend>
+      <div class="flex gap-4">
+        <% [['c', '°C'], ['f', '°F']].forEach(function (u) { %>
+          <label class="flex gap-2 items-center text-sm text-neutral-200 cursor-pointer">
+            <input type="radio" name="units" value="<%= u[0] %>" class="accent-purple-600" <%= s.units === u[0] ? 'checked' : '' %> /> <%= u[1] %>
+          </label>
+        <% }) %>
+      </div>
+    </fieldset>
+
+    <button type="submit" class="<%= buttonClass %>"><%= t('weatherWidget.setup.save') %></button>
+  </form>
+
+  <!-- OBS link -->
+  <section id="link" class="rounded-lg border border-neutral-800 bg-neutral-900 p-6 scroll-mt-24">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('weatherWidget.setup.linkHeading') %></h2>
+    <p class="text-sm text-neutral-500 mb-4"><%= t('weatherWidget.setup.linkIntro') %></p>
+    <div class="flex gap-2 mb-2">
+      <input id="weather-link" type="text" readonly value="<%= link %>" class="<%= inputClass %> font-mono" />
+      <button type="button" hidden class="<%= ghostButtonClass %> shrink-0" data-copy-target="weather-link" data-copied-label="<%= t('donationMedia.setup.copied') %>"><%= t('donationMedia.setup.copy') %></button>
+    </div>
+    <p class="text-xs text-neutral-500 mb-4"><%= t('weatherWidget.setup.linkHint') %></p>
+    <p class="rounded-md border border-amber-800 bg-amber-950/40 text-amber-300 text-sm px-4 py-3 mb-4"><%= t('weatherWidget.setup.secretWarning') %></p>
+    <form method="post" action="/<%= channel.channelLogin %>/settings/widgets/weather" data-confirm="<%= t('weatherWidget.setup.regenerateConfirm') %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="action" value="regenerate" />
+      <button type="submit" class="<%= dangerButtonClass %>"><%= t('weatherWidget.setup.regenerate') %></button>
+    </form>
+  </section>
+</main>
+<%- include('partials/settingsShellClose') %>
+
+<script src="<%= asset('/js/donation-media-setup.js') %>" defer></script>
+<script src="<%= asset('/js/weather-widget-setup.js') %>" defer></script>
+
+<%- include('partials/foot') %>

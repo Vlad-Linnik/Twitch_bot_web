@@ -2397,7 +2397,8 @@
       "unban_request": "Unban appeal",
       "comment": "Discussion",
       "media": "Movies & games",
-      "donation_media": "Donation media"
+      "donation_media": "Donation media",
+      "weather_widget": "Weather widget"
     },
     "action": {
       "add": "Added",
@@ -2504,7 +2505,10 @@
       "mediaPosterRemoved": "Cover of \"{{target}}\" removed",
       "donationMediaConnected": "Donation media: connected {{target}}",
       "donationMediaDisconnected": "Donation media: disconnected {{target}}",
-      "donationMediaRegenerated": "Donation media: issued new OBS links, the old ones no longer work"
+      "donationMediaRegenerated": "Donation media: issued new OBS links, the old ones no longer work",
+      "weatherCity": "Weather widget: city changed",
+      "weatherSettings": "Weather widget: look and behaviour changed",
+      "weatherRegenerated": "Weather widget: new OBS link issued, the old one no longer works"
     }
   },
   "settingsNav": {
@@ -2536,10 +2540,11 @@
       "fun": "Fun",
       "bot": "Bot",
       "management": "Management",
-      "donationMedia": "Donation media"
+      "widgets": "Widgets"
     },
-    "donationMediaQueue": "Clip queue",
-    "donationMediaSetup": "Setup"
+    "donationMediaQueue": "Donation media: queue",
+    "donationMediaSetup": "Donation media: setup",
+    "weatherWidget": "Weather"
   },
   "moderatorPermissions": {
     "title": "Moderator permissions",
@@ -4307,6 +4312,116 @@
       "news": "News",
       "movies": "Movies",
       "games": "Games"
+    }
+  },
+  "weatherWidget": {
+    "setup": {
+      "title": "Weather widget",
+      "subtitle": "the weather in your city, live on stream",
+      "saved": {
+        "settings": "Saved. A widget already open in OBS picks the changes up within a few minutes, or at once when the source is refreshed.",
+        "link": "A new link was issued. Replace it in the OBS source - the old one no longer works."
+      },
+      "previewHeading": "Preview",
+      "previewIntro": "This is how the widget looks in OBS. The buttons below show any weather with the change played out - watch the sun go behind the clouds and the rain start. Look and animations change in the preview at once, before saving.",
+      "city": "City",
+      "cityPlaceholder": "Start typing a name, e.g. London",
+      "cityHint": "Pick the city from the suggestions so two places with one name are not confused.",
+      "searching": "Searching…",
+      "nothingFound": "Nothing found. Try another spelling.",
+      "noCityYet": "No city chosen yet - the widget will say \"No city set\".",
+      "errors": {
+        "city": "That city was not found. Pick it from the suggestions.",
+        "cityLookup": "The weather service did not answer. Try again in a minute."
+      },
+      "style": "Icon style",
+      "behaviour": "Animations",
+      "toggle": {
+        "animations": "Live weather",
+        "animationsHint": "Rain and snow fall, clouds drift, the sun's rays turn, lightning strikes. Without it the picture is still, like an icon.",
+        "transitions": "Animated weather changes",
+        "transitionsHint": "When the weather changes, you see it happen: clouds roll in over the sun, the sky darkens, the rain starts - and back. Without it the picture just switches.",
+        "transparent": "Transparent background",
+        "transparentHint": "No card and no sky square: sun, clouds and rain straight over the stream. The minimal style never has a background."
+      },
+      "units": "Units",
+      "save": "Save",
+      "linkHeading": "OBS link",
+      "linkIntro": "In OBS, add a \"Browser\" source and paste this link.",
+      "linkHint": "Recommended source size: 640×220. The background is transparent; text and picture scale to the source.",
+      "secretWarning": "Keep this link to yourself: it shows which city you chose. If it leaks, issue a new one.",
+      "regenerate": "Issue a new link",
+      "regenerateConfirm": "The old link will stop working and the OBS source will need updating. Continue?",
+      "show": "What to show",
+      "showHint": "Any combination: the widget lays itself out. The first ticked line becomes the large one; without the picture only text remains, without text only the picture."
+    },
+    "style": {
+      "realistic": "Realistic",
+      "realisticHint": "A gradient sky, soft clouds, a glowing sun, raindrops with splashes - on a translucent card.",
+      "minimal": "Minimal",
+      "minimalHint": "Thin lines on a transparent background, like a phone's weather glyph. Nothing extra over the stream."
+    },
+    "preview": {
+      "clear": "☀️ Clear",
+      "partlyCloudy": "⛅ Partly cloudy",
+      "cloudy": "☁️ Overcast",
+      "fog": "🌫️ Fog",
+      "drizzle": "🌦️ Drizzle",
+      "rain": "🌧️ Rain",
+      "heavyRain": "🌧️ Downpour",
+      "storm": "⛈️ Thunderstorm",
+      "snow": "❄️ Snow",
+      "night": "🌙 Night",
+      "nightRain": "🌧️ Rain at night",
+      "live": "Back to the real weather"
+    },
+    "overlay": {
+      "feels": "Feels like",
+      "wind": "Wind",
+      "windKmh": "km/h",
+      "windMph": "mph",
+      "humidity": "Humidity",
+      "noCity": "No city set",
+      "unavailable": "Weather unavailable"
+    },
+    "code": {
+      "0": "Clear",
+      "1": "Mostly clear",
+      "2": "Partly cloudy",
+      "3": "Overcast",
+      "45": "Fog",
+      "48": "Freezing fog",
+      "51": "Light drizzle",
+      "53": "Drizzle",
+      "55": "Heavy drizzle",
+      "56": "Freezing drizzle",
+      "57": "Heavy freezing drizzle",
+      "61": "Light rain",
+      "63": "Rain",
+      "65": "Heavy rain",
+      "66": "Freezing rain",
+      "67": "Heavy freezing rain",
+      "71": "Light snow",
+      "73": "Snow",
+      "75": "Heavy snow",
+      "77": "Snow grains",
+      "80": "Light showers",
+      "81": "Showers",
+      "82": "Heavy showers",
+      "85": "Snow showers",
+      "86": "Heavy snow showers",
+      "95": "Thunderstorm",
+      "96": "Thunderstorm with hail",
+      "99": "Severe thunderstorm with hail"
+    },
+    "field": {
+      "icon": "Weather picture",
+      "temp": "Temperature",
+      "desc": "Description",
+      "city": "City",
+      "feels": "Feels like",
+      "wind": "Wind",
+      "humidity": "Humidity"
     }
   }
 }
