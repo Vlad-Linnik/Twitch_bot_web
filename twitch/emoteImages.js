@@ -216,7 +216,8 @@ function ffzImagesFromSets(data, onlyDefaultSets) {
 }
 
 async function fetchFfzGlobalImages() {
-  const { data } = await http.get(`${FFZ_API}/set/global`);
+  // Same allowance as the room: on 2026-11-21 the global set timed out from the VPS at 15s.
+  const { data } = await http.get(`${FFZ_API}/set/global`, { timeout: ROOM_TIMEOUT_MS });
   return ffzImagesFromSets(data, true);
 }
 
