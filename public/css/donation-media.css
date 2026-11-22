@@ -262,3 +262,12 @@
 .dm-volume input[type="range"]:disabled { opacity: 0.5; }
 .dm-volume-icon { width: 1.4em; text-align: center; }
 .dm-volume-value { min-width: 3.5em; color: var(--dm-text); font-variant-numeric: tabular-nums; }
+
+/* Button icons: the channel's theme or an Easter egg (lib/donationMediaIcons.js), else the emoji. */
+.dm-btn { display: inline-flex; align-items: center; gap: 6px; }
+.dm-ico { display: inline-flex; align-items: center; gap: 2px; line-height: 1; }
+.dm-ico:empty { display: none; }
+.dm-ico.is-img img { height: 1.6em; width: auto; display: block; }
+.dm-btn.is-small .dm-ico.is-img img { height: 1.4em; }
+.dm-check .dm-ico { margin-right: 2px; }
+.dm-radio-line .dm-ico.is-img img { height: 1.5em; }

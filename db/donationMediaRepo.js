@@ -9,6 +9,9 @@
 //     donatePay:      { tokenEnc, origin },
 //     placeholderUrl,                            the owner's own placeholder picture, or absent
 //                                                (lib/donationMediaPlaceholder.js)
+//     buttons: { theme, custom },                the queue panel's icon theme
+//                                                (lib/donationMediaIcons.js)
+//     historyLimit,                              how many finished donations the queue keeps
 //     createdAt, updatedAt }
 // The platform credentials are encrypted at rest (lib/tokenCrypto.js), like the owner refresh
 // tokens: each of them reads the streamer's donations, donor names included. The two link keys are
@@ -18,18 +21,25 @@
 //
 // DonationMediaQueues - one row per channel, the queue itself (lib/donationMediaQueue.js's
 // toStored()), so a deploy does not throw away donations that were paid for and not yet shown.
+//
+// DonationMediaEasterEggs - global, not per channel, edited by the site admin only:
+//   { videoId, icons: { slot: [icon] }, note, updatedAt, by } - while that video plays, those
+//   panel buttons wear those icons (lib/donationMediaIcons.js normalizeEgg).
 const crypto = require("crypto");
 const { connectWeb } = require("./connection");
 const { encrypt, decrypt } = require("../lib/tokenCrypto");
+const { normalizeButtons, clampHistoryLimit, normalizeEgg, HISTORY_MAX } = require("../lib/donationMediaIcons");
 
 let settings;
 let queues;
+let eggs;
 
 async function ensureInitialized() {
-  if (settings && queues) return { settings, queues };
+  if (settings && queues && eggs) return { settings, queues, eggs };
   const db = await connectWeb();
   const s = db.collection("DonationMediaSettings");
   const q = db.collection("DonationMediaQueues");
+  const e = db.collection("DonationMediaEasterEggs");
   // A failed createIndex must not fail the request that happened to trigger it (../CLAUDE.md,
   // "A repo's ensureInitialized() must not be able to fail a page render").
   try {
@@ -38,13 +48,15 @@ async function ensureInitialized() {
       s.createIndex({ playerKey: 1 }, { unique: true, sparse: true }),
       s.createIndex({ panelKey: 1 }, { unique: true, sparse: true }),
       q.createIndex({ channelId: 1 }, { unique: true }),
+      e.createIndex({ videoId: 1 }, { unique: true }),
     ]);
   } catch (err) {
     console.error("[donationMediaRepo] createIndex failed:", err.message);
   }
   settings = s;
   queues = q;
-  return { settings, queues };
+  eggs = e;
+  return { settings, queues, eggs };
 }
 
 function newKey() {
@@ -81,6 +93,8 @@ function toConfig(doc) {
     donatello: dnUser && dnWidget ? { userId: dnUser, widgetId: dnWidget } : null,
     donatePay: dp ? { token: dp, origin: doc.donatePay.origin } : null,
     placeholderUrl: doc.placeholderUrl || null,
+    buttons: normalizeButtons(doc.buttons),
+    historyLimit: Number.isFinite(doc.historyLimit) ? clampHistoryLimit(doc.historyLimit) : HISTORY_MAX,
     updatedAt: doc.updatedAt || null,
   };
 }
@@ -174,6 +188,46 @@ async function setPlaceholder(channelId, url) {
   return before && before.placeholderUrl ? before.placeholderUrl : null;
 }
 
+// The panel's icon theme (already normalized by the caller); resolves to the one it replaced, so
+// uploads it no longer uses can be deleted.
+async function setButtons(channelId, buttons) {
+  const { settings: col } = await ensureInitialized();
+  const before = await col.findOneAndUpdate(
+    { channelId: String(channelId) },
+    { $set: { buttons: normalizeButtons(buttons), updatedAt: new Date() } },
+    { projection: { buttons: 1 } }
+  );
+  return normalizeButtons(before && before.buttons);
+}
+
+async function setHistoryLimit(channelId, value) {
+  const { settings: col } = await ensureInitialized();
+  await col.updateOne({ channelId: String(channelId) }, { $set: { historyLimit: clampHistoryLimit(value), updatedAt: new Date() } });
+}
+
+// --- Easter eggs (global) -------------------------------------------------------------------------
+
+async function listEggs() {
+  const { eggs: col } = await ensureInitialized();
+  const docs = await col.find({}, { projection: { _id: 0 } }).sort({ updatedAt: -1 }).toArray();
+  return docs.map((d) => ({ ...normalizeEgg(d), updatedAt: d.updatedAt || null, by: d.by || null })).filter((d) => d.videoId);
+}
+
+// Returns the egg as saved, or null when it is not a valid one.
+async function saveEgg(egg, by) {
+  const clean = normalizeEgg(egg);
+  if (!clean) return null;
+  const { eggs: col } = await ensureInitialized();
+  await col.updateOne({ videoId: clean.videoId }, { $set: { ...clean, updatedAt: new Date(), by: by || null } }, { upsert: true });
+  return clean;
+}
+
+// Resolves to the removed egg (for its uploads), or null.
+async function deleteEgg(videoId) {
+  const { eggs: col } = await ensureInitialized();
+  return col.findOneAndDelete({ videoId: String(videoId) }, { projection: { _id: 0 } });
+}
+
 const PLATFORM_FIELDS = { donationAlerts: "donationAlerts", donatello: "donatello", donatePay: "donatePay" };
 
 async function clearPlatform(channelId, platform) {
@@ -220,4 +274,9 @@ module.exports = {
   loadQueue,
   saveQueue,
   setPlaceholder,
+  setButtons,
+  setHistoryLimit,
+  listEggs,
+  saveEgg,
+  deleteEgg,
 };

@@ -402,5 +402,6 @@ module.exports = {
   getChannelEmoteImages,
   getSevenTvEmoteImages,
   getSevenTvLinkStatus,
+  getSevenTvUser,
   withEmoteImages,
 };

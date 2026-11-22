@@ -5,7 +5,11 @@
 //
 //   { channelId,              string, numeric Twitch id
 //     action,                 "hide" | "show" | "pause" | "play" | "skip" (lib/donationMediaChatCommand.js)
+//                             or "add" - a song request (!sr), see that file
 //     itemId,                 integer, DonationMediaNowPlaying.item.id the moderator was looking at
+//                             (not on "add")
+//     videoId,                "add" only: the link as typed in chat
+//     result,                 "add" only, written by finish() on "done": { title, position }
 //     by: { userId, login },  the moderator, as the bot saw them (userId is Twitch's numeric id)
 //     status,                 "pending"  - written by the bot (TwitchBot commands/donationMediaControl.js)
 //                             "handling" - taken by claim(), a moment before finish()
@@ -51,9 +55,11 @@ async function claim() {
   );
 }
 
-async function finish(id, status) {
+async function finish(id, status, result = null) {
   const col = await ensureInitialized();
-  await col.updateOne({ _id: id }, { $set: { status, handledAt: new Date() } });
+  const set = { status, handledAt: new Date() };
+  if (result) set.result = result;
+  await col.updateOne({ _id: id }, { $set: set });
 }
 
 module.exports = { claim, finish, COLLECTION, MAX_AGE_MS };

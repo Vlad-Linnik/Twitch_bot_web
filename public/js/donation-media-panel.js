@@ -55,6 +55,30 @@
     return node;
   }
 
+  // A button's icon: the pictures the server resolved for this slot (the channel's theme, or an
+  // Easter egg of the clip playing now - state.icons, lib/donationMediaIcons.js), else the emoji.
+  const DEFAULT_EMOJI = {
+    resume: "▶", pause: "⏸", skip: "⏭", restart: "↺", radio: "📻", moreArtist: "👤",
+    hide: "🙈", blur: "🌫", image: "🖼", autoPlaylist: "🎶", infinite: "♾",
+  };
+  function icon(slot) {
+    const resolved = state && state.icons && state.icons[slot];
+    const box = el("span", { class: "dm-ico", "aria-hidden": "true" });
+    if (resolved && Array.isArray(resolved.imgs) && resolved.imgs.length) {
+      box.classList.add("is-img");
+      for (const src of resolved.imgs) box.appendChild(el("img", { src, alt: "", draggable: "false" }));
+    } else {
+      box.textContent = (resolved && resolved.emoji) || DEFAULT_EMOJI[slot] || "";
+    }
+    return box;
+  }
+  // Icon + label as a button's content.
+  function iconText(slot, text) {
+    const nodes = [icon(slot)];
+    if (text) nodes.push(el("span", { text }));
+    return nodes;
+  }
+
   const offline = el("div", { class: "dm-offline", text: t("offline") });
   const readOnlyNote = el("div", { class: "dm-note", text: t("readOnly") });
   readOnlyNote.hidden = true;
@@ -70,11 +94,13 @@
   const playlistCount = el("span");
   const autoBox = el("input", { type: "checkbox" });
   autoBox.addEventListener("change", () => command("autoPlaylist", { on: autoBox.checked }));
-  const autoLabel = el("label", { class: "dm-check" }, autoBox, el("span", { text: t("playlistAuto") }));
+  const autoIcon = el("span");
+  const autoLabel = el("label", { class: "dm-check" }, autoBox, autoIcon, el("span", { text: t("playlistAuto") }));
   const autoHint = el("div", { class: "dm-hint", text: t("playlistAutoHint") });
   const infiniteBox = el("input", { type: "checkbox" });
   infiniteBox.addEventListener("change", () => command("infinite", { on: infiniteBox.checked }));
-  const infiniteLabel = el("label", { class: "dm-check" }, infiniteBox, el("span", { text: `♾ ${t("infinite")}` }));
+  const infiniteIcon = el("span");
+  const infiniteLabel = el("label", { class: "dm-check" }, infiniteBox, infiniteIcon, el("span", { text: t("infinite") }));
   const infiniteHint = el("div", { class: "dm-hint", text: t("infiniteHint") });
   const playlistNote = el("div", { class: "dm-note is-warn" });
   const playlistBox = el("div", { class: "dm-list" });
@@ -141,7 +167,7 @@
       el("button", {
         class: "dm-btn is-small",
         type: "button",
-        text: wide ? `📻 ${t("radio")}` : "📻",
+
         title: t("radioHint"),
         "aria-label": t("radioHint"),
         disabled: busy.radio,
@@ -151,11 +177,11 @@
             feedMsg.textContent = feedResultText(result, { nothing: "radioNothing" });
           });
         },
-      }),
+      }, ...iconText("radio", wide ? t("radio") : "")),
       el("button", {
         class: "dm-btn is-small",
         type: "button",
-        text: wide ? `👤 ${t("moreArtist")}` : "👤+",
+
         title: t("moreArtistHint"),
         "aria-label": t("moreArtistHint"),
         disabled: busy.artist,
@@ -165,7 +191,7 @@
             feedMsg.textContent = feedResultText(result, { nothing: "moreArtistNothing" });
           });
         },
-      }),
+      }, ...iconText("moreArtist", wide ? t("moreArtist") : "+")),
     ];
   }
 
@@ -394,19 +420,19 @@
           "div",
           { class: "dm-controls" },
           state.paused
-            ? el("button", { class: "dm-btn is-primary", type: "button", text: `▶ ${t("resume")}`, onclick: () => command("resume") })
-            : el("button", { class: "dm-btn is-primary", type: "button", text: `⏸ ${t("pause")}`, onclick: () => command("pause") }),
-          el("button", { class: "dm-btn is-danger", type: "button", text: `⏭ ${t("skip")}`, onclick: () => command("skip") }),
-          el("button", { class: "dm-btn", type: "button", text: `↺ ${t("restart")}`, onclick: () => command("seek", { time: 0 }) }),
+            ? el("button", { class: "dm-btn is-primary", type: "button", onclick: () => command("resume") }, ...iconText("resume", t("resume")))
+            : el("button", { class: "dm-btn is-primary", type: "button", onclick: () => command("pause") }, ...iconText("pause", t("pause"))),
+          el("button", { class: "dm-btn is-danger", type: "button", onclick: () => command("skip") }, ...iconText("skip", t("skip"))),
+          el("button", { class: "dm-btn", type: "button", onclick: () => command("seek", { time: 0 }) }, ...iconText("restart", t("restart"))),
           playlistButton(item, { wide: true })
         )
       );
       card.appendChild(el("div", { class: "dm-controls" }, ...trackButtons(item.videoId, { wide: true })));
       const modes = [
         [null, t("coverNone")],
-        ["hide", `🙈 ${t("coverHide")}`],
-        ["blur", `🌫 ${t("coverBlur")}`],
-        ["image", `🖼 ${t("coverImage")}`],
+        ["hide", t("coverHide")],
+        ["blur", t("coverBlur")],
+        ["image", t("coverImage")],
       ];
       card.appendChild(
         el(
@@ -417,10 +443,9 @@
             el("button", {
               class: "dm-btn is-small" + ((state.cover || null) === mode ? " is-active" : "") + (mode ? " is-cover" : ""),
               type: "button",
-              text: label,
               "aria-pressed": (state.cover || null) === mode ? "true" : "false",
               onclick: () => command("cover", { mode }),
-            })
+            }, ...(mode ? iconText(mode, label) : [el("span", { text: label })]))
           )
         )
       );
@@ -622,6 +647,8 @@
 
   function renderPlaylist() {
     const list = state.playlist || [];
+    autoIcon.replaceChildren(icon("autoPlaylist"));
+    infiniteIcon.replaceChildren(icon("infinite"));
     autoBox.checked = state.autoPlaylist === true;
     autoBox.disabled = !canControl;
     infiniteBox.checked = state.infinite === true;
@@ -671,7 +698,8 @@
     if (state.radio) {
       const seed = state.radio.seed;
       radioLine.append(
-        el("span", { text: `📻 ${t("radioOn")} ` }),
+        icon("radio"),
+        el("span", { text: `${t("radioOn")} ` }),
         el("a", { href: videoUrl(seed), target: "_blank", rel: "noopener noreferrer", text: seed.title || seed.videoId })
       );
       if (canControl) radioLine.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: t("radioStop"), onclick: () => command("radioStop") }));

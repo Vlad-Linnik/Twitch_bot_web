@@ -32,6 +32,11 @@ const {
 } = require("../lib/donationMedia");
 const { resolveDonatelloUserId } = require("../lib/donatelloWidgetPage");
 const placeholder = require("../lib/donationMediaPlaceholder");
+const icons = require("../lib/donationMediaIcons");
+const iconImage = require("../lib/donationMediaIconImage");
+const emoteImages = require("../twitch/emoteImages");
+const adminActionLogsRepo = require("../db/adminActionLogsRepo");
+const { extractVideoId } = require("../lib/donationMedia");
 
 const router = express.Router();
 
@@ -44,7 +49,7 @@ const OBS_CSP = [
   "default-src 'self'",
   "script-src 'self' https://www.youtube.com https://s.ytimg.com",
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
-  "img-src 'self' data: https://i.ytimg.com",
+  "img-src 'self' data: https://i.ytimg.com https://cdn.7tv.app",
   "style-src 'self' 'unsafe-inline'",
   "connect-src 'self'",
   "object-src 'none'",
@@ -122,6 +127,14 @@ router.get("/:channel/settings/donation-media", requireLevel(1), settingsNav("do
       status: donationMediaManager.statusOf(channel.channelId),
       currencies: DA_CURRENCIES,
       placeholderUrl: config.placeholderUrl,
+      buttons: config.buttons,
+      historyLimit: config.historyLimit,
+      iconSlots: icons.SLOTS,
+      sevenTvTheme: icons.resolveIcons({ theme: "7tv" }),
+      customIcons: icons.resolveIcons({ theme: "custom", custom: config.buttons.custom }),
+      iconErrorNames: typeof req.query.names === "string" ? req.query.names.slice(0, 120) : "",
+      historyMin: icons.HISTORY_MIN,
+      historyMax: icons.HISTORY_MAX,
       saved: typeof req.query.saved === "string" ? req.query.saved : null,
       error: typeof req.query.error === "string" ? req.query.error : null,
       errorPlatform: typeof req.query.platform === "string" ? req.query.platform : null,
@@ -272,6 +285,132 @@ router.post(
   }
 );
 
+// --- the queue panel's buttons and history (owner only) -------------------------------------------
+
+const iconUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: iconImage.MAX_UPLOAD_BYTES, files: 1, fields: 8, parts: 9, fieldSize: 2048 },
+});
+
+function readIconUpload(req, res, next) {
+  iconUpload.single("image")(req, res, (err) => {
+    if (err) {
+      req.iconUploadError = err.code === "LIMIT_FILE_SIZE" ? "too_large" : "not_allowed_type";
+      return next();
+    }
+    next();
+  });
+}
+
+// "pepeJAM Tssk", "https://7tv.app/emotes/<id>", a bare id - up to MAX_ICONS_PER_SLOT, separated by
+// spaces or commas. A name is looked up in the channel's own 7TV set first, then in 7TV's global
+// set. `channelIds`: one channel, or several (the admin's Easter eggs belong to no channel, so
+// their names are looked up in every channel's set). Resolves to { icons, unknown: [names not found] }.
+async function resolveIconRefs(text, channelIds) {
+  const ids = Array.isArray(channelIds) ? channelIds : [channelIds];
+  const tokens = String(text || "").split(/[\s,]+/).filter(Boolean).slice(0, icons.MAX_ICONS_PER_SLOT);
+  const out = [];
+  const unknown = [];
+  let channelSet = null;
+  let globalSet = null;
+  for (const token of tokens) {
+    const id = icons.parseSevenTvRef(token);
+    if (id) {
+      out.push({ kind: "7tv", id });
+      continue;
+    }
+    if (!/^[\w:().!?-]{1,40}$/.test(token)) {
+      unknown.push(token.slice(0, 40));
+      continue;
+    }
+    if (!channelSet) {
+      channelSet = new Map();
+      for (const channelId of ids) {
+        const user = await emoteImages.getSevenTvUser(channelId, { complete: true }).catch(() => null);
+        for (const e of (user && user.emote_set && user.emote_set.emotes) || []) if (!channelSet.has(e.name)) channelSet.set(e.name, e.id);
+      }
+    }
+    let found = channelSet.get(token);
+    if (!found) {
+      if (!globalSet) {
+        const map = await emoteImages.getSevenTvGlobalImages({ complete: true }).catch(() => new Map());
+        globalSet = new Map([...map].map(([name, url]) => [name, (String(url).match(/\/emote\/([^/]+)\//) || [])[1]]));
+      }
+      found = globalSet.get(token);
+    }
+    if (found && icons.parseSevenTvRef(found)) out.push({ kind: "7tv", id: found });
+    else unknown.push(token);
+  }
+  return { icons: out, unknown };
+}
+
+const ICON_ERRORS = { not_allowed_type: "iconType", unreadable: "iconType", too_large: "iconTooLarge" };
+
+router.post(
+  "/:channel/settings/donation-media/buttons",
+  settingsWriteLimiter,
+  requireLevel(1),
+  readIconUpload,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannel(req, res);
+      if (!channel) return;
+      const config = await donationMediaRepo.getOrCreate(channel);
+      const back = `/${channel.channelLogin}/settings/donation-media`;
+      const fail = (code, extra = "") => res.redirect(`${back}?error=${code}&platform=buttons${extra}#buttons`);
+      const action = req.body.action;
+
+      if (action === "history") {
+        await donationMediaRepo.setHistoryLimit(channel.channelId, req.body.historyLimit);
+        await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
+        await settingsChangeLogRepo.logChange({ channelLogin: channel.channelLogin, user: req.user, category: "donation_media", action: "update", target: "historyLimit", before: null, after: null });
+        return res.redirect(`${back}?saved=history#history`);
+      }
+
+      const next_ = { theme: config.buttons.theme, custom: { ...config.buttons.custom } };
+      if (action === "theme") {
+        if (!icons.THEMES.includes(req.body.theme)) return fail("iconTheme");
+        next_.theme = req.body.theme;
+      } else if (action === "slot") {
+        const slot = req.body.slot;
+        if (!icons.SLOT_KEYS.includes(slot)) return fail("iconSlot");
+        if (req.body.reset === "1") {
+          delete next_.custom[slot];
+        } else {
+          if (req.iconUploadError) return fail(ICON_ERRORS[req.iconUploadError] || "iconType");
+          const { icons: resolved, unknown } = await resolveIconRefs(req.body.refs, channel.channelId);
+          if (unknown.length) return fail("iconUnknown", `&names=${encodeURIComponent(unknown.join(" ").slice(0, 120))}`);
+          const list = resolved;
+          if (req.file && req.file.buffer && req.file.buffer.length) {
+            try {
+              list.push({ kind: "upload", url: await iconImage.saveIcon(req.file.buffer) });
+            } catch (err) {
+              if (err instanceof iconImage.PlaceholderError) return fail(ICON_ERRORS[err.code] || "iconType");
+              throw err;
+            }
+          }
+          if (list.length === 0) return fail("iconEmpty");
+          next_.custom[slot] = list.slice(0, icons.MAX_ICONS_PER_SLOT);
+        }
+        // Editing a slot means the custom theme is the one wanted.
+        next_.theme = "custom";
+      } else {
+        return fail("iconSlot");
+      }
+
+      const before = await donationMediaRepo.setButtons(channel.channelId, next_);
+      const kept = new Set(iconImage.uploadsIn(icons.normalizeButtons(next_).custom));
+      for (const url of iconImage.uploadsIn(before.custom)) if (!kept.has(url)) await iconImage.deleteIcon(url);
+      await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
+      await settingsChangeLogRepo.logChange({ channelLogin: channel.channelLogin, user: req.user, category: "donation_media", action: "update", target: "buttons", before: null, after: null });
+      return res.redirect(`${back}?saved=buttons#buttons`);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.get(
   "/:channel/settings/donation-media/queue",
   requireLevel(2),
@@ -319,6 +458,74 @@ function obsPage(role, view) {
     }
   };
 }
+
+// --- Easter eggs: the site admin's, for every channel ---------------------------------------------
+// While one particular video plays, some panel buttons wear other icons (lib/donationMediaIcons.js).
+
+router.get("/admin/donation-media/eggs", requireLevel(0), async (req, res, next) => {
+  try {
+    const list = await donationMediaRepo.listEggs();
+    res.render("adminDonationMediaEggs", {
+      tab: "donation-eggs",
+      eggs: list.map((egg) => ({ ...egg, resolved: icons.resolveIcons(null, egg.icons) })),
+      iconSlots: icons.SLOTS,
+      saved: typeof req.query.saved === "string" ? req.query.saved : null,
+      error: typeof req.query.error === "string" ? req.query.error : null,
+      errorNames: typeof req.query.names === "string" ? req.query.names.slice(0, 120) : "",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/donation-media/eggs", settingsWriteLimiter, requireLevel(0), readIconUpload, verifyToken, async (req, res, next) => {
+  try {
+    const back = "/admin/donation-media/eggs";
+    const fail = (code, extra = "") => res.redirect(`${back}?error=${code}${extra}`);
+    const eggList = await donationMediaRepo.listEggs();
+    const action = req.body.action;
+    const videoId = extractVideoId(typeof req.body.video === "string" ? req.body.video.slice(0, 300) : "");
+    if (!videoId) return fail("eggVideo");
+    const existing = eggList.find((e) => e.videoId === videoId);
+
+    if (action === "delete") {
+      const removed = await donationMediaRepo.deleteEgg(videoId);
+      if (removed) for (const url of iconImage.uploadsIn(removed.icons)) await iconImage.deleteIcon(url);
+    } else {
+      const slot = req.body.slot;
+      if (!icons.SLOT_KEYS.includes(slot)) return fail("iconSlot");
+      const egg = { videoId, icons: { ...(existing ? existing.icons : {}) }, note: typeof req.body.note === "string" ? req.body.note : existing ? existing.note : "" };
+      const replaced = egg.icons[slot] || [];
+      if (action === "removeSlot") {
+        delete egg.icons[slot];
+      } else {
+        if (req.iconUploadError) return fail(ICON_ERRORS[req.iconUploadError] || "iconType");
+        const channels = await channelsRepo.listAll().catch(() => []);
+        const { icons: resolved, unknown } = await resolveIconRefs(req.body.refs, channels.map((c) => String(c.channelId)));
+        if (unknown.length) return fail("iconUnknown", `&names=${encodeURIComponent(unknown.join(" ").slice(0, 120))}`);
+        if (req.file && req.file.buffer && req.file.buffer.length) {
+          try {
+            resolved.push({ kind: "upload", url: await iconImage.saveIcon(req.file.buffer) });
+          } catch (err) {
+            if (err instanceof iconImage.PlaceholderError) return fail(ICON_ERRORS[err.code] || "iconType");
+            throw err;
+          }
+        }
+        if (resolved.length === 0) return fail("iconEmpty");
+        egg.icons[slot] = resolved.slice(0, icons.MAX_ICONS_PER_SLOT);
+      }
+      if (Object.keys(egg.icons).length === 0) await donationMediaRepo.deleteEgg(videoId);
+      else await donationMediaRepo.saveEgg(egg, req.user && req.user.login);
+      const kept = new Set(iconImage.uploadsIn(egg.icons));
+      for (const url of iconImage.uploadsIn({ [slot]: replaced })) if (!kept.has(url)) await iconImage.deleteIcon(url);
+    }
+    await adminActionLogsRepo.logAction({ admin: req.user, action: `donationMediaEgg.${action === "delete" ? "delete" : "save"}`, target: videoId });
+    await donationMediaManager.reloadEggs();
+    return res.redirect(`${back}?saved=1`);
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/obs/donation-media/:key/player", obsPage("player", "donationMediaPlayer"));
 router.get("/obs/donation-media/:key/panel", obsPage("panel", "donationMediaObsPanel"));

@@ -40,6 +40,7 @@ module.exports = [
       { signature: "!cancellongban @user", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.cancellongban", useCaseKey: "commands.useCase.cancellongban", configKey: "cancellongban" },
       { signature: "!longbans", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.longbans", useCaseKey: "commands.useCase.longbans", configKey: "longbans" },
       { signature: "!clip hide|show|pause|play|skip", accessKey: "commands.access.mod", cooldown: null, descriptionKey: "commands.desc.clip", useCaseKey: "commands.useCase.clip", configKey: "clip" },
+      { signature: "!sr <ссылка YouTube>", accessKey: "commands.access.modOrAll", cooldown: "30s", descriptionKey: "commands.desc.sr", useCaseKey: "commands.useCase.sr", configKey: "sr" },
     ],
   },
   {

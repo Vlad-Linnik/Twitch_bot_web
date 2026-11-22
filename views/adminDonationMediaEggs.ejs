@@ -1,0 +1,112 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabDonationEggs') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The site admin's Easter eggs for the donation media panel (routes/donationMedia.js): while one
+  video plays, chosen panel buttons wear other icons - on every channel.
+%>
+<%
+  const eInput = 'w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
+  const eButton = 'px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium';
+  const eGhost = 'px-3 py-1.5 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-xs';
+  const eDanger = 'px-3 py-1.5 rounded-md border border-red-900 hover:border-red-700 text-red-400 text-xs';
+  const errorKeys = ['eggVideo', 'iconType', 'iconTooLarge', 'iconUnknown', 'iconEmpty', 'iconSlot'];
+  const drawImgs = (resolved) => (resolved && resolved.imgs ? resolved.imgs : [])
+    .map((src) => `<img src="${src.replace(/"/g, '&quot;')}" alt="" class="h-8 w-auto inline-block" loading="lazy" />`).join('');
+%>
+
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.eggs.intro') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <% if (saved) { %>
+    <div class="mb-6 rounded-md border border-green-800 bg-green-950/50 text-green-300 text-sm px-4 py-3"><%= t('admin.eggs.saved') %></div>
+  <% } %>
+  <% if (error) { %>
+    <div class="mb-6 rounded-md border border-red-800/50 bg-red-900/20 text-red-400 text-sm px-4 py-3">
+      <%= error === 'eggVideo' ? t('admin.eggs.badVideo') : t('donationMedia.setup.errors.' + (errorKeys.includes(error) ? error : 'iconType')) %><% if (error === 'iconUnknown' && errorNames) { %>: <%= errorNames %><% } %>
+    </div>
+  <% } %>
+
+  <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+    <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.eggs.addHeading') %></h2>
+    <p class="text-sm text-neutral-500 mb-4"><%= t('admin.eggs.addIntro') %></p>
+    <form method="post" enctype="multipart/form-data" action="/admin/donation-media/eggs" class="grid gap-3 md:grid-cols-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="action" value="save" />
+      <label class="block">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.eggs.video') %></span>
+        <input type="text" name="video" required maxlength="300" placeholder="https://www.youtube.com/watch?v=…" class="<%= eInput %>" />
+      </label>
+      <label class="block">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.eggs.slot') %></span>
+        <select name="slot" class="<%= eInput %>">
+          <% for (const slot of iconSlots) { %><option value="<%= slot.key %>"><%= slot.emoji %> <%= t('donationMedia.setup.slots.' + slot.key) %></option><% } %>
+        </select>
+      </label>
+      <label class="block">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.eggs.emotes') %></span>
+        <input type="text" name="refs" maxlength="400" autocomplete="off" spellcheck="false" placeholder="Jokerge Tssk" class="<%= eInput %>" />
+      </label>
+      <label class="block">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.eggs.picture') %></span>
+        <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif"
+               class="block w-full text-sm text-neutral-400 file:mr-3 file:rounded-md file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-200 hover:file:bg-neutral-700" />
+      </label>
+      <label class="block md:col-span-2">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.eggs.note') %></span>
+        <input type="text" name="note" maxlength="200" class="<%= eInput %>" />
+      </label>
+      <div class="md:col-span-2"><button type="submit" class="<%= eButton %>"><%= t('admin.eggs.save') %></button></div>
+    </form>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-neutral-100 mb-4"><%= t('admin.eggs.listHeading') %> <span class="text-neutral-500 font-normal"><%= eggs.length %></span></h2>
+    <% if (eggs.length === 0) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.eggs.empty') %></p>
+    <% } %>
+    <div class="space-y-4">
+      <% for (const egg of eggs) { %>
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 flex flex-col md:flex-row gap-4">
+          <a href="https://www.youtube.com/watch?v=<%= egg.videoId %>" target="_blank" rel="noopener noreferrer" class="shrink-0">
+            <img src="https://i.ytimg.com/vi/<%= egg.videoId %>/mqdefault.jpg" alt="" class="w-48 rounded-md border border-neutral-800" loading="lazy" />
+          </a>
+          <div class="flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <a href="https://www.youtube.com/watch?v=<%= egg.videoId %>" target="_blank" rel="noopener noreferrer" class="font-mono text-sm text-purple-300 hover:underline"><%= egg.videoId %></a>
+              <% if (egg.note) { %><span class="text-sm text-neutral-400">· <%= egg.note %></span><% } %>
+              <% if (egg.by) { %><span class="text-xs text-neutral-600">· <%= egg.by %></span><% } %>
+            </div>
+            <ul class="space-y-2">
+              <% for (const slot of iconSlots) { if (!egg.icons[slot.key]) continue; %>
+                <li class="flex items-center gap-3">
+                  <span class="text-sm text-neutral-300 w-48 shrink-0"><%= slot.emoji %> <%= t('donationMedia.setup.slots.' + slot.key) %></span>
+                  <span class="inline-flex items-center gap-1"><%- drawImgs(egg.resolved[slot.key]) %></span>
+                  <form method="post" enctype="multipart/form-data" action="/admin/donation-media/eggs" class="ml-auto">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <input type="hidden" name="action" value="removeSlot" />
+                    <input type="hidden" name="video" value="<%= egg.videoId %>" />
+                    <input type="hidden" name="slot" value="<%= slot.key %>" />
+                    <input type="hidden" name="note" value="<%= egg.note %>" />
+                    <button type="submit" class="<%= eGhost %>"><%= t('admin.eggs.removeSlot') %></button>
+                  </form>
+                </li>
+              <% } %>
+            </ul>
+          </div>
+          <form method="post" enctype="multipart/form-data" action="/admin/donation-media/eggs" class="shrink-0" data-confirm="<%= t('admin.eggs.deleteConfirm') %>">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="action" value="delete" />
+            <input type="hidden" name="video" value="<%= egg.videoId %>" />
+            <button type="submit" class="<%= eDanger %>"><%= t('admin.eggs.delete') %></button>
+          </form>
+        </div>
+      <% } %>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/foot') %>

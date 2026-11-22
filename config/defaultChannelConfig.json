@@ -104,6 +104,12 @@
       "enabled": true,
       "signature": "!clip"
     },
+    "sr": {
+      "enabled": false,
+      "cooldownMs": 30000,
+      "signature": "!sr",
+      "access": "mods"
+    },
     "muteduel": {
       "enabled": true,
       "cooldownMs": 50000,

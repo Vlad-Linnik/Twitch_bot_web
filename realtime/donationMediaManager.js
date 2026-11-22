@@ -18,12 +18,14 @@ const donationMediaNowPlayingRepo = require("../db/donationMediaNowPlayingRepo")
 const donationMediaChatCommandsRepo = require("../db/donationMediaChatCommandsRepo");
 const chatCommand = require("../lib/donationMediaChatCommand");
 const channelsRepo = require("../db/channelsRepo");
+const channelConfigRepo = require("../db/channelConfigRepo");
 const { computePermission, canEditSectionAt } = require("../middleware/permissions");
 const { MediaQueue } = require("../lib/donationMediaQueue");
 const { extractVideoId } = require("../lib/donationMedia");
 const { CONNECTORS } = require("./donationMediaConnectors");
 const radioSources = require("../lib/radioSources");
 const { titleKey } = require("../lib/donationMediaRadio");
+const icons = require("../lib/donationMediaIcons");
 
 const SAVE_DEBOUNCE_MS = 1000;
 const PERMISSION_RECHECK_MS = 60 * 1000;
@@ -48,6 +50,9 @@ const CHAT_COMMAND_BATCH = 20;
 const RADIO_RETRY_MS = 2 * 60 * 1000;
 
 const sessions = new Map(); // channelId -> Session
+// The site admin's Easter eggs, for every channel: videoId -> { slot: [icon] }. Loaded at boot and
+// after every edit (reloadEggs).
+let eggs = new Map();
 
 class Session {
   constructor(channelId, channelLogin) {
@@ -63,15 +68,20 @@ class Session {
     this.publishChain = Promise.resolve();
     this.radioRetryAt = 0;
     this.radioStarting = false; // startRadio's own first fetch is running; no top-up beside it
+    this.buttons = icons.normalizeButtons(null);
     this.queue = new MediaQueue({
+      // The panel's icons follow the clip: an Easter egg is for one video.
+      decorate: (snap) => ({ ...snap, icons: icons.resolveIcons(this.buttons, snap.current ? eggs.get(snap.current.videoId) : null) }),
       send: (target, message) => this.send(target, message),
       onChange: () => {
         this.scheduleSave();
         this.topUpRadio();
       },
     });
-    this.ready = donationMediaRepo
-      .loadQueue(this.channelId)
+    this.ready = Promise.resolve()
+      // A failure here costs the theme, not the queue.
+      .then(() => this.loadPanelSettings().catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load panel settings:`, err.message)))
+      .then(() => donationMediaRepo.loadQueue(this.channelId))
       .then((stored) => {
         this.queue.restore(stored);
         // A clip queued moments before a restart may not have had its name looked up yet.
@@ -206,6 +216,14 @@ class Session {
     }
     this.status[platform] = { connected, error: error || null };
     this.queue.setPlatforms(this.status);
+  }
+
+  // The owner's panel settings: the button theme and the history length.
+  async loadPanelSettings() {
+    const config = await donationMediaRepo.findByChannelId(this.channelId);
+    if (!config) return;
+    this.buttons = config.buttons;
+    this.queue.setHistoryLimit(config.historyLimit);
   }
 
   // --- the "up next" feed (lib/radioSources.js does the asking) ----------------------------------
@@ -364,9 +382,47 @@ function getSession(channelId, channelLogin) {
 
 // --- chat commands -------------------------------------------------------------------------------
 
-// One `!clip ...` from chat, already claimed. Returns the status to record.
+// One `!sr <link>` from chat. Returns { status, result? }.
+async function runSongRequest(cmd) {
+  const config = await donationMediaRepo.findByChannelId(cmd.channelId);
+  if (!config) return { status: "invalid" };
+  const settings = await channelConfigRepo.getConfig(config.channelLogin);
+  const sr = settings.commands && settings.commands.sr;
+  if (!sr || !sr.enabled) return { status: "disabled" };
+
+  const userId = cmd.by && cmd.by.userId ? String(cmd.by.userId) : null;
+  if (!userId) return { status: "forbidden" };
+  const login = cmd.by.login ? String(cmd.by.login).slice(0, 25) : userId;
+  // The bot filtered by badge; the site decides with its own rules. A moderator counts only with
+  // the donation media section - the same as for the panel.
+  const level = await computePermission(userId, config.channelLogin);
+  const isMod = level <= 2 && (await canEditSectionAt(level, config.channelId, userId, "donationMedia"));
+  if (sr.access !== "all" && !isMod) return { status: "forbidden" };
+
+  const videoId = extractVideoId(typeof cmd.videoId === "string" ? cmd.videoId.slice(0, 300) : "");
+  if (!videoId) return { status: "invalid" };
+
+  const session = getSession(config.channelId, config.channelLogin);
+  await session.ready;
+  const q = session.queue;
+  if (!isMod && chatCommand.waitingRequestsOf(q, login) >= chatCommand.SR_PER_USER) return { status: "limit" };
+  // oEmbed refuses a video whose owner forbade embedding - the OBS player could not show it.
+  const info = await radioSources.embedInfo(videoId);
+  if (!info) return { status: "noEmbed" };
+  const item = q.add("manual", { videoId, title: info.title || "", donor: "", amount: null, message: "", start: 0, end: 0 }, { addedBy: login, viaChat: true });
+  if (!item) return { status: "full" };
+  const position = q.current && q.current.id === item.id ? 0 : q.queue.findIndex((i) => i.id === item.id) + 1;
+  return { status: "done", result: { title: (info.title || "").slice(0, 200), position } };
+}
+
+// One `!clip ...` or `!sr ...` from chat, already claimed. Returns { status, result? }.
 async function runChatCommand(cmd) {
-  if (!cmd.createdAt || Date.now() - new Date(cmd.createdAt).getTime() > donationMediaChatCommandsRepo.MAX_AGE_MS) return "expired";
+  if (!cmd.createdAt || Date.now() - new Date(cmd.createdAt).getTime() > donationMediaChatCommandsRepo.MAX_AGE_MS) return { status: "expired" };
+  if (chatCommand.isSongRequest(cmd.action)) return runSongRequest(cmd);
+  return { status: await runClipCommand(cmd) };
+}
+
+async function runClipCommand(cmd) {
   if (!chatCommand.isAction(cmd.action)) return "invalid";
   // Only a channel whose session exists has anything playing: the bot found a playing row, which
   // only a session writes, so a missing one means this process restarted since.
@@ -395,14 +451,14 @@ async function pollChatCommands() {
     for (let i = 0; i < CHAT_COMMAND_BATCH; i++) {
       const cmd = await donationMediaChatCommandsRepo.claim();
       if (!cmd) break;
-      let status;
+      let outcome;
       try {
-        status = await runChatCommand(cmd);
+        outcome = await runChatCommand(cmd);
       } catch (err) {
         console.error(`[donationMedia] chat command ${cmd.action} failed:`, err.message);
-        status = "invalid";
+        outcome = { status: "invalid" };
       }
-      await donationMediaChatCommandsRepo.finish(cmd._id, status);
+      await donationMediaChatCommandsRepo.finish(cmd._id, outcome.status, outcome.result || null);
     }
   } catch (err) {
     console.error("[donationMedia] chat command poll failed:", err.message);
@@ -420,6 +476,7 @@ function startChatCommands() {
 // Boot: start listening for every channel that has a platform connected.
 async function start() {
   startChatCommands();
+  await reloadEggs();
   try {
     const configs = await donationMediaRepo.listConfigured();
     for (const config of configs) {
@@ -438,6 +495,26 @@ async function start() {
 function setPlaceholder(channelId, url) {
   const session = sessions.get(String(channelId));
   if (session) session.send("players", { type: "placeholder", url: url || null });
+}
+
+// After the setup page changed the panel's buttons or history length: open panels redraw at once.
+async function reloadPanelSettings(channelId, channelLogin) {
+  const session = getSession(channelId, channelLogin);
+  await session.ready;
+  await session.loadPanelSettings();
+  session.queue.broadcastState();
+}
+
+// After the admin edited the Easter eggs: every open panel picks them up.
+async function reloadEggs() {
+  try {
+    const list = await donationMediaRepo.listEggs();
+    eggs = new Map(list.map((e) => [e.videoId, e.icons]));
+  } catch (err) {
+    console.error("[donationMedia] could not load the Easter eggs:", err.message);
+    return;
+  }
+  for (const session of sessions.values()) session.queue.broadcastState();
 }
 
 // After the setup page saved something for this channel.
@@ -683,6 +760,8 @@ async function handleConnection(ws, principal) {
 module.exports = {
   start,
   reload,
+  reloadPanelSettings,
+  reloadEggs,
   setPlaceholder,
   statusOf,
   // realtime/socketServer.js's handler contract

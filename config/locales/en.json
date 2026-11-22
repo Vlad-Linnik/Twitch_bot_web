@@ -157,7 +157,8 @@
     "access": {
       "mod": "mod",
       "all": "all",
-      "allExceptionListed": "all (or mod/exception-listed)"
+      "allExceptionListed": "all (or mod/exception-listed)",
+      "modOrAll": "moderator or everyone (channel setting)"
     },
     "category": {
       "variables": "Variables",
@@ -190,7 +191,8 @@
       "sovet": "Get a random Dota 2 item suggestion. Only responds while the stream's category is Dota 2.",
       "longban": "Block a user longer than Twitch's native timeout cap (2 weeks) — via a renewing timeout or a ban with an automatic unban on a set date/duration.",
       "cancellongban": "End an active long-ban early and immediately restore the user's chat access.",
-      "longbans": "List the channel's currently active long-bans."
+      "longbans": "List the channel's currently active long-bans.",
+      "sr": "Put a YouTube video into the donation media queue straight from chat. The channel owner switches the command on and decides who may use it."
     },
     "useCase": {
       "addvar": "Track deaths, wins, or any running tally live during a stream.",
@@ -215,7 +217,8 @@
       "sovet": "A lighthearted random Dota 2 item suggestion for chat.",
       "longban": "Long-term removal of a problem user without manually re-timing them out every 2 weeks.",
       "cancellongban": "Undo a long-ban if the call changes or it was issued by mistake.",
-      "longbans": "Check who's currently under a long-ban and when each one ends."
+      "longbans": "Check who's currently under a long-ban and when each one ends.",
+      "sr": "A moderator queues the track chat asked for without opening the panel; on a channel open to everyone, viewers request music themselves."
     }
   },
   "games": {
@@ -2324,7 +2327,8 @@
       "update7tv": "Re-sync 7TV",
       "muteduel": "Mute duel",
       "question": "Yes/No answers",
-      "directmsg": "Reply to mentions"
+      "directmsg": "Reply to mentions",
+      "sr": "Song request"
     },
     "commandDesc": {
       "topchatters": "Leaderboard of the most active chatters for a time period.",
@@ -2349,7 +2353,8 @@
       "update7tv": "Lets mods manually re-sync the channel's 7TV emote set.",
       "muteduel": "The mini-game where chat can challenge each other to a dice-roll duel.",
       "question": "The bot answers yes/no questions when pinged.",
-      "directmsg": "The bot responds to pings that aren't a recognized command."
+      "directmsg": "The bot responds to pings that aren't a recognized command.",
+      "sr": "!sr <YouTube link> puts a video into the donation media queue. Off by default; open to moderators or to everyone. A viewer can have at most two own requests waiting."
     },
     "manageCustomCommands": "Manage this channel's custom commands",
     "manageVariables": "Manage this channel's variables",
@@ -2383,7 +2388,10 @@
     "save": "Save settings",
     "autosaveSaving": "Saving…",
     "autosaveSaved": "Saved",
-    "autosaveError": "Failed to save — check the values or reload the page"
+    "autosaveError": "Failed to save — check the values or reload the page",
+    "accessLabel": "Who can",
+    "accessMods": "Moderators",
+    "accessAll": "Everyone"
   },
   "settingsChangeLog": {
     "title": "Change log",
@@ -3650,7 +3658,26 @@
     "recapBuilding": "building…",
     "recapBuiltAt": "built {{when}}",
     "recapNotBuilt": "not built",
-    "recapOpen": "open"
+    "recapOpen": "open",
+    "tabDonationEggs": "Media Easter eggs",
+    "eggs": {
+      "intro": "Easter eggs of the donation media panel: while the chosen video plays, chosen panel buttons wear other icons - on every channel.",
+      "addHeading": "Add or change",
+      "addIntro": "One button at a time. A video that already has an egg is extended; the same button is replaced.",
+      "video": "Video (YouTube link or id)",
+      "slot": "Button",
+      "emotes": "7TV emotes (space separated)",
+      "picture": "Or your own picture",
+      "note": "Note (shown only here)",
+      "save": "Save Easter egg",
+      "listHeading": "Easter eggs",
+      "empty": "No Easter eggs yet.",
+      "removeSlot": "Remove",
+      "delete": "Delete Easter egg",
+      "deleteConfirm": "Delete this video's Easter egg entirely?",
+      "saved": "Saved - open panels have already picked it up.",
+      "badVideo": "That does not look like a YouTube link or video id."
+    }
   },
   "unbanBureau": {
     "title": "Amnesty Bureau",
@@ -3974,7 +4001,9 @@
         "cleared": "Platform disconnected, key deleted.",
         "links": "New links issued. Paste them into OBS again.",
         "placeholder": "Placeholder uploaded. Open OBS players already use it.",
-        "placeholderReset": "The built-in placeholder is back."
+        "placeholderReset": "The built-in placeholder is back.",
+        "buttons": "Panel buttons saved.",
+        "history": "History length saved."
       },
       "da": {
         "token": "Widget link or token",
@@ -3999,7 +4028,13 @@
         "dpToken": "No DonatePay media widget token found in the link.",
         "phType": "Not an image, or an unsupported format: PNG, JPG, WebP or GIF please.",
         "phTooLarge": "The picture is too large: up to 8 MB, 4000 px a side, a GIF up to 300 frames.",
-        "phEmpty": "Choose a file."
+        "phEmpty": "Choose a file.",
+        "iconType": "That picture did not work - PNG, JPEG, WebP or GIF please.",
+        "iconTooLarge": "The picture is too large (8 MB at most).",
+        "iconUnknown": "No such emotes in the channel's 7TV set or 7TV's global set",
+        "iconEmpty": "Give an emote or choose a picture.",
+        "iconTheme": "Unknown theme.",
+        "iconSlot": "Unknown button."
       },
       "placeholderHeading": "Placeholder",
       "placeholderIntro": "The picture viewers see when a moderator covers a clip with \"Placeholder\". The clip's sound keeps playing.",
@@ -4008,7 +4043,38 @@
       "placeholderCurrent": "Current placeholder",
       "placeholderHint": "PNG, JPG, WebP or GIF (animation is kept), up to 8 MB. The picture is fitted into a 16:9 frame without cropping.",
       "placeholderUpload": "Upload",
-      "placeholderReset": "Back to the default"
+      "placeholderReset": "Back to the default",
+      "buttonsHeading": "Panel buttons",
+      "buttonsIntro": "How the buttons of the queue panel look - on the site and in the OBS dock. Changes reach every open panel at once.",
+      "theme": {
+        "default": "Standard",
+        "7tv": "7TV emotes",
+        "custom": "Your own"
+      },
+      "themeSave": "Save theme",
+      "customHeading": "Your own theme",
+      "customIntro": "For each button - 7TV emotes (a name from the channel's set or 7TV's global set, a 7tv.app/emotes/… link or an id; several separated by spaces) and/or your own picture. An empty button stays standard. Saving a button switches to the “Your own” theme.",
+      "customRefsPlaceholder": "pepeJAM or a 7tv.app/emotes/… link",
+      "customUpload": "Your picture (PNG, JPEG, WebP, GIF)",
+      "customSave": "Save",
+      "customReset": "Reset",
+      "slots": {
+        "resume": "Resume",
+        "pause": "Pause",
+        "skip": "Skip",
+        "restart": "Restart",
+        "radio": "Radio",
+        "moreArtist": "More by this artist",
+        "hide": "Hide",
+        "blur": "Blur",
+        "image": "Placeholder",
+        "autoPlaylist": "Auto playlist",
+        "infinite": "Endless music"
+      },
+      "historyHeading": "History",
+      "historyIntro": "How many recent donations the panel's history keeps. Your own playlist and picked tracks never enter it.",
+      "historyUnit": "tracks ({{min}} to {{max}})",
+      "historySave": "Save"
     },
     "queuePage": {
       "title": "Clip queue",

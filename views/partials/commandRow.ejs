@@ -46,6 +46,15 @@
                  class="w-full min-w-24 max-w-40 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
         </label>
       <% } %>
+      <% if (cmd.access !== undefined) { %>
+        <label class="block mt-2">
+          <span class="block text-xs text-neutral-500 mb-0.5"><%= t('channelSettings.accessLabel') %></span>
+          <select name="commands.<%= name %>.access" class="w-full min-w-24 max-w-40 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
+            <option value="mods" <%= cmd.access !== 'all' ? 'selected' : '' %>><%= t('channelSettings.accessMods') %></option>
+            <option value="all" <%= cmd.access === 'all' ? 'selected' : '' %>><%= t('channelSettings.accessAll') %></option>
+          </select>
+        </label>
+      <% } %>
       <% if (cmd.reply && typeof cmd.reply === 'object') { %>
         <fieldset class="mt-2">
           <legend class="block text-xs text-neutral-500 mb-0.5"><%= t('channelSettings.replyPartsLabel') %></legend>
