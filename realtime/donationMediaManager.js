@@ -225,8 +225,8 @@ class Session {
     }
   }
 
-  // Called after every change: while the radio is on and its tracks run low, the Mix of the last
-  // radio track that played tops the feed up.
+  // Called after every change: while the radio (or endless music) is on and the feed runs low, a
+  // Mix tops it up - see MediaQueue.radioWantsMore for which track it is the Mix of.
   topUpRadio() {
     const seed = this.queue.radioWantsMore();
     if (!seed || this.radioStarting || this.queue.radioBusy.radio || Date.now() < this.radioRetryAt) return;
@@ -585,6 +585,8 @@ async function handlePanelCommand(session, ws, principal, msg) {
     }
     case "radioStop":
       return q.stopRadio();
+    case "infinite":
+      return q.setInfinite(msg.on === true);
     case "moreFromArtist": {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       if (!videoId) return reply({ ok: false, reason: "bad" });

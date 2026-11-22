@@ -72,6 +72,10 @@
   autoBox.addEventListener("change", () => command("autoPlaylist", { on: autoBox.checked }));
   const autoLabel = el("label", { class: "dm-check" }, autoBox, el("span", { text: t("playlistAuto") }));
   const autoHint = el("div", { class: "dm-hint", text: t("playlistAutoHint") });
+  const infiniteBox = el("input", { type: "checkbox" });
+  infiniteBox.addEventListener("change", () => command("infinite", { on: infiniteBox.checked }));
+  const infiniteLabel = el("label", { class: "dm-check" }, infiniteBox, el("span", { text: `♾ ${t("infinite")}` }));
+  const infiniteHint = el("div", { class: "dm-hint", text: t("infiniteHint") });
   const playlistNote = el("div", { class: "dm-note is-warn" });
   const playlistBox = el("div", { class: "dm-list" });
   const playlistInput = el("input", { type: "text", placeholder: t("addPlaceholder"), autocomplete: "off", maxlength: "300" });
@@ -229,7 +233,7 @@
       aiForm,
       feedMsg
     ),
-    el("section", {}, autoLabel, autoHint, playlistDetails, playlistForm, playlistMsg),
+    el("section", {}, autoLabel, autoHint, infiniteLabel, infiniteHint, playlistDetails, playlistForm, playlistMsg),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
   );
 
@@ -620,6 +624,8 @@
     const list = state.playlist || [];
     autoBox.checked = state.autoPlaylist === true;
     autoBox.disabled = !canControl;
+    infiniteBox.checked = state.infinite === true;
+    infiniteBox.disabled = !canControl;
     playlistCount.textContent = list.length ? String(list.length) : "";
     playlistForm.hidden = !canControl;
     playlistNote.textContent = state.playlistStalled ? t("playlistStalled") : "";
