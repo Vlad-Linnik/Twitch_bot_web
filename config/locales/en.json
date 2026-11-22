@@ -182,7 +182,7 @@
       "botinfo": "Bot uptime.",
       "randomclip": "Posts a random clip from the channel's most-viewed clips.",
       "weather": "Show the current weather for a given city.",
-      "track": "Name the donated clip playing on stream right now. The streamer picks what the reply includes - title, link, donor name, amount - in the settings.",
+      "track": "Name the donated clip playing on stream right now. The streamer picks what the reply includes - title, author (YouTube channel), link, donor name, amount - in the settings.",
       "clip": "Control the donated clip from chat: hide - cover the picture (the sound keeps playing), show - uncover it, pause, play - resume, skip.",
       "update7tv": "Re-sync the channel's 7TV emote set into the tracked-word whitelist.",
       "muteduel": "Challenge chat or a user to a dice-roll duel; loser gets timed out.",
@@ -2366,6 +2366,7 @@
     "defaultCityLabel": "Default city",
     "replyPartsLabel": "What the reply says",
     "replyPart": {
+      "author": "Author (channel)",
       "title": "Title",
       "link": "Link",
       "donor": "Who ordered it",

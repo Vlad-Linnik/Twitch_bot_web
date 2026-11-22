@@ -7,8 +7,10 @@
 // One row per channel, written by realtime/donationMediaManager.js and only by it:
 //   { channelId,                       string, numeric Twitch id
 //     channelLogin,                    without "#", for a human reading the collection
-//     item: null | { id, videoId, title, donor, amount: { value, currency } | null,
+//     item: null | { id, videoId, title, author, donor, amount: { value, currency } | null,
 //                    platform, addedBy },
+//                                  `author` is the clip's YouTube channel name (oEmbed), null
+//                                  until it is looked up or when the lookup failed
 //                                  `id` is the queue's own item id; the bot sends it back with a
 //                                  `!clip` command (db/donationMediaChatCommandsRepo.js)
 //     paused,                          boolean

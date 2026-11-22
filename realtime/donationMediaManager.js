@@ -95,7 +95,8 @@ class Session {
   publishNowPlaying() {
     const current = this.queue.current;
     const paused = Boolean(current && this.queue.paused);
-    const key = current ? `${current.id}|${paused ? 1 : 0}|${current.title || ""}` : "none";
+    const author = current ? channelNameFor(current.videoId, () => this.publishNowPlaying()) : null;
+    const key = current ? `${current.id}|${paused ? 1 : 0}|${current.title || ""}|${author || ""}` : "none";
     const now = Date.now();
     const prev = this.published;
     if (prev && prev.key === key && (!current || now - prev.at < NOW_PLAYING_REFRESH_MS)) return;
@@ -109,6 +110,9 @@ class Session {
           id: current.id,
           videoId: current.videoId,
           title: current.title || null,
+          // The YouTube channel the clip is from - none of the platforms send it, so it is looked
+          // up here and arrives a moment after the clip starts (the row is re-written then).
+          author: author || null,
           donor: current.donor || null,
           amount: current.amount ? { ...current.amount } : null,
           platform: current.platform || null,
@@ -200,18 +204,50 @@ class Session {
   }
 }
 
-// The clip's name for the panel when the platform did not send one. The player reports it as well
-// once the clip plays; this is what the queue shows before that.
-async function fetchTitle(videoId) {
+// YouTube oEmbed: the clip's name and its channel's name, or null.
+async function fetchVideoInfo(videoId) {
   try {
     const url = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(OEMBED_TIMEOUT_MS) });
     if (!res.ok) return null;
     const data = await res.json();
-    return data && data.title ? String(data.title).slice(0, 200) : null;
+    if (!data) return null;
+    return {
+      title: data.title ? String(data.title).slice(0, 200) : null,
+      author: data.author_name ? String(data.author_name).slice(0, 100) : null,
+    };
   } catch (_) {
     return null;
   }
+}
+
+// The clip's name for the panel when the platform did not send one. The player reports it as well
+// once the clip plays; this is what the queue shows before that.
+async function fetchTitle(videoId) {
+  const info = await fetchVideoInfo(videoId);
+  return info ? info.title : null;
+}
+
+// The YouTube channel of a clip, for the bot's now-playing row. Asked for on every publish (that is
+// every second of progress), so it answers from memory and starts at most one lookup per video;
+// `onLearnt` runs once the name arrives so the row picks it up without waiting for the refresh. A
+// failed lookup is remembered too and retried only after AUTHOR_RETRY_MS, or a dead oEmbed would be
+// asked once a second for the whole clip.
+const AUTHOR_CACHE_MAX = 500;
+const AUTHOR_RETRY_MS = 5 * 60 * 1000;
+const authorCache = new Map(); // videoId -> { author: string | null, at, pending }
+
+function channelNameFor(videoId, onLearnt) {
+  const hit = authorCache.get(videoId);
+  if (hit && (hit.pending || hit.author || Date.now() - hit.at < AUTHOR_RETRY_MS)) return hit.author;
+  if (authorCache.size >= AUTHOR_CACHE_MAX) authorCache.delete(authorCache.keys().next().value);
+  authorCache.set(videoId, { author: null, at: Date.now(), pending: true });
+  fetchVideoInfo(videoId).then((info) => {
+    const author = info && info.author ? info.author : null;
+    authorCache.set(videoId, { author, at: Date.now(), pending: false });
+    if (author) onLearnt();
+  });
+  return null;
 }
 
 function getSession(channelId, channelLogin) {

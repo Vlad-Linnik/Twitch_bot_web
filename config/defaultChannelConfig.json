@@ -94,6 +94,7 @@
       "signature": "!song",
       "reply": {
         "title": true,
+        "author": false,
         "link": true,
         "donor": true,
         "amount": true
