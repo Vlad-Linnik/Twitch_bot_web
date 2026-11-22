@@ -39,4 +39,14 @@ function translate(locale, key, vars) {
   return key;
 }
 
-module.exports = { translate, isSupportedLocale, DEFAULT_LOCALE, SUPPORTED_LOCALES, NATIVE_LANGUAGE_NAMES };
+// Whether a key has a text in this language or in the fallback one - for callers that try one key
+// and fall back to another (routes/mediaSection.js's section translator), so the first try does
+// not log a missing key that was never meant to exist.
+function hasTranslation(locale, key) {
+  return (
+    typeof resolveKey(dictionaries[locale] || dictionaries[DEFAULT_LOCALE], key) === "string" ||
+    typeof resolveKey(dictionaries[DEFAULT_LOCALE], key) === "string"
+  );
+}
+
+module.exports = { translate, hasTranslation, isSupportedLocale, DEFAULT_LOCALE, SUPPORTED_LOCALES, NATIVE_LANGUAGE_NAMES };

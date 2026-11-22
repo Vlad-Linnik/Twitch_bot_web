@@ -28,6 +28,7 @@
 // served by Mongo (the viewer average is computed on read), and a channel has hundreds of cards,
 // not tens of thousands. 24 per portion - a full last row at 2, 3, 4 and 6 columns.
 const express = require("express");
+const { hasTranslation } = require("../config/i18n");
 const { infoIsStale, INFO_VERSION } = require("../lib/mediaInfo");
 const multer = require("multer");
 const mediaItemsRepo = require("../db/mediaItemsRepo");
@@ -140,10 +141,12 @@ function createMediaSectionRouter(cfg) {
   router.use(`/:channel/${SECTION}`, (req, res, next) => {
     const t = res.locals.t;
     res.locals.sec = cfg.view;
+    // Asked first whether the section has its own text, rather than reading the key and comparing:
+    // reading a key that is absent logs it as missing, and absent is the normal case here - it
+    // filled the error log with a "missing" line for every shared string on every games page.
     res.locals.st = (key, vars) => {
       const own = `${cfg.view.i18n}.${key}`;
-      const text = t(own, vars);
-      return text === own ? t(`movies.${key}`, vars) : text;
+      return t(hasTranslation(res.locals.locale, own) ? own : `movies.${key}`, vars);
     };
     next();
   });
