@@ -91,7 +91,13 @@
     "track": {
       "enabled": true,
       "cooldownMs": 15000,
-      "signature": "!track"
+      "signature": "!song",
+      "reply": {
+        "title": true,
+        "link": true,
+        "donor": true,
+        "amount": true
+      }
     },
     "clip": {
       "enabled": true,

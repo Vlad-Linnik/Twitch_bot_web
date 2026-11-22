@@ -46,6 +46,18 @@
                  class="w-full min-w-24 max-w-40 rounded-md bg-neutral-900 border border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
         </label>
       <% } %>
+      <% if (cmd.reply && typeof cmd.reply === 'object') { %>
+        <fieldset class="mt-2">
+          <legend class="block text-xs text-neutral-500 mb-0.5"><%= t('channelSettings.replyPartsLabel') %></legend>
+          <input type="hidden" name="commands.<%= name %>.reply.present" value="1" />
+          <% for (const part of Object.keys(cmd.reply)) { %>
+            <label class="flex items-center gap-1.5 text-sm text-neutral-300 whitespace-nowrap">
+              <input type="checkbox" name="commands.<%= name %>.reply.<%= part %>" <%= cmd.reply[part] !== false ? 'checked' : '' %> class="accent-purple-500" />
+              <%= t('channelSettings.replyPart.' + part) %>
+            </label>
+          <% } %>
+        </fieldset>
+      <% } %>
     <% } else { %>
       <span class="text-neutral-600">—</span>
     <% } %>
