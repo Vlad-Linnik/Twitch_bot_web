@@ -22,6 +22,8 @@ const { computePermission, canEditSectionAt } = require("../middleware/permissio
 const { MediaQueue } = require("../lib/donationMediaQueue");
 const { extractVideoId } = require("../lib/donationMedia");
 const { CONNECTORS } = require("./donationMediaConnectors");
+const radioSources = require("../lib/radioSources");
+const { titleKey } = require("../lib/donationMediaRadio");
 
 const SAVE_DEBOUNCE_MS = 1000;
 const PERMISSION_RECHECK_MS = 60 * 1000;
@@ -41,6 +43,9 @@ const NOW_PLAYING_REFRESH_MS = 60 * 1000;
 const CHAT_COMMAND_POLL_MS = 1000;
 // At most this many commands per tick: a burst is drained over a few ticks rather than in one loop.
 const CHAT_COMMAND_BATCH = 20;
+// A radio top-up that found nothing new is not retried before this: the Mix of the same track
+// would answer the same, and a source that is down should not be asked every second.
+const RADIO_RETRY_MS = 2 * 60 * 1000;
 
 const sessions = new Map(); // channelId -> Session
 
@@ -56,9 +61,14 @@ class Session {
     this.saveTimer = null;
     this.published = null; // { key, at, itemId, startedAt } - the last now-playing row written
     this.publishChain = Promise.resolve();
+    this.radioRetryAt = 0;
+    this.radioStarting = false; // startRadio's own first fetch is running; no top-up beside it
     this.queue = new MediaQueue({
       send: (target, message) => this.send(target, message),
-      onChange: () => this.scheduleSave(),
+      onChange: () => {
+        this.scheduleSave();
+        this.topUpRadio();
+      },
     });
     this.ready = donationMediaRepo
       .loadQueue(this.channelId)
@@ -75,7 +85,9 @@ class Session {
       .catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load the queue:`, err.message))
       // Nothing plays right after a load (the clip that was playing went back into the queue), and
       // a row left by the previous process may still say otherwise.
-      .then(() => this.publishNowPlaying());
+      .then(() => this.publishNowPlaying())
+      // A radio saved as on with a nearly empty feed carries on after a restart.
+      .then(() => this.topUpRadio());
   }
 
   send(target, message) {
@@ -194,6 +206,96 @@ class Session {
     }
     this.status[platform] = { connected, error: error || null };
     this.queue.setPlatforms(this.status);
+  }
+
+  // --- the "up next" feed (lib/radioSources.js does the asking) ----------------------------------
+
+  // Runs one fetch of a kind at a time; the panel shows the kind as busy meanwhile. Resolves to the
+  // tracks, or null when one of this kind was already running or it failed.
+  async fetchInto(kind, load) {
+    if (this.queue.radioBusy[kind]) return null;
+    this.queue.setRadioBusy(kind, true);
+    try {
+      return await load(this.queue.feedExclusions(titleKey));
+    } catch (err) {
+      console.error(`[donationMedia] ${this.channelLogin}: ${kind} fetch failed:`, err.message);
+      return null;
+    } finally {
+      this.queue.setRadioBusy(kind, false);
+    }
+  }
+
+  // Called after every change: while the radio is on and its tracks run low, the Mix of the last
+  // radio track that played tops the feed up.
+  topUpRadio() {
+    const seed = this.queue.radioWantsMore();
+    if (!seed || this.radioStarting || this.queue.radioBusy.radio || Date.now() < this.radioRetryAt) return;
+    const radio = this.queue.radio;
+    this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex)).then((tracks) => {
+      // The radio may have been switched off or restarted from another track meanwhile.
+      if (this.queue.radio !== radio || !tracks) return;
+      const added = this.queue.addUpNext(tracks, "radio");
+      if (added === 0) this.radioRetryAt = Date.now() + RADIO_RETRY_MS;
+    });
+  }
+
+  // The track a panel pointed at, with a name for the seed: from wherever the panel saw it, else
+  // oEmbed.
+  async trackInfo(videoId) {
+    const q = this.queue;
+    const known = [q.current, ...q.queue, ...q.history, ...q.playlist, ...q.upNext].find((i) => i && i.videoId === videoId && i.title);
+    const info = known && known.author ? null : await radioSources.embedInfo(videoId);
+    return {
+      videoId,
+      title: (known && known.title) || (info && info.title) || "",
+      author: (known && known.author) || (info && info.author) || "",
+    };
+  }
+
+  async startRadio(videoId) {
+    const seed = await this.trackInfo(videoId);
+    this.radioStarting = true;
+    try {
+      this.queue.startRadio(seed);
+      const radio = this.queue.radio;
+      this.radioRetryAt = 0;
+      // fetchInto refuses while a top-up of the previous radio is still running; that one's answer
+      // is dropped (the radio object changed), and this waits it out.
+      for (let i = 0; i < 30 && this.queue.radioBusy.radio; i++) await new Promise((r) => setTimeout(r, 500));
+      const tracks = await this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex));
+      if (this.queue.radio !== radio) return 0;
+      // Radio from the track that is playing lets it finish; from any other, the radio starts now.
+      const playing = this.queue.current && this.queue.current.videoId === videoId;
+      const added = tracks ? this.queue.addUpNext(tracks, "radio", playing ? { first: true } : { playNow: true }) : 0;
+      if (added === 0) this.queue.stopRadio();
+      return added;
+    } finally {
+      this.radioStarting = false;
+    }
+  }
+
+  async moreFromArtist(videoId) {
+    const seed = await this.trackInfo(videoId);
+    const tracks = await this.fetchInto("artist", (ex) => radioSources.moreFromArtist(seed, ex));
+    return tracks ? this.queue.addUpNext(tracks, "artist") : 0;
+  }
+
+  // { added, error } - error "noKey" | "failed" | "busy" | null.
+  async aiWish(text) {
+    const q = this.queue;
+    if (q.radioBusy.ai) return { added: 0, error: "busy" };
+    let error = null;
+    const tracks = await this.fetchInto("ai", async (ex) => {
+      const result = await radioSources.aiPick(text, {
+        ...ex,
+        nowPlaying: q.current ? q.current.title : "",
+        tasteTitles: q.playlist.map((p) => p.title).filter(Boolean).slice(-15),
+        avoidTitles: q.upNext.map((u) => u.title).filter(Boolean),
+      });
+      error = result.error;
+      return result.tracks;
+    });
+    return { added: tracks ? q.addUpNext(tracks, "ai", { playNow: true }) : 0, error };
   }
 
   onMedia(platform, media, dedupeKey) {
@@ -475,6 +577,33 @@ async function handlePanelCommand(session, ws, principal, msg) {
       if (entry) fetchTitle(videoId).then((title) => title && q.setPlaylistTitle(entry.id, title));
       return;
     }
+    case "radioStart": {
+      const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
+      if (!videoId) return reply({ ok: false, reason: "bad" });
+      const added = await session.startRadio(videoId);
+      return reply(added > 0 ? { ok: true, added } : { ok: false, reason: "nothing" });
+    }
+    case "radioStop":
+      return q.stopRadio();
+    case "moreFromArtist": {
+      const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
+      if (!videoId) return reply({ ok: false, reason: "bad" });
+      if (q.radioBusy.artist) return reply({ ok: false, reason: "busy" });
+      const added = await session.moreFromArtist(videoId);
+      return reply(added > 0 ? { ok: true, added } : { ok: false, reason: "nothing" });
+    }
+    case "aiWish": {
+      const text = typeof msg.text === "string" ? msg.text.trim().slice(0, radioSources.WISH_MAX) : "";
+      if (!text) return reply({ ok: false, reason: "empty" });
+      const { added, error } = await session.aiWish(text);
+      return reply(added > 0 ? { ok: true, added } : { ok: false, reason: error || "nothing" });
+    }
+    case "upNextRemove":
+      return asId(msg.id) && q.removeUpNext(msg.id);
+    case "upNextPlay":
+      return asId(msg.id) && q.playUpNextNow(msg.id);
+    case "upNextClear":
+      return q.clearUpNext();
     case "add": {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       reply({ ok: Boolean(videoId) });

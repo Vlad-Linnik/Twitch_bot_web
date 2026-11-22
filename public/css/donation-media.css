@@ -236,6 +236,22 @@
   background: rgba(147, 51, 234, 0.18); border: 1px solid var(--dm-accent); color: var(--dm-text);
 }
 .dm-btn.is-kept { color: var(--dm-warn); opacity: 0.85; cursor: default; }
+
+/* The "up next" feed: the radio, more by an artist, the AI wish. */
+.dm-badge.p-radio { background: var(--dm-card-2); color: var(--dm-text); border: 1px solid #0ea5e9; }
+.dm-badge.s-mix { background: #b91c1c; }
+.dm-badge.s-lastfm { background: #d51007; }
+.dm-badge.s-author { background: #475569; }
+.dm-badge.s-ai { background: #7c3aed; }
+.dm-radio-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; padding: 6px 10px;
+  border-radius: 8px; font-size: 13px; background: rgba(14, 165, 233, 0.12); border: 1px solid #0ea5e9;
+}
+.dm-radio-line[hidden] { display: none; }
+.dm-radio-line a { color: var(--dm-text); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.dm-busy:not(:empty)::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border: 2px solid var(--dm-muted); border-top-color: transparent; border-radius: 50%; animation: dm-spin 0.8s linear infinite; }
+@keyframes dm-spin { to { transform: rotate(360deg); } }
+.dm-btn:disabled { opacity: 0.5; cursor: default; }
 .dm-blur { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--dm-muted); }
 .dm-blur input[type="range"] { flex: 1; max-width: 260px; accent-color: var(--dm-warn); }
 .dm-blur-value { min-width: 3.5em; color: var(--dm-text); font-variant-numeric: tabular-nums; }

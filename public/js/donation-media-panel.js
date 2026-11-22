@@ -7,7 +7,8 @@
 //   { type: "state", state }        everything - current, queue, history, statuses
 //   { type: "progress", id, time, duration }
 //   { type: "access", canControl }
-//   { type: "reply", reqId, ok }    answer to "add"
+//   { type: "reply", reqId, ok }    answer to "add", "playlistAdd", "radioStart", "moreFromArtist",
+//                                   "aiWish" (with `added` or `reason`)
 // Every piece of donor-written text is put on the page as textContent, never as HTML.
 (function () {
   "use strict";
@@ -98,6 +99,72 @@
     playlistBox
   );
 
+  // The "up next" feed: tracks picked by the radio, "more by this artist" and the AI wish. Built
+  // once, like the playlist: the wish being typed must survive every state update.
+  const feedCount = el("span");
+  const feedClear = el("button", { class: "dm-btn is-small", type: "button", text: t("upNextClear"), onclick: () => command("upNextClear") });
+  const radioLine = el("div", { class: "dm-radio-line" });
+  const feedBusy = el("div", { class: "dm-hint dm-busy" });
+  const feedBox = el("div", { class: "dm-list" });
+  const feedMsg = el("div", { class: "dm-hint" });
+  const aiInput = el("input", { type: "text", placeholder: t("aiPlaceholder"), autocomplete: "off", maxlength: "200" });
+  const aiButton = el("button", { class: "dm-btn", type: "submit", text: `✨ ${t("aiSubmit")}` });
+  const aiForm = el("form", { class: "dm-add" }, aiInput, aiButton);
+  aiForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = aiInput.value.trim();
+    if (!text) return;
+    feedMsg.textContent = "";
+    command("aiWish", { text }, (result) => {
+      if (result.ok) aiInput.value = "";
+      feedMsg.textContent = feedResultText(result, { noKey: "aiNoKey", failed: "aiFailed", nothing: "aiNothing" });
+    });
+  });
+  aiInput.addEventListener("input", () => { feedMsg.textContent = ""; });
+
+  function feedResultText(result, reasons) {
+    if (result.ok) return t("added").replace("{{n}}", String(result.added || 0));
+    const key = reasons[result.reason];
+    return key ? t(key) : "";
+  }
+
+  // The two per-track buttons: radio from it, more by its artist. The answer arrives once the
+  // sources have been asked (a few seconds); the busy line says so meanwhile.
+  function trackButtons(videoId, { wide = false } = {}) {
+    if (!canControl || !videoId) return [];
+    const busy = (state && state.radioBusy) || {};
+    return [
+      el("button", {
+        class: "dm-btn is-small",
+        type: "button",
+        text: wide ? `📻 ${t("radio")}` : "📻",
+        title: t("radioHint"),
+        "aria-label": t("radioHint"),
+        disabled: busy.radio,
+        onclick: () => {
+          feedMsg.textContent = "";
+          command("radioStart", { url: videoId }, (result) => {
+            feedMsg.textContent = feedResultText(result, { nothing: "radioNothing" });
+          });
+        },
+      }),
+      el("button", {
+        class: "dm-btn is-small",
+        type: "button",
+        text: wide ? `👤 ${t("moreArtist")}` : "👤+",
+        title: t("moreArtistHint"),
+        "aria-label": t("moreArtistHint"),
+        disabled: busy.artist,
+        onclick: () => {
+          feedMsg.textContent = "";
+          command("moreFromArtist", { url: videoId }, (result) => {
+            feedMsg.textContent = feedResultText(result, { nothing: "moreArtistNothing" });
+          });
+        },
+      }),
+    ];
+  }
+
   // The OBS player's volume. Built once, like the playlist toggle: the card below it is redrawn on
   // every state update, and a slider redrawn under the pointer drops the drag. While it is held,
   // the server's echo does not move it. Values go out at most every VOLUME_SEND_MS while dragging
@@ -151,6 +218,17 @@
     statusBox,
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("nowPlaying") })), volumeBox, nowBox),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("queue") }), queueCount), queueBox, addForm),
+    el(
+      "section",
+      {},
+      el("h2", { class: "dm-h" }, el("span", { text: `🎧 ${t("upNext")}` }), feedCount),
+      el("div", { class: "dm-hint", text: t("upNextHint") }),
+      radioLine,
+      feedBusy,
+      feedBox,
+      aiForm,
+      feedMsg
+    ),
     el("section", {}, autoLabel, autoHint, playlistDetails, playlistForm, playlistMsg),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
   );
@@ -200,6 +278,11 @@
     const line = el("div", { class: "dm-donor-line" });
     if (item.platform === "playlist") {
       line.appendChild(el("span", { class: "dm-badge p-playlist", text: t("playlistBadge") }));
+      return line;
+    }
+    if (item.platform === "radio") {
+      line.appendChild(el("span", { class: "dm-badge p-radio", text: t("upNextBadge") }));
+      if (item.source) line.appendChild(el("span", { class: `dm-badge s-${item.source}`, text: t(`source.${item.source}`) }));
       return line;
     }
     if (item.platform === "manual") {
@@ -271,7 +354,8 @@
       return;
     }
 
-    if (item.fromPlaylist) nowBox.appendChild(el("div", { class: "dm-playlist-banner", text: `🎶 ${t("playlistNowPlaying")}` }));
+    if (item.platform === "radio") nowBox.appendChild(el("div", { class: "dm-playlist-banner", text: `🎧 ${t("upNext")}` }));
+    else if (item.fromPlaylist) nowBox.appendChild(el("div", { class: "dm-playlist-banner", text: `🎶 ${t("playlistNowPlaying")}` }));
 
     const info = el(
       "div",
@@ -313,6 +397,7 @@
           playlistButton(item, { wide: true })
         )
       );
+      card.appendChild(el("div", { class: "dm-controls" }, ...trackButtons(item.videoId, { wide: true })));
       const modes = [
         [null, t("coverNone")],
         ["hide", `🙈 ${t("coverHide")}`],
@@ -548,6 +633,7 @@
     for (const entry of list) {
       const actions = el("div", { class: "dm-row-actions" });
       if (canControl) {
+        for (const b of trackButtons(entry.videoId)) actions.appendChild(b);
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("playlistRemove", { id: entry.id }) }));
       }
       const r = row({ id: entry.id, videoId: entry.videoId, title: entry.title, platform: "playlist" }, { actions });
@@ -557,6 +643,54 @@
       if (entry.id === playingId) r.classList.add("is-playing");
       playlistBox.appendChild(r);
     }
+  }
+
+  function renderFeed() {
+    const list = state.upNext || [];
+    const busy = state.radioBusy || {};
+    feedCount.replaceChildren();
+    if (list.length) {
+      feedCount.appendChild(document.createTextNode(String(list.length)));
+      if (canControl) {
+        feedCount.appendChild(document.createTextNode(" · "));
+        feedCount.appendChild(feedClear);
+      }
+    }
+    aiForm.hidden = !canControl;
+    aiButton.disabled = Boolean(busy.ai);
+    feedBusy.textContent = busy.radio || busy.artist || busy.ai ? t("searching") : "";
+
+    radioLine.replaceChildren();
+    radioLine.hidden = !state.radio;
+    if (state.radio) {
+      const seed = state.radio.seed;
+      radioLine.append(
+        el("span", { text: `📻 ${t("radioOn")} ` }),
+        el("a", { href: videoUrl(seed), target: "_blank", rel: "noopener noreferrer", text: seed.title || seed.videoId })
+      );
+      if (canControl) radioLine.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: t("radioStop"), onclick: () => command("radioStop") }));
+    }
+
+    feedBox.replaceChildren();
+    if (list.length === 0) {
+      feedBox.appendChild(el("div", { class: "dm-empty", text: t("upNextEmpty") }));
+      return;
+    }
+    list.forEach((entry, index) => {
+      const item = { id: entry.id, videoId: entry.videoId, title: entry.title, platform: "radio", source: entry.source };
+      const actions = el("div", { class: "dm-row-actions" });
+      if (canControl) {
+        actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: "▶", title: t("upNextPlay"), "aria-label": t("upNextPlay"), onclick: () => command("upNextPlay", { id: entry.id }) }));
+        const keep = playlistButton(item);
+        if (keep) actions.appendChild(keep);
+        for (const b of trackButtons(entry.videoId)) actions.appendChild(b);
+        actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("upNextRemove", { id: entry.id }) }));
+      }
+      const extra = entry.author ? el("div", { class: "dm-msg-short", text: entry.author }) : null;
+      const r = row(item, { num: index + 1, actions, extra });
+      r.removeAttribute("data-dm-id");
+      feedBox.appendChild(r);
+    });
   }
 
   function renderHistory() {
@@ -584,6 +718,7 @@
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: t("playNext"), title: t("playNextHint"), onclick: () => command("replay", { id: item.id, next: true }) }));
         const keep = playlistButton(item);
         if (keep) actions.appendChild(keep);
+        for (const b of trackButtons(item.videoId)) actions.appendChild(b);
       }
       historyBox.appendChild(row(item, { actions, extra }));
     }
@@ -601,6 +736,7 @@
     renderStatus();
     renderNow();
     renderQueue();
+    renderFeed();
     renderPlaylist();
     renderHistory();
   }
