@@ -211,6 +211,10 @@
       root.style.fontSize = size.toFixed(2) + "px";
     }
     var target = root.style.fontSize;
+    // What the widget actually takes of the source, margin included - the setup page turns it into
+    // the source size that would leave no empty band in OBS.
+    var tight = widget.getBoundingClientRect();
+    postTight((tight.width + margin * 2) / vw, (tight.height + margin * 2) / vh);
     if (animated && fitted && current && current !== target) {
       // Back to where the eye last saw it, then animate to the target.
       root.style.fontSize = current;
@@ -312,7 +316,20 @@
     return true;
   }
 
+  // To the setup page: the share of the source's width and height the widget fills (null for the
+  // free layout, whose parts are placed in fractions of the source - shrinking the source would
+  // move them).
+  var lastTight = "";
+  function postTight(w, h) {
+    if (!framed) return;
+    var key = w === null ? "free" : w.toFixed(3) + "x" + h.toFixed(3);
+    if (key === lastTight) return;
+    lastTight = key;
+    window.parent.postMessage({ type: "weather-tight", w: w, h: h }, window.location.origin);
+  }
+
   function fitFree() {
+    postTight(null, null);
     var seeded = seedFree(false);
     body.style.padding = "0";
     setLayout("free");
@@ -1194,6 +1211,19 @@
     show({ code: 3, isDay: true, temp: null, feels: null, wind: null, humidity: null, text: text, city: city });
   }
 
+  // At most one self-reload every two minutes: should the versions ever keep disagreeing (files
+  // rebuilt mid-deploy, a cache in front of the page), the widget must not reload in a loop.
+  function mayReload() {
+    try {
+      var last = Number(window.sessionStorage.getItem("weatherWidgetReloadAt")) || 0;
+      if (Date.now() - last < 2 * 60 * 1000) return false;
+      window.sessionStorage.setItem("weatherWidgetReloadAt", String(Date.now()));
+    } catch (_) {
+      // No storage: still reload - without it a loop is bounded by the poll interval anyway.
+    }
+    return true;
+  }
+
   function poll() {
     fetch("/obs/weather/" + encodeURIComponent(key) + "/data", { cache: "no-store" })
       .then(function (r) {
@@ -1201,6 +1231,13 @@
         return r.json();
       })
       .then(function (data) {
+        // A deploy changed the overlay's code: reload to run the new one. The setup page's preview
+        // is reloaded with the setup page itself and is left alone, so a reload never throws away
+        // an arrangement being edited.
+        if (data.version && boot.version && data.version !== boot.version && !framed && mayReload()) {
+          window.location.reload();
+          return;
+        }
         if (data.settings && !settingsFromForm) applySettings(data.settings);
         if (typeof data.city === "string") city = previewCity !== null ? previewCity : data.city;
         live = { reading: data.reading || null, error: data.error || null };

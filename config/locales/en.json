@@ -4372,7 +4372,9 @@
       "iconSide": "Picture",
       "layoutHint": "\"Auto\" picks the layout that leaves the least empty space in the source. \"Free\" lets you place every element yourself: press \"Move with the mouse\" above the preview.",
       "sourceSize": "Source size in OBS",
-      "sourceSizeHint": "Width and height of the \"Browser\" source in OBS. The preview takes the same shape, so a free arrangement looks on stream exactly as it does here."
+      "sourceSizeHint": "Width and height of the \"Browser\" source in OBS (its properties, not dragging its frame). The widget fills this rectangle, and the preview takes the same shape.",
+      "tightSize": "Part of the source stays empty. The size at which the source's frame in OBS matches the widget: {{size}} - set it in the \"Browser\" source's properties (Width and Height).",
+      "tightApply": "Use it here"
     },
     "style": {
       "realistic": "Realistic",

@@ -131,6 +131,40 @@
     });
   }
 
+  // The preview reports how much of the source the widget fills. Where a band of the source stays
+  // empty, the size that would hug the widget is offered: entered here it reshapes the preview,
+  // entered in the source's properties in OBS it makes the source's frame the widget's.
+  var tightBox = form.querySelector("[data-tight]");
+  var tightSize = null;
+  window.addEventListener("message", function (event) {
+    if (!tightBox || event.origin !== window.location.origin || !event.data || event.data.type !== "weather-tight") return;
+    var sw = parseInt(value("sourceW"), 10);
+    var sh = parseInt(value("sourceH"), 10);
+    if (event.data.w === null || !(sw > 0 && sh > 0)) {
+      tightBox.hidden = true;
+      return;
+    }
+    var w = Math.min(sw, Math.round(sw * event.data.w));
+    var h = Math.min(sh, Math.round(sh * event.data.h));
+    // A sliver is not worth a change in OBS.
+    if (sw - w < sw * 0.04 && sh - h < sh * 0.04) {
+      tightBox.hidden = true;
+      return;
+    }
+    tightSize = { w: w, h: h };
+    tightBox.querySelector("[data-tight-text]").textContent = tightBox.dataset.text.replace("{{size}}", w + " × " + h);
+    tightBox.hidden = false;
+  });
+  if (tightBox) {
+    tightBox.querySelector("[data-tight-apply]").addEventListener("click", function () {
+      if (!tightSize) return;
+      form.querySelector('[name="sourceW"]').value = tightSize.w;
+      form.querySelector('[name="sourceH"]').value = tightSize.h;
+      shapeStage();
+      tightBox.hidden = true;
+    });
+  }
+
   // The preview sends every change of the free layout; it is saved with the form.
   window.addEventListener("message", function (event) {
     if (event.origin !== window.location.origin || !event.data || event.data.type !== "weather-free") return;

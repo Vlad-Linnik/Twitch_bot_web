@@ -8,6 +8,9 @@
 //   /obs/weather/:key                            the OBS browser source (no login: the key is
 //   /obs/weather/:key/data                       the credential) and the reading it polls
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const { fingerprint } = require("../lib/assetVersion");
 const channelsRepo = require("../db/channelsRepo");
 const weatherWidgetRepo = require("../db/weatherWidgetRepo");
 const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
@@ -48,6 +51,24 @@ function overlayLink(req, key) {
   return `${req.protocol}://${req.get("host")}/obs/weather/${key}?lang=${encodeURIComponent(req.locale || "en")}`;
 }
 
+// What makes up the overlay's code: its script, its stylesheet, its page. A browser source in OBS
+// loads the page once and keeps it, so a deploy that changes any of these would otherwise reach a
+// running scene only when the streamer reloads the source by hand. The overlay compares this with
+// the version it was loaded with and reloads itself when they differ. Settings need none of this -
+// they ride on every poll. Not cached: a deploy can rebuild files under a running process
+// (lib/assetVersion.js says why).
+const OVERLAY_VIEW = path.join(__dirname, "..", "views", "weatherWidget.ejs");
+function overlayVersion() {
+  let view = "";
+  try {
+    const stat = fs.statSync(OVERLAY_VIEW);
+    view = `${stat.mtimeMs}:${stat.size}`;
+  } catch (_) {
+    /* no view, no page: the version only has to differ when something changed */
+  }
+  return [fingerprint("/js/weather-widget.js"), fingerprint("/css/weather-widget.css"), view].join("|");
+}
+
 // Everything the overlay script needs that is not the live reading: the scene of every code,
 // the descriptions in the page's language, the labels. One JSON in a data attribute.
 function overlayBootstrap(t, config) {
@@ -66,6 +87,7 @@ function overlayBootstrap(t, config) {
     },
     settings: config.settings,
     city: weather.publicCityName(config),
+    version: overlayVersion(),
   };
 }
 
@@ -187,7 +209,7 @@ router.get("/obs/weather/:key/data", async (req, res) => {
   try {
     const config = await weatherWidgetRepo.findByKey(req.params.key);
     if (!config) return res.status(404).json({ error: "notFound" });
-    const base = { settings: config.settings, city: weather.publicCityName(config) };
+    const base = { settings: config.settings, city: weather.publicCityName(config), version: overlayVersion() };
     if (!config.city) return res.json({ ...base, reading: null, error: "noCity" });
     try {
       const current = await openMeteo.currentConditions(config.city.lat, config.city.lon);

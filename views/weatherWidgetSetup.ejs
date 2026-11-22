@@ -185,6 +185,10 @@
         px
       </div>
       <p class="text-xs text-neutral-500 mt-1"><%= t('weatherWidget.setup.sourceSizeHint') %></p>
+      <p class="mt-2 text-sm text-amber-300/90" data-tight hidden data-text="<%= t('weatherWidget.setup.tightSize') %>">
+        <span data-tight-text></span>
+        <button type="button" class="ml-2 px-2 py-0.5 rounded border border-amber-700 hover:border-amber-500 text-amber-200 text-xs" data-tight-apply><%= t('weatherWidget.setup.tightApply') %></button>
+      </p>
     </fieldset>
 
     <fieldset>
