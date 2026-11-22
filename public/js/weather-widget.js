@@ -14,8 +14,11 @@
 (function () {
   "use strict";
 
-  var POLL_MS = 5 * 60 * 1000;
-  var RETRY_MS = 60 * 1000;
+  // Every poll is answered from the server's cache (lib/openMeteo.js), so polling often costs
+  // the weather service nothing; what it buys is that a change on the setup page - city, look,
+  // fields - reaches a running OBS scene within half a minute instead of several.
+  var POLL_MS = 30 * 1000;
+  var RETRY_MS = 30 * 1000;
   // How long a change of weather takes to play out, and how the layers overlap inside it.
   var CHANGE_MS = 2600;
   // Each cloud slot appears once cover passes its threshold; the higher slots fill the sky.
@@ -60,7 +63,7 @@
     fog: Array.prototype.slice.call(sceneEl.querySelectorAll(".fog")),
   };
 
-  var settings = Object.assign({ style: "realistic", animations: true, transitions: true, units: "c", transparent: false }, boot.settings || {});
+  var settings = Object.assign({ style: "realistic", animations: true, transitions: true, units: "c", align: "left", timer: false, timerShowSec: 60, timerEveryMin: 10, transparent: false }, boot.settings || {});
   var city = boot.city || "";
   // The city the setup page's preview was told (a postMessage from this origin). It outranks the
   // server's answer, which leaves a hidden city's name out.
@@ -86,11 +89,149 @@
     body.classList.toggle("style-realistic", settings.style !== "minimal");
     body.classList.toggle("anim-on", !!settings.animations);
     body.classList.toggle("bg-none", !!settings.transparent);
+    body.classList.toggle("align-right", settings.align === "right");
     var iconBefore = !before.show || before.show.icon !== false;
     layout();
     if (before.style !== settings.style || before.animations !== settings.animations || iconBefore !== visible("icon")) precip.restyle();
     if (shownReading) renderText(shownReading, false);
     scheduleStrike();
+    scheduleVisibility();
+    fitSoon(0);
+  }
+
+  // --- shown on a timer ------------------------------------------------------------------------
+
+  // The cycle is counted from the clock, not from when the page loaded: every OBS scene showing
+  // the widget, and the same scene after a reload, appears at the same moments (with a ten-minute
+  // cycle: at :00, :10, :20...). The setup page's preview is framed and ignores the timer - a
+  // preview that vanished for nine minutes would preview nothing.
+  var framed = window.self !== window.top;
+  var visibilityTimer = null;
+
+  function scheduleVisibility() {
+    clearTimeout(visibilityTimer);
+    if (!settings.timer || framed) {
+      widget.classList.remove("is-away");
+      return;
+    }
+    var period = settings.timerEveryMin * 60 * 1000;
+    var showMs = settings.timerShowSec * 1000;
+    var phase = Date.now() % period;
+    var on = phase < showMs;
+    widget.classList.toggle("is-away", !on);
+    visibilityTimer = setTimeout(scheduleVisibility, (on ? showMs - phase : period - phase) + 50);
+  }
+
+  // --- filling the source ----------------------------------------------------------------------
+
+  // The widget is sized in em, so its size is proportional to the root font size. fit() measures
+  // it and sets the root size that makes it as large as the OBS source allows: one side of the
+  // rectangle is filled edge to edge (less a thin margin), the other is as full as the widget's
+  // own shape permits. The measuring happens with the animation off and in one synchronous pass,
+  // so nothing is painted at the trial size; the change itself is then animated.
+  var root = document.documentElement;
+  var fitTimer = null;
+  var fitted = false;
+
+  // The arrangements fit() chooses from, by the shape of the source:
+  //   stack - picture beside a column of lines (the default)
+  //   wide  - the small lines beside the temperature instead of under it, for a long strip
+  //   tall  - the picture above the text, for a narrow or square source
+  //   line  - everything on one line, for a thin strip
+  var LAYOUTS = ["stack", "wide", "tall", "line"];
+
+  function setLayout(name) {
+    LAYOUTS.forEach(function (l) {
+      body.classList.toggle("lay-" + l, l === name);
+    });
+  }
+
+  // How much of the available box the widget would cover in this arrangement, scaled to fit.
+  function coverage(aw, ah) {
+    var r = widget.getBoundingClientRect();
+    if (!r.width || !r.height) return 0;
+    var k = Math.min(aw / r.width, ah / r.height);
+    return (k * r.width * k * r.height) / (aw * ah);
+  }
+
+  function fit() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    if (!vw || !vh) return;
+    var margin = Math.round(Math.min(vw, vh) * 0.04);
+    body.style.padding = margin + "px";
+    var aw = vw - margin * 2;
+    var ah = vh - margin * 2;
+    var current = root.style.fontSize;
+    root.classList.remove("fit-animate");
+
+    // Try each arrangement and keep the one that leaves the least empty space. The default
+    // wins ties, so the widget only rearranges itself when that clearly fills the box better.
+    var best = "stack";
+    setLayout("stack");
+    var bestCover = coverage(aw, ah) * 1.08;
+    ["wide", "tall", "line"].forEach(function (name) {
+      setLayout(name);
+      var c = coverage(aw, ah);
+      if (c > bestCover) {
+        best = name;
+        bestCover = c;
+      }
+    });
+    setLayout(best);
+
+    var size = parseFloat(window.getComputedStyle(root).fontSize) || 16;
+    // Two passes: a few things are in px (the card's border, the star dots), so the first
+    // proportional guess is close rather than exact.
+    for (var i = 0; i < 2; i++) {
+      var r = widget.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var k = Math.min(aw / r.width, ah / r.height);
+      size = size * k;
+      root.style.fontSize = size.toFixed(2) + "px";
+    }
+    var target = root.style.fontSize;
+    if (fitted && current && current !== target) {
+      // Back to where the eye last saw it, then animate to the target.
+      root.style.fontSize = current;
+      void root.offsetWidth;
+      root.classList.add("fit-animate");
+      root.style.fontSize = target;
+      // The canvas measured itself at the old size; re-measure once the size has settled.
+      setTimeout(precip.resize, 650);
+    } else {
+      precip.resize();
+    }
+    fitted = true;
+  }
+
+  // Text that is still changing - a temperature counting, a description cross-fading - is
+  // measured once it has settled, or the widget would swell and shrink along with it.
+  function fitSoon(delayMs) {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(fit, delayMs || 0);
+  }
+
+  window.addEventListener("resize", function () {
+    fitSoon(50);
+  });
+  // Not every change of the viewport fires "resize" (device emulation does not, for one); the
+  // body's box changes either way. Only its size is compared, so fit()'s own font-size changes -
+  // which leave the body as large as the viewport - do not feed back into it.
+  if (window.ResizeObserver) {
+    var lastBox = "";
+    new ResizeObserver(function () {
+      var box = window.innerWidth + "x" + window.innerHeight;
+      if (box !== lastBox) {
+        lastBox = box;
+        fitSoon(50);
+      }
+    }).observe(body);
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () {
+      fitSoon(0);
+    });
   }
 
   // Lays the widget out from the fields that are on. Whatever comes first of temperature,
@@ -264,7 +405,7 @@
     // realistic look the clouds fill most of the box, and anything falling behind them is hidden
     // until the last third. In the minimal one it is a column under the outline, like an icon.
     function bounds() {
-      return minimal() ? { top: H * 0.7, bottom: H * 1.02, left: W * 0.16, right: W * 0.9 } : { top: H * 0.42, bottom: H, left: -W * 0.1, right: W * 1.05 };
+      return minimal() ? { top: H * 0.78, bottom: H * 1.04, left: W * 0.16, right: W * 0.9 } : { top: H * 0.42, bottom: H, left: -W * 0.1, right: W * 1.05 };
     }
 
     function resize() {
@@ -550,7 +691,13 @@
       }
     }
 
-    return { set: set, restyle: restyle };
+    // A new size from fit(): the canvas re-measures; what is in the air keeps falling.
+    function resizeOnly() {
+      resize();
+      if (!settings.animations) still();
+    }
+
+    return { set: set, restyle: restyle, resize: resizeOnly };
   })();
 
   // --- text ------------------------------------------------------------------------------------
@@ -604,6 +751,7 @@
       span.textContent = p;
       detailsEl.appendChild(span);
     });
+    fitSoon(animate ? 1300 : 0);
   }
 
   // --- putting a reading on screen -------------------------------------------------------------
@@ -646,6 +794,9 @@
         if (typeof data.city === "string") city = previewCity !== null ? previewCity : data.city;
         live = { reading: data.reading || null, error: data.error || null };
         if (!previewing) showLive();
+        // Also a safety net for a resize that sent no final event: a fit that finds the same
+        // size changes nothing.
+        fitSoon(1500);
         setTimeout(poll, data.reading ? POLL_MS : RETRY_MS);
       })
       .catch(function () {

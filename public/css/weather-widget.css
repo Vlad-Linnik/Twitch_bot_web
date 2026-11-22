@@ -1,7 +1,9 @@
 /* The OBS weather widget (views/weatherWidget.ejs). Plain CSS, not Tailwind: this page carries no
    site chrome and is loaded by OBS on its own. Everything is sized in em off the root, and the
    root follows the browser source's size, so the widget scales with whatever width and height the
-   streamer gives the source in OBS (the setup page recommends 640x220).
+   streamer gives the source in OBS. The size below is only the first paint: the script then sizes
+   the root so the widget fills the source's rectangle with as little empty space as it can
+   (public/js/weather-widget.js's fit()), and sets the body's margin.
 
    Layer strengths (opacity, position) are set inline by public/js/weather-widget.js together with
    each layer's transition timing - that is what plays a change of weather in order (clouds roll
@@ -9,6 +11,10 @@
 
 html {
   font-size: min(4.1vw, 11.5vh);
+}
+/* Fitting animates the size, so a widget that changed its text grows or shrinks smoothly. */
+html.fit-animate {
+  transition: font-size 0.6s cubic-bezier(0.45, 0.05, 0.25, 1);
 }
 html, body {
   margin: 0;
@@ -23,16 +29,64 @@ body {
   color: #fff;
   display: flex;
   align-items: center;
-  padding: 0.4em;
+  justify-content: flex-start;
+  padding: 0;
   box-sizing: border-box;
 }
 
+/* --- arrangements, chosen by public/js/weather-widget.js's fit() for the source's shape ------- */
+
+/* wide: temperature on the left, the small lines stacked beside it. */
+.lay-wide .info {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 0.45em;
+  align-items: center;
+  justify-items: start;
+}
+.lay-wide .info > * { grid-column: 2; margin-top: 0; }
+.lay-wide .info > .temp { grid-column: 1; grid-row: 1 / span 4; }
+.lay-wide .info > .desc + .city,
+.lay-wide .info > * + .details { margin-top: 0.15em; }
+.align-right.lay-wide .info { justify-items: end; }
+.align-right.lay-wide .info > * { grid-column: 1; }
+.align-right.lay-wide .info > .temp { grid-column: 2; }
+
+/* line: every line of text side by side, on one baseline. */
+.lay-line .info { flex-direction: row; align-items: center; gap: 0.55em; }
+.lay-line .info > * { margin-top: 0; white-space: nowrap; }
+
+/* tall: the picture above the text. */
+.lay-tall .widget { flex-direction: column; align-items: flex-start; gap: 0.35em; }
+.align-right.lay-tall .widget { flex-direction: column; align-items: flex-end; }
+.style-realistic.lay-tall .widget,
+.style-realistic.align-right.lay-tall .widget { padding: 0.5em 0.7em 0.6em; }
+
+/* --- right alignment: the widget hugs the right edge, mirrored ------------------------------- */
+
+body.align-right { justify-content: flex-end; }
+.align-right .widget { flex-direction: row-reverse; }
+.align-right .info { align-items: flex-end; text-align: right; }
+.style-realistic.align-right .widget { padding: 0.5em 0.5em 0.5em 1.1em; }
+
+/* Always its natural size, never squeezed by the source: fit() measures it at trial sizes larger
+   than the source, and a squeezed widget (wrapped lines, shrunk columns) would measure wrong. What
+   overflows during that measuring is never painted. */
 .widget {
   display: flex;
+  flex: none;
+  width: max-content;
   align-items: center;
   gap: 0.7em;
-  transition: opacity 0.8s ease;
+  transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.45, 0.05, 0.25, 1);
 }
+/* Off-screen between appearances when shown on a timer: it slides a little towards its edge as
+   it fades. */
+.widget.is-away {
+  opacity: 0;
+  transform: translateX(-0.8em);
+}
+.align-right .widget.is-away { transform: translateX(0.8em); }
 .widget.is-hidden {
   opacity: 0;
 }
@@ -235,8 +289,8 @@ body:not(.anim-on) .scene.storm .bolt { opacity: 1; }
 .info {
   display: flex;
   flex-direction: column;
-  min-width: 0;
   line-height: 1.1;
+  white-space: nowrap;
 }
 .temp {
   font-size: 3em;
@@ -341,7 +395,9 @@ body:not(.anim-on) .scene.storm .bolt { opacity: 1; }
   stroke-linejoin: round;
 }
 .style-minimal .moon .line-icon * { stroke: #e8ecff; }
-.style-minimal .body { left: 6%; top: 4%; width: 52%; height: 52%; }
+/* The art sits around the middle of its square, so next to the text it reads as centred; rain
+   and snow use the strip under the clouds. */
+.style-minimal .body { left: 6%; top: 12%; width: 52%; height: 52%; }
 .style-minimal .cloud use {
   stroke: #fff;
   stroke-width: 0.11em;
@@ -352,8 +408,8 @@ body:not(.anim-on) .scene.storm .bolt { opacity: 1; }
 /* Two outlined clouds at most: four line drawings stacked read as a scribble, and the icon only
    has to say "how cloudy", which the second cloud already does. Precipitation falls below them
    (public/js/weather-widget.js's bounds), never through an outline. */
-.style-minimal .cloud-0 { left: 30%; top: 12%; width: 66%; }
-.style-minimal .cloud-1 { left: 4%; top: 26%; width: 64%; }
+.style-minimal .cloud-0 { left: 30%; top: 22%; width: 66%; }
+.style-minimal .cloud-1 { left: 4%; top: 36%; width: 64%; }
 .style-minimal .cloud-2,
 .style-minimal .cloud-3 { display: none; }
 .style-minimal .cloud use { fill: rgba(20, 26, 40, 0.55); }
@@ -366,11 +422,11 @@ body:not(.anim-on) .scene.storm .bolt { opacity: 1; }
   left: 14%;
   width: 72%;
 }
-.style-minimal .fog-0 { top: 62%; }
-.style-minimal .fog-1 { top: 74%; left: 22%; width: 60%; }
-.style-minimal .fog-2 { top: 86%; left: 10%; width: 66%; }
+.style-minimal .fog-0 { top: 72%; }
+.style-minimal .fog-1 { top: 82%; left: 22%; width: 60%; }
+.style-minimal .fog-2 { top: 92%; left: 10%; width: 66%; }
 .style-minimal .bolt path { fill: #ffd66b; stroke: none; }
-.style-minimal .bolt { left: 40%; top: 52%; width: 28%; height: 44%; }
+.style-minimal .bolt { left: 40%; top: 62%; width: 26%; height: 38%; }
 .style-minimal .info { text-shadow: 0 0.05em 0.3em rgba(0, 0, 0, 0.55); }
 .style-minimal .temp { font-weight: 300; }
 .style-minimal .desc { font-weight: 500; }

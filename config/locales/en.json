@@ -4319,7 +4319,7 @@
       "title": "Weather widget",
       "subtitle": "the weather in your city, live on stream",
       "saved": {
-        "settings": "Saved. A widget already open in OBS picks the changes up within a few minutes, or at once when the source is refreshed.",
+        "settings": "Saved. A widget already open in OBS picks the changes up within half a minute.",
         "link": "A new link was issued. Replace it in the OBS source - the old one no longer works."
       },
       "previewHeading": "Preview",
@@ -4348,12 +4348,23 @@
       "save": "Save",
       "linkHeading": "OBS link",
       "linkIntro": "In OBS, add a \"Browser\" source and paste this link.",
-      "linkHint": "Recommended source size: 640×220. The background is transparent; text and picture scale to the source.",
+      "linkHint": "The widget stretches to fill the source rectangle, leaving as little empty space as it can: the shape comes from the source size in OBS (e.g. 640×220 for wide, 300×300 for square). The background is transparent.",
       "secretWarning": "Anyone with this link can open your widget, but sees only what the stream shows: a hidden city is not sent through it. If the link leaks, issue a new one.",
       "regenerate": "Issue a new link",
       "regenerateConfirm": "The old link will stop working and the OBS source will need updating. Continue?",
       "show": "What to show",
-      "showHint": "Any combination: the widget lays itself out. The first ticked line becomes the large one; without the picture only text remains, without text only the picture."
+      "showHint": "Any combination: the widget lays itself out. The first ticked line becomes the large one; without the picture only text remains, without text only the picture.",
+      "align": "Alignment",
+      "align_left": "Left",
+      "align_right": "Right",
+      "alignHint": "Which edge of the source the widget hugs. On the right it is mirrored: picture on the right, text aligned to it - handy for a right-hand corner.",
+      "timerHeading": "When to show",
+      "timer": "Show on a timer",
+      "timerHint": "The widget appears for a while and then fades out again. The cycle follows the clock: with a 10-minute cycle it appears at :00, :10, :20 and so on, in every scene at once. The preview on this page always shows it.",
+      "timerShowFor": "Show for",
+      "timerSeconds": "seconds",
+      "timerEvery": "every",
+      "timerMinutes": "minutes"
     },
     "style": {
       "realistic": "Realistic",

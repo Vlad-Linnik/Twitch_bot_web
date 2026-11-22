@@ -113,6 +113,37 @@
     </fieldset>
 
     <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.timerHeading') %></legend>
+      <label class="flex gap-3 items-start cursor-pointer mb-3">
+        <input type="checkbox" name="timer" value="1" class="mt-1 accent-purple-600" <%= s.timer ? 'checked' : '' %> />
+        <span>
+          <span class="block text-sm text-neutral-200"><%= t('weatherWidget.setup.timer') %></span>
+          <span class="block text-xs text-neutral-500"><%= t('weatherWidget.setup.timerHint') %></span>
+        </span>
+      </label>
+      <div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
+        <%= t('weatherWidget.setup.timerShowFor') %>
+        <input type="number" name="timerShowSec" value="<%= s.timerShowSec %>" min="5" max="600" step="1" class="w-24 rounded-md bg-neutral-950 border border-neutral-800 px-2 py-1.5 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-600" />
+        <%= t('weatherWidget.setup.timerSeconds') %>
+        <%= t('weatherWidget.setup.timerEvery') %>
+        <input type="number" name="timerEveryMin" value="<%= s.timerEveryMin %>" min="1" max="120" step="1" class="w-24 rounded-md bg-neutral-950 border border-neutral-800 px-2 py-1.5 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-600" />
+        <%= t('weatherWidget.setup.timerMinutes') %>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.align') %></legend>
+      <div class="flex gap-4">
+        <% ['left', 'right'].forEach(function (a) { %>
+          <label class="flex gap-2 items-center text-sm text-neutral-200 cursor-pointer">
+            <input type="radio" name="align" value="<%= a %>" class="accent-purple-600" <%= s.align === a ? 'checked' : '' %> /> <%= t('weatherWidget.setup.align_' + a) %>
+          </label>
+        <% }) %>
+      </div>
+      <p class="text-xs text-neutral-500 mt-1"><%= t('weatherWidget.setup.alignHint') %></p>
+    </fieldset>
+
+    <fieldset>
       <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.units') %></legend>
       <div class="flex gap-4">
         <% [['c', '°C'], ['f', '°F']].forEach(function (u) { %>

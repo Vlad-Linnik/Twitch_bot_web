@@ -46,6 +46,7 @@
     return {
       style: radio("style"),
       units: radio("units"),
+      align: radio("align"),
       animations: checked("animations"),
       transitions: checked("transitions"),
       transparent: checked("transparent"),
