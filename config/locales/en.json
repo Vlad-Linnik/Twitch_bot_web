@@ -1939,7 +1939,7 @@
         "status_invalid": "Pick a status.",
         "year_invalid": "The year looks wrong.",
         "imdb_invalid": "IMDb: an id like tt1375666 or an imdb.com/title/… link.",
-        "recording_invalid": "Recording link: only Twitch (videos), YouTube, VK Video and Rutube.",
+        "recording_invalid": "Recording link: only Twitch (videos), YouTube (video or playlist), VK Video and Rutube.",
         "progress_invalid": "Check \"how much was watched\": a percentage 0-100, episodes no more than the total.",
         "rating_invalid": "A score is 1 to 10.",
         "poster_invalid": "The poster didn't work: an image up to 5 MB.",

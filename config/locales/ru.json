@@ -1939,7 +1939,7 @@
         "status_invalid": "Выберите статус.",
         "year_invalid": "Год выглядит неправильно.",
         "imdb_invalid": "IMDb: нужен идентификатор вида tt1375666 или ссылка на imdb.com/title/….",
-        "recording_invalid": "Ссылка на запись: подходят только Twitch (videos), YouTube, VK Видео и Rutube.",
+        "recording_invalid": "Ссылка на запись: подходят только Twitch (videos), YouTube (видео или плейлист), VK Видео и Rutube.",
         "progress_invalid": "Проверьте «сколько просмотрено»: процент от 0 до 100, серии не больше, чем всего.",
         "rating_invalid": "Оценка — от 1 до 10.",
         "poster_invalid": "Постер не подошёл: нужна картинка до 5 МБ.",
