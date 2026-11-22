@@ -127,12 +127,7 @@ router.get("/:channel/settings/donation-media", requireLevel(1), settingsNav("do
       status: donationMediaManager.statusOf(channel.channelId),
       currencies: DA_CURRENCIES,
       placeholderUrl: config.placeholderUrl,
-      buttons: config.buttons,
       historyLimit: config.historyLimit,
-      iconSlots: icons.SLOTS,
-      sevenTvTheme: icons.resolveIcons({ theme: "7tv" }),
-      customIcons: icons.resolveIcons({ theme: "custom", custom: config.buttons.custom }),
-      iconErrorNames: typeof req.query.names === "string" ? req.query.names.slice(0, 120) : "",
       historyMin: icons.HISTORY_MIN,
       historyMax: icons.HISTORY_MAX,
       saved: typeof req.query.saved === "string" ? req.query.saved : null,
@@ -287,6 +282,29 @@ router.post(
 
 // --- the queue panel's buttons and history (owner only) -------------------------------------------
 
+// The button theme has a settings page of its own under "Widgets"; the history length stays on the
+// setup page. Both save through the POST below.
+router.get("/:channel/settings/donation-media/buttons", requireLevel(1), settingsNav("donationMediaButtons"), async (req, res, next) => {
+  try {
+    const channel = await loadChannel(req, res);
+    if (!channel) return;
+    const config = await donationMediaRepo.getOrCreate(channel);
+    res.render("donationMediaButtons", {
+      channel,
+      buttons: config.buttons,
+      iconSlots: icons.SLOTS,
+      sevenTvTheme: icons.resolveIcons({ theme: "7tv" }),
+      customIcons: icons.resolveIcons({ theme: "custom", custom: config.buttons.custom }),
+      iconErrorNames: typeof req.query.names === "string" ? req.query.names.slice(0, 120) : "",
+      saved: typeof req.query.saved === "string" ? req.query.saved : null,
+      error: typeof req.query.error === "string" ? req.query.error : null,
+      errorPlatform: "buttons",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const iconUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: iconImage.MAX_UPLOAD_BYTES, files: 1, fields: 8, parts: 9, fieldSize: 2048 },
@@ -357,15 +375,16 @@ router.post(
       const channel = await loadChannel(req, res);
       if (!channel) return;
       const config = await donationMediaRepo.getOrCreate(channel);
-      const back = `/${channel.channelLogin}/settings/donation-media`;
-      const fail = (code, extra = "") => res.redirect(`${back}?error=${code}&platform=buttons${extra}#buttons`);
+      const setup = `/${channel.channelLogin}/settings/donation-media`;
+      const back = `${setup}/buttons`;
+      const fail = (code, extra = "") => res.redirect(`${back}?error=${code}${extra}`);
       const action = req.body.action;
 
       if (action === "history") {
         await donationMediaRepo.setHistoryLimit(channel.channelId, req.body.historyLimit);
         await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
         await settingsChangeLogRepo.logChange({ channelLogin: channel.channelLogin, user: req.user, category: "donation_media", action: "update", target: "historyLimit", before: null, after: null });
-        return res.redirect(`${back}?saved=history#history`);
+        return res.redirect(`${setup}?saved=history#history`);
       }
 
       const next_ = { theme: config.buttons.theme, custom: { ...config.buttons.custom } };
@@ -404,7 +423,7 @@ router.post(
       for (const url of iconImage.uploadsIn(before.custom)) if (!kept.has(url)) await iconImage.deleteIcon(url);
       await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
       await settingsChangeLogRepo.logChange({ channelLogin: channel.channelLogin, user: req.user, category: "donation_media", action: "update", target: "buttons", before: null, after: null });
-      return res.redirect(`${back}?saved=buttons#buttons`);
+      return res.redirect(`${back}?saved=buttons`);
     } catch (err) {
       next(err);
     }

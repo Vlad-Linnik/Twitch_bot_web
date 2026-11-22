@@ -1,0 +1,26 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('donationMedia.setup.buttonsHeading') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The donation media queue panel's button theme, a settings page of its own under "Widgets"
+  (routes/donationMedia.js). Owner only, like the setup page: the theme is the channel's look.
+%>
+
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
+
+  <header class="mb-8">
+    <h1 class="settings-heading text-3xl font-bold text-neutral-100 mb-1"><%= t('donationMedia.setup.buttonsHeading') %></h1>
+    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('donationMedia.setup.subtitle') %></p>
+  </header>
+
+  <% if (saved) { %>
+    <p class="mb-6 rounded-lg border border-green-800/50 bg-green-900/20 text-green-400 px-4 py-2.5 text-sm"><%= t('donationMedia.setup.saved.buttons') %></p>
+  <% } %>
+
+  <%- include('partials/donationMediaButtons') %>
+
+</main>
+<%- include('partials/settingsShellClose') %>
+
+<%- include('partials/foot') %>

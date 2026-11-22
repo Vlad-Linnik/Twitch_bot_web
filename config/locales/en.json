@@ -2561,7 +2561,8 @@
     },
     "donationMediaQueue": "Donation media: queue",
     "donationMediaSetup": "Donation media: setup",
-    "weatherWidget": "Weather"
+    "weatherWidget": "Weather",
+    "donationMediaButtons": "Donation media: buttons"
   },
   "moderatorPermissions": {
     "title": "Moderator permissions",

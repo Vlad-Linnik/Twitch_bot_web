@@ -2561,7 +2561,8 @@
     },
     "donationMediaQueue": "Медиа за донат: очередь",
     "donationMediaSetup": "Медиа за донат: подключение",
-    "weatherWidget": "Погода"
+    "weatherWidget": "Погода",
+    "donationMediaButtons": "Медиа за донат: кнопки"
   },
   "moderatorPermissions": {
     "title": "Права модераторов",

@@ -1,7 +1,7 @@
 <%#
-  The queue panel's button theme and history length (routes/donationMedia.js, POST .../buttons), on
-  the owner's setup page. Reads channel, buttons, historyLimit, iconSlots, sevenTvTheme,
-  customIcons, historyMin, historyMax, csrfToken, error, errorPlatform from the page.
+  The queue panel's button theme (routes/donationMedia.js, POST .../buttons), on its own settings
+  page (views/donationMediaButtons.ejs). Reads channel, buttons, iconSlots, sevenTvTheme,
+  customIcons, iconErrorNames, csrfToken, error, errorPlatform from the page.
 %>
 <%
   const bInput = 'w-full bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
@@ -20,7 +20,6 @@
   ];
 %>
 <section id="buttons" class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6 scroll-mt-24">
-  <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('donationMedia.setup.buttonsHeading') %></h2>
   <p class="text-sm text-neutral-500 mb-5"><%= t('donationMedia.setup.buttonsIntro') %></p>
 
   <% if (bError) { %>
@@ -73,16 +72,4 @@
       </form>
     <% } %>
   </div>
-</section>
-
-<section id="history" class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6 scroll-mt-24">
-  <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('donationMedia.setup.historyHeading') %></h2>
-  <p class="text-sm text-neutral-500 mb-4"><%= t('donationMedia.setup.historyIntro') %></p>
-  <form method="post" enctype="multipart/form-data" action="/<%= channel.channelLogin %>/settings/donation-media/buttons" class="flex flex-wrap items-center gap-3">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-    <input type="hidden" name="action" value="history" />
-    <input type="number" name="historyLimit" min="<%= historyMin %>" max="<%= historyMax %>" step="1" value="<%= historyLimit %>" required class="<%= bInput %> w-28" />
-    <span class="text-sm text-neutral-500"><%= t('donationMedia.setup.historyUnit', { min: historyMin, max: historyMax }) %></span>
-    <button type="submit" class="<%= bButton %>"><%= t('donationMedia.setup.historySave') %></button>
-  </form>
 </section>
