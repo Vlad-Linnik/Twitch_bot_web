@@ -5,6 +5,7 @@
 //   { type: "cover", mode, blur }  mode null | "hide" | "blur" | "image" - the picture over the clip,
 //                                  sound unchanged; blur = strength in percent (10-100)
 //   { type: "placeholder", url }   the owner's own placeholder picture changed (null = built-in)
+//   { type: "volume", value }      0-100; sent on connect and on every change, kept for every clip
 // and sends { type: "ended", id, error } and, once a second, { type: "progress", id, time, duration, title }.
 //
 // Loaded BEFORE the YouTube IFrame API script, so onYouTubeIframeAPIReady exists when it calls it.
@@ -22,6 +23,7 @@
   // The cover for the clip being played. Reset when a "play" ARRIVES, not when it is carried out:
   // a play deferred until the YouTube API is ready runs after the "cover" that followed it.
   let coverMode = null;
+  let volume = null; // null until the server says; YouTube's own default until then
   let ws = null;
   let reconnectAttempt = 0;
 
@@ -60,6 +62,10 @@
     if (mode === "hide" || mode === "blur" || mode === "image") container.classList.add(`cover-${mode}`);
   }
 
+  function applyVolume() {
+    if (playerReady && volume !== null) player.setVolume(volume);
+  }
+
   window.onYouTubeIframeAPIReady = function () {
     player = new YT.Player("ytplayer", {
       width: "100%",
@@ -68,6 +74,7 @@
       events: {
         onReady: () => {
           playerReady = true;
+          applyVolume();
           if (pending) {
             const item = pending;
             pending = null;
@@ -114,6 +121,7 @@
       mutedForPause = true;
       player.mute();
     }
+    applyVolume();
     player.loadVideoById(options);
   }
 
@@ -158,6 +166,10 @@
         break;
       case "stop":
         stop();
+        break;
+      case "volume":
+        volume = Math.min(100, Math.max(0, Math.round(Number(msg.value)) || 0));
+        applyVolume();
         break;
       case "placeholder":
         setPlaceholder(msg.url);

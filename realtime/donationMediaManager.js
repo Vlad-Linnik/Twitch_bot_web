@@ -424,6 +424,8 @@ async function handlePanelCommand(session, ws, principal, msg) {
       return q.setCover(typeof msg.mode === "string" ? msg.mode : null);
     case "blurStrength":
       return q.setBlurStrength(Number(msg.value));
+    case "volume":
+      return q.setVolume(Number(msg.value));
     case "autoPlaylist":
       return q.setAutoPlaylist(msg.on === true);
     case "playlistRemove":

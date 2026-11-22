@@ -98,6 +98,40 @@
     playlistBox
   );
 
+  // The OBS player's volume. Built once, like the playlist toggle: the card below it is redrawn on
+  // every state update, and a slider redrawn under the pointer drops the drag. While it is held,
+  // the server's echo does not move it. Values go out at most every VOLUME_SEND_MS while dragging
+  // (the stream hears the change as it is made), and the final one on release.
+  const VOLUME_SEND_MS = 300;
+  const volumeInput = el("input", { type: "range", min: "0", max: "100", step: "1", value: "100", "aria-label": t("volume") });
+  const volumeValue = el("span", { class: "dm-volume-value", text: "100%" });
+  const volumeIcon = el("span", { class: "dm-volume-icon", "aria-hidden": "true", text: "🔊" });
+  let volumeHeld = false;
+  let volumeSentAt = 0;
+  let volumeTimer = null;
+  function showVolume(value) {
+    volumeValue.textContent = `${value}%`;
+    volumeIcon.textContent = value === 0 ? "🔇" : value < 40 ? "🔈" : value < 75 ? "🔉" : "🔊";
+  }
+  function sendVolume() {
+    clearTimeout(volumeTimer);
+    volumeTimer = null;
+    volumeSentAt = Date.now();
+    command("volume", { value: Number(volumeInput.value) });
+  }
+  volumeInput.addEventListener("pointerdown", () => { volumeHeld = true; });
+  volumeInput.addEventListener("input", () => {
+    showVolume(Number(volumeInput.value));
+    const wait = VOLUME_SEND_MS - (Date.now() - volumeSentAt);
+    if (wait <= 0) sendVolume();
+    else if (!volumeTimer) volumeTimer = setTimeout(sendVolume, wait);
+  });
+  volumeInput.addEventListener("change", () => {
+    volumeHeld = false;
+    sendVolume();
+  });
+  const volumeBox = el("div", { class: "dm-volume", title: t("volumeHint") }, el("span", { text: t("volume") }), volumeIcon, volumeInput, volumeValue);
+
   const addInput = el("input", { type: "text", placeholder: t("addPlaceholder"), autocomplete: "off", maxlength: "300" });
   const addForm = el("form", { class: "dm-add" }, addInput, el("button", { class: "dm-btn", type: "submit", text: t("add") }));
   addForm.addEventListener("submit", (event) => {
@@ -115,7 +149,7 @@
     offline,
     readOnlyNote,
     statusBox,
-    el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("nowPlaying") })), nowBox),
+    el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("nowPlaying") })), volumeBox, nowBox),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("queue") }), queueCount), queueBox, addForm),
     el("section", {}, autoLabel, autoHint, playlistDetails, playlistForm, playlistMsg),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
@@ -559,6 +593,11 @@
     if (!state) return;
     readOnlyNote.hidden = canControl;
     addForm.hidden = !canControl;
+    volumeInput.disabled = !canControl;
+    if (!volumeHeld && !volumeTimer && Number.isFinite(state.volume)) {
+      volumeInput.value = String(state.volume);
+      showVolume(state.volume);
+    }
     renderStatus();
     renderNow();
     renderQueue();

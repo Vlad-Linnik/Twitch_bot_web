@@ -4067,7 +4067,9 @@
       "toPlaylist": "To playlist",
       "toPlaylistHint": "Add this clip to your own playlist",
       "inPlaylist": "In the playlist",
-      "blurStrength": "Blur strength"
+      "blurStrength": "Blur strength",
+      "volume": "Volume",
+      "volumeHint": "The OBS player's volume, for donations and your own playlist. Kept for every following clip."
     },
     "player": {
       "coverText": "Clip hidden"
