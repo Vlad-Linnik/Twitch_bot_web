@@ -34,6 +34,19 @@
     return out;
   }
 
+  function value(name) {
+    var el = form.querySelector('[name="' + name + '"]');
+    return el ? el.value : undefined;
+  }
+
+  function freeLayout() {
+    try {
+      return JSON.parse(value("free") || "{}");
+    } catch (_) {
+      return {};
+    }
+  }
+
   function formSettings() {
     var checked = function (name) {
       var el = form.querySelector('input[name="' + name + '"]');
@@ -47,6 +60,9 @@
       style: radio("style"),
       units: radio("units"),
       align: radio("align"),
+      layout: value("layout"),
+      iconSide: value("iconSide"),
+      free: freeLayout(),
       animations: checked("animations"),
       transitions: checked("transitions"),
       transparent: checked("transparent"),
@@ -55,16 +71,72 @@
   }
 
   form.addEventListener("change", function (event) {
-    if (event.target && event.target.name !== "cityQuery") post({ type: "weather-settings", settings: formSettings() });
+    if (!event.target || event.target.name === "cityQuery") return;
+    // Leaving the free layout ends the editing of it.
+    if (event.target.name === "layout" && event.target.value !== "free" && stopEditing) stopEditing();
+    post({ type: "weather-settings", settings: formSettings() });
   });
+  var stopEditing = null;
   if (frame) {
     frame.addEventListener("load", function () {
       post({ type: "weather-settings", settings: formSettings() });
       // The overlay is not told a hidden city's name by the server (lib/weatherWidget.js's
       // publicCityName); the owner's preview is, so ticking "City" shows it before saving.
       if (form.dataset.cityName) post({ type: "weather-city", city: form.dataset.cityName });
+      // A reloaded preview starts outside the editor.
+      if (editing) post({ type: "weather-edit", on: true });
     });
   }
+
+  // --- the preview's shape: the OBS source's ------------------------------------------------------
+
+  var stage = document.getElementById("weather-preview-stage");
+  function shapeStage() {
+    var w = parseInt(value("sourceW"), 10);
+    var h = parseInt(value("sourceH"), 10);
+    if (stage && w > 0 && h > 0) stage.style.aspectRatio = w + " / " + h;
+  }
+  ["sourceW", "sourceH"].forEach(function (name) {
+    var el = form.querySelector('[name="' + name + '"]');
+    if (el) el.addEventListener("input", shapeStage);
+  });
+
+  // --- the mouse editor (it runs inside the preview, public/js/weather-widget.js) -------------
+
+  var bar = document.getElementById("weather-editor-bar");
+  var editing = false;
+  if (bar) {
+    bar.hidden = false;
+    var toggle = bar.querySelector("[data-edit-toggle]");
+    var editHint = bar.querySelector("[data-edit-hint]");
+    var setEditing = function (on) {
+      editing = on;
+      toggle.textContent = on ? toggle.dataset.labelOn : toggle.dataset.labelOff;
+      toggle.classList.toggle("border-purple-500", on);
+      editHint.hidden = !on;
+      if (on && value("layout") !== "free") {
+        form.querySelector('[name="layout"]').value = "free";
+        post({ type: "weather-settings", settings: formSettings() });
+      }
+      post({ type: "weather-edit", on: on });
+    };
+    toggle.addEventListener("click", function () {
+      setEditing(!editing);
+    });
+    stopEditing = function () {
+      if (editing) setEditing(false);
+    };
+    bar.querySelector("[data-edit-reset]").addEventListener("click", function () {
+      post({ type: "weather-free-reset" });
+    });
+  }
+
+  // The preview sends every change of the free layout; it is saved with the form.
+  window.addEventListener("message", function (event) {
+    if (event.origin !== window.location.origin || !event.data || event.data.type !== "weather-free") return;
+    var field = form.querySelector('[name="free"]');
+    if (field) field.value = JSON.stringify(event.data.free || {});
+  });
 
   // --- preview buttons -------------------------------------------------------------------------
 

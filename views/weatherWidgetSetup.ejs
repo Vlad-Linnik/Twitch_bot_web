@@ -36,8 +36,17 @@
   <section class="mb-10 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
     <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('weatherWidget.setup.previewHeading') %></h2>
     <p class="text-sm text-neutral-500 mb-4"><%= t('weatherWidget.setup.previewIntro') %></p>
-    <div class="rounded-lg overflow-hidden border border-neutral-800 mb-4 bg-gradient-to-br from-sky-900 via-slate-700 to-emerald-900">
-      <iframe id="weather-preview" src="<%= framePath %>" title="<%= t('weatherWidget.setup.previewHeading') %>" width="640" height="220" class="block w-full max-w-[640px] aspect-[64/22] border-0 bg-transparent"></iframe>
+    <%# The frame takes the shape of the OBS source (sourceW x sourceH), so a free layout is
+        placed on the same shape it is shown on; weather-widget-setup.js keeps it in step. %>
+    <div class="mb-3 max-w-[720px]">
+      <div class="rounded-lg overflow-hidden border border-neutral-800 bg-gradient-to-br from-sky-900 via-slate-700 to-emerald-900" id="weather-preview-stage" style="aspect-ratio: <%= s.sourceW %> / <%= s.sourceH %>">
+        <iframe id="weather-preview" src="<%= framePath %>" title="<%= t('weatherWidget.setup.previewHeading') %>" class="block w-full h-full border-0 bg-transparent"></iframe>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mb-4" id="weather-editor-bar" hidden>
+      <button type="button" class="<%= ghostButtonClass %>" data-edit-toggle data-label-on="<%= t('weatherWidget.editor.done') %>" data-label-off="<%= t('weatherWidget.editor.start') %>"><%= t('weatherWidget.editor.start') %></button>
+      <button type="button" class="<%= ghostButtonClass %>" data-edit-reset><%= t('weatherWidget.editor.reset') %></button>
+      <span class="text-xs text-neutral-500" data-edit-hint hidden><%= t('weatherWidget.editor.hint') %></span>
     </div>
     <div class="flex flex-wrap gap-2" id="weather-preview-buttons" hidden>
       <% previewCodes.forEach(function (p) { %>
@@ -141,6 +150,41 @@
         <% }) %>
       </div>
       <p class="text-xs text-neutral-500 mt-1"><%= t('weatherWidget.setup.alignHint') %></p>
+    </fieldset>
+
+    <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.arrangement') %></legend>
+      <div class="flex flex-wrap gap-3">
+        <label class="text-sm text-neutral-300">
+          <span class="block text-xs text-neutral-500 mb-1"><%= t('weatherWidget.setup.layout') %></span>
+          <select name="layout" class="w-full sm:w-auto bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-600">
+            <% ['auto', 'stack', 'wide', 'tall', 'line', 'free'].forEach(function (l) { %>
+              <option value="<%= l %>" <%= s.layout === l ? 'selected' : '' %>><%= t('weatherWidget.layout.' + l) %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="text-sm text-neutral-300">
+          <span class="block text-xs text-neutral-500 mb-1"><%= t('weatherWidget.setup.iconSide') %></span>
+          <select name="iconSide" class="w-full sm:w-auto bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-600">
+            <% ['auto', 'left', 'right'].forEach(function (v) { %>
+              <option value="<%= v %>" <%= s.iconSide === v ? 'selected' : '' %>><%= t('weatherWidget.iconSide.' + v) %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+      <p class="text-xs text-neutral-500 mt-2"><%= t('weatherWidget.setup.layoutHint') %></p>
+      <input type="hidden" name="free" value="<%= JSON.stringify(s.free) %>" />
+    </fieldset>
+
+    <fieldset>
+      <legend class="<%= labelClass %>"><%= t('weatherWidget.setup.sourceSize') %></legend>
+      <div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
+        <input type="number" name="sourceW" value="<%= s.sourceW %>" min="100" max="3840" step="1" class="w-24 rounded-md bg-neutral-950 border border-neutral-800 px-2 py-1.5 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-600" />
+        ×
+        <input type="number" name="sourceH" value="<%= s.sourceH %>" min="50" max="2160" step="1" class="w-24 rounded-md bg-neutral-950 border border-neutral-800 px-2 py-1.5 text-sm text-neutral-200 tabular-nums focus:outline-none focus:border-purple-600" />
+        px
+      </div>
+      <p class="text-xs text-neutral-500 mt-1"><%= t('weatherWidget.setup.sourceSizeHint') %></p>
     </fieldset>
 
     <fieldset>

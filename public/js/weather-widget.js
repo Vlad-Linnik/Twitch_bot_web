@@ -44,7 +44,6 @@
   var widget = document.getElementById("widget");
   var sceneEl = document.getElementById("scene");
   var tempEl = document.getElementById("temp");
-  var unitEl = document.getElementById("unit");
   var descEl = document.getElementById("desc");
   var cityEl = document.getElementById("city");
   var detailsEl = document.getElementById("details");
@@ -63,11 +62,13 @@
     fog: Array.prototype.slice.call(sceneEl.querySelectorAll(".fog")),
   };
 
-  var settings = Object.assign({ style: "realistic", animations: true, transitions: true, units: "c", align: "left", timer: false, timerShowSec: 60, timerEveryMin: 10, transparent: false }, boot.settings || {});
+  var settings = Object.assign({ style: "realistic", animations: true, transitions: true, units: "c", align: "left", layout: "auto", iconSide: "auto", timer: false, timerShowSec: 60, timerEveryMin: 10, transparent: false }, boot.settings || {});
   var city = boot.city || "";
   // The city the setup page's preview was told (a postMessage from this origin). It outranks the
   // server's answer, which leaves a hidden city's name out.
   var previewCity = null;
+  // Set once the setup page has sent its form's settings: see the "weather-settings" message.
+  var settingsFromForm = false;
   var live = null; // the last reading from the server: { reading, error }
   var previewing = false;
   var shown = null; // the state on screen: { scene, night }
@@ -90,9 +91,12 @@
     body.classList.toggle("anim-on", !!settings.animations);
     body.classList.toggle("bg-none", !!settings.transparent);
     body.classList.toggle("align-right", settings.align === "right");
+    var iconSide = settings.iconSide === "left" || settings.iconSide === "right" ? settings.iconSide : settings.align;
+    body.classList.toggle("icon-right", iconSide === "right");
     var iconBefore = !before.show || before.show.icon !== false;
     layout();
     if (before.style !== settings.style || before.animations !== settings.animations || iconBefore !== visible("icon")) precip.restyle();
+    if (shown) cropScene(shown.scene, shown.night);
     if (shownReading) renderText(shownReading, false);
     scheduleStrike();
     scheduleVisibility();
@@ -138,10 +142,11 @@
   //   wide  - the small lines beside the temperature instead of under it, for a long strip
   //   tall  - the picture above the text, for a narrow or square source
   //   line  - everything on one line, for a thin strip
+  // plus "free", placed by hand (the free layout section below).
   var LAYOUTS = ["stack", "wide", "tall", "line"];
 
   function setLayout(name) {
-    LAYOUTS.forEach(function (l) {
+    LAYOUTS.concat("free").forEach(function (l) {
       body.classList.toggle("lay-" + l, l === name);
     });
   }
@@ -155,6 +160,17 @@
   }
 
   function fit() {
+    if (settings.layout === "free" || editing) {
+      fitFree();
+      return;
+    }
+    clearFree();
+    fitAuto(true);
+  }
+
+  // animated: false applies the size at once (used to measure the automatic layout when seeding
+  // the free one).
+  function fitAuto(animated) {
     var vw = window.innerWidth;
     var vh = window.innerHeight;
     if (!vw || !vh) return;
@@ -165,19 +181,23 @@
     var current = root.style.fontSize;
     root.classList.remove("fit-animate");
 
-    // Try each arrangement and keep the one that leaves the least empty space. The default
-    // wins ties, so the widget only rearranges itself when that clearly fills the box better.
-    var best = "stack";
-    setLayout("stack");
-    var bestCover = coverage(aw, ah) * 1.08;
-    ["wide", "tall", "line"].forEach(function (name) {
-      setLayout(name);
-      var c = coverage(aw, ah);
-      if (c > bestCover) {
-        best = name;
-        bestCover = c;
-      }
-    });
+    // A pinned arrangement is used as it is. Otherwise each is tried and the one leaving the
+    // least empty space kept; the default wins ties, so the widget only rearranges itself when
+    // that clearly fills the box better.
+    var best = LAYOUTS.indexOf(settings.layout) >= 0 ? settings.layout : null;
+    if (!best) {
+      best = "stack";
+      setLayout("stack");
+      var bestCover = coverage(aw, ah) * 1.08;
+      ["wide", "tall", "line"].forEach(function (name) {
+        setLayout(name);
+        var c = coverage(aw, ah);
+        if (c > bestCover) {
+          best = name;
+          bestCover = c;
+        }
+      });
+    }
     setLayout(best);
 
     var size = parseFloat(window.getComputedStyle(root).fontSize) || 16;
@@ -191,7 +211,7 @@
       root.style.fontSize = size.toFixed(2) + "px";
     }
     var target = root.style.fontSize;
-    if (fitted && current && current !== target) {
+    if (animated && fitted && current && current !== target) {
       // Back to where the eye last saw it, then animate to the target.
       root.style.fontSize = current;
       void root.offsetWidth;
@@ -211,6 +231,317 @@
     clearTimeout(fitTimer);
     fitTimer = setTimeout(fit, delayMs || 0);
   }
+
+  // --- free layout -----------------------------------------------------------------------------
+
+  // Placed by hand in the setup page's editor: each part has its own spot and size in the source
+  // (settings.free, lib/weatherWidget.js's parseFree). x, y are where the top-left corner of what
+  // is drawn goes, as fractions of the source; u is the part's size unit as a fraction of the
+  // source's height, times the part's own em size (MULT) - the same em sizes the automatic layouts
+  // use, so a part seeded from them keeps its look. The picture is placed by its drawing, not its
+  // square: its crop margins (cropScene) shift the square so the drawing lands on x, y.
+  var PARTS = {
+    icon: { el: sceneEl, mult: 1 },
+    temp: { el: tempEl.parentNode, mult: 3 },
+    desc: { el: descEl, mult: 1.05 },
+    city: { el: cityEl, mult: 0.8 },
+    details: { el: detailsEl, mult: 0.68 },
+  };
+  var PART_KEYS = ["icon", "temp", "desc", "city", "details"];
+
+  // Where a part's drawing is on screen.
+  function artRect(k) {
+    var el = PARTS[k].el;
+    var r = el.getBoundingClientRect();
+    if (k !== "icon") return { left: r.left, top: r.top, width: r.width, height: r.height };
+    var cs = window.getComputedStyle(el);
+    var ml = parseFloat(cs.marginLeft) || 0;
+    var mt = parseFloat(cs.marginTop) || 0;
+    var mr = parseFloat(cs.marginRight) || 0;
+    var mb = parseFloat(cs.marginBottom) || 0;
+    return { left: r.left - ml, top: r.top - mt, width: r.width + ml + mr, height: r.height + mt + mb };
+  }
+
+  function clearFree() {
+    PART_KEYS.forEach(function (k) {
+      var st = PARTS[k].el.style;
+      st.left = st.top = st.fontSize = "";
+    });
+  }
+
+  function applyFree() {
+    var W = window.innerWidth;
+    var H = window.innerHeight;
+    var free = settings.free || {};
+    PART_KEYS.forEach(function (k) {
+      var f = free[k];
+      if (!f) return;
+      var st = PARTS[k].el.style;
+      st.fontSize = (f.u * H * PARTS[k].mult).toFixed(2) + "px";
+      st.left = (f.x * W).toFixed(1) + "px";
+      st.top = (f.y * H).toFixed(1) + "px";
+    });
+  }
+
+  // Parts the free layout does not place yet (never placed, or switched on since) start where the
+  // automatic layout would put them; a fresh free layout is the automatic one, ready to be moved.
+  function seedFree(all) {
+    var free = Object.assign({}, all ? {} : settings.free || {});
+    var missing = PART_KEYS.filter(function (k) {
+      return !free[k];
+    });
+    if (!missing.length) return false;
+    clearFree();
+    setLayout(null);
+    fitAuto(false);
+    var W = window.innerWidth;
+    var H = window.innerHeight;
+    missing.forEach(function (k) {
+      var el = PARTS[k].el;
+      if (window.getComputedStyle(el).display === "none") return;
+      var r = artRect(k);
+      if (!r.width) return;
+      var size = parseFloat(window.getComputedStyle(el).fontSize) || 16;
+      free[k] = {
+        x: Math.max(0, Math.min(1, r.left / W)),
+        y: Math.max(0, Math.min(1, r.top / H)),
+        u: size / PARTS[k].mult / H,
+      };
+    });
+    settings.free = free;
+    return true;
+  }
+
+  function fitFree() {
+    var seeded = seedFree(false);
+    body.style.padding = "0";
+    setLayout("free");
+    applyFree();
+    precip.resize();
+    if (editing) {
+      if (seeded) postFree();
+      drawBoxes();
+    }
+  }
+
+  // --- the editor (the setup page's preview only) -----------------------------------------------
+
+  // Drag a part to move it, drag its corner or turn the wheel over it to resize, arrows nudge the
+  // selected part by a pixel (with Shift by ten). Edges and centres snap to the source's edges and
+  // centre lines and to the other parts', with a guide drawn while they do; Shift while dragging
+  // turns snapping off. Every change goes to the setup page, which saves it with the form.
+  var editing = false;
+  var editLayer = null;
+  var selected = null;
+  var SNAP_PX = 6;
+
+  function postFree() {
+    if (!framed) return;
+    window.parent.postMessage({ type: "weather-free", free: settings.free || {} }, window.location.origin);
+  }
+
+  function setEditing(on) {
+    editing = !!on && framed;
+    body.classList.toggle("editing", editing);
+    if (editing) {
+      if (!editLayer) {
+        editLayer = document.createElement("div");
+        editLayer.className = "edit-layer";
+        document.body.appendChild(editLayer);
+      }
+      fit();
+      postFree();
+    } else {
+      selected = null;
+      if (editLayer) editLayer.textContent = "";
+      fit();
+    }
+  }
+
+  function drawBoxes(guides) {
+    if (!editLayer) return;
+    editLayer.textContent = "";
+    PART_KEYS.forEach(function (k) {
+      if (window.getComputedStyle(PARTS[k].el).display === "none") return;
+      var r = artRect(k);
+      if (!r.width || !r.height) return;
+      var box = document.createElement("div");
+      box.className = "edit-box" + (selected === k ? " is-selected" : "");
+      box.dataset.part = k;
+      box.style.left = r.left + "px";
+      box.style.top = r.top + "px";
+      box.style.width = r.width + "px";
+      box.style.height = r.height + "px";
+      var handle = document.createElement("div");
+      handle.className = "edit-handle";
+      handle.dataset.handle = "1";
+      box.appendChild(handle);
+      editLayer.appendChild(box);
+    });
+    (guides || []).forEach(function (g) {
+      var line = document.createElement("div");
+      line.className = "edit-guide " + (g.v ? "is-v" : "is-h");
+      if (g.v) line.style.left = g.at + "px";
+      else line.style.top = g.at + "px";
+      editLayer.appendChild(line);
+    });
+  }
+
+  // Snaps a moving rectangle's left/centre/right and top/middle/bottom to the targets; returns
+  // the correction and the guides to draw.
+  function snap(rect, skip) {
+    var W = window.innerWidth;
+    var H = window.innerHeight;
+    var xs = [0, W / 2, W];
+    var ys = [0, H / 2, H];
+    PART_KEYS.forEach(function (k) {
+      if (k === skip || window.getComputedStyle(PARTS[k].el).display === "none") return;
+      var r = artRect(k);
+      xs.push(r.left, r.left + r.width / 2, r.left + r.width);
+      ys.push(r.top, r.top + r.height / 2, r.top + r.height);
+    });
+    function best(edges, targets) {
+      var out = null;
+      edges.forEach(function (e) {
+        targets.forEach(function (t) {
+          var d = t - e;
+          if (Math.abs(d) <= SNAP_PX && (!out || Math.abs(d) < Math.abs(out.d))) out = { d: d, at: t };
+        });
+      });
+      return out;
+    }
+    var bx = best([rect.left, rect.left + rect.width / 2, rect.left + rect.width], xs);
+    var by = best([rect.top, rect.top + rect.height / 2, rect.top + rect.height], ys);
+    var guides = [];
+    if (bx) guides.push({ v: true, at: bx.at });
+    if (by) guides.push({ v: false, at: by.at });
+    return { dx: bx ? bx.d : 0, dy: by ? by.d : 0, guides: guides };
+  }
+
+  function movePart(k, x, y) {
+    var W = window.innerWidth;
+    var H = window.innerHeight;
+    var r = artRect(k);
+    var f = settings.free[k];
+    // Kept wholly inside the source; a part bigger than the source is pinned to its top-left.
+    f.x = Math.max(0, Math.min(1 - r.width / W, x));
+    f.y = Math.max(0, Math.min(1 - r.height / H, y));
+  }
+
+  function scalePart(k, factor, keepCentre) {
+    var f = settings.free[k];
+    var before = artRect(k);
+    f.u = Math.max(0.005, Math.min(2, f.u * factor));
+    applyFree();
+    if (keepCentre) {
+      var after = artRect(k);
+      var W = window.innerWidth;
+      var H = window.innerHeight;
+      f.x += (before.width - after.width) / 2 / W;
+      f.y += (before.height - after.height) / 2 / H;
+    }
+    movePart(k, f.x, f.y);
+    applyFree();
+  }
+
+  var drag = null;
+  document.addEventListener("pointerdown", function (event) {
+    if (!editing) return;
+    var box = event.target.closest && event.target.closest(".edit-box");
+    if (!box) {
+      selected = null;
+      drawBoxes();
+      return;
+    }
+    event.preventDefault();
+    var k = box.dataset.part;
+    selected = k;
+    var f = settings.free[k];
+    var r = artRect(k);
+    drag = {
+      k: k,
+      resize: !!event.target.dataset.handle,
+      sx: event.clientX,
+      sy: event.clientY,
+      x: f.x,
+      y: f.y,
+      u: f.u,
+      w: r.width,
+      h: r.height,
+    };
+    try {
+      box.setPointerCapture(event.pointerId);
+    } catch (_) {
+      /* a synthetic event has no capture to take */
+    }
+    drawBoxes();
+  });
+
+  document.addEventListener("pointermove", function (event) {
+    if (!editing || !drag) return;
+    var W = window.innerWidth;
+    var H = window.innerHeight;
+    var dx = event.clientX - drag.sx;
+    var dy = event.clientY - drag.sy;
+    var f = settings.free[drag.k];
+    var guides = [];
+    if (drag.resize) {
+      // The corner follows the pointer along the diagonal; the top-left stays put.
+      var factor = Math.max(0.1, (drag.w + dx + drag.h + dy) / (drag.w + drag.h));
+      f.u = Math.max(0.005, Math.min(2, drag.u * factor));
+      applyFree();
+    } else {
+      var x = drag.x + dx / W;
+      var y = drag.y + dy / H;
+      if (!event.shiftKey) {
+        var r = artRect(drag.k);
+        var s = snap({ left: x * W, top: y * H, width: r.width, height: r.height }, drag.k);
+        x += s.dx / W;
+        y += s.dy / H;
+        guides = s.guides;
+      }
+      movePart(drag.k, x, y);
+      applyFree();
+    }
+    drawBoxes(guides);
+  });
+
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    drawBoxes();
+    postFree();
+  }
+  document.addEventListener("pointerup", endDrag);
+  document.addEventListener("pointercancel", endDrag);
+
+  document.addEventListener(
+    "wheel",
+    function (event) {
+      if (!editing) return;
+      var box = event.target.closest && event.target.closest(".edit-box");
+      if (!box) return;
+      event.preventDefault();
+      selected = box.dataset.part;
+      scalePart(selected, event.deltaY < 0 ? 1.05 : 1 / 1.05, true);
+      drawBoxes();
+      postFree();
+    },
+    { passive: false }
+  );
+
+  document.addEventListener("keydown", function (event) {
+    if (!editing || !selected) return;
+    var step = event.shiftKey ? 10 : 1;
+    var d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+    if (!d) return;
+    event.preventDefault();
+    var f = settings.free[selected];
+    movePart(selected, f.x + d[0] / window.innerWidth, f.y + d[1] / window.innerHeight);
+    applyFree();
+    drawBoxes();
+    postFree();
+  });
 
   window.addEventListener("resize", function () {
     fitSoon(50);
@@ -349,7 +680,83 @@
       scheduleStrike();
     }
 
+    // The picture's box is cropped to what is drawn in it: during the change to both the old and
+    // the new drawing (so nothing overlaps the text mid-way), after it to the new one alone.
+    clearTimeout(showScene.cropTimer);
+    if (prev && animate) {
+      cropScene(scene, night, shown);
+      showScene.cropTimer = setTimeout(function () {
+        cropScene(scene, night);
+        fitSoon(0);
+      }, D + 150);
+    } else {
+      cropScene(scene, night);
+    }
+
     shown = { scene: scene, night: night };
+  }
+
+  // --- cropping the picture to its drawing ------------------------------------------------------
+
+  // The scene is a fixed square, but what is drawn in it is not: a lone sun fills its upper-left
+  // half, two clouds leave the top empty, only rain reaches the bottom. Where there is no visible
+  // box around the picture - the minimal look, or a transparent background - that empty part of
+  // the square is empty part of the widget, and it is what made a widget look loose. So the
+  // scene's layout box is pulled in to the drawing with negative margins; the layers keep their
+  // positions inside the square and still paint where they are (the scene does not clip there).
+  // The parts come from the layers' own layout boxes (offset*, which transitions do not move),
+  // for the layers the scene will show. Margins are in em, so fit()'s rescaling keeps them right.
+  function artBox(scene, night) {
+    var S = sceneEl.offsetWidth;
+    var H = sceneEl.offsetHeight;
+    if (!S || !H) return null;
+    var box = null;
+    function add(x0, y0, x1, y1) {
+      box = box
+        ? { x0: Math.min(box.x0, x0), y0: Math.min(box.y0, y0), x1: Math.max(box.x1, x1), y1: Math.max(box.y1, y1) }
+        : { x0: x0, y0: y0, x1: x1, y1: y1 };
+    }
+    function addEl(el) {
+      if (!el || !el.offsetWidth) return;
+      add(el.offsetLeft, el.offsetTop, el.offsetLeft + el.offsetWidth, el.offsetTop + el.offsetHeight);
+    }
+    if (scene.sun > 0.02) addEl(night ? layers.moon : layers.sun);
+    layers.clouds.forEach(function (el, i) {
+      if (scene.clouds >= CLOUD_SLOTS[i].threshold) addEl(el);
+    });
+    if (scene.rain > 0 || scene.snow > 0) {
+      var b = precip.zone();
+      add(b.left * S, b.top * H, b.right * S, b.bottom * H);
+    }
+    if (scene.fog > 0) layers.fog.forEach(addEl);
+    if (scene.storm) addEl(sceneEl.querySelector(".bolt"));
+    if (!box) return null;
+    // Nothing reaches past the square by more than a hair (fog banks are wider than it on purpose).
+    return { x0: Math.max(0, box.x0), y0: Math.max(0, box.y0), x1: Math.min(S, box.x1), y1: Math.min(H * 1.04, box.y1), S: S, H: H };
+  }
+
+  function cropScene(scene, night, alsoState) {
+    var cropping = settings.style === "minimal" || !!settings.transparent;
+    if (!cropping) {
+      sceneEl.style.margin = "";
+      return;
+    }
+    var box = artBox(scene, night);
+    if (alsoState) {
+      var other = artBox(alsoState.scene, alsoState.night);
+      if (box && other) {
+        box = { x0: Math.min(box.x0, other.x0), y0: Math.min(box.y0, other.y0), x1: Math.max(box.x1, other.x1), y1: Math.max(box.y1, other.y1), S: box.S, H: box.H };
+      } else box = box || other;
+    }
+    if (!box) {
+      sceneEl.style.margin = "";
+      return;
+    }
+    var em = parseFloat(window.getComputedStyle(sceneEl).fontSize) || 16;
+    var m = function (px) {
+      return (-px / em).toFixed(3) + "em";
+    };
+    sceneEl.style.margin = [m(box.y0), m(box.S - box.x1), m(box.H - box.y1), m(box.x0)].join(" ");
   }
 
   var strikeTimer = null;
@@ -697,7 +1104,12 @@
       if (!settings.animations) still();
     }
 
-    return { set: set, restyle: restyle, resize: resizeOnly };
+    // Where rain and snow fall, as fractions of the scene - for cropping the picture to its drawing.
+    function zone() {
+      return minimal() ? { top: 0.78, bottom: 1.04, left: 0.16, right: 0.9 } : { top: 0.42, bottom: 1, left: 0, right: 1 };
+    }
+
+    return { set: set, restyle: restyle, resize: resizeOnly, zone: zone };
   })();
 
   // --- text ------------------------------------------------------------------------------------
@@ -737,7 +1149,6 @@
   function renderText(reading, animate) {
     if (reading.temp === null || reading.temp === undefined) tempEl.textContent = "--";
     else countTo(reading.temp, animate);
-    unitEl.textContent = settings.units === "f" ? "F" : "C";
     setDesc(reading.text || descriptions[reading.code] || "", animate);
     cityEl.textContent = reading.city !== undefined ? reading.city : city;
     layout(!!reading.text);
@@ -790,7 +1201,7 @@
         return r.json();
       })
       .then(function (data) {
-        if (data.settings) applySettings(data.settings);
+        if (data.settings && !settingsFromForm) applySettings(data.settings);
         if (typeof data.city === "string") city = previewCity !== null ? previewCity : data.city;
         live = { reading: data.reading || null, error: data.error || null };
         if (!previewing) showLive();
@@ -826,7 +1237,16 @@
       previewing = false;
       showLive();
     } else if (msg.type === "weather-settings") {
+      // From here on the form is the source of the look; the server's saved settings would undo
+      // what is being previewed (and edited) on every poll.
+      settingsFromForm = true;
       applySettings(msg.settings || {});
+    } else if (msg.type === "weather-edit") {
+      setEditing(!!msg.on);
+    } else if (msg.type === "weather-free-reset") {
+      seedFree(true);
+      fit();
+      postFree();
     } else if (msg.type === "weather-city") {
       city = previewCity = String(msg.city || "");
       if (shownReading) {

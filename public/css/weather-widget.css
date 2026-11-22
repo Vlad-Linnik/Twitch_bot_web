@@ -34,40 +34,100 @@ body {
   box-sizing: border-box;
 }
 
-/* --- arrangements, chosen by public/js/weather-widget.js's fit() for the source's shape ------- */
+/* --- alignment and the picture's side -------------------------------------------------------- */
+/* align-right: the widget hugs the right edge and its text is aligned to it. icon-right: the
+   picture is after the text (the script sets it from the "picture" setting, by default the same
+   side as the alignment). Kept apart so the two can be combined either way. */
 
-/* wide: temperature on the left, the small lines stacked beside it. */
-.lay-wide .info {
+body.align-right { justify-content: flex-end; }
+.align-right .info { align-items: flex-end; text-align: right; }
+.icon-right .widget { flex-direction: row-reverse; }
+.style-realistic.icon-right .widget { padding: 0.5em 0.5em 0.5em 1.1em; }
+
+/* --- arrangements, chosen by public/js/weather-widget.js's fit() for the source's shape, or set
+   by hand. The selectors carry body. so they outrank the alignment rules above. ------------ */
+
+/* wide: temperature, and the small lines stacked beside it. */
+body.lay-wide .info {
   display: grid;
   grid-template-columns: auto auto;
-  column-gap: 0.45em;
+  column-gap: 0.4em;
   align-items: center;
   justify-items: start;
 }
-.lay-wide .info > * { grid-column: 2; margin-top: 0; }
-.lay-wide .info > .temp { grid-column: 1; grid-row: 1 / span 4; }
-.lay-wide .info > .desc + .city,
-.lay-wide .info > * + .details { margin-top: 0.15em; }
-.align-right.lay-wide .info { justify-items: end; }
-.align-right.lay-wide .info > * { grid-column: 1; }
-.align-right.lay-wide .info > .temp { grid-column: 2; }
+body.lay-wide .info > * { grid-column: 2; margin-top: 0; }
+body.lay-wide .info > .temp { grid-column: 1; grid-row: 1 / span 4; }
+body.lay-wide .info > .desc + .city,
+body.lay-wide .info > * + .details { margin-top: 0.12em; }
+body.align-right.lay-wide .info { justify-items: end; }
+body.align-right.lay-wide .info > * { grid-column: 1; }
+body.align-right.lay-wide .info > .temp { grid-column: 2; }
 
-/* line: every line of text side by side, on one baseline. */
-.lay-line .info { flex-direction: row; align-items: center; gap: 0.55em; }
-.lay-line .info > * { margin-top: 0; white-space: nowrap; }
+/* line: every line of text side by side, centred on one axis. */
+body.lay-line .info { flex-direction: row; align-items: center; gap: 0.5em; }
+body.lay-line .info > * { margin-top: 0; white-space: nowrap; }
 
 /* tall: the picture above the text. */
-.lay-tall .widget { flex-direction: column; align-items: flex-start; gap: 0.35em; }
-.align-right.lay-tall .widget { flex-direction: column; align-items: flex-end; }
-.style-realistic.lay-tall .widget,
-.style-realistic.align-right.lay-tall .widget { padding: 0.5em 0.7em 0.6em; }
+body.lay-tall .widget { flex-direction: column; align-items: flex-start; gap: 0.3em; }
+body.align-right.lay-tall .widget { align-items: flex-end; }
+body.style-realistic.lay-tall .widget { padding: 0.5em 0.7em 0.6em; }
 
-/* --- right alignment: the widget hugs the right edge, mirrored ------------------------------- */
+/* free: every part placed by hand (public/js/weather-widget.js's free layout). The widget becomes
+   the whole source and each part is positioned in it on its own; there is no card around parts
+   that can be anywhere, so text gets the shadow a transparent background gets. */
+body.lay-free { padding: 0; }
+body.lay-free .widget {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  display: block;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+body.lay-free .info { display: contents; }
+body.lay-free .scene,
+body.lay-free .temp,
+body.lay-free .desc,
+body.lay-free .city,
+body.lay-free .details { position: absolute; }
+body.lay-free .temp,
+body.lay-free .desc,
+body.lay-free .city,
+body.lay-free .details { margin: 0; }
+body.lay-free.style-realistic .info {
+  text-shadow: 0 0.04em 0.08em rgba(0, 0, 0, 0.75), 0 0.1em 0.5em rgba(0, 0, 0, 0.55);
+}
 
-body.align-right { justify-content: flex-end; }
-.align-right .widget { flex-direction: row-reverse; }
-.align-right .info { align-items: flex-end; text-align: right; }
-.style-realistic.align-right .widget { padding: 0.5em 0.5em 0.5em 1.1em; }
+/* The editor's boxes, handles and guides - the setup page's preview only. */
+/* Dragging must not select the text underneath. */
+body.editing { user-select: none; -webkit-user-select: none; }
+.edit-layer { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+.edit-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed rgba(255, 255, 255, 0.55);
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+}
+.edit-box:hover { border-color: rgba(196, 160, 255, 0.95); }
+.edit-box.is-selected { border: 1px solid #a78bfa; background: rgba(167, 139, 250, 0.08); }
+.edit-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: #a78bfa;
+  border: 1px solid #fff;
+  border-radius: 2px;
+  cursor: nwse-resize;
+}
+.edit-guide { position: absolute; background: #f472b6; pointer-events: none; }
+.edit-guide.is-v { top: 0; bottom: 0; width: 1px; }
+.edit-guide.is-h { left: 0; right: 0; height: 1px; }
 
 /* Always its natural size, never squeezed by the source: fit() measures it at trial sizes larger
    than the source, and a squeezed widget (wrapped lines, shrunk columns) would measure wrong. What
@@ -77,7 +137,7 @@ body.align-right { justify-content: flex-end; }
   flex: none;
   width: max-content;
   align-items: center;
-  gap: 0.7em;
+  gap: 0.5em;
   transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.45, 0.05, 0.25, 1);
 }
 /* Off-screen between appearances when shown on a timer: it slides a little towards its edge as
@@ -301,7 +361,6 @@ body:not(.anim-on) .scene.storm .bolt { opacity: 1; }
   font-variant-numeric: tabular-nums;
 }
 .temp .deg { font-weight: 400; opacity: 0.9; }
-.temp .unit { font-size: 0.32em; font-weight: 600; margin-top: 0.4em; opacity: 0.75; }
 .desc { font-size: 1.05em; font-weight: 600; margin-top: 0.1em; transition: opacity 0.5s ease; }
 .desc.is-fading { opacity: 0; }
 .city { font-size: 0.8em; opacity: 0.8; margin-top: 0.25em; }
@@ -334,10 +393,10 @@ body:not(.anim-on) .scene.storm .bolt { opacity: 1; }
 
 /* The card follows its content: around the picture alone it is square, around text alone it gets
    even padding on both sides. */
-.style-realistic.no-info .widget { padding: 0.5em; }
-.style-realistic.text-only .widget { padding: 0.55em 1.2em; }
-.style-realistic.bg-none.no-info .widget,
-.style-realistic.bg-none.text-only .widget { padding: 0.2em; }
+body.style-realistic.no-info .widget { padding: 0.5em; }
+body.style-realistic.text-only .widget { padding: 0.55em 1.2em; }
+body.style-realistic.bg-none.no-info .widget,
+body.style-realistic.bg-none.text-only .widget { padding: 0.2em; }
 
 /* --- realistic -------------------------------------------------------------------------------- */
 

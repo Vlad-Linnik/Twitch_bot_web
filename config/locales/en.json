@@ -4359,14 +4359,20 @@
       "align": "Alignment",
       "align_left": "Left",
       "align_right": "Right",
-      "alignHint": "Which edge of the source the widget hugs. On the right it is mirrored: picture on the right, text aligned to it - handy for a right-hand corner.",
+      "alignHint": "Which edge of the source the widget hugs and its text is aligned to. The picture is on the same side by default - that is changed under \"Arrangement\".",
       "timerHeading": "When to show",
       "timer": "Show on a timer",
       "timerHint": "The widget appears for a while and then fades out again. The cycle follows the clock: with a 10-minute cycle it appears at :00, :10, :20 and so on, in every scene at once. The preview on this page always shows it.",
       "timerShowFor": "Show for",
       "timerSeconds": "seconds",
       "timerEvery": "every",
-      "timerMinutes": "minutes"
+      "timerMinutes": "minutes",
+      "arrangement": "Arrangement",
+      "layout": "Layout",
+      "iconSide": "Picture",
+      "layoutHint": "\"Auto\" picks the layout that leaves the least empty space in the source. \"Free\" lets you place every element yourself: press \"Move with the mouse\" above the preview.",
+      "sourceSize": "Source size in OBS",
+      "sourceSizeHint": "Width and height of the \"Browser\" source in OBS. The preview takes the same shape, so a free arrangement looks on stream exactly as it does here."
     },
     "style": {
       "realistic": "Realistic",
@@ -4435,6 +4441,25 @@
       "feels": "Feels like",
       "wind": "Wind",
       "humidity": "Humidity"
+    },
+    "editor": {
+      "start": "✋ Move with the mouse",
+      "done": "Done",
+      "reset": "Reset arrangement",
+      "hint": "Drag an element to move it; its corner or the wheel resizes it; arrows nudge by 1 px (10 with Shift). Elements snap to the edges, the centre and each other; Shift while dragging turns snapping off. Remember to save."
+    },
+    "layout": {
+      "auto": "Auto",
+      "stack": "Picture and a column of lines",
+      "wide": "Lines beside the temperature",
+      "tall": "Picture on top",
+      "line": "All on one line",
+      "free": "Free (mouse)"
+    },
+    "iconSide": {
+      "auto": "Same side as the alignment",
+      "left": "Left",
+      "right": "Right"
     }
   }
 }
