@@ -1,7 +1,8 @@
 // The OBS browser source (views/donationMediaPlayer.ejs): plays whatever the channel's queue sends,
 // on a transparent page, and reports back when a clip ends and how far it has got. The queue and
 // every decision live on the server (lib/donationMediaQueue.js); this page only obeys:
-//   { type: "play", item }  { type: "pause" }  { type: "resume" }  { type: "seek", time }  { type: "stop" }
+//   { type: "play", item, cover }  cover = the cover the clip starts under, as in "cover" below
+//   { type: "pause" }  { type: "resume" }  { type: "seek", time }  { type: "stop" }
 //   { type: "cover", mode, blur }  mode null | "hide" | "blur" | "image" - the picture over the clip,
 //                                  sound unchanged; blur = strength in percent (10-100)
 //   { type: "placeholder", url }   the owner's own placeholder picture changed (null = built-in)
@@ -23,6 +24,9 @@
   // The cover for the clip being played. Reset when a "play" ARRIVES, not when it is carried out:
   // a play deferred until the YouTube API is ready runs after the "cover" that followed it.
   let coverMode = null;
+  // A covered clip gives way to an uncovered one: the old picture stays in YouTube's frame until
+  // the new clip has loaded, so the cover is held until the new one actually plays.
+  let coverHeld = false;
   let volume = null; // null until the server says; YouTube's own default until then
   let ws = null;
   let reconnectAttempt = 0;
@@ -58,8 +62,22 @@
   }
 
   function setCover(mode) {
+    coverHeld = false;
     container.classList.remove("cover-hide", "cover-blur", "cover-image");
     if (mode === "hide" || mode === "blur" || mode === "image") container.classList.add(`cover-${mode}`);
+  }
+
+  // The cover of the clip now starting.
+  function startCover() {
+    const covered = /(^| )cover-/.test(container.className);
+    if (!coverMode && covered && container.style.display === "block") coverHeld = true;
+    else setCover(coverMode);
+  }
+
+  function releaseCover() {
+    if (!coverHeld || !current) return;
+    const data = player.getVideoData ? player.getVideoData() : null;
+    if (data && data.video_id === current.videoId) setCover(coverMode);
   }
 
   function applyVolume() {
@@ -83,10 +101,13 @@
         },
         onStateChange: (event) => {
           if (event.data === YT.PlayerState.ENDED) finish(false);
-          // A pause that arrived while the clip was still loading.
-          else if (event.data === YT.PlayerState.PLAYING && wantPaused) {
-            player.pauseVideo();
-            releaseMute();
+          else if (event.data === YT.PlayerState.PLAYING) {
+            releaseCover();
+            // A pause that arrived while the clip was still loading.
+            if (wantPaused) {
+              player.pauseVideo();
+              releaseMute();
+            }
           }
         },
         // Removed, private, not embeddable: report it and let the queue move on.
@@ -109,7 +130,7 @@
     current = item;
     wantPaused = Boolean(item && item.paused);
     releaseMute();
-    setCover(coverMode);
+    startCover();
     if (!item || !item.videoId) {
       finish(true);
       return;
@@ -147,8 +168,7 @@
   function onMessage(msg) {
     switch (msg.type) {
       case "play":
-        coverMode = null;
-        setCover(null);
+        coverMode = msg.cover || null;
         if (!playerReady) pending = msg.item;
         else play(msg.item);
         break;
@@ -212,6 +232,8 @@
     const data = player.getVideoData ? player.getVideoData() : null;
     // While the next clip loads, the player still reports the previous one.
     if (!data || data.video_id !== current.videoId) return;
+    // getVideoData() is empty for a moment around a load, so the PLAYING event alone can miss.
+    if (player.getPlayerState() === YT.PlayerState.PLAYING) releaseCover();
     send({
       type: "progress",
       id: current.id,

@@ -664,6 +664,8 @@ async function handlePanelCommand(session, ws, principal, msg) {
       return q.stopRadio();
     case "infinite":
       return q.setInfinite(msg.on === true);
+    case "hideMusic":
+      return q.setHideMusic(msg.on === true);
     case "moreFromArtist": {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       if (!videoId) return reply({ ok: false, reason: "bad" });

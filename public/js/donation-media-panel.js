@@ -102,6 +102,11 @@
   const infiniteIcon = el("span");
   const infiniteLabel = el("label", { class: "dm-check" }, infiniteBox, infiniteIcon, el("span", { text: t("infinite") }));
   const infiniteHint = el("div", { class: "dm-hint", text: t("infiniteHint") });
+  const hideMusicBox = el("input", { type: "checkbox" });
+  hideMusicBox.addEventListener("change", () => command("hideMusic", { on: hideMusicBox.checked }));
+  const hideMusicIcon = el("span");
+  const hideMusicLabel = el("label", { class: "dm-check" }, hideMusicBox, hideMusicIcon, el("span", { text: t("hideMusic") }));
+  const hideMusicHint = el("div", { class: "dm-hint", text: t("hideMusicHint") });
   const playlistNote = el("div", { class: "dm-note is-warn" });
   const playlistBox = el("div", { class: "dm-list" });
   const playlistInput = el("input", { type: "text", placeholder: t("addPlaceholder"), autocomplete: "off", maxlength: "300" });
@@ -259,7 +264,7 @@
       aiForm,
       feedMsg
     ),
-    el("section", {}, autoLabel, autoHint, infiniteLabel, infiniteHint, playlistDetails, playlistForm, playlistMsg),
+    el("section", {}, autoLabel, autoHint, infiniteLabel, infiniteHint, hideMusicLabel, hideMusicHint, playlistDetails, playlistForm, playlistMsg),
     el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
   );
 
@@ -653,6 +658,10 @@
     autoBox.disabled = !canControl;
     infiniteBox.checked = state.infinite === true;
     infiniteBox.disabled = !canControl;
+    // The "hide" button's icon: the same action, applied to every such track.
+    hideMusicIcon.replaceChildren(icon("hide"));
+    hideMusicBox.checked = state.hideMusic === true;
+    hideMusicBox.disabled = !canControl;
     playlistCount.textContent = list.length ? String(list.length) : "";
     playlistForm.hidden = !canControl;
     playlistNote.textContent = state.playlistStalled ? t("playlistStalled") : "";

@@ -65,7 +65,7 @@ const PANEL_STRING_KEYS = [
   "history", "historyEmpty", "clearHistory", "requeue", "requeueHint", "playNext", "playNextHint",
   "anonymous", "manual", "addedBy", "replay",
   "coverLabel", "coverNone", "coverHide", "coverBlur", "coverImage", "coverHint", "coverActive", "blurStrength", "volume", "volumeHint",
-  "playlist", "playlistAuto", "playlistAutoHint", "infinite", "infiniteHint", "playlistEmpty", "playlistAdd", "playlistDuplicate",
+  "playlist", "playlistAuto", "playlistAutoHint", "infinite", "infiniteHint", "hideMusic", "hideMusicHint", "playlistEmpty", "playlistAdd", "playlistDuplicate",
   "playlistFull", "playlistStalled", "playlistBadge", "playlistNowPlaying", "toPlaylist", "toPlaylistHint", "inPlaylist",
   "upNext", "upNextHint", "upNextEmpty", "upNextClear", "upNextPlay", "upNextBadge", "radio", "radioHint", "radioOn", "radioStop", "radioNothing", "moreArtist", "moreArtistHint", "moreArtistNothing", "aiPlaceholder", "aiSubmit", "aiNoKey", "aiFailed", "aiNothing", "added", "searching", "source.mix", "source.lastfm", "source.author", "source.ai",
   "status.skipped", "status.removed", "status.error",
