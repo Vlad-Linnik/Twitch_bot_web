@@ -24,7 +24,6 @@ const { MediaQueue } = require("../lib/donationMediaQueue");
 const { extractVideoId } = require("../lib/donationMedia");
 const { CONNECTORS } = require("./donationMediaConnectors");
 const radioSources = require("../lib/radioSources");
-const { titleKey } = require("../lib/donationMediaRadio");
 const icons = require("../lib/donationMediaIcons");
 
 const SAVE_DEBOUNCE_MS = 1000;
@@ -230,11 +229,11 @@ class Session {
 
   // Runs one fetch of a kind at a time; the panel shows the kind as busy meanwhile. Resolves to the
   // tracks, or null when one of this kind was already running or it failed.
-  async fetchInto(kind, load) {
+  async fetchInto(kind, load, { repeats = false } = {}) {
     if (this.queue.radioBusy[kind]) return null;
     this.queue.setRadioBusy(kind, true);
     try {
-      return await load(this.queue.feedExclusions(titleKey));
+      return await load(this.queue.feedExclusions({ repeats }));
     } catch (err) {
       console.error(`[donationMedia] ${this.channelLogin}: ${kind} fetch failed:`, err.message);
       return null;
@@ -244,17 +243,26 @@ class Session {
   }
 
   // Called after every change: while the radio (or endless music) is on and the feed runs low, a
-  // Mix tops it up - see MediaQueue.radioWantsMore for which track it is the Mix of.
+  // Mix tops it up - see MediaQueue.radioWantsMore for which track it is the Mix of. When that gives
+  // nothing new, the Mixes of the other topUpSeeds are tried, and then tracks played long enough ago
+  // (REPEAT_AFTER_MS) are let in again: an empty feed would hand its turn to the own playlist, and
+  // the same Mix asked again would answer the same until it is restarted.
   topUpRadio() {
-    const seed = this.queue.radioWantsMore();
-    if (!seed || this.radioStarting || this.queue.radioBusy.radio || Date.now() < this.radioRetryAt) return;
+    const seeds = this.queue.topUpSeeds();
+    if (seeds.length === 0 || this.radioStarting || this.queue.radioBusy.radio || Date.now() < this.radioRetryAt) return;
     const radio = this.queue.radio;
-    this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex)).then((tracks) => {
-      // The radio may have been switched off or restarted from another track meanwhile.
+    this.topUpFrom(radio, [...seeds.map((s) => ({ seed: s, repeats: false })), ...seeds.map((s) => ({ seed: s, repeats: true }))]);
+  }
+
+  async topUpFrom(radio, attempts) {
+    for (const { seed, repeats } of attempts) {
+      const tracks = await this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex), { repeats });
+      // The radio may have been switched off or restarted from another track meanwhile (and its
+      // first fetch may be what is running now).
       if (this.queue.radio !== radio || !tracks) return;
-      const added = this.queue.addUpNext(tracks, "radio");
-      if (added === 0) this.radioRetryAt = Date.now() + RADIO_RETRY_MS;
-    });
+      if (this.queue.addUpNext(tracks, "radio", { repeats }) > 0) return;
+    }
+    this.radioRetryAt = Date.now() + RADIO_RETRY_MS;
   }
 
   // The track a panel pointed at, with a name for the seed: from wherever the panel saw it, else
