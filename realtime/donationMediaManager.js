@@ -24,6 +24,8 @@ const { MediaQueue } = require("../lib/donationMediaQueue");
 const { extractVideoId } = require("../lib/donationMedia");
 const { CONNECTORS } = require("./donationMediaConnectors");
 const radioSources = require("../lib/radioSources");
+const { MusicRadio } = require("../lib/musicRadio");
+const musicGraphRepo = require("../db/musicGraphRepo");
 const icons = require("../lib/donationMediaIcons");
 
 const SAVE_DEBOUNCE_MS = 1000;
@@ -76,7 +78,9 @@ class Session {
         this.scheduleSave();
         this.topUpRadio();
       },
+      onFinished: (item, how) => this.onFinished(item, how),
     });
+    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo });
     this.ready = Promise.resolve()
       // A failure here costs the theme, not the queue.
       .then(() => this.loadPanelSettings().catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load panel settings:`, err.message)))
@@ -95,6 +99,7 @@ class Session {
       // Nothing plays right after a load (the clip that was playing went back into the queue), and
       // a row left by the previous process may still say otherwise.
       .then(() => this.publishNowPlaying())
+      .then(() => this.music.load())
       // A radio saved as on with a nearly empty feed carries on after a restart.
       .then(() => this.topUpRadio());
   }
@@ -242,11 +247,11 @@ class Session {
     }
   }
 
-  // Called after every change: while the radio (or endless music) is on and the feed runs low, a
-  // Mix tops it up - see MediaQueue.radioWantsMore for which track it is the Mix of. When that gives
-  // nothing new, the Mixes of the other topUpSeeds are tried, and then tracks played long enough ago
-  // (REPEAT_AFTER_MS) are let in again: an empty feed would hand its turn to the own playlist, and
-  // the same Mix asked again would answer the same until it is restarted.
+  // Called after every change: while the radio (or endless music) is on and the feed runs low, the
+  // music graph tops it up. When it has nothing (YouTube would not open its root), plain Mixes are
+  // tried - see MediaQueue.topUpSeeds - and then tracks played long enough ago (REPEAT_AFTER_MS) are
+  // let in again: an empty feed would hand its turn to the own playlist, and the same Mix asked again
+  // would answer the same until it is restarted.
   topUpRadio() {
     const seeds = this.queue.topUpSeeds();
     if (seeds.length === 0 || this.radioStarting || this.queue.radioBusy.radio || Date.now() < this.radioRetryAt) return;
@@ -255,14 +260,32 @@ class Session {
   }
 
   async topUpFrom(radio, attempts) {
+    const chosen = await this.fetchInto("radio", (ex) => this.music.next(this.queue, ex), { repeats: true });
+    if (this.queue.radio !== radio) return;
+    if (chosen && this.queue.addUpNext(chosen, "radio", { repeats: true }) > 0) return;
     for (const { seed, repeats } of attempts) {
       const tracks = await this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex), { repeats });
+      if (tracks) this.music.learn(seed, tracks);
       // The radio may have been switched off or restarted from another track meanwhile (and its
       // first fetch may be what is running now).
       if (this.queue.radio !== radio || !tracks) return;
       if (this.queue.addUpNext(tracks, "radio", { repeats }) > 0) return;
     }
     this.radioRetryAt = Date.now() + RADIO_RETRY_MS;
+  }
+
+  // A queue item ended; the next one has not been chosen yet. After a skip the radio's part of the
+  // feed is chosen anew at once, or the branch just skipped would go on from it.
+  onFinished(item, how) {
+    const q = this.queue;
+    const known = authorCache.get(item.videoId);
+    const outcome = this.music.finished(item, how, (known && known.author) || "");
+    if (!outcome || outcome === "heard" || !(q.radio || q.infinite)) return;
+    const tail = q.upNext.filter((u) => q.isRadioTail(u)).length;
+    if (tail > 0 && (outcome === "skipEarly" || outcome === "skipMid")) {
+      q.replaceRadioTail(this.music.nextNow(q, { ...q.feedExclusions({ repeats: true, tail: false }), limit: tail }));
+    }
+    this.music.grow(q);
   }
 
   // The track a panel pointed at, with a name for the seed: from wherever the panel saw it, else
@@ -285,14 +308,19 @@ class Session {
       this.queue.startRadio(seed);
       const radio = this.queue.radio;
       this.radioRetryAt = 0;
+      this.music.restart();
+      this.music.noted(seed, "liked");
       // fetchInto refuses while a top-up of the previous radio is still running; that one's answer
       // is dropped (the radio object changed), and this waits it out.
       for (let i = 0; i < 30 && this.queue.radioBusy.radio; i++) await new Promise((r) => setTimeout(r, 500));
-      const tracks = await this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex));
+      const chosen = await this.fetchInto("radio", (ex) => this.music.next(this.queue, ex), { repeats: true });
       if (this.queue.radio !== radio) return 0;
+      const tracks = chosen && chosen.length > 0 ? chosen : await this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex));
+      if (this.queue.radio !== radio) return 0;
+      if (tracks && tracks !== chosen) this.music.learn(seed, tracks);
       // Radio from the track that is playing lets it finish; from any other, the radio starts now.
       const playing = this.queue.current && this.queue.current.videoId === videoId;
-      const added = tracks ? this.queue.addUpNext(tracks, "radio", playing ? { first: true } : { playNow: true }) : 0;
+      const added = tracks ? this.queue.addUpNext(tracks, "radio", { repeats: tracks === chosen, ...(playing ? { first: true } : { playNow: true }) }) : 0;
       if (added === 0) this.queue.stopRadio();
       return added;
     } finally {
@@ -302,7 +330,12 @@ class Session {
 
   async moreFromArtist(videoId) {
     const seed = await this.trackInfo(videoId);
+    // From the graph when it knows enough of them. Such tracks may have played before - the graph
+    // keeps its own count of when - hence `repeats`.
+    const known = await this.fetchInto("artist", (ex) => this.music.byArtist(seed, this.queue, ex), { repeats: true });
+    if (known && known.length > 0) return this.queue.addUpNext(known, "artist", { repeats: true });
     const tracks = await this.fetchInto("artist", (ex) => radioSources.moreFromArtist(seed, ex));
+    if (tracks) this.music.learn(seed, tracks);
     return tracks ? this.queue.addUpNext(tracks, "artist") : 0;
   }
 
@@ -321,6 +354,7 @@ class Session {
       error = result.error;
       return result.tracks;
     });
+    if (tracks) this.music.learnWish(tracks);
     return { added: tracks ? q.addUpNext(tracks, "ai", { playNow: true }) : 0, error };
   }
 
@@ -539,6 +573,13 @@ function statusOf(channelId) {
   return session ? JSON.parse(JSON.stringify(session.status)) : {};
 }
 
+// The channel's radio and its queue, for the admin's view of the music graph; null when no session of
+// the channel is running.
+function musicOf(channelId) {
+  const session = sessions.get(String(channelId));
+  return session ? { music: session.music, queue: session.queue } : null;
+}
+
 // --- the socket ------------------------------------------------------------------------------------
 
 // Called by realtime/socketServer.js before the handshake. Returns the principal the connection
@@ -659,7 +700,12 @@ async function handlePanelCommand(session, ws, principal, msg) {
       if (q.playlist.some((p) => p.videoId === videoId)) return reply({ ok: false, reason: "duplicate" });
       const entry = q.addToPlaylist(videoId);
       reply(entry ? { ok: true } : { ok: false, reason: "full" });
-      if (entry) fetchTitle(videoId).then((title) => title && q.setPlaylistTitle(entry.id, title));
+      if (entry) {
+        session.trackInfo(videoId).then((track) => {
+          if (track.title) q.setPlaylistTitle(entry.id, track.title);
+          session.music.noted(track, "liked");
+        }).catch(() => {});
+      }
       return;
     }
     case "radioStart": {
@@ -688,9 +734,17 @@ async function handlePanelCommand(session, ws, principal, msg) {
       return reply(added > 0 ? { ok: true, added } : { ok: false, reason: error || "nothing" });
     }
     case "upNextRemove":
-      return asId(msg.id) && q.removeUpNext(msg.id);
+      if (asId(msg.id)) {
+        const entry = q.removeUpNext(msg.id);
+        if (entry) session.music.noted(entry, "dropped");
+      }
+      return;
     case "upNextPlay":
-      return asId(msg.id) && q.playUpNextNow(msg.id);
+      if (asId(msg.id)) {
+        const entry = q.playUpNextNow(msg.id);
+        if (entry) session.music.noted(entry, "liked");
+      }
+      return;
     case "upNextClear":
       return q.clearUpNext();
     case "add": {
@@ -774,6 +828,7 @@ module.exports = {
   reloadEggs,
   setPlaceholder,
   statusOf,
+  musicOf,
   // realtime/socketServer.js's handler contract
   authorizeUpgrade,
   handleConnection,

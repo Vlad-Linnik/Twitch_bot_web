@@ -239,6 +239,7 @@
 
 /* The "up next" feed: the radio, more by an artist, the AI wish. */
 .dm-badge.p-radio { background: var(--dm-card-2); color: var(--dm-text); border: 1px solid #0ea5e9; }
+.dm-badge.s-graph { background: #0f766e; }
 .dm-badge.s-mix { background: #b91c1c; }
 .dm-badge.s-lastfm { background: #d51007; }
 .dm-badge.s-author { background: #475569; }

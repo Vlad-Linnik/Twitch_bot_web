@@ -1,0 +1,86 @@
+<%- include('partials/head', { title: t('admin.title') + ' · ' + t('admin.tabMusicGraph') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The donation media radio's music graph (routes/adminMusicGraph.js): drawn and filled by
+  public/js/admin-music-graph.js from its JSON endpoint. Read-only.
+%>
+<%
+  const gInput = 'bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
+  const gButton = 'px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium';
+  const gGhost = 'px-3 py-2 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-sm';
+%>
+
+<main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
+  <p class="text-neutral-500 text-sm mb-8"><%= t('admin.graph.intro') %></p>
+
+  <%- include('partials/adminTabs', { tab }) %>
+
+  <% if (channels.length === 0) { %>
+    <p class="text-neutral-400"><%= t('admin.graph.noChannels') %></p>
+  <% } else { %>
+  <div id="music-graph" data-strings="<%= JSON.stringify(strings) %>" data-lang="<%= locale %>">
+    <form id="mg-form" class="flex flex-wrap items-end gap-3 mb-4">
+      <label class="block">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.graph.channel') %></span>
+        <select id="mg-channel" class="<%= gInput %>">
+          <% channels.forEach(function (c) { %><option value="<%= c.channelId %>"><%= c.channelLogin %></option><% }) %>
+        </select>
+      </label>
+      <label class="block grow min-w-[14rem]">
+        <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.graph.search') %></span>
+        <input id="mg-q" type="search" maxlength="100" class="<%= gInput %> w-full" placeholder="<%= t('admin.graph.searchPlaceholder') %>" />
+      </label>
+      <button type="submit" class="<%= gButton %>"><%= t('admin.graph.show') %></button>
+      <button type="button" id="mg-live" class="<%= gGhost %>"><%= t('admin.graph.liveButton') %></button>
+      <button type="button" id="mg-refresh" class="<%= gGhost %>"><%= t('admin.graph.refresh') %></button>
+    </form>
+    <p id="mg-status" class="text-sm text-neutral-400 mb-3 min-h-[1.25rem]" role="status"></p>
+    <dl id="mg-totals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></dl>
+
+    <div class="grid lg:grid-cols-[minmax(0,1fr)_18rem] gap-4 items-start">
+      <div class="rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden">
+        <svg id="mg-svg" viewBox="-460 -460 920 920" class="block w-full h-auto touch-none select-none" role="img" aria-label="<%= t('admin.graph.graphLabel') %>"></svg>
+      </div>
+      <aside class="space-y-4 min-w-0">
+        <section id="mg-detail" class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-300 break-words"><%= t('admin.graph.selectHint') %></section>
+        <section class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm">
+          <h2 class="font-semibold text-neutral-100 mb-2"><%= t('admin.graph.legend') %></h2>
+          <ul id="mg-legend" class="space-y-1 mb-3 text-neutral-300"></ul>
+          <p class="text-xs text-neutral-500"><%= t('admin.graph.legendHint') %></p>
+        </section>
+      </aside>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-6 mt-8 items-start">
+      <section class="min-w-0">
+        <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('admin.graph.nextHeading') %></h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs uppercase tracking-wide text-neutral-500">
+              <tr>
+                <th class="py-2 pr-3 font-medium"><%= t('admin.graph.colTrack') %></th>
+                <th class="py-2 pr-3 font-medium"><%= t('admin.graph.colState') %></th>
+                <th class="py-2 pr-3 font-medium text-right"><%= t('admin.graph.colCloseness') %></th>
+                <th class="py-2 pr-3 font-medium text-right"><%= t('admin.graph.colTaste') %></th>
+                <th class="py-2 font-medium text-right"><%= t('admin.graph.colRested') %></th>
+              </tr>
+            </thead>
+            <tbody id="mg-next" class="text-neutral-300"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="min-w-0">
+        <h2 class="text-lg font-semibold text-neutral-100 mb-3"><%= t('admin.graph.statsHeading', { days: statsDays }) %></h2>
+        <dl id="mg-supply" class="text-sm text-neutral-300 mb-5"></dl>
+        <h3 class="text-sm font-semibold text-neutral-200 mb-2"><%= t('admin.graph.sources') %></h3>
+        <dl id="mg-sources" class="text-sm text-neutral-300"></dl>
+      </section>
+    </div>
+  </div>
+  <script src="<%= asset('/js/admin-music-graph.js') %>" defer></script>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>

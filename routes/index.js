@@ -19,6 +19,7 @@ router.use("/", require("./privacy"));
 router.use("/", require("./requestBot"));
 router.use("/", require("./admin"));
 router.use("/", require("./adminAi"));
+router.use("/", require("./adminMusicGraph"));
 router.use("/", require("./adminApi"));
 router.use("/", require("./seasonalTheme"));
 
