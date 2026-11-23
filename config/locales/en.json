@@ -4202,7 +4202,7 @@
       "playlistAuto": "Play my own playlist automatically",
       "playlistAutoHint": "While no donations are queued, the own playlist plays shuffled. A donation cuts the track off at once, and after the donations the track continues from the same spot.",
       "infinite": "Endless music",
-      "infiniteHint": "The feed refills itself with similar tracks: it builds on the ones heard to the end (on your own playlist only at the very start) and keeps away from what gets skipped. A track does not come back within 10 hours. Your own playlist plays only while the feed is empty.",
+      "infiniteHint": "The feed refills itself with similar tracks: it builds on the ones heard to the end (on your own playlist only at the very start) and keeps away from what gets skipped. A track does not come back within 10 hours. Your own playlist plays only while the feed is empty; but once it holds more than 10 tracks of at most 10 minutes, they come up in the feed too.",
       "hideMusic": "Hide music clips not paid by a donation",
       "hideMusicHint": "The sound plays, but OBS shows the video only for donations. Applies to the own playlist, the up-next feed, chat requests (!sr) and clips added by hand. Show a single clip with the \"As is\" button.",
       "playlistEmpty": "The playlist is empty - add clips below.",
@@ -4238,6 +4238,7 @@
       "searching": "Looking for tracks…",
       "source": {
         "graph": "Similar",
+        "playlist": "From the playlist",
         "mix": "YouTube Mix",
         "lastfm": "Last.fm",
         "author": "Channel",

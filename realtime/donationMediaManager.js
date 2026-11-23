@@ -46,6 +46,10 @@ const NOW_PLAYING_REFRESH_MS = 60 * 1000;
 const CHAT_COMMAND_POLL_MS = 1000;
 // At most this many commands per tick: a burst is drained over a few ticks rather than in one loop.
 const CHAT_COMMAND_BATCH = 20;
+// Between two lookups of how long the own playlist's tracks are (a whole YouTube page each, once per
+// track), and how long a track whose page did not say is left alone.
+const LENGTH_PAUSE_MS = 5 * 1000;
+const LENGTH_RETRY_MS = 6 * 60 * 60 * 1000;
 // A radio top-up that found nothing new is not retried before this: the Mix of the same track
 // would answer the same, and a source that is down should not be asked every second.
 const RADIO_RETRY_MS = 2 * 60 * 1000;
@@ -68,6 +72,8 @@ class Session {
     this.published = null; // { key, at, itemId, startedAt } - the last now-playing row written
     this.publishChain = Promise.resolve();
     this.radioRetryAt = 0;
+    this.learningLengths = false;
+    this.lengthTried = new Map(); // videoId -> when
     this.radioStarting = false; // startRadio's own first fetch is running; no top-up beside it
     this.buttons = icons.normalizeButtons(null);
     this.queue = new MediaQueue({
@@ -253,6 +259,7 @@ class Session {
   // let in again: an empty feed would hand its turn to the own playlist, and the same Mix asked again
   // would answer the same until it is restarted.
   topUpRadio() {
+    if (this.queue.endlessPlaylistPossible()) this.learnLengths().catch((err) => console.error(`[donationMedia] ${this.channelLogin}: playlist lengths:`, err.message));
     const seeds = this.queue.topUpSeeds();
     if (seeds.length === 0 || this.radioStarting || this.queue.radioBusy.radio || Date.now() < this.radioRetryAt) return;
     const radio = this.queue.radio;
@@ -272,6 +279,31 @@ class Session {
       if (this.queue.addUpNext(tracks, "radio", { repeats }) > 0) return;
     }
     this.radioRetryAt = Date.now() + RADIO_RETRY_MS;
+  }
+
+  // How long the own playlist's tracks are, one by one in the background: which of them endless music
+  // may take depends on it. From what the music graph has stored, else YouTube; never asked again.
+  async learnLengths() {
+    if (this.learningLengths) return;
+    const unknown = () => this.queue.playlist.find((p) => !p.seconds && !(Date.now() - (this.lengthTried.get(p.videoId) || 0) < LENGTH_RETRY_MS));
+    if (!unknown()) return;
+    this.learningLengths = true;
+    try {
+      for (let entry = unknown(); entry && this.queue.endlessPlaylistPossible(); entry = unknown()) {
+        const { videoId } = entry;
+        this.lengthTried.set(videoId, Date.now());
+        const stored = await musicGraphRepo.findTrack(videoId).catch(() => null);
+        let seconds = (stored && stored.duration) || 0;
+        const author = (stored && stored.author) || ((await radioSources.embedInfo(videoId).catch(() => null)) || {}).author || "";
+        if (!seconds) {
+          seconds = await radioSources.videoLength(videoId).catch(() => 0);
+          await new Promise((r) => setTimeout(r, LENGTH_PAUSE_MS).unref());
+        }
+        this.queue.setPlaylistInfo(videoId, { author, seconds });
+      }
+    } finally {
+      this.learningLengths = false;
+    }
   }
 
   // A queue item ended; the next one has not been chosen yet. After a skip the radio's part of the
@@ -703,6 +735,7 @@ async function handlePanelCommand(session, ws, principal, msg) {
       if (entry) {
         session.trackInfo(videoId).then((track) => {
           if (track.title) q.setPlaylistTitle(entry.id, track.title);
+          q.setPlaylistInfo(videoId, { author: track.author });
           session.music.noted(track, "liked");
         }).catch(() => {});
       }

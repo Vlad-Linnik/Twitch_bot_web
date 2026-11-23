@@ -119,8 +119,25 @@ async function findByArtist(artist, limit = 60) {
   return (await tracks.find({ artist }).sort({ usedAt: -1 }).limit(limit).toArray()).map(toTrack);
 }
 
+async function findTrack(videoId) {
+  const { tracks } = await ensureInitialized();
+  const doc = await tracks.findOne({ _id: videoId });
+  return doc ? toTrack(doc) : null;
+}
+
+// Only what is known: the row is shared, and a track met without its artist or length must not take
+// them off a row that has them.
 function info(t) {
-  return { title: t.title, author: t.author, duration: t.duration || 0, song: songId(t), artist: artistOf(t.title, t.author), usedAt: new Date() };
+  const out = { usedAt: new Date() };
+  if (t.title) out.title = t.title;
+  if (t.author) out.author = t.author;
+  if (t.duration > 0) out.duration = t.duration;
+  const song = songId(t);
+  if (!song.startsWith("v:")) {
+    out.song = song;
+    out.artist = artistOf(t.title, t.author);
+  }
+  return out;
 }
 
 function upserts(list) {
@@ -145,23 +162,40 @@ async function saveNeighbours(track, list, similar) {
   );
 }
 
-// links: [{ track, s }] - all of the node's, not only the new ones.
-async function saveLinks(track, links) {
+// links: [{ track, s }], added to the row's own: another channel may have found others, and the graph
+// in memory need not have loaded them. The stronger of two stands. Writes go one after another, or two
+// at once would each add to what it read before the other.
+let linkWrites = Promise.resolve();
+function saveLinks(track, links) {
+  const write = linkWrites.then(() => addLinks(track, links));
+  linkWrites = write.catch(() => {});
+  return write;
+}
+
+async function addLinks(track, links) {
   const { tracks } = await ensureInitialized();
-  const kept = [...links].sort((a, b) => b.s - a.s).slice(0, LINKS_MAX);
+  const doc = await tracks.findOne({ _id: track.videoId }, { projection: { links: 1 } });
+  const merged = mergeLinks(doc && doc.links, links.map((l) => ({ v: l.track.videoId, s: l.s })));
+  const stay = new Set(merged.map((l) => l.v));
   await tracks.bulkWrite(
     [
       {
         updateOne: {
           filter: { _id: track.videoId },
-          update: { $set: { ...info(track), links: kept.map((l) => ({ v: l.track.videoId, s: l.s })) } },
+          update: { $set: { ...info(track), links: merged } },
           upsert: true,
         },
       },
-      ...upserts(kept.map((l) => l.track)),
+      ...upserts(links.map((l) => l.track).filter((t) => stay.has(t.videoId))),
     ],
     { ordered: false }
   );
+}
+
+function mergeLinks(stored, added) {
+  const best = new Map();
+  for (const l of [...(Array.isArray(stored) ? stored : []), ...added]) if (l && l.v && l.s > (best.get(l.v) || 0)) best.set(l.v, l.s);
+  return [...best].map(([v, s]) => ({ v, s })).sort((a, b) => b.s - a.s).slice(0, LINKS_MAX);
 }
 
 async function saveEmbed(videoId, embed) {
@@ -233,6 +267,7 @@ async function statsSince(channelId, days) {
 
 module.exports = {
   loadAround,
+  findTrack,
   findByArtist,
   saveNeighbours,
   saveLinks,
@@ -244,4 +279,7 @@ module.exports = {
   search,
   statsSince,
   EXPAND_TTL_MS,
+  // for tests
+  _mergeLinks: mergeLinks,
+  _info: info,
 };
