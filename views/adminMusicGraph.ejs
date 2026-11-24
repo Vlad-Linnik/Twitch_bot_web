@@ -3,15 +3,19 @@
 
 <%#
   The donation media radio's music graph (routes/adminMusicGraph.js): drawn and filled by
-  public/js/admin-music-graph.js from its JSON endpoint. Read-only.
+  public/js/admin-music-graph.js from its JSON endpoint, moved by public/js/music-graph-sim.js.
+  Read-only.
 %>
 <%
   const gInput = 'bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
   const gButton = 'px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium';
-  const gGhost = 'px-3 py-2 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-sm';
+  const gGhost = 'px-3 py-2 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-sm aria-pressed:border-purple-600 aria-pressed:text-purple-200 aria-pressed:bg-purple-600/15';
+  const gSwitch = (key, label) => `<label class="mg-row"><span>${label}</span><input type="checkbox" class="mg-switch" data-set="${key}" /></label>`;
+  const gSlider = (key, label, min, max, step) => `<label class="mg-slider"><span class="mg-slider-head"><span>${label}</span><output data-out="${key}"></output></span><input type="range" class="mg-range" data-set="${key}" min="${min}" max="${max}" step="${step}" /></label>`;
 %>
 
 <main class="pt-14 max-w-6xl mx-auto px-6 py-16">
+  <link rel="stylesheet" href="<%= asset('/css/music-graph.css') %>" />
   <h1 class="text-3xl font-bold text-neutral-100 mb-1"><%= t('admin.title') %></h1>
   <p class="text-neutral-500 text-sm mb-8"><%= t('admin.graph.intro') %></p>
 
@@ -20,7 +24,7 @@
   <% if (channels.length === 0) { %>
     <p class="text-neutral-400"><%= t('admin.graph.noChannels') %></p>
   <% } else { %>
-  <div id="music-graph" data-strings="<%= JSON.stringify(strings) %>" data-lang="<%= locale %>">
+  <div id="music-graph" data-strings="<%= JSON.stringify(strings) %>" data-lang="<%= locale %>" data-sim="<%= asset('/js/music-graph-sim.js') %>">
     <form id="mg-form" class="flex flex-wrap items-end gap-3 mb-4">
       <label class="block">
         <span class="block text-xs uppercase tracking-wide text-neutral-500 mb-1"><%= t('admin.graph.channel') %></span>
@@ -33,25 +37,81 @@
         <input id="mg-q" type="search" maxlength="100" class="<%= gInput %> w-full" placeholder="<%= t('admin.graph.searchPlaceholder') %>" />
       </label>
       <button type="submit" class="<%= gButton %>"><%= t('admin.graph.show') %></button>
-      <button type="button" id="mg-live" class="<%= gGhost %>"><%= t('admin.graph.liveButton') %></button>
+      <button type="button" id="mg-live" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.liveButton') %></button>
+      <button type="button" id="mg-whole" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.wholeButton') %></button>
       <button type="button" id="mg-refresh" class="<%= gGhost %>"><%= t('admin.graph.refresh') %></button>
     </form>
     <p id="mg-status" class="text-sm text-neutral-400 mb-3 min-h-[1.25rem]" role="status"></p>
-    <dl id="mg-totals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></dl>
 
-    <div class="grid lg:grid-cols-[minmax(0,1fr)_18rem] gap-4 items-start">
-      <div class="rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden">
-        <svg id="mg-svg" viewBox="-460 -460 920 920" class="block w-full h-auto touch-none select-none" role="img" aria-label="<%= t('admin.graph.graphLabel') %>"></svg>
+    <div id="mg-stage" class="mg-stage">
+      <canvas id="mg-canvas" tabindex="0" role="img" aria-label="<%= t('admin.graph.graphLabel') %>"></canvas>
+      <section id="mg-detail" class="mg-card mg-detail" hidden></section>
+
+      <div class="mg-card mg-tools">
+        <button type="button" id="mg-zoom-in" class="mg-icon" title="<%= t('admin.graph.zoomIn') %>" aria-label="<%= t('admin.graph.zoomIn') %>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
+        <button type="button" id="mg-zoom-out" class="mg-icon" title="<%= t('admin.graph.zoomOut') %>" aria-label="<%= t('admin.graph.zoomOut') %>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg></button>
+        <button type="button" id="mg-fit" class="mg-icon" title="<%= t('admin.graph.fit') %>" aria-label="<%= t('admin.graph.fit') %>"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" /><path d="M12 2v5M12 17v5M2 12h5M17 12h5" /></svg></button>
+        <button type="button" id="mg-full" class="mg-icon" title="<%= t('admin.graph.fullscreen') %>" aria-label="<%= t('admin.graph.fullscreen') %>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg></button>
       </div>
-      <aside class="space-y-4 min-w-0">
-        <section id="mg-detail" class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-300 break-words"><%= t('admin.graph.selectHint') %></section>
-        <section class="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm">
-          <h2 class="font-semibold text-neutral-100 mb-2"><%= t('admin.graph.legend') %></h2>
-          <ul id="mg-legend" class="space-y-1 mb-3 text-neutral-300"></ul>
-          <p class="text-xs text-neutral-500"><%= t('admin.graph.legendHint') %></p>
-        </section>
+      <p id="mg-counts" class="mg-counts"></p>
+
+      <button type="button" id="mg-gear" class="mg-icon mg-gear" title="<%= t('admin.graph.settings') %>" aria-label="<%= t('admin.graph.settings') %>" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 14H2.900a2 2 0 0 1 0-4H3a1.7 1.7 0 0 0 1.2-2.900l-.1-.1a2 2 0 1 1 2.8-2.800l.1.1A1.7 1.7 0 0 0 10 3.100V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.200l.1-.1a2 2 0 1 1 2.8 2.800l-.1.1a1.7 1.7 0 0 0 1.2 2.900h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg></button>
+      <aside id="mg-panel" class="mg-card mg-panel" aria-label="<%= t('admin.graph.settings') %>">
+        <div class="mg-panel-buttons">
+          <button type="button" id="mg-reset" class="mg-icon" title="<%= t('admin.graph.reset') %>" aria-label="<%= t('admin.graph.reset') %>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.700L3 8M3 3v5h5" /></svg></button>
+          <button type="button" id="mg-panel-close" class="mg-icon" title="<%= t('admin.graph.closePanel') %>" aria-label="<%= t('admin.graph.closePanel') %>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+        </div>
+        <details data-section="filters" open>
+          <summary><%= t('admin.graph.filters') %></summary>
+          <div class="mg-body">
+            <input type="search" class="mg-field" data-set="text" maxlength="100" placeholder="<%= t('admin.graph.filterPlaceholder') %>" aria-label="<%= t('admin.graph.filterPlaceholder') %>" />
+            <%- gSwitch('onlyHeard', t('admin.graph.onlyHeard')) %>
+            <%- gSwitch('onlyOpened', t('admin.graph.onlyOpened')) %>
+            <%- gSwitch('closed', t('admin.graph.showClosed')) %>
+            <%- gSwitch('orphans', t('admin.graph.orphans')) %>
+            <%- gSlider('depth', t('admin.graph.depth'), 1, 6, 1) %>
+            <%- gSlider('perNode', t('admin.graph.perNode'), 0, 24, 1) %>
+          </div>
+        </details>
+        <details data-section="groups">
+          <summary><%= t('admin.graph.groups') %></summary>
+          <div class="mg-body">
+            <div id="mg-legend" class="mg-groups"></div>
+            <div id="mg-groups" class="mg-groups"></div>
+            <button type="button" id="mg-new-group" class="mg-primary"><%= t('admin.graph.newGroup') %></button>
+            <p class="mg-hint"><%= t('admin.graph.legendHint') %></p>
+          </div>
+        </details>
+        <details data-section="display">
+          <summary><%= t('admin.graph.display') %></summary>
+          <div class="mg-body">
+            <%- gSwitch('arrows', t('admin.graph.arrows')) %>
+            <%- gSlider('fade', t('admin.graph.fade'), -3, 3, 0.1) %>
+            <%- gSlider('node', t('admin.graph.nodeSize'), 0.2, 3, 0.05) %>
+            <%- gSlider('line', t('admin.graph.lineWidth'), 0.2, 5, 0.1) %>
+            <label class="mg-row"><span><%= t('admin.graph.sizeBy') %></span>
+              <select class="mg-select" data-set="size">
+                <option value="links"><%= t('admin.graph.sizeLinks') %></option>
+                <option value="chance"><%= t('admin.graph.sizeChance') %></option>
+                <option value="close"><%= t('admin.graph.sizeClose') %></option>
+              </select>
+            </label>
+            <button type="button" id="mg-animate" class="mg-primary"><%= t('admin.graph.animate') %></button>
+          </div>
+        </details>
+        <details data-section="forces">
+          <summary><%= t('admin.graph.forces') %></summary>
+          <div class="mg-body">
+            <%- gSlider('center', t('admin.graph.center'), 0, 1, 0.01) %>
+            <%- gSlider('repel', t('admin.graph.repel'), 0, 20, 0.1) %>
+            <%- gSlider('link', t('admin.graph.link'), 0, 1, 0.01) %>
+            <%- gSlider('distance', t('admin.graph.distance'), 30, 500, 5) %>
+          </div>
+        </details>
       </aside>
     </div>
+
+    <dl id="mg-totals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"></dl>
 
     <div class="grid lg:grid-cols-2 gap-6 mt-8 items-start">
       <section class="min-w-0">

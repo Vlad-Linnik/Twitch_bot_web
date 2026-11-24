@@ -114,6 +114,12 @@ async function loadAround(seeds) {
   return [...rows.values()].map(toTrack);
 }
 
+// The whole graph, the rows used last first. Looking at it does not count as use.
+async function loadAll(limit) {
+  const { tracks } = await ensureInitialized();
+  return (await tracks.find({}).sort({ usedAt: -1 }).limit(limit).toArray()).map(toTrack);
+}
+
 async function findByArtist(artist, limit = 60) {
   const { tracks } = await ensureInitialized();
   return (await tracks.find({ artist }).sort({ usedAt: -1 }).limit(limit).toArray()).map(toTrack);
@@ -267,6 +273,7 @@ async function statsSince(channelId, days) {
 
 module.exports = {
   loadAround,
+  loadAll,
   findTrack,
   findByArtist,
   saveNeighbours,
