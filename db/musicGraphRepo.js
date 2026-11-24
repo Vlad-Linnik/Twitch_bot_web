@@ -10,6 +10,8 @@
 //     similar: [{ artist, track, match }],   Last.fm's answer, likewise
 //     expandedAt,                      when the two were asked for; older than EXPAND_TTL_MS = again
 //     links: [{ v: videoId, s }],      neighbours found another way (Last.fm searched, the artist's)
+//     energy,                          how lively the song is, -1..1, null when the model asked did not
+//                                      know; absent until it was asked (lib/musicEnergy.js)
 //     embed, embedAt,                  does it play in an embedded player, and when that was learnt
 //     usedAt }                         TTL index: a track no radio has come near for 180 days goes
 //
@@ -79,6 +81,7 @@ function toTrack(doc) {
     links: Array.isArray(doc.links) ? doc.links.filter((l) => l && l.v) : [],
     embed: typeof doc.embed === "boolean" ? doc.embed : null,
     embedAt: doc.embedAt ? doc.embedAt.getTime() : 0,
+    energy: doc.energy,
   };
 }
 
@@ -209,6 +212,14 @@ async function saveEmbed(videoId, embed) {
   await tracks.updateOne({ _id: videoId }, { $set: { embed, embedAt: new Date() } });
 }
 
+async function saveEnergy(rows) {
+  const { tracks } = await ensureInitialized();
+  await tracks.bulkWrite(
+    rows.map((r) => ({ updateOne: { filter: { _id: r.videoId }, update: { $set: { energy: r.energy } } } })),
+    { ordered: false }
+  );
+}
+
 async function loadTaste(channelId) {
   const { taste } = await ensureInitialized();
   return taste
@@ -279,6 +290,7 @@ module.exports = {
   saveNeighbours,
   saveLinks,
   saveEmbed,
+  saveEnergy,
   loadTaste,
   saveTaste,
   count,

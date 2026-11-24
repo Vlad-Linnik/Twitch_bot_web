@@ -145,6 +145,17 @@
 }
 .dm-paused { color: var(--dm-warn); font-weight: 700; }
 
+/* The track's own buttons on the left, what the music leans to on the right; below them in a dock. */
+.dm-now-bottom { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0 20px; }
+.dm-now-actions { flex: 1 1 320px; min-width: 0; }
+.dm-modes { flex: none; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.dm-mode-label { display: block; margin-bottom: 3px; font-size: 12px; color: var(--dm-muted); }
+.dm-mode-values { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.dm-mode-values .dm-btn { justify-content: center; border-radius: 0; margin-left: -1px; color: var(--dm-muted); }
+.dm-mode-values .dm-btn:first-child { margin-left: 0; border-radius: 6px 0 0 6px; }
+.dm-mode-values .dm-btn:last-child { border-radius: 0 6px 6px 0; }
+.dm-mode-values .dm-btn:hover, .dm-mode-values .dm-btn.is-active { position: relative; z-index: 1; color: var(--dm-text); }
+
 .dm-controls { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .dm-btn {
   background: var(--dm-card-2);

@@ -31,6 +31,7 @@ const musicFeaturesRepo = require("../db/musicFeaturesRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
 const streamSessionsRepo = require("../db/streamSessionsRepo");
 const { MusicTagRegistry } = require("../lib/musicTagRegistry");
+const { MusicEnergy } = require("../lib/musicEnergy");
 const { MusicFeatures } = require("../lib/musicFeatures");
 const { eventOf } = require("../lib/musicJournal");
 const { songId, artistOf } = require("../lib/musicGraph");
@@ -67,9 +68,10 @@ const sessions = new Map(); // channelId -> Session
 // after every edit (reloadEggs).
 let eggs = new Map();
 
-// Every channel's: the artists' tags, and which changes of the choosing are on (loaded at boot and set by
+// Every channel's: the artists' tags, the songs' energy, and which changes of the choosing are on (loaded at boot and set by
 // the admin's page).
 const musicTags = new MusicTagRegistry({ repo: musicArtistsRepo, source: radioSources.artistTags });
+const musicEnergy = new MusicEnergy({ source: radioSources.songEnergy, repo: musicGraphRepo });
 const musicFeatures = new MusicFeatures();
 
 class Session {
@@ -101,7 +103,7 @@ class Session {
       },
       onFinished: (item, how) => this.onFinished(item, how),
     });
-    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo, tags: musicTags, features: musicFeatures });
+    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo, tags: musicTags, features: musicFeatures, energy: musicEnergy });
     this.ready = Promise.resolve()
       // A failure here costs the theme, not the queue.
       .then(() => this.loadPanelSettings().catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load panel settings:`, err.message)))
@@ -336,6 +338,24 @@ class Session {
       q.replaceRadioTail(this.music.nextNow(q, { ...q.feedExclusions({ repeats: true, tail: false }), limit: tail }));
     }
     this.music.grow(q);
+  }
+
+  // What the music leans to has changed: the radio's own part of the feed is chosen anew, at once out of
+  // what is known to play and then, when that has been looked into, again.
+  async rechoose() {
+    const q = this.queue;
+    if (!(q.radio || q.infinite)) return;
+    const tail = () => q.upNext.filter((u) => q.isRadioTail(u)).length;
+    const want = tail();
+    if (want === 0) return;
+    const around = (ex) => ({ ...ex, ...q.feedExclusions({ repeats: true, tail: false }), limit: want });
+    q.replaceRadioTail(this.music.nextNow(q, around({})));
+    q.changed();
+    const { radio, musicMode } = q;
+    const chosen = await this.fetchInto("radio", (ex) => this.music.next(q, { ...around(ex), tail: false }));
+    if (!chosen || chosen.length === 0 || q.radio !== radio || q.musicMode !== musicMode || tail() === 0) return;
+    q.replaceRadioTail(chosen);
+    q.changed();
   }
 
   // A track taken out of the feed before it played.
@@ -817,6 +837,9 @@ async function handlePanelCommand(session, ws, principal, msg) {
       return q.setInfinite(msg.on === true);
     case "hideMusic":
       return q.setHideMusic(msg.on === true);
+    case "musicMode":
+      if (q.setMusicMode({ novelty: msg.novelty, mood: msg.mood })) await session.rechoose();
+      return;
     case "moreFromArtist": {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       if (!videoId) return reply({ ok: false, reason: "bad" });

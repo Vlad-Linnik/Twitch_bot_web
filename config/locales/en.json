@@ -4338,7 +4338,21 @@
       },
       "blurStrength": "Blur strength",
       "volume": "Volume",
-      "volumeHint": "The OBS player's volume, for donations and your own playlist. Kept for every following clip."
+      "volumeHint": "The OBS player's volume, for donations and your own playlist. Kept for every following clip.",
+      "musicNovelty": "What to play",
+      "musicNoveltyHint": "For the radio and endless music: how much of the feed has never played on the channel. Takes effect at once; tracks asked for by hand stay.",
+      "novelty": {
+        "known": "Known",
+        "even": "Mixed",
+        "new": "New"
+      },
+      "musicMood": "Mood",
+      "musicMoodHint": "For the radio and endless music. An AI rates the energy of each song once; those it does not know are judged by their artist’s genre. Fitting songs play first, the others once there are no more.",
+      "mood": {
+        "calm": "Calm",
+        "any": "Any",
+        "lively": "Lively"
+      }
     },
     "player": {
       "coverText": "Clip hidden"

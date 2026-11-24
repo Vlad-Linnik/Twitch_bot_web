@@ -383,6 +383,36 @@
     return el("div", { class: "dm-blur" }, el("span", { text: t("blurStrength") }), input, label);
   }
 
+  // What radio and endless music lean to.
+  function musicModes() {
+    const mode = state.musicMode || {};
+    const group = (key, label, hint, values) =>
+      el(
+        "div",
+        { class: "dm-mode", role: "group", "aria-label": label, title: hint },
+        el("span", { class: "dm-mode-label", text: label }),
+        el(
+          "div",
+          { class: "dm-mode-values" },
+          ...values.map(([value, text]) =>
+            el("button", {
+              class: "dm-btn is-small" + (mode[key] === value ? " is-active" : ""),
+              type: "button",
+              "aria-pressed": mode[key] === value ? "true" : "false",
+              text,
+              onclick: () => command("musicMode", { [key]: value }),
+            })
+          )
+        )
+      );
+    return el(
+      "div",
+      { class: "dm-modes" },
+      group("novelty", t("musicNovelty"), t("musicNoveltyHint"), [["known", t("novelty.known")], ["even", t("novelty.even")], ["new", t("novelty.new")]]),
+      group("mood", t("musicMood"), t("musicMoodHint"), [["calm", t("mood.calm")], ["any", t("mood.any")], ["lively", t("mood.lively")]])
+    );
+  }
+
   function renderNow() {
     nowBox.replaceChildren();
     const item = state.current;
@@ -423,7 +453,9 @@
 
     const card = el("div", { class: "dm-now" }, el("div", { class: "dm-now-top" }, thumb(item), info), bar, times);
     if (canControl) {
-      card.appendChild(
+      const actions = el("div", { class: "dm-now-actions" });
+      card.appendChild(el("div", { class: "dm-now-bottom" }, actions, musicModes()));
+      actions.appendChild(
         el(
           "div",
           { class: "dm-controls" },
@@ -435,14 +467,14 @@
           playlistButton(item, { wide: true })
         )
       );
-      card.appendChild(el("div", { class: "dm-controls" }, ...trackButtons(item.videoId, { wide: true })));
+      actions.appendChild(el("div", { class: "dm-controls" }, ...trackButtons(item.videoId, { wide: true })));
       const modes = [
         [null, t("coverNone")],
         ["hide", t("coverHide")],
         ["blur", t("coverBlur")],
         ["image", t("coverImage")],
       ];
-      card.appendChild(
+      actions.appendChild(
         el(
           "div",
           { class: "dm-cover", title: t("coverHint") },
