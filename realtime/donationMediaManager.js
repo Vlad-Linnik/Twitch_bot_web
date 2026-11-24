@@ -495,9 +495,8 @@ class Session {
       const tracks = chosen && chosen.length > 0 ? chosen : await this.fetchInto("radio", (ex) => radioSources.radioFor(seed, ex));
       if (this.queue.radio !== radio) return 0;
       if (tracks && tracks !== chosen) this.music.learn(seed, tracks);
-      // Radio from the track that is playing lets it finish; from any other, the radio starts now.
-      const playing = this.queue.current && this.queue.current.videoId === videoId;
-      const added = tracks ? this.queue.addUpNext(tracks, "radio", { repeats: tracks === chosen, ...(playing ? { first: true } : { playNow: true }) }) : 0;
+      // Whatever plays now plays out, and the radio comes after it.
+      const added = tracks ? this.queue.addUpNext(tracks, "radio", { repeats: tracks === chosen, first: true }) : 0;
       if (added === 0) this.queue.stopRadio();
       return added;
     } finally {
@@ -943,7 +942,7 @@ async function handlePanelCommand(session, ws, principal, msg) {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       reply({ ok: Boolean(videoId) });
       if (!videoId) return;
-      const item = q.add("manual", { videoId, title: "", donor: "", amount: null, message: "", start: 0, end: 0 }, { addedBy: principal.by });
+      const item = q.add("manual", { videoId, title: "", donor: "", amount: null, message: "", start: 0, end: 0 }, { addedBy: principal.by, gently: true });
       if (item) fetchTitle(videoId).then((title) => title && q.setTitle(item.id, title));
       return;
     }
