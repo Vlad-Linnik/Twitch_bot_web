@@ -106,9 +106,14 @@ class Session {
     this.interest = new Map(); // videoId -> { asked, chat } - counted before its row was written
     this.radioStarting = false; // startRadio's own first fetch is running; no top-up beside it
     this.buttons = icons.normalizeButtons(null);
+    // The channel's placeholder pictures and the one picked (its url, null = the built-in card);
+    // null until loaded.
+    this.placeholders = null;
+    this.placeholderUrl = null;
+    this.placeholderChain = Promise.resolve();
     this.queue = new MediaQueue({
       // The panel's icons follow the clip: an Easter egg is for one video.
-      decorate: (snap) => ({ ...snap, icons: icons.resolveIcons(this.buttons, snap.current ? eggs.get(snap.current.videoId) : null) }),
+      decorate: (snap) => ({ ...snap, icons: icons.resolveIcons(this.buttons, snap.current ? eggs.get(snap.current.videoId) : null), ...this.placeholderState() }),
       send: (target, message) => this.send(target, message),
       onChange: () => {
         this.scheduleSave();
@@ -260,11 +265,41 @@ class Session {
     this.queue.setPlatforms(this.status);
   }
 
-  // The owner's panel settings: the button theme and the history length.
+  // What the panel's placeholder picker shows: the own pictures and the id of the one picked.
+  placeholderState() {
+    const list = this.placeholders || [];
+    const picked = list.find((p) => p.url === this.placeholderUrl);
+    return { placeholders: list.map(({ id, thumb }) => ({ id, thumb })), placeholder: picked ? picked.id : null };
+  }
+
+  // A moderator picked a picture in the panel (id, or "builtin"). It stays picked for later clips.
+  // One that is gone meanwhile changes nothing: the clip is covered with what was picked before.
+  selectPlaceholder(id) {
+    if (!this.placeholders) return;
+    const entry = this.placeholders.find((p) => p.id === id);
+    if (!entry && id !== "builtin") return;
+    const url = entry ? entry.url : null;
+    if (url === this.placeholderUrl) return;
+    this.placeholderUrl = url;
+    this.send("players", { type: "placeholder", url });
+    this.queue.broadcastState();
+    // Chained, so the last of two quick picks is the one saved.
+    this.placeholderChain = this.placeholderChain
+      .then(() => donationMediaRepo.selectPlaceholder(this.channelId, url))
+      .catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not save the placeholder picked:`, err.message));
+  }
+
+  // The panel settings: the button theme, the history length, the placeholder pictures.
   async loadPanelSettings() {
+    await this.placeholderChain;
     const config = await donationMediaRepo.findByChannelId(this.channelId);
     if (!config) return;
     this.buttons = config.buttons;
+    const changed = this.placeholders !== null && this.placeholderUrl !== config.placeholderUrl;
+    this.placeholders = config.placeholders;
+    this.placeholderUrl = config.placeholderUrl;
+    // OBS players open now switch to it without a reload.
+    if (changed) this.send("players", { type: "placeholder", url: this.placeholderUrl });
     this.queue.setHistoryLimit(config.historyLimit);
   }
 
@@ -709,14 +744,8 @@ async function start() {
   }
 }
 
-// The owner changed the placeholder picture: OBS players open now switch to it without a reload
-// (a player opened later gets it in its page).
-function setPlaceholder(channelId, url) {
-  const session = sessions.get(String(channelId));
-  if (session) session.send("players", { type: "placeholder", url: url || null });
-}
-
-// After the setup page changed the panel's buttons or history length: open panels redraw at once.
+// After the site changed the panel's buttons, history length or placeholder pictures: open panels
+// redraw at once.
 async function reloadPanelSettings(channelId, channelLogin) {
   const session = getSession(channelId, channelLogin);
   await session.ready;
@@ -868,6 +897,8 @@ async function handlePanelCommand(session, ws, principal, msg) {
     case "clearHistory":
       return q.clearHistory();
     case "cover":
+      // The picture first: the cover must not show the previous one for a moment.
+      if (msg.mode === "image" && typeof msg.placeholder === "string") session.selectPlaceholder(msg.placeholder);
       return q.setCover(typeof msg.mode === "string" ? msg.mode : null);
     case "blurStrength":
       return q.setBlurStrength(Number(msg.value));
@@ -999,7 +1030,11 @@ async function handleConnection(ws, principal) {
       session.players.delete(ws);
       session.queue.playerLeft();
     });
-    session.queue.playerJoined((message) => ws.readyState === 1 && ws.send(JSON.stringify(message)));
+    const sendToJoined = (message) => ws.readyState === 1 && ws.send(JSON.stringify(message));
+    // The page came with the picture picked when it was loaded; one picked while its socket was
+    // down never reached it.
+    if (session.placeholders) sendToJoined({ type: "placeholder", url: session.placeholderUrl });
+    session.queue.playerJoined(sendToJoined);
   } else {
     const entry = { ws, principal };
     session.panels.add(entry);
@@ -1017,7 +1052,6 @@ module.exports = {
   reload,
   reloadPanelSettings,
   reloadEggs,
-  setPlaceholder,
   statusOf,
   musicOf,
   musicTags,

@@ -383,6 +383,65 @@
     return el("div", { class: "dm-blur" }, el("span", { text: t("blurStrength") }), input, label);
   }
 
+  // The "placeholder" button's menu: the channel's own pictures and the built-in card, as
+  // thumbnails. One node for the page's life, moved into every redrawn card, so a state update
+  // neither closes it nor restarts the animated pictures; its tiles are rebuilt only when the list
+  // itself changes.
+  const coverMenu = el("div", { class: "dm-cover-menu", role: "group", "aria-label": t("coverImagePick") });
+  coverMenu.hidden = true;
+  let coverMenuFor = null; // the id of the clip it was opened on
+  let coverMenuList = null; // the list its tiles were built from, as text
+  let coverMenuButton = null;
+
+  function setCoverMenu(open) {
+    coverMenuFor = open && state && state.current ? state.current.id : null;
+    coverMenu.hidden = coverMenuFor === null;
+    if (coverMenuButton) coverMenuButton.setAttribute("aria-expanded", coverMenu.hidden ? "false" : "true");
+  }
+
+  function updateCoverMenu() {
+    const list = state.placeholders || [];
+    const key = list.map((p) => p.id).join(",");
+    if (key !== coverMenuList) {
+      coverMenuList = key;
+      const tile = (id, label, inner) =>
+        el("button", {
+          class: "dm-cover-tile",
+          type: "button",
+          title: label,
+          "aria-label": label,
+          "data-id": id,
+          onclick: () => {
+            setCoverMenu(false);
+            if (coverMenuButton) coverMenuButton.focus();
+            command("cover", { mode: "image", placeholder: id });
+          },
+        }, inner);
+      coverMenu.replaceChildren(
+        tile("builtin", t("coverBuiltin"), el("span", { class: "dm-cover-builtin", text: "🙈" })),
+        ...list.map((p, i) => tile(p.id, `${t("coverOwn")} ${i + 1}`, el("img", { src: p.thumb, alt: "", draggable: "false" })))
+      );
+    }
+    const picked = state.cover === "image" ? state.placeholder || "builtin" : null;
+    for (const node of coverMenu.children) {
+      const on = node.dataset.id === picked;
+      node.classList.toggle("is-active", on);
+      node.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    if (list.length === 0 || !state.current || state.current.id !== coverMenuFor) setCoverMenu(false);
+  }
+
+  document.addEventListener("click", (event) => {
+    if (coverMenu.hidden || coverMenu.contains(event.target)) return;
+    if (coverMenuButton && coverMenuButton.contains(event.target)) return;
+    setCoverMenu(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || coverMenu.hidden) return;
+    setCoverMenu(false);
+    if (coverMenuButton) coverMenuButton.focus();
+  });
+
   // What radio and endless music lean to.
   function musicModes() {
     const mode = state.musicMode || {};
@@ -415,6 +474,8 @@
 
   function renderNow() {
     nowBox.replaceChildren();
+    coverMenuButton = null;
+    updateCoverMenu();
     const item = state.current;
     if (!item) {
       const text = state.queue.length > 0 && !state.playerConnected ? t("waitingForPlayer") : t("nothingPlaying");
@@ -479,14 +540,21 @@
           "div",
           { class: "dm-cover", title: t("coverHint") },
           el("span", { class: "dm-cover-label", text: t("coverLabel") }),
-          ...modes.map(([mode, label]) =>
-            el("button", {
+          ...modes.map(([mode, label]) => {
+            // With nothing to choose from, the button covers the clip at once.
+            const picks = mode === "image" && (state.placeholders || []).length > 0;
+            const button = el("button", {
               class: "dm-btn is-small" + ((state.cover || null) === mode ? " is-active" : "") + (mode ? " is-cover" : ""),
               type: "button",
+              title: picks ? t("coverImagePick") : null,
               "aria-pressed": (state.cover || null) === mode ? "true" : "false",
-              onclick: () => command("cover", { mode }),
-            }, ...(mode ? iconText(mode, label) : [el("span", { text: label })]))
-          )
+              "aria-expanded": picks ? (coverMenu.hidden ? "false" : "true") : null,
+              onclick: () => (picks ? setCoverMenu(coverMenu.hidden) : command("cover", { mode })),
+            }, ...(mode ? iconText(mode, label) : [el("span", { text: label })]), picks ? el("span", { class: "dm-caret", "aria-hidden": "true", text: "▾" }) : null);
+            if (picks) coverMenuButton = button;
+            return button;
+          }),
+          coverMenu
         )
       );
       if (state.cover === "blur") card.appendChild(blurSlider());

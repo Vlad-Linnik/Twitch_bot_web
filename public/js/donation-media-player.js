@@ -5,7 +5,7 @@
 //   { type: "pause" }  { type: "resume" }  { type: "seek", time }  { type: "stop" }
 //   { type: "cover", mode, blur }  mode null | "hide" | "blur" | "image" - the picture over the clip,
 //                                  sound unchanged; blur = strength in percent (10-100)
-//   { type: "placeholder", url }   the owner's own placeholder picture changed (null = built-in)
+//   { type: "placeholder", url }   the placeholder picture picked in the panel (null = built-in)
 //   { type: "volume", value }      0-100; sent on connect and on every change, kept for every clip
 // and sends { type: "ended", id, error } and, once a second, { type: "progress", id, time, duration, title }.
 //
@@ -51,8 +51,10 @@
   function setPlaceholder(url) {
     const cover = document.getElementById("player-cover");
     const old = cover.querySelector("img");
-    if (old) old.remove();
     const ok = typeof url === "string" && /^\/uploads\/donation-media\/[0-9a-f-]{36}\.webp$/.test(url);
+    // Sent on every connect: the same picture is left alone, or its animation would start over.
+    if (old && ok && old.getAttribute("src") === url) return;
+    if (old) old.remove();
     cover.classList.toggle("has-image", ok);
     if (!ok) return;
     const img = document.createElement("img");

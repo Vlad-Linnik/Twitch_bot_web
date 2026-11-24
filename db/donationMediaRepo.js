@@ -7,7 +7,8 @@
 //     donationAlerts: { tokenEnc, currency },
 //     donatello:      { userIdEnc, widgetIdEnc },
 //     donatePay:      { tokenEnc, origin },
-//     placeholderUrl,                            the owner's own placeholder picture, or absent
+//     placeholders: [{ url, thumb }],            the channel's own placeholder pictures
+//     placeholderUrl,                            the one picked last; absent or null = built-in
 //                                                (lib/donationMediaPlaceholder.js)
 //     buttons: { theme, custom },                the queue panel's icon theme
 //                                                (lib/donationMediaIcons.js)
@@ -28,6 +29,7 @@
 const crypto = require("crypto");
 const { connectWeb } = require("./connection");
 const { encrypt, decrypt } = require("../lib/tokenCrypto");
+const { normalizePlaceholders, MAX_PLACEHOLDERS } = require("../lib/donationMediaPlaceholder");
 const { normalizeButtons, clampHistoryLimit, normalizeEgg, HISTORY_MAX } = require("../lib/donationMediaIcons");
 
 let settings;
@@ -92,7 +94,7 @@ function toConfig(doc) {
     donationAlerts: da ? { token: da, currency: doc.donationAlerts.currency || null } : null,
     donatello: dnUser && dnWidget ? { userId: dnUser, widgetId: dnWidget } : null,
     donatePay: dp ? { token: dp, origin: doc.donatePay.origin } : null,
-    placeholderUrl: doc.placeholderUrl || null,
+    ...normalizePlaceholders(doc),
     buttons: normalizeButtons(doc.buttons),
     historyLimit: Number.isFinite(doc.historyLimit) ? clampHistoryLimit(doc.historyLimit) : HISTORY_MAX,
     updatedAt: doc.updatedAt || null,
@@ -126,14 +128,14 @@ async function findByKey(key) {
   const { settings: col } = await ensureInitialized();
   const doc = await col.findOne(
     { $or: [{ playerKey: key }, { panelKey: key }] },
-    { projection: { channelId: 1, channelLogin: 1, playerKey: 1, panelKey: 1, placeholderUrl: 1 } }
+    { projection: { channelId: 1, channelLogin: 1, playerKey: 1, panelKey: 1, placeholderUrl: 1, placeholders: 1 } }
   );
   if (!doc) return null;
   return {
     role: doc.playerKey === key ? "player" : "panel",
     channelId: doc.channelId,
     channelLogin: doc.channelLogin,
-    placeholderUrl: doc.placeholderUrl || null,
+    placeholderUrl: normalizePlaceholders(doc).placeholderUrl,
   };
 }
 
@@ -179,13 +181,59 @@ async function setDonatePay(channelId, { token, origin }) {
   );
 }
 
-// Sets (or, with null, removes) the placeholder picture; resolves to the one it replaced, so the
-// caller can delete that file.
-async function setPlaceholder(channelId, url) {
+// A row from when a channel had a single picture gets its list, so the writes below have one to
+// change.
+async function ensurePlaceholderList(col, channelId) {
+  await col.updateOne({ channelId, placeholders: { $exists: false } }, [
+    { $set: { placeholders: { $cond: [{ $ifNull: ["$placeholderUrl", false] }, [{ url: "$placeholderUrl" }], []] } } },
+  ]);
+}
+
+// Adds a picture; a channel's first one is also the one picked. False when the list is full.
+async function addPlaceholder(channelId, { url, thumb }) {
   const { settings: col } = await ensureInitialized();
-  const update = url ? { $set: { placeholderUrl: url, updatedAt: new Date() } } : { $unset: { placeholderUrl: "" }, $set: { updatedAt: new Date() } };
-  const before = await col.findOneAndUpdate({ channelId: String(channelId) }, update, { projection: { placeholderUrl: 1 } });
-  return before && before.placeholderUrl ? before.placeholderUrl : null;
+  const id = String(channelId);
+  await ensurePlaceholderList(col, id);
+  const entry = { url, thumb };
+  const set = { updatedAt: new Date() };
+  const first = await col.updateOne({ channelId: id, placeholders: { $size: 0 } }, { $push: { placeholders: entry }, $set: { ...set, placeholderUrl: url } });
+  if (first.modifiedCount) return true;
+  const added = await col.updateOne(
+    { channelId: id, [`placeholders.${MAX_PLACEHOLDERS - 1}`]: { $exists: false } },
+    { $push: { placeholders: entry }, $set: set }
+  );
+  return added.modifiedCount > 0;
+}
+
+// Removes a picture; if it was the one picked, the built-in card is. Resolves to the removed
+// { url, thumb }, so the caller can delete its files, or null.
+async function removePlaceholder(channelId, url) {
+  const { settings: col } = await ensureInitialized();
+  const id = String(channelId);
+  await ensurePlaceholderList(col, id);
+  const before = await col.findOneAndUpdate(
+    { channelId: id, "placeholders.url": url },
+    [
+      {
+        $set: {
+          placeholders: { $filter: { input: "$placeholders", cond: { $ne: ["$$this.url", { $literal: url }] } } },
+          placeholderUrl: { $cond: [{ $eq: ["$placeholderUrl", { $literal: url }] }, null, "$placeholderUrl"] },
+          updatedAt: new Date(),
+        },
+      },
+    ],
+    { projection: { placeholders: 1 } }
+  );
+  return (before && before.placeholders.find((p) => p.url === url)) || null;
+}
+
+// Picks one of the channel's pictures, or (null) the built-in card. A picture removed meanwhile is
+// not picked.
+async function selectPlaceholder(channelId, url) {
+  const { settings: col } = await ensureInitialized();
+  const id = String(channelId);
+  await ensurePlaceholderList(col, id);
+  await col.updateOne(url ? { channelId: id, "placeholders.url": url } : { channelId: id }, { $set: { placeholderUrl: url } });
 }
 
 // The panel's icon theme (already normalized by the caller); resolves to the one it replaced, so
@@ -273,7 +321,9 @@ module.exports = {
   regenerateKeys,
   loadQueue,
   saveQueue,
-  setPlaceholder,
+  addPlaceholder,
+  removePlaceholder,
+  selectPlaceholder,
   setButtons,
   setHistoryLimit,
   listEggs,

@@ -64,7 +64,7 @@ const PANEL_STRING_KEYS = [
   "queue", "queueEmpty", "moveTop", "dragHint", "remove", "add", "addPlaceholder",
   "history", "historyEmpty", "clearHistory", "requeue", "requeueHint", "playNext", "playNextHint",
   "anonymous", "manual", "addedBy", "replay",
-  "coverLabel", "coverNone", "coverHide", "coverBlur", "coverImage", "coverHint", "coverActive", "blurStrength", "volume", "volumeHint",
+  "coverLabel", "coverNone", "coverHide", "coverBlur", "coverImage", "coverImagePick", "coverBuiltin", "coverOwn", "coverHint", "coverActive", "blurStrength", "volume", "volumeHint",
   "playlist", "playlistAuto", "playlistAutoHint", "infinite", "infiniteHint", "musicNovelty", "musicNoveltyHint", "novelty.known", "novelty.even", "novelty.new",
   "musicMood", "musicMoodHint", "mood.calm", "mood.any", "mood.lively", "hideMusic", "hideMusicHint", "playlistEmpty", "playlistAdd", "playlistDuplicate",
   "playlistFull", "playlistStalled", "playlistBadge", "playlistNowPlaying", "toPlaylist", "toPlaylistHint", "inPlaylist",
@@ -127,7 +127,8 @@ router.get("/:channel/settings/donation-media", requireLevel(1), settingsNav("do
       platforms: platformView(config),
       status: donationMediaManager.statusOf(channel.channelId),
       currencies: DA_CURRENCIES,
-      placeholderUrl: config.placeholderUrl,
+      placeholders: config.placeholders,
+      placeholderMax: placeholder.MAX_PLACEHOLDERS,
       historyLimit: config.historyLimit,
       historyMin: icons.HISTORY_MIN,
       historyMax: icons.HISTORY_MAX,
@@ -213,7 +214,7 @@ router.post(
   }
 );
 
-// The channel's placeholder picture (lib/donationMediaPlaceholder.js). Its own route because it is
+// The channel's placeholder pictures (lib/donationMediaPlaceholder.js). Its own route because it is
 // the one multipart form: multer must read the body before the CSRF check can. Uploaded from the
 // owner's setup page or from the queue page, so it follows the queue's access - every moderator
 // who may control the queue (section "donationMedia") - rather than the platform keys' level 1:
@@ -234,7 +235,7 @@ function readPlaceholderUpload(req, res, next) {
   });
 }
 
-const PLACEHOLDER_ERRORS = { not_allowed_type: "phType", unreadable: "phType", too_large: "phTooLarge", empty: "phEmpty" };
+const PLACEHOLDER_ERRORS = { not_allowed_type: "phType", unreadable: "phType", too_large: "phTooLarge", empty: "phEmpty", full: "phFull" };
 
 router.post(
   "/:channel/settings/donation-media/placeholder",
@@ -246,35 +247,46 @@ router.post(
     try {
       const channel = await loadChannel(req, res);
       if (!channel) return;
-      await donationMediaRepo.getOrCreate(channel);
+      const config = await donationMediaRepo.getOrCreate(channel);
       const fromQueue = req.body.from === "queue";
       const back = `/${channel.channelLogin}/settings/donation-media${fromQueue ? "/queue" : ""}`;
       const fail = (code) => res.redirect(`${back}?error=${PLACEHOLDER_ERRORS[code] || "phType"}&platform=placeholder#placeholder`);
 
-      let url = null;
-      if (req.body.action !== "reset") {
+      const removing = req.body.action === "remove";
+      if (removing) {
+        const entry = config.placeholders.find((p) => p.id === req.body.id);
+        const removed = entry && (await donationMediaRepo.removePlaceholder(channel.channelId, entry.url));
+        if (!removed) return res.redirect(`${back}#placeholder`);
+        // First the players and panels let go of the picture, then its files go.
+        await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
+        await placeholder.deletePlaceholder(removed);
+      } else {
         if (req.placeholderUploadError) return fail(req.placeholderUploadError);
         if (!req.file || !req.file.buffer || req.file.buffer.length === 0) return fail("empty");
+        if (config.placeholders.length >= placeholder.MAX_PLACEHOLDERS) return fail("full");
+        let entry;
         try {
-          url = await placeholder.savePlaceholder(req.file.buffer);
+          entry = await placeholder.savePlaceholder(req.file.buffer);
         } catch (err) {
           if (err instanceof placeholder.PlaceholderError) return fail(err.code);
           throw err;
         }
+        if (!(await donationMediaRepo.addPlaceholder(channel.channelId, entry))) {
+          await placeholder.deletePlaceholder(entry);
+          return fail("full");
+        }
+        await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
       }
-      const previous = await donationMediaRepo.setPlaceholder(channel.channelId, url);
-      if (previous && previous !== url) await placeholder.deletePlaceholder(previous);
-      donationMediaManager.setPlaceholder(channel.channelId, url);
       await settingsChangeLogRepo.logChange({
         channelLogin: channel.channelLogin,
         user: req.user,
         category: "donation_media",
-        action: url ? "connect" : "disconnect",
+        action: removing ? "disconnect" : "connect",
         target: "placeholder",
         before: null,
         after: null,
       });
-      return res.redirect(`${back}?saved=${url ? "placeholder" : "placeholderReset"}#placeholder`);
+      return res.redirect(`${back}?saved=${removing ? "placeholderRemoved" : "placeholder"}#placeholder`);
     } catch (err) {
       next(err);
     }
@@ -445,7 +457,8 @@ router.get(
         channel,
         configured: Boolean(config && (config.donationAlerts || config.donatello || config.donatePay)),
         isOwner: req.permissionLevel <= 1,
-        placeholderUrl: config && placeholder.isPlaceholderUrl(config.placeholderUrl) ? config.placeholderUrl : null,
+        placeholders: config ? config.placeholders : [],
+        placeholderMax: placeholder.MAX_PLACEHOLDERS,
         saved: typeof req.query.saved === "string" ? req.query.saved : null,
         error: typeof req.query.error === "string" ? req.query.error : null,
         errorPlatform: typeof req.query.platform === "string" ? req.query.platform : null,
@@ -470,7 +483,7 @@ function obsPage(role, view) {
       res.render(view, {
         key: req.params.key,
         channelLogin: found.channelLogin,
-        placeholderUrl: placeholder.isPlaceholderUrl(found.placeholderUrl) ? found.placeholderUrl : null,
+        placeholderUrl: found.placeholderUrl,
         panelStrings: panelStrings(res.locals.t),
       });
     } catch (err) {
