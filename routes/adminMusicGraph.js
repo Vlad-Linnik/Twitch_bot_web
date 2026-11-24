@@ -5,6 +5,8 @@ const express = require("express");
 const { requireLevel } = require("../middleware/permissions");
 const channelsRepo = require("../db/channelsRepo");
 const musicGraphRepo = require("../db/musicGraphRepo");
+const musicEventsRepo = require("../db/musicEventsRepo");
+const { summarize } = require("../lib/musicJournal");
 const donationMediaManager = require("../realtime/donationMediaManager");
 const { MusicRadio } = require("../lib/musicRadio");
 const { songId } = require("../lib/musicGraph");
@@ -17,6 +19,9 @@ const STRING_KEYS = [
   "loading", "failed", "empty", "nothingFound", "live", "stored", "total", "opened", "close", "streak", "close2", "far", "closeness", "share", "taste", "rested", "plays",
   "lastPlayed", "never", "via", "edges", "openTrack", "around", "notOpened", "wontPlay", "supply.graph", "supply.mix", "supply.grow", "supply.lastfm", "supply.artist", "supply.oembed", "sources", "noStats", "skipShare",
   "wholeStatus", "wholeCut", "groupQuery", "groupColor", "removeGroup", "animate", "animateStop", "depthAll", "counts", "closeDetail",
+  "journalEmpty", "journalTotal", "journalNotCounted", "reason.offline", "reason.muted", "reason.seeked",
+  "cut.source", "cut.mode", "cut.closeness", "cut.novelty", "cut.genre", "cut.place", "cut.hour", "cut.asked",
+  "group.radio", "group.endless", "group.feed", "group.playlist", "group.new", "group.known", "group.asked", "group.notAsked",
   "state.root", "state.playing", "state.waiting", "state.liked", "state.disliked", "state.closed", "state.heard", "state.unheard",
 ];
 // A channel with nothing playing is shown from the songs it heard to the end last.
@@ -81,7 +86,8 @@ router.get("/admin/music-graph/data", requireAdmin, async (req, res, next) => {
     const channelId = typeof req.query.channel === "string" && /^\d{1,20}$/.test(req.query.channel) ? req.query.channel : "0";
     const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
     const session = donationMediaManager.musicOf(channelId);
-    const stats = await musicGraphRepo.statsSince(channelId, STATS_DAYS);
+    const [stats, events] = await Promise.all([musicGraphRepo.statsSince(channelId, STATS_DAYS), musicEventsRepo.since(channelId, STATS_DAYS)]);
+    stats.journal = summarize(events);
     if (req.query.whole === "1") return res.json({ ...(await wholeOf(channelId, session)), stats });
     const reply = (graph, roots, extra) => res.json({ ...pack(describe(graph, roots, { songId, ...extra.queue })), live: extra.live, root: extra.root || null, stats });
 

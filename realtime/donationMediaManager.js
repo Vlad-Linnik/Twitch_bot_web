@@ -26,6 +26,10 @@ const { CONNECTORS } = require("./donationMediaConnectors");
 const radioSources = require("../lib/radioSources");
 const { MusicRadio } = require("../lib/musicRadio");
 const musicGraphRepo = require("../db/musicGraphRepo");
+const musicEventsRepo = require("../db/musicEventsRepo");
+const streamSessionsRepo = require("../db/streamSessionsRepo");
+const { eventOf } = require("../lib/musicJournal");
+const { songId, artistOf } = require("../lib/musicGraph");
 const icons = require("../lib/donationMediaIcons");
 
 const SAVE_DEBOUNCE_MS = 1000;
@@ -74,6 +78,8 @@ class Session {
     this.radioRetryAt = 0;
     this.learningLengths = false;
     this.lengthTried = new Map(); // videoId -> when
+    this.live = { live: null }; // streamSessionsRepo.liveState(), as of the last minute
+    this.touchedAt = null; // the last panel command
     this.radioStarting = false; // startRadio's own first fetch is running; no top-up beside it
     this.buttons = icons.normalizeButtons(null);
     this.queue = new MediaQueue({
@@ -133,6 +139,7 @@ class Session {
     const prev = this.published;
     if (prev && prev.key === key && (!current || now - prev.at < NOW_PLAYING_REFRESH_MS)) return;
 
+    this.refreshLive();
     const startedAt = current && prev && prev.itemId === current.id ? prev.startedAt : new Date(now);
     this.published = { key, at: now, itemId: current ? current.id : null, startedAt };
     const item = current
@@ -311,13 +318,54 @@ class Session {
   onFinished(item, how) {
     const q = this.queue;
     const known = authorCache.get(item.videoId);
-    const outcome = this.music.finished(item, how, (known && known.author) || "");
+    const author = (known && known.author) || "";
+    const outcome = this.music.finished(item, how, author, { live: this.live.live });
+    if (item.fromPlaylist) this.journal(item, how, outcome, author);
     if (!outcome || outcome === "heard" || !(q.radio || q.infinite)) return;
     const tail = q.upNext.filter((u) => q.isRadioTail(u)).length;
     if (tail > 0 && (outcome === "skipEarly" || outcome === "skipMid")) {
       q.replaceRadioTail(this.music.nextNow(q, { ...q.feedExclusions({ repeats: true, tail: false }), limit: tail }));
     }
     this.music.grow(q);
+  }
+
+  // A track taken out of the feed before it played.
+  dropped(entry) {
+    this.music.noted(entry, "dropped");
+    this.journal({ videoId: entry.videoId, title: entry.title, upNextEntry: entry }, { by: "panel" }, "dropped");
+  }
+
+  // Never in the music's way: nothing waits for it, and a failure costs the row.
+  journal(item, how, outcome, author = "") {
+    const q = this.queue;
+    const entry = item.upNextEntry;
+    const track = { videoId: item.videoId, title: item.title, author: (entry && entry.author) || author };
+    const state = this.live;
+    const event = eventOf({
+      channelId: this.channelId,
+      item,
+      how,
+      outcome,
+      author,
+      node: (entry && entry.node) || songId(track),
+      artist: artistOf(track.title, track.author),
+      mode: !entry ? "playlist" : entry.via !== "radio" ? "feed" : q.radio ? "radio" : "endless",
+      live: state.live,
+      idleMs: this.touchedAt ? Date.now() - this.touchedAt : null,
+    });
+    if (state.live) {
+      event.category = state.category;
+      event.viewers = state.viewers;
+      event.hour = Math.round(((Date.now() - new Date(state.startedAt).getTime()) / 3600000) * 100) / 100;
+    }
+    musicEventsRepo.add(event).catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not write the journal:`, err.message));
+  }
+
+  refreshLive() {
+    streamSessionsRepo
+      .liveState(this.channelId)
+      .then((state) => { this.live = state; })
+      .catch(() => { this.live = { live: null }; });
   }
 
   // The track a panel pointed at, with a name for the seed: from wherever the panel saw it, else
@@ -695,6 +743,7 @@ async function handlePanelCommand(session, ws, principal, msg) {
     return;
   }
   const q = session.queue;
+  session.touchedAt = Date.now();
   switch (msg.type) {
     case "pause":
       return q.pause();
@@ -769,7 +818,7 @@ async function handlePanelCommand(session, ws, principal, msg) {
     case "upNextRemove":
       if (asId(msg.id)) {
         const entry = q.removeUpNext(msg.id);
-        if (entry) session.music.noted(entry, "dropped");
+        if (entry) session.dropped(entry);
       }
       return;
     case "upNextMove":

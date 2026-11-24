@@ -980,11 +980,29 @@
       ...(sources.length
         ? sources.map(([name, c]) => {
             const skipped = (c.skipEarly || 0) + (c.skipMid || 0);
-            const total = skipped + (c.skipLate || 0) + (c.listened || 0);
+            const total = skipped + (c.skipLate || 0) + (c.listened || 0) + (c.through || 0);
             return row(name, t("skipShare").replace("{{skipped}}", number(skipped)).replace("{{total}}", number(total)));
           })
         : [el("p", { class: "text-neutral-500" }, t("noStats"))])
     );
+    drawJournal(data.stats.journal);
+  }
+
+  const CUTS = ["closeness", "novelty", "genre", "source", "mode", "place", "hour", "asked"];
+  const inOrder = (a, b) => parseFloat(a) - parseFloat(b) || a.localeCompare(b);
+
+  function drawJournal(j) {
+    const share = ({ n, skips }) => (n > 0 ? `${percent(skips / n)} · ${number(n)}` : "–");
+    const block = (title, rows) => el("div", {}, el("h3", { class: "font-semibold text-neutral-200 mb-1" }, title), el("dl", {}, ...rows));
+    if (!j || Object.keys(j.outcomes).length === 0) {
+      $("mg-journal").replaceChildren(el("p", { class: "text-neutral-500" }, t("journalEmpty")));
+      return;
+    }
+    const total = [row(t("journalTotal"), share(j.total)), ...Object.entries(j.notCounted).map(([why, n]) => row(`${t("journalNotCounted")}: ${t(`reason.${why}`)}`, number(n)))];
+    const cuts = CUTS.filter((c) => j.cuts[c]).map((c) =>
+      block(t(`cut.${c}`), Object.keys(j.cuts[c]).sort(inOrder).map((g) => row(strings[`group.${g}`] || g, share(j.cuts[c][g]))))
+    );
+    $("mg-journal").replaceChildren(block(t("journalTotal"), total), ...cuts);
   }
 
   // --- loading -------------------------------------------------------------------------------------------------

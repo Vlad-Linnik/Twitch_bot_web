@@ -3767,6 +3767,36 @@
         "closed": "Closed by skips",
         "heard": "Played before",
         "unheard": "Not played yet"
+      },
+      "journalHeading": "How tracks end",
+      "journalHint": "Share of background tracks skipped in {{days}} days, and how many are in the group. Under a hundred says nothing yet.",
+      "journalEmpty": "The journal is empty: nothing has played since it was added.",
+      "journalTotal": "All",
+      "journalNotCounted": "Played out, not counted",
+      "reason": {
+        "offline": "off air",
+        "muted": "muted",
+        "seeked": "wound forward"
+      },
+      "cut": {
+        "source": "Source",
+        "mode": "What was on",
+        "closeness": "Closeness to the root",
+        "novelty": "Heard before",
+        "genre": "Genre likeness",
+        "place": "Place in the batch",
+        "hour": "Hour of the stream",
+        "asked": "Viewers asked"
+      },
+      "group": {
+        "radio": "radio",
+        "endless": "endless",
+        "feed": "asked for",
+        "playlist": "playlist",
+        "new": "first time",
+        "known": "played before",
+        "asked": "asked",
+        "notAsked": "did not ask"
       }
     },
     "eggs": {

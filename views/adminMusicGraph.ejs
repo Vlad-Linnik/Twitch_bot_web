@@ -138,6 +138,12 @@
         <dl id="mg-sources" class="text-sm text-neutral-300"></dl>
       </section>
     </div>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.journalHeading') %></h2>
+      <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.journalHint', { days: statsDays }) %></p>
+      <div id="mg-journal" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6 text-sm text-neutral-300"></div>
+    </section>
   </div>
   <script src="<%= asset('/js/admin-music-graph.js') %>" defer></script>
   <% } %>

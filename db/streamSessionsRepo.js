@@ -38,6 +38,35 @@ const { cached: withClosedCache } = createCache({
 });
 const { cached: withLiveCache } = createCache({ ttlMs: 20000, maxEntries: 20 });
 
+// Is the channel on air: true, false, or null - nobody who would know is looking (the bot is down, is
+// switched off on this channel or has never seen it live). The bot polls every 5 minutes, so the first
+// minutes of a stream read as false.
+const SAMPLE_FRESH_MS = 12 * 60 * 1000;
+const HEARTBEAT_FRESH_MS = 3 * 60 * 1000;
+const { cached: withLiveStateCache } = createCache({ ttlMs: 30000, maxEntries: 200 });
+
+async function liveState(channelId) {
+  const id = String(channelId);
+  return withLiveStateCache(id, async () => {
+    const { sessions, samples } = await ensureInitialized();
+    const db = await connect();
+    const [open, last, channel, heartbeat] = await Promise.all([
+      sessions.findOne({ channelId: id, endedAt: null }, { projection: { startedAt: 1 } }),
+      samples.findOne({ channelId: id }, { sort: { timestamp: -1 }, projection: { timestamp: 1, category: 1, viewerCount: 1 } }),
+      db.collection("Channels").findOne({ channelId: id }, { projection: { channelLogin: 1 } }),
+      db.collection("BotHeartbeat").findOne({ _id: "status" }),
+    ]);
+    const now = Date.now();
+    const fresh = (at, ms) => Boolean(at) && now - new Date(at).getTime() < ms;
+    if (open && (fresh(last && last.timestamp, SAMPLE_FRESH_MS) || fresh(open.startedAt, SAMPLE_FRESH_MS))) {
+      return { live: true, startedAt: open.startedAt, category: (last && last.category) || null, viewers: last ? last.viewerCount : null };
+    }
+    const connected = heartbeat && Array.isArray(heartbeat.connectedChannels) ? heartbeat.connectedChannels.map((c) => String(c).replace(/^#/, "").toLowerCase()) : [];
+    const watched = channel && last && fresh(heartbeat && heartbeat.updatedAt, HEARTBEAT_FRESH_MS) && connected.includes(String(channel.channelLogin).toLowerCase());
+    return { live: watched && !open ? false : null };
+  });
+}
+
 async function listSessions(channelId, limit = limits.MAX_STREAM_SESSIONS_LISTED) {
   const { sessions } = await ensureInitialized();
   return sessions
@@ -139,4 +168,4 @@ async function getSessionChartData(channel, session) {
   });
 }
 
-module.exports = { listSessions, getSessionById, getSessionChartData };
+module.exports = { liveState, listSessions, getSessionById, getSessionChartData };
