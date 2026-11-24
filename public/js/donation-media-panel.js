@@ -33,12 +33,10 @@
   let canControl = false;
   let reqSeq = 0;
   const pendingReplies = new Map();
-  // Reordering the queue by dragging. While a row is held, state updates from the server are not
-  // drawn into the queue (they would pull the row out from under the pointer); the latest one is
-  // drawn on drop.
-  let drag = null; // { row, id, startOrder, offsetY, pointerId }
-  let queueRenderPending = false;
-  let focusGripId = null; // the row whose handle keeps focus across a re-render (keyboard moves)
+  // Reordering a list (the queue, the feed) by dragging. While a row is held, state updates from the
+  // server are not drawn into its list (they would pull the row out from under the pointer); the
+  // latest one is drawn on drop.
+  let drag = null; // { list, row, id, startOrder, offsetY, pointerId }
 
   // --- the skeleton ------------------------------------------------------------------------------
   function el(tag, props, ...children) {
@@ -141,6 +139,11 @@
   const radioLine = el("div", { class: "dm-radio-line" });
   const feedBusy = el("div", { class: "dm-hint dm-busy" });
   const feedBox = el("div", { class: "dm-list" });
+  // The two lists whose rows can be dragged: the box they stand in, the command that moves one, what
+  // the server says is in them, and how they are redrawn. `focusId`: the row whose handle keeps focus
+  // across a redraw (keyboard moves).
+  const queueList = { box: queueBox, command: "move", items: () => state.queue, render: () => renderQueue(), focusId: null };
+  const feedList = { box: feedBox, command: "upNextMove", items: () => state.upNext || [], render: () => renderFeed(), focusId: null };
   const feedMsg = el("div", { class: "dm-hint" });
   const aiInput = el("input", { type: "text", placeholder: t("aiPlaceholder"), autocomplete: "off", maxlength: "200" });
   const aiButton = el("button", { class: "dm-btn", type: "submit", text: `✨ ${t("aiSubmit")}` });
@@ -490,11 +493,7 @@
   }
 
   function renderQueue() {
-    if (drag) {
-      queueRenderPending = true;
-      return;
-    }
-    queueRenderPending = false;
+    if (drag && drag.list === queueList) return;
     queueBox.replaceChildren();
     queueCount.textContent = state.queue.length ? String(state.queue.length) : "";
     if (state.queue.length === 0) {
@@ -511,36 +510,39 @@
         if (keep) actions.appendChild(keep);
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("remove", { id: item.id }) }));
       }
-      const grip = canControl && state.queue.length > 1 ? makeGrip(item, index) : null;
+      const grip = canControl && state.queue.length > 1 ? makeGrip(queueList, item.id, index) : null;
       queueBox.appendChild(row(item, { num: index + 1, actions, grip }));
     });
-    if (focusGripId !== null) {
-      const grip = queueBox.querySelector(`.dm-row[data-dm-id="${focusGripId}"] .dm-grip`);
-      if (grip) grip.focus();
-      focusGripId = null;
-    }
+    refocusGrip(queueList);
+  }
+
+  function refocusGrip(list) {
+    if (list.focusId === null) return;
+    const grip = list.box.querySelector(`.dm-row[data-dm-id="${list.focusId}"] .dm-grip`);
+    if (grip) grip.focus();
+    list.focusId = null;
   }
 
   // --- drag to reorder ---------------------------------------------------------------------------
   // The row is moved in the DOM as the pointer passes a neighbour's middle, and follows the pointer
   // with a transform in between. On drop the server is told which item the row now stands in front
   // of (see MediaQueue.move) - the server's next "state" is what finally redraws the list.
-  function queueRows() {
-    return Array.from(queueBox.querySelectorAll(".dm-row[data-dm-id]"));
+  function rowsOf(list) {
+    return Array.from(list.box.querySelectorAll(".dm-row[data-dm-id]"));
   }
 
   function rowId(rowEl) {
     return Number(rowEl.getAttribute("data-dm-id"));
   }
 
-  function renumber() {
-    queueRows().forEach((rowEl, i) => {
+  function renumber(list) {
+    rowsOf(list).forEach((rowEl, i) => {
       const num = rowEl.querySelector(".dm-num");
       if (num) num.textContent = String(i + 1);
     });
   }
 
-  function makeGrip(item, index) {
+  function makeGrip(list, id, index) {
     const grip = el("span", {
       class: "dm-grip",
       text: "⠿",
@@ -549,39 +551,40 @@
       title: t("dragHint"),
       "aria-label": t("dragHint"),
     });
-    grip.addEventListener("pointerdown", (event) => startDrag(event, grip));
+    grip.addEventListener("pointerdown", (event) => startDrag(event, grip, list));
     grip.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
       event.preventDefault();
-      const queue = state.queue;
+      const items = list.items();
       let beforeId;
       if (event.key === "ArrowUp") {
         if (index === 0) return;
-        beforeId = queue[index - 1].id;
+        beforeId = items[index - 1].id;
       } else {
-        if (index >= queue.length - 1) return;
-        beforeId = index + 2 < queue.length ? queue[index + 2].id : null;
+        if (index >= items.length - 1) return;
+        beforeId = index + 2 < items.length ? items[index + 2].id : null;
       }
-      focusGripId = item.id;
-      command("move", { id: item.id, beforeId, index: event.key === "ArrowUp" ? index - 1 : index + 1 });
+      list.focusId = id;
+      command(list.command, { id, beforeId, index: event.key === "ArrowUp" ? index - 1 : index + 1 });
     });
     return grip;
   }
 
-  function startDrag(event, grip) {
+  function startDrag(event, grip, list) {
     if (drag || event.button > 0) return;
     const rowEl = grip.closest(".dm-row");
     if (!rowEl) return;
     event.preventDefault();
     drag = {
+      list,
       row: rowEl,
       id: rowId(rowEl),
-      startOrder: queueRows().map(rowId).join(","),
+      startOrder: rowsOf(list).map(rowId).join(","),
       offsetY: event.clientY - rowEl.getBoundingClientRect().top,
       pointerId: event.pointerId,
     };
     rowEl.classList.add("is-dragging");
-    queueBox.classList.add("is-sorting");
+    list.box.classList.add("is-sorting");
     // Listened for on the window, not captured on the handle: moving the row in the DOM detaches
     // the handle for an instant, which drops a pointer capture, and the release then never arrives.
     window.addEventListener("pointermove", onDragMove);
@@ -597,17 +600,18 @@
   // Moves the held row to where the pointer is. Called on every move and once more on release:
   // a pointer may jump between two move events, and the release is the one position that counts.
   function placeDragged(y) {
-    const others = queueRows().filter((r) => r !== drag.row);
+    const { box } = drag.list;
+    const others = rowsOf(drag.list).filter((r) => r !== drag.row);
     const next = others.find((r) => {
       const rect = r.getBoundingClientRect();
       return y < rect.top + rect.height / 2;
     });
     if (next) {
-      if (drag.row.nextElementSibling !== next) queueBox.insertBefore(drag.row, next);
-    } else if (queueBox.lastElementChild !== drag.row) {
-      queueBox.appendChild(drag.row);
+      if (drag.row.nextElementSibling !== next) box.insertBefore(drag.row, next);
+    } else if (box.lastElementChild !== drag.row) {
+      box.appendChild(drag.row);
     }
-    renumber();
+    renumber(drag.list);
     drag.row.style.transform = "";
     const natural = drag.row.getBoundingClientRect().top;
     drag.row.style.transform = `translateY(${y - drag.offsetY - natural}px)`;
@@ -625,17 +629,17 @@
     window.removeEventListener("pointercancel", endDrag);
 
     if (event.type === "pointerup") placeDragged(event.clientY);
-    const { row: rowEl, id, startOrder } = drag;
+    const { list, row: rowEl, id, startOrder } = drag;
     rowEl.style.transform = "";
     rowEl.classList.remove("is-dragging");
-    queueBox.classList.remove("is-sorting");
-    const rows = queueRows();
+    list.box.classList.remove("is-sorting");
+    const rows = rowsOf(list);
     const moved = event.type === "pointerup" && rows.map(rowId).join(",") !== startOrder;
     const nextRow = rowEl.nextElementSibling;
     drag = null;
 
     if (moved) {
-      command("move", {
+      command(list.command, {
         id,
         beforeId: nextRow && nextRow.hasAttribute("data-dm-id") ? rowId(nextRow) : null,
         index: rows.indexOf(rowEl),
@@ -644,9 +648,9 @@
     // Cancelled or unmoved: put the list back as the server last described it. Moved: leave the
     // row where it was dropped - the server's answer to "move" redraws the list; the timer only
     // covers a move the server refused, which sends no answer at all.
-    if (!moved) renderQueue();
+    if (!moved) list.render();
     else setTimeout(() => {
-      if (!drag) renderQueue();
+      if (!drag) list.render();
     }, 1500);
   }
 
@@ -714,6 +718,7 @@
       if (canControl) radioLine.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: t("radioStop"), onclick: () => command("radioStop") }));
     }
 
+    if (drag && drag.list === feedList) return;
     feedBox.replaceChildren();
     if (list.length === 0) {
       feedBox.appendChild(el("div", { class: "dm-empty", text: t("upNextEmpty") }));
@@ -730,10 +735,10 @@
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("upNextRemove", { id: entry.id }) }));
       }
       const extra = entry.author ? el("div", { class: "dm-msg-short", text: entry.author }) : null;
-      const r = row(item, { num: index + 1, actions, extra });
-      r.removeAttribute("data-dm-id");
-      feedBox.appendChild(r);
+      const grip = canControl && list.length > 1 ? makeGrip(feedList, entry.id, index) : null;
+      feedBox.appendChild(row(item, { num: index + 1, actions, extra, grip }));
     });
+    refocusGrip(feedList);
   }
 
   function renderHistory() {

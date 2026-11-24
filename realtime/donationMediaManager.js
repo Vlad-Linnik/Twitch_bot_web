@@ -772,6 +772,10 @@ async function handlePanelCommand(session, ws, principal, msg) {
         if (entry) session.music.noted(entry, "dropped");
       }
       return;
+    case "upNextMove":
+      if (!asId(msg.id)) return;
+      if (msg.beforeId !== null && !asId(msg.beforeId)) return;
+      return q.moveUpNext(msg.id, { beforeId: msg.beforeId, index: Number.isInteger(msg.index) ? msg.index : null });
     case "upNextPlay":
       if (asId(msg.id)) {
         const entry = q.playUpNextNow(msg.id);
