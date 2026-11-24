@@ -40,6 +40,7 @@
       <button type="button" id="mg-live" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.liveButton') %></button>
       <button type="button" id="mg-whole" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.wholeButton') %></button>
       <button type="button" id="mg-interest" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.interestButton') %></button>
+      <button type="button" id="mg-donations" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.donationsButton') %></button>
       <button type="button" id="mg-refresh" class="<%= gGhost %>"><%= t('admin.graph.refresh') %></button>
     </form>
     <p id="mg-status" class="text-sm text-neutral-400 mb-3 min-h-[1.25rem]" role="status"></p>
@@ -150,6 +151,12 @@
       <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.askedHeading') %></h2>
       <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.askedHint') %></p>
       <dl id="mg-asked" class="text-sm text-neutral-300"></dl>
+    </section>
+
+    <section class="mt-10 max-w-2xl">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.donatedHeading') %></h2>
+      <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.donatedHint') %></p>
+      <dl id="mg-donated" class="text-sm text-neutral-300"></dl>
     </section>
 
     <section id="mg-features" class="mt-10 max-w-2xl">

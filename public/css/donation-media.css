@@ -251,6 +251,19 @@
 .dm-btn.is-active { background: var(--dm-card-2); border-color: var(--dm-accent); color: var(--dm-text); font-weight: 600; }
 .dm-btn.is-cover.is-active { background: var(--dm-warn); border-color: var(--dm-warn); color: #111; }
 
+/* --- the action log ----------------------------------------------------------------------------- */
+.dm-log { max-height: 420px; overflow-y: auto; margin: 6px 0; border: 1px solid var(--dm-line); border-radius: 8px; background: var(--dm-card); }
+.dm-log .dm-empty { border: 0; }
+.dm .dm-btn[hidden] { display: none; }
+.dm-log-row { display: flex; flex-wrap: wrap; gap: 2px 10px; padding: 5px 10px; font-size: 12px; }
+.dm-log-row + .dm-log-row { border-top: 1px solid var(--dm-line); }
+.dm-log-at { color: var(--dm-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dm-log-by { min-width: 110px; font-weight: 700; color: #fff; overflow-wrap: anywhere; }
+.dm-log-what { flex: 1 1 260px; min-width: 0; display: flex; flex-wrap: wrap; gap: 2px 6px; overflow-wrap: anywhere; }
+.dm-log-what a { color: var(--dm-muted); text-decoration: none; }
+.dm-log-what a:hover { color: var(--dm-text); text-decoration: underline; }
+.dm-log-who { background: var(--dm-card); border: 1px solid var(--dm-line); border-radius: 6px; color: var(--dm-text); font: inherit; font-size: 12px; padding: 4px 8px; }
+
 /* --- the channel's own playlist ---------------------------------------------------------------- */
 .dm-check { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 .dm-check input { width: 16px; height: 16px; accent-color: var(--dm-accent); }

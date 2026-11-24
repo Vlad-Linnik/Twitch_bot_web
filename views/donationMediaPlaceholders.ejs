@@ -1,0 +1,77 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + t('settingsNav.donationMediaPlaceholders') }) %>
+<%- include('partials/nav') %>
+
+<%#
+  The channel's placeholder pictures, a settings page of its own under "Widgets"
+  (routes/donationMedia.js): every moderator sees them, and whoever may control the queue adds and
+  deletes them. placeholders: [{ id, url, thumb }].
+%>
+<%
+  const canEdit = typeof canEditSection !== 'undefined' && canEditSection === true;
+  const phAction = '/' + channel.channelLogin + '/settings/donation-media/placeholders';
+  const phFrame = 'aspect-video rounded-md overflow-hidden border border-neutral-800 bg-neutral-950';
+%>
+
+<%- include('partials/settingsShellOpen') %>
+<main class="max-w-4xl mx-auto px-6 pt-8 pb-16">
+
+  <header class="mb-8">
+    <h1 class="settings-heading text-3xl font-bold text-neutral-100 mb-1"><%= t('donationMedia.setup.placeholderHeading') %></h1>
+    <p class="text-sm text-neutral-500"><%= channel.channelLogin %> · <%= t('donationMedia.setup.subtitle') %></p>
+  </header>
+
+  <% if (saved === 'placeholder' || saved === 'placeholderRemoved') { %>
+    <p class="mb-6 rounded-lg border border-green-800/50 bg-green-900/20 text-green-400 px-4 py-2.5 text-sm"><%= t('donationMedia.setup.saved.' + saved) %></p>
+  <% } %>
+  <% if (error) { %>
+    <p class="mb-6 rounded-lg border border-red-800/50 bg-red-900/20 text-red-400 px-4 py-2.5 text-sm"><%= t('donationMedia.setup.errors.' + (['phType', 'phTooLarge', 'phEmpty', 'phFull'].includes(error) ? error : 'phType')) %></p>
+  <% } %>
+
+  <section class="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+    <p class="text-sm text-neutral-500 mb-5"><%= t('donationMedia.setup.placeholderIntro') %></p>
+
+    <ul class="flex flex-wrap gap-3 mb-3">
+      <li class="w-32">
+        <div class="<%= phFrame %> flex flex-col items-center justify-center text-neutral-300 text-xs" style="background: radial-gradient(circle at 50% 40%, #2b2140, #0d0b12 70%);">
+          <span class="text-lg">🙈</span><span><%= t('donationMedia.player.coverText') %></span>
+        </div>
+        <p class="mt-1 text-xs text-neutral-500"><%= t('donationMedia.setup.placeholderBuiltin') %></p>
+      </li>
+      <% placeholders.forEach((ph, i) => { %>
+        <li class="w-32">
+          <a href="<%= ph.url %>" target="_blank" rel="noopener" class="block <%= phFrame %>">
+            <img src="<%= ph.thumb %>" alt="<%= t('donationMedia.setup.placeholderOwn') %> <%= i + 1 %>" loading="lazy" class="w-full h-full object-contain" />
+          </a>
+          <div class="mt-1 flex items-center justify-between gap-2 text-xs text-neutral-500">
+            <span><%= t('donationMedia.setup.placeholderOwn') %> <%= i + 1 %></span>
+            <% if (canEdit) { %>
+              <form method="post" enctype="multipart/form-data" action="<%= phAction %>" data-confirm-delete="<%= t('donationMedia.setup.placeholderRemoveConfirm') %>">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="action" value="remove" />
+                <input type="hidden" name="id" value="<%= ph.id %>" />
+                <button type="submit" class="text-red-400 hover:text-red-300"><%= t('donationMedia.setup.placeholderRemove') %></button>
+              </form>
+            <% } %>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+    <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.placeholderCount', { count: placeholders.length, max: placeholderMax }) %></p>
+
+    <% if (canEdit && placeholders.length < placeholderMax) { %>
+      <form method="post" enctype="multipart/form-data" action="<%= phAction %>" class="mt-5 space-y-3">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="action" value="upload" />
+        <input type="file" name="image" required accept="image/png,image/jpeg,image/webp,image/gif"
+               class="block w-full text-sm text-neutral-400 file:mr-3 file:rounded-md file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-200 hover:file:bg-neutral-700" />
+        <p class="text-xs text-neutral-500"><%= t('donationMedia.setup.placeholderHint') %></p>
+        <button type="submit" class="px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium"><%= t('donationMedia.setup.placeholderUpload') %></button>
+      </form>
+    <% } %>
+  </section>
+</main>
+<%- include('partials/settingsShellClose') %>
+
+<script src="<%= asset('/js/confirm-delete.js') %>" defer></script>
+
+<%- include('partials/foot') %>

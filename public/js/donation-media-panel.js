@@ -9,6 +9,8 @@
 //   { type: "access", canControl }
 //   { type: "reply", reqId, ok }    answer to "add", "playlistAdd", "radioStart", "moreFromArtist",
 //                                   "aiWish" (with `added` or `reason`)
+//   { type: "log", ... }            a page of the action log (asked for with "log")
+//   { type: "logEntry", entry }     a new row of it, or one that changed
 // Every piece of donor-written text is put on the page as textContent, never as HTML.
 (function () {
   "use strict";
@@ -250,6 +252,105 @@
   });
   addInput.addEventListener("input", () => addInput.classList.remove("is-bad"));
 
+  // Who did what (lib/donationMediaActionLog.js). Asked for when first opened; from then on new rows
+  // arrive by themselves.
+  const logList = el("div", { class: "dm-log" });
+  const logWho = el("select", { class: "dm-log-who", "aria-label": t("log.title") });
+  const logMore = el("button", { class: "dm-btn is-small", type: "button", text: t("log.more"), onclick: () => logRows.length && requestLog(logRows[logRows.length - 1].id) });
+  logMore.hidden = true;
+  const logDetails = el(
+    "details",
+    { class: "dm-playlist" },
+    el("summary", { class: "dm-h" }, el("span", { text: t("log.title") })),
+    logWho,
+    logList,
+    logMore
+  );
+  let logRows = [];
+  let logPeople = [];
+  logDetails.addEventListener("toggle", () => logDetails.open && requestLog());
+  logWho.addEventListener("change", () => requestLog());
+
+  function requestLog(before) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "log", before: before || null, by: logWho.value || null }));
+  }
+
+  function logPeopleOptions() {
+    const chosen = logWho.value;
+    logWho.replaceChildren(
+      el("option", { value: "", text: t("log.everyone") }),
+      ...logPeople.map((name) => el("option", { value: name, text: name === "OBS" ? t("log.via.dock") : name }))
+    );
+    logWho.value = chosen;
+  }
+
+  function onLog(msg) {
+    if ((msg.by || "") !== logWho.value) return; // an answer about someone no longer chosen
+    logRows = msg.before ? logRows.concat(msg.entries) : msg.entries;
+    logMore.hidden = !msg.more;
+    if (msg.people) {
+      logPeople = msg.people;
+      logPeopleOptions();
+    }
+    renderLog();
+  }
+
+  function onLogEntry(entry) {
+    if (!logDetails.open) return;
+    if (!logPeople.includes(entry.by)) {
+      logPeople = logPeople.concat(entry.by).sort((a, b) => a.localeCompare(b));
+      logPeopleOptions();
+    }
+    if (logWho.value && logWho.value !== entry.by) return;
+    const at = logRows.findIndex((r) => r.id === entry.id);
+    if (at === -1) logRows = [entry].concat(logRows);
+    else logRows[at] = entry;
+    renderLog();
+  }
+
+  function logText(entry) {
+    const d = entry.detail || {};
+    const text = t(`log.do.${entry.action}`);
+    const parts = [];
+    if (entry.action === "cover") parts.push({ none: t("coverNone"), hide: t("coverHide"), blur: t("coverBlur"), image: t("coverImage") }[d.mode] || d.mode);
+    if (entry.action === "seek") parts.push(formatTime(d.time));
+    if (Number.isFinite(d.value)) parts.push(`${d.value}%`);
+    if (typeof d.on === "boolean") parts.push(d.on ? t("log.on") : t("log.off"));
+    if (Number.isFinite(d.place)) parts.push(`${t("log.place")} ${d.place}`);
+    if (d.novelty) parts.push(`${t("musicNovelty").toLowerCase()} - ${t(`novelty.${d.novelty}`).toLowerCase()}`);
+    if (d.mood) parts.push(`${t("musicMood").toLowerCase()} - ${t(`mood.${d.mood}`).toLowerCase()}`);
+    if (d.text) parts.push(`«${d.text}»`);
+    const n = Number.isFinite(d.added) ? d.added : d.count;
+    if (Number.isFinite(n)) parts.push(`${t("log.tracks")} ${n}`);
+    return parts.length ? `${text}: ${parts.join(", ")}` : text;
+  }
+
+  function renderLog() {
+    if (logRows.length === 0) {
+      logList.replaceChildren(el("div", { class: "dm-empty", text: t("log.empty") }));
+      return;
+    }
+    const format = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    logList.replaceChildren(
+      ...logRows.map((entry) =>
+        el(
+          "div",
+          { class: "dm-log-row" },
+          el("span", { class: "dm-log-at", text: format.format(entry.at) }),
+          el("span", { class: "dm-log-by", text: entry.via === "dock" ? t("log.via.dock") : entry.by }),
+          el(
+            "span",
+            { class: "dm-log-what" },
+            entry.via === "chat" ? el("span", { class: "dm-badge is-replay", text: t("log.via.chat") }) : null,
+            el("span", { text: logText(entry) }),
+            entry.video ? el("a", { href: videoUrl(entry.video), target: "_blank", rel: "noopener noreferrer", text: titleOf(entry.video) }) : null
+          )
+        )
+      )
+    );
+  }
+
   root.replaceChildren(
     offline,
     readOnlyNote,
@@ -268,7 +369,8 @@
       feedMsg
     ),
     el("section", {}, autoLabel, autoHint, infiniteLabel, infiniteHint, hideMusicLabel, hideMusicHint, playlistDetails, playlistForm, playlistMsg),
-    el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox)
+    el("section", {}, el("h2", { class: "dm-h" }, el("span", { text: t("history") }), historyCount), historyBox),
+    el("section", {}, logDetails)
   );
 
   // --- formatting --------------------------------------------------------------------------------
@@ -906,6 +1008,7 @@
     ws.addEventListener("open", () => {
       reconnectAttempt = 0;
       offline.classList.remove("is-shown");
+      if (logDetails.open) requestLog();
     });
     ws.addEventListener("message", (event) => {
       let msg;
@@ -925,6 +1028,10 @@
       } else if (msg.type === "access") {
         canControl = msg.canControl === true;
         render();
+      } else if (msg.type === "log") {
+        onLog(msg);
+      } else if (msg.type === "logEntry") {
+        onLogEntry(msg.entry);
       } else if (msg.type === "reply") {
         const fn = pendingReplies.get(msg.reqId);
         pendingReplies.delete(msg.reqId);

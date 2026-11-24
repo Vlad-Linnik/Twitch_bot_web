@@ -8,6 +8,8 @@ const channelsRepo = require("../db/channelsRepo");
 const musicGraphRepo = require("../db/musicGraphRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
 const musicInterestRepo = require("../db/musicInterestRepo");
+const musicDonationsRepo = require("../db/musicDonationsRepo");
+const { rowsOf } = require("../lib/musicDonations");
 const musicModels = require("../lib/musicModels");
 const { graphOf } = require("../lib/musicInterest");
 const musicFeaturesRepo = require("../db/musicFeaturesRepo");
@@ -30,6 +32,7 @@ const STRING_KEYS = [
   "wholeStatus", "wholeCut", "groupQuery", "groupColor", "removeGroup", "animate", "animateStop", "depthAll", "counts", "closeDetail",
   "journalEmpty", "journalTotal", "journalSkipped", "journalNotCounted", "reason.offline", "reason.muted", "reason.seeked",
   "interestStatus", "interestEmpty", "askedBy", "askedTimes", "askedLast", "sharedWith",
+  "donationsStatus", "donationsEmpty", "donatedBy", "donatedTimes", "donatedLast", "donatedShared",
   "feature.tags", "feature.model", "armOn", "armOff",
   "cut.source", "cut.mode", "cut.closeness", "cut.novelty", "cut.genre", "cut.place", "cut.hour", "cut.asked",
   "group.radio", "group.endless", "group.feed", "group.playlist", "group.new", "group.known", "group.asked", "group.notAsked",
@@ -46,7 +49,7 @@ const WHOLE_TTL_MS = 60 * 1000;
 const whole = new Map(); // channel id -> { at, reply: Promise }
 
 async function knownChannels() {
-  const ids = new Set([...(await musicGraphRepo.channelsWithTaste()), ...(await musicInterestRepo.channels())]);
+  const ids = new Set([...(await musicGraphRepo.channelsWithTaste()), ...(await musicInterestRepo.channels()), ...(await musicDonationsRepo.channels())]);
   // listAll: a channel the bot is switched off on may still have a radio.
   const channels = (await channelsRepo.listAll()).filter((c) => ids.has(String(c.channelId)));
   return channels.map((c) => ({ channelId: String(c.channelId), channelLogin: c.channelLogin })).sort((a, b) => a.channelLogin.localeCompare(b.channelLogin));
@@ -108,7 +111,8 @@ function wholeOf(channelId, session) {
 }
 
 // ?channel=<id>  whose taste; ?q=<words or a video id>  around this track instead of the live radio;
-// ?whole=1  everything; ?interest=1  the viewers' interest, a graph of its own.
+// ?whole=1  everything; ?interest=1  the viewers' interest, ?donations=1  what was paid for - graphs of
+// their own.
 router.get("/admin/music-graph/data", requireAdmin, async (req, res, next) => {
   try {
     const channelId = typeof req.query.channel === "string" && /^\d{1,20}$/.test(req.query.channel) ? req.query.channel : "0";
@@ -118,10 +122,13 @@ router.get("/admin/music-graph/data", requireAdmin, async (req, res, next) => {
     stats.journal = summarize(events);
     const interest = graphOf(await musicInterestRepo.forChannel(channelId));
     stats.asked = interest.songs.slice(0, ASKED_ROWS);
-    if (req.query.interest === "1") {
+    const donations = graphOf(rowsOf(await musicDonationsRepo.forChannel(channelId)));
+    stats.donated = donations.songs.slice(0, ASKED_ROWS);
+    const own = req.query.interest === "1" ? interest : req.query.donations === "1" ? donations : null;
+    if (own) {
       const music = new MusicRadio({ channelId, sources: {}, repo: musicGraphRepo });
       await music.load();
-      return res.json({ ...pack(describeInterest(music.graph, interest)), live: false, interest: true, viewers: interest.viewers, root: null, stats });
+      return res.json({ ...pack(describeInterest(music.graph, own)), live: false, interest: true, donations: own === donations, viewers: own.viewers, root: null, stats });
     }
     if (req.query.whole === "1") return res.json({ ...(await wholeOf(channelId, session)), stats });
     const reply = (graph, roots, extra) => res.json({ ...pack(describe(graph, roots, { songId, ...extra.queue })), live: extra.live, root: extra.root || null, stats });

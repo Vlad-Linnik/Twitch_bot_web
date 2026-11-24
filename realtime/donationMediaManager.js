@@ -14,6 +14,8 @@
 // channel. The queue is written to Mongo on every change (debounced), so a restart loses at most
 // the last second, and the listeners are restarted at boot for every configured channel.
 const donationMediaRepo = require("../db/donationMediaRepo");
+const donationMediaActionsRepo = require("../db/donationMediaActionsRepo");
+const actionLog = require("../lib/donationMediaActionLog");
 const donationMediaNowPlayingRepo = require("../db/donationMediaNowPlayingRepo");
 const donationMediaChatCommandsRepo = require("../db/donationMediaChatCommandsRepo");
 const chatCommand = require("../lib/donationMediaChatCommand");
@@ -30,6 +32,8 @@ const musicArtistsRepo = require("../db/musicArtistsRepo");
 const musicFeaturesRepo = require("../db/musicFeaturesRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
 const musicInterestRepo = require("../db/musicInterestRepo");
+const musicDonationsRepo = require("../db/musicDonationsRepo");
+const { donationOf } = require("../lib/musicDonations");
 const { readChat } = require("../lib/musicInterest");
 const streamSessionsRepo = require("../db/streamSessionsRepo");
 const { MusicTagRegistry } = require("../lib/musicTagRegistry");
@@ -111,6 +115,8 @@ class Session {
     this.placeholders = null;
     this.placeholderUrl = null;
     this.placeholderChain = Promise.resolve();
+    this.lastAction = null; // the last row of the action log
+    this.actionChain = Promise.resolve();
     this.queue = new MediaQueue({
       // The panel's icons follow the clip: an Easter egg is for one video.
       decorate: (snap) => ({ ...snap, icons: icons.resolveIcons(this.buttons, snap.current ? eggs.get(snap.current.videoId) : null), ...this.placeholderState() }),
@@ -128,6 +134,9 @@ class Session {
       .then(() => donationMediaRepo.loadQueue(this.channelId))
       .then((stored) => {
         this.queue.restore(stored);
+        // What the history still holds and the donations' graph may not: written before there was one,
+        // or while Mongo was away.
+        this.recordDonations(this.queue.history.map((h) => [h, { status: h.status, at: h.finishedAt }]));
         // A clip queued moments before a restart may not have had its name looked up yet.
         for (const item of this.queue.queue) {
           if (!item.title) fetchTitle(item.videoId).then((title) => title && this.queue.setTitle(item.id, title));
@@ -289,6 +298,31 @@ class Session {
       .catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not save the placeholder picked:`, err.message));
   }
 
+  // One row of the action log, or (a slider still moving) more of the last one. `who` is { by, byId,
+  // via }. Nothing waits for it: a failure costs the row, never the command.
+  logAction(entry, { by, byId = null, via }) {
+    if (!entry) return;
+    const next = { channelId: this.channelId, at: new Date(), by, byId, via, action: entry.action, video: entry.video || null, detail: entry.detail || null };
+    const row = { _id: actionLog.continues(this.lastAction, next) ? this.lastAction._id : donationMediaActionsRepo.newId(), ...next };
+    this.lastAction = row;
+    this.writeAction(row);
+    // The name of a clip added by its link comes later.
+    if (row.video && !row.video.title) {
+      fetchTitle(row.video.videoId).then((title) => {
+        if (!title) return;
+        row.video.title = title;
+        this.writeAction(row);
+      });
+    }
+  }
+
+  writeAction(row) {
+    this.actionChain = this.actionChain
+      .then(() => donationMediaActionsRepo.save(row))
+      .then(() => this.send("panels", { type: "logEntry", entry: logView(row) }))
+      .catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not write the action log:`, err.message));
+  }
+
   // The panel settings: the button theme, the history length, the placeholder pictures.
   async loadPanelSettings() {
     await this.placeholderChain;
@@ -379,6 +413,7 @@ class Session {
     const q = this.queue;
     const known = authorCache.get(item.videoId);
     const author = (known && known.author) || "";
+    this.recordDonations([[item, { status: how.status, at: Date.now(), author }]]);
     const outcome = this.music.finished(item, how, author, { live: this.live.live });
     if (item.fromPlaylist) this.journal(item, how, outcome, author);
     if (!outcome || outcome === "heard" || !(q.radio || q.infinite)) return;
@@ -387,6 +422,12 @@ class Session {
       q.replaceRadioTail(this.music.nextNow(q, { ...q.feedExclusions({ repeats: true, tail: false }), limit: tail }));
     }
     this.music.grow(q);
+  }
+
+  // The donations' graph. Never in the queue's way: a failure costs the rows.
+  recordDonations(ended) {
+    const rows = ended.map(([item, how]) => donationOf(this.channelId, item, how)).filter(Boolean);
+    musicDonationsRepo.record(rows).catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not write the donations' graph:`, err.message));
   }
 
   // What the music leans to has changed: the radio's own part of the feed is chosen anew, at once out of
@@ -577,6 +618,11 @@ class Session {
   }
 }
 
+// A row of the action log as the panels get it.
+function logView(row) {
+  return { id: String(row._id), at: new Date(row.at).getTime(), by: row.by, via: row.via, action: row.action, video: row.video || null, detail: row.detail || null };
+}
+
 // YouTube oEmbed: the clip's name and its channel's name, or null.
 async function fetchVideoInfo(videoId) {
   try {
@@ -664,6 +710,8 @@ async function runSongRequest(cmd) {
   if (!info) return { status: "noEmbed" };
   const item = q.add("manual", { videoId, title: info.title || "", donor: "", amount: null, message: "", start: 0, end: 0 }, { addedBy: login, viaChat: true });
   if (!item) return { status: "full" };
+  // The log is of what moderators do; a viewer's request is already under their name in the queue.
+  if (isMod) session.logAction({ action: "songRequest", video: { videoId, title: info.title || "" } }, { by: login, byId: userId, via: "chat" });
   const position = q.current && q.current.id === item.id ? 0 : q.queue.findIndex((i) => i.id === item.id) + 1;
   return { status: "done", result: { title: (info.title || "").slice(0, 200), position } };
 }
@@ -691,7 +739,11 @@ async function runClipCommand(cmd) {
   if (level > 2 || !(await canEditSectionAt(level, session.channelId, userId, "donationMedia"))) return "forbidden";
 
   const by = cmd.by.login ? String(cmd.by.login).slice(0, 25) : userId;
-  return chatCommand.apply(session.queue, { action: cmd.action, itemId: cmd.itemId, by }).status;
+  const command = actionLog.commandOfChat(cmd.action);
+  const before = actionLog.capture(session.queue, command, session.placeholderUrl);
+  const { status } = chatCommand.apply(session.queue, { action: cmd.action, itemId: cmd.itemId, by });
+  if (status === "done") session.logAction(actionLog.entryOf(command, before, session.queue, { placeholder: session.placeholderUrl }), { by, byId: userId, via: "chat" });
+  return status;
 }
 
 let chatCommandTimer = null;
@@ -751,6 +803,13 @@ async function reloadPanelSettings(channelId, channelLogin) {
   await session.ready;
   await session.loadPanelSettings();
   session.queue.broadcastState();
+}
+
+// An action done on the site rather than in the panel (a placeholder picture added or deleted).
+async function logSiteAction(channelId, channelLogin, user, entry) {
+  const session = getSession(channelId, channelLogin);
+  await session.ready;
+  session.logAction(entry, { by: user.login || String(user.userId), byId: String(user.userId), via: "site" });
 }
 
 // After the admin edited the Easter eggs: every open panel picks them up.
@@ -867,14 +926,46 @@ function parseMessage(data) {
 
 const asId = (value) => (Number.isInteger(value) && value > 0 ? value : null);
 
+// A page of the action log; reading it needs no control.
+async function sendLog(session, ws, msg) {
+  const before = typeof msg.before === "string" ? msg.before : null;
+  const by = typeof msg.by === "string" && msg.by ? msg.by.slice(0, 30) : null;
+  // Rows still being written come first, or a page opened right after an action would lack it.
+  await session.actionChain;
+  const [{ rows, more }, people] = await Promise.all([
+    donationMediaActionsRepo.list(session.channelId, { before, by }),
+    before ? null : donationMediaActionsRepo.people(session.channelId),
+  ]);
+  if (ws.readyState === 1) ws.send(JSON.stringify({ type: "log", before, by, entries: rows.map(logView), more, people }));
+}
+
 async function handlePanelCommand(session, ws, principal, msg) {
-  const reply = (payload) => ws.readyState === 1 && ws.send(JSON.stringify({ type: "reply", reqId: msg.reqId, ...payload }));
   if (!(await refreshControl(principal))) {
     ws.send(JSON.stringify({ type: "access", canControl: false }));
     return;
   }
-  const q = session.queue;
   session.touchedAt = Date.now();
+  let replied = null;
+  const reply = (payload) => {
+    replied = payload;
+    if (ws.readyState === 1) ws.send(JSON.stringify({ type: "reply", reqId: msg.reqId, ...payload }));
+  };
+  const before = actionLog.capture(session.queue, msg, session.placeholderUrl);
+  const log = () =>
+    session.logAction(actionLog.entryOf(msg, before, session.queue, { reply: replied, placeholder: session.placeholderUrl }), {
+      by: principal.by,
+      byId: principal.userId || null,
+      via: principal.key ? "dock" : "site",
+    });
+  const running = runPanelCommand(session, principal, msg, reply);
+  // At once, so that what another person does meanwhile is not taken for this command's work.
+  if (!actionLog.isSlow(msg.type)) log();
+  await running;
+  if (actionLog.isSlow(msg.type)) log();
+}
+
+async function runPanelCommand(session, principal, msg, reply) {
+  const q = session.queue;
   switch (msg.type) {
     case "pause":
       return q.pause();
@@ -1006,7 +1097,8 @@ async function handleConnection(ws, principal) {
         }
         return;
       }
-      await handlePanelCommand(session, ws, principal, msg);
+      if (msg.type === "log") await sendLog(session, ws, msg);
+      else await handlePanelCommand(session, ws, principal, msg);
     } catch (err) {
       console.error(`[donationMedia] ${session.channelLogin}: command failed:`, err);
     }
@@ -1052,6 +1144,7 @@ module.exports = {
   reload,
   reloadPanelSettings,
   reloadEggs,
+  logSiteAction,
   statusOf,
   musicOf,
   musicTags,

@@ -7,6 +7,8 @@
 //   /:channel/settings/donation-media/queue   the queue panel on the site, for moderators. Control
 //                                              follows the "donationMedia" moderator section; the
 //                                              rest see it read-only.
+//   /:channel/settings/donation-media/placeholders   the pictures a clip is covered with, for the
+//                                              same moderators.
 //   /obs/donation-media/:key/player           the OBS browser source (no login: the key is the
 //   /obs/donation-media/:key/panel            credential) and the OBS dock panel.
 //
@@ -33,6 +35,7 @@ const {
 const { resolveDonatelloUserId } = require("../lib/donatelloWidgetPage");
 const placeholder = require("../lib/donationMediaPlaceholder");
 const icons = require("../lib/donationMediaIcons");
+const { ACTIONS: ACTION_LOG_ACTIONS } = require("../lib/donationMediaActionLog");
 const iconImage = require("../lib/donationMediaIconImage");
 const emoteImages = require("../twitch/emoteImages");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
@@ -70,6 +73,8 @@ const PANEL_STRING_KEYS = [
   "playlistFull", "playlistStalled", "playlistBadge", "playlistNowPlaying", "toPlaylist", "toPlaylistHint", "inPlaylist",
   "upNext", "upNextHint", "upNextEmpty", "upNextClear", "upNextPlay", "upNextBadge", "radio", "radioHint", "radioOn", "radioStop", "radioNothing", "moreArtist", "moreArtistHint", "moreArtistNothing", "aiPlaceholder", "aiSubmit", "aiNoKey", "aiFailed", "aiNothing", "added", "searching", "source.graph", "source.playlist", "source.mix", "source.lastfm", "source.author", "source.ai",
   "status.skipped", "status.removed", "status.error",
+  "log.title", "log.empty", "log.everyone", "log.more", "log.via.chat", "log.via.dock", "log.on", "log.off", "log.place", "log.tracks",
+  ...ACTION_LOG_ACTIONS.map((a) => `log.do.${a}`),
 ];
 
 function panelStrings(t) {
@@ -127,8 +132,6 @@ router.get("/:channel/settings/donation-media", requireLevel(1), settingsNav("do
       platforms: platformView(config),
       status: donationMediaManager.statusOf(channel.channelId),
       currencies: DA_CURRENCIES,
-      placeholders: config.placeholders,
-      placeholderMax: placeholder.MAX_PLACEHOLDERS,
       historyLimit: config.historyLimit,
       historyMin: icons.HISTORY_MIN,
       historyMax: icons.HISTORY_MAX,
@@ -215,10 +218,9 @@ router.post(
 );
 
 // The channel's placeholder pictures (lib/donationMediaPlaceholder.js). Its own route because it is
-// the one multipart form: multer must read the body before the CSRF check can. Uploaded from the
-// owner's setup page or from the queue page, so it follows the queue's access - every moderator
-// who may control the queue (section "donationMedia") - rather than the platform keys' level 1:
-// a placeholder is what the moderator on duty needs when a clip turns out unfit, and every change
+// the one multipart form: multer must read the body before the CSRF check can. It follows the
+// queue's access - every moderator who may control the queue (section "donationMedia") - rather
+// than the platform keys' level 1: a placeholder is what the moderator on duty needs when a clip turns out unfit, and every change
 // is in the settings change log under their name.
 const placeholderUpload = multer({
   storage: multer.memoryStorage(),
@@ -237,8 +239,31 @@ function readPlaceholderUpload(req, res, next) {
 
 const PLACEHOLDER_ERRORS = { not_allowed_type: "phType", unreadable: "phType", too_large: "phTooLarge", empty: "phEmpty", full: "phFull" };
 
+router.get(
+  "/:channel/settings/donation-media/placeholders",
+  requireLevel(2),
+  exposeSectionEditAccess("donationMedia"),
+  settingsNav("donationMediaPlaceholders"),
+  async (req, res, next) => {
+    try {
+      const channel = await loadChannel(req, res);
+      if (!channel) return;
+      const config = await donationMediaRepo.findByChannelId(channel.channelId);
+      res.render("donationMediaPlaceholders", {
+        channel,
+        placeholders: config ? config.placeholders : [],
+        placeholderMax: placeholder.MAX_PLACEHOLDERS,
+        saved: typeof req.query.saved === "string" ? req.query.saved : null,
+        error: typeof req.query.error === "string" ? req.query.error : null,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.post(
-  "/:channel/settings/donation-media/placeholder",
+  "/:channel/settings/donation-media/placeholders",
   settingsWriteLimiter,
   requireSectionEditAccess("donationMedia"),
   readPlaceholderUpload,
@@ -248,15 +273,14 @@ router.post(
       const channel = await loadChannel(req, res);
       if (!channel) return;
       const config = await donationMediaRepo.getOrCreate(channel);
-      const fromQueue = req.body.from === "queue";
-      const back = `/${channel.channelLogin}/settings/donation-media${fromQueue ? "/queue" : ""}`;
-      const fail = (code) => res.redirect(`${back}?error=${PLACEHOLDER_ERRORS[code] || "phType"}&platform=placeholder#placeholder`);
+      const back = `/${channel.channelLogin}/settings/donation-media/placeholders`;
+      const fail = (code) => res.redirect(`${back}?error=${PLACEHOLDER_ERRORS[code] || "phType"}`);
 
       const removing = req.body.action === "remove";
       if (removing) {
         const entry = config.placeholders.find((p) => p.id === req.body.id);
         const removed = entry && (await donationMediaRepo.removePlaceholder(channel.channelId, entry.url));
-        if (!removed) return res.redirect(`${back}#placeholder`);
+        if (!removed) return res.redirect(back);
         // First the players and panels let go of the picture, then its files go.
         await donationMediaManager.reloadPanelSettings(channel.channelId, channel.channelLogin);
         await placeholder.deletePlaceholder(removed);
@@ -286,7 +310,8 @@ router.post(
         before: null,
         after: null,
       });
-      return res.redirect(`${back}?saved=${removing ? "placeholderRemoved" : "placeholder"}#placeholder`);
+      await donationMediaManager.logSiteAction(channel.channelId, channel.channelLogin, req.user, { action: removing ? "placeholderRemove" : "placeholderAdd" });
+      return res.redirect(`${back}?saved=${removing ? "placeholderRemoved" : "placeholder"}`);
     } catch (err) {
       next(err);
     }
@@ -457,11 +482,6 @@ router.get(
         channel,
         configured: Boolean(config && (config.donationAlerts || config.donatello || config.donatePay)),
         isOwner: req.permissionLevel <= 1,
-        placeholders: config ? config.placeholders : [],
-        placeholderMax: placeholder.MAX_PLACEHOLDERS,
-        saved: typeof req.query.saved === "string" ? req.query.saved : null,
-        error: typeof req.query.error === "string" ? req.query.error : null,
-        errorPlatform: typeof req.query.platform === "string" ? req.query.platform : null,
         panelStrings: panelStrings(res.locals.t),
       });
     } catch (err) {

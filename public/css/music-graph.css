@@ -66,6 +66,8 @@
 .mg-primary:hover { background: #9b73f8; }
 .mg-dot { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-right: 0.5rem; vertical-align: -0.05em; border: 2px solid transparent; }
 .mg-groups { display: grid; gap: 0.55rem; }
+.mg-count { margin-left: 0.4rem; color: var(--mg-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.mg-row.is-none { opacity: 0.5; }
 .mg-group { display: flex; align-items: center; gap: 0.4rem; }
 .mg-group .mg-field { flex: 1; min-width: 0; padding-block: 0.3rem; }
 .mg-group input[type="color"] { flex: none; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
