@@ -993,6 +993,10 @@
 
   function drawJournal(j) {
     const share = ({ n, skips }) => (n > 0 ? `${percent(skips / n)} · ${number(n)}` : "–");
+    for (const box of document.querySelectorAll("[data-arm]")) {
+      const arm = j && j.arms[box.dataset.arm];
+      box.textContent = arm && (arm.on.n || arm.off.n) ? `${t("armOn")} ${share(arm.on)}, ${t("armOff")} ${share(arm.off)}` : "";
+    }
     const block = (title, rows) => el("div", {}, el("h3", { class: "font-semibold text-neutral-200 mb-1" }, title), el("dl", {}, ...rows));
     if (!j || Object.keys(j.outcomes).length === 0) {
       $("mg-journal").replaceChildren(el("p", { class: "text-neutral-500" }, t("journalEmpty")));

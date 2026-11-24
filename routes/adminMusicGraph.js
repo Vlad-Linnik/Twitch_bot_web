@@ -1,11 +1,17 @@
 // The site admin's view of the donation media radio's music graph (lib/musicGraph.js): what it knows,
-// what it would play and why. Read-only, and it never asks YouTube or Last.fm for anything - it shows
-// the live radio's graph, what Mongo has around a track, or all of it.
+// what it would play and why, and the switches of what decides it (lib/musicFeatures.js). It never asks
+// YouTube or Last.fm for anything - it shows the live radio's graph, what Mongo has around a track, or
+// all of it.
 const express = require("express");
 const { requireLevel } = require("../middleware/permissions");
 const channelsRepo = require("../db/channelsRepo");
 const musicGraphRepo = require("../db/musicGraphRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
+const musicFeaturesRepo = require("../db/musicFeaturesRepo");
+const musicArtistsRepo = require("../db/musicArtistsRepo");
+const adminActionLogsRepo = require("../db/adminActionLogsRepo");
+const { verifyToken } = require("../middleware/csrf");
+const { FEATURES, normalize } = require("../lib/musicFeatures");
 const { summarize } = require("../lib/musicJournal");
 const donationMediaManager = require("../realtime/donationMediaManager");
 const { MusicRadio } = require("../lib/musicRadio");
@@ -20,6 +26,7 @@ const STRING_KEYS = [
   "lastPlayed", "never", "via", "edges", "openTrack", "around", "notOpened", "wontPlay", "supply.graph", "supply.mix", "supply.grow", "supply.lastfm", "supply.artist", "supply.oembed", "sources", "noStats", "skipShare",
   "wholeStatus", "wholeCut", "groupQuery", "groupColor", "removeGroup", "animate", "animateStop", "depthAll", "counts", "closeDetail",
   "journalEmpty", "journalTotal", "journalNotCounted", "reason.offline", "reason.muted", "reason.seeked",
+  "feature.tags", "feature.crowd", "feature.model", "armOn", "armOff",
   "cut.source", "cut.mode", "cut.closeness", "cut.novelty", "cut.genre", "cut.place", "cut.hour", "cut.asked",
   "group.radio", "group.endless", "group.feed", "group.playlist", "group.new", "group.known", "group.asked", "group.notAsked",
   "state.root", "state.playing", "state.waiting", "state.liked", "state.disliked", "state.closed", "state.heard", "state.unheard",
@@ -47,8 +54,23 @@ router.get("/admin/music-graph", requireAdmin, async (req, res, next) => {
       tab: "music-graph",
       channels: await knownChannels(),
       statsDays: STATS_DAYS,
+      features: Object.entries(FEATURES).map(([name, f]) => ({ name, modes: f.modes, mode: donationMediaManager.musicFeatures.modes[name] })),
+      artistsKnown: await musicArtistsRepo.count(),
+      saved: req.query.saved === "1",
       strings: Object.fromEntries(STRING_KEYS.map((k) => [k, t(`admin.graph.${k}`)])),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/music-graph/features", requireAdmin, verifyToken, async (req, res, next) => {
+  try {
+    const modes = normalize({ ...donationMediaManager.musicFeatures.modes, ...Object.fromEntries(Object.keys(FEATURES).map((name) => [name, req.body[name]])) });
+    await musicFeaturesRepo.save(modes, req.user.login);
+    await donationMediaManager.loadMusicFeatures();
+    await adminActionLogsRepo.logAction({ admin: req.user, action: "musicGraph.features", target: null, details: Object.entries(modes).map(([k, v]) => `${k}: ${v}`).join(", ") });
+    res.redirect("/admin/music-graph?saved=1#mg-features");
   } catch (err) {
     next(err);
   }

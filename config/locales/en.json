@@ -3419,6 +3419,9 @@
         "delete": "Comment under a card deleted",
         "restrictUser": "Commenter restricted",
         "unrestrictUser": "Commenter unrestricted"
+      },
+      "musicGraph": {
+        "features": "Music graph switches changed"
       }
     },
     "news": {
@@ -3797,7 +3800,26 @@
         "known": "played before",
         "asked": "asked",
         "notAsked": "did not ask"
-      }
+      },
+      "featuresHeading": "What is on",
+      "featuresHint": "“Half” is a coin for every batch: it shows whether fewer are skipped with the change than without. Telling 20% from 15% takes about 900 tracks on each side.",
+      "featuresSave": "Save",
+      "featuresSaved": "Saved.",
+      "feature": {
+        "tags": "Genre by the artist's tags",
+        "crowd": "Lowered for skips on other channels",
+        "model": "Learnt weights",
+        "similar": "Last.fm's similar songs from the base",
+        "start": "Endless music starts from favourites"
+      },
+      "featureMode": {
+        "off": "Off",
+        "half": "Half of the batches",
+        "all": "All"
+      },
+      "armOn": "with",
+      "armOff": "without",
+      "artistsKnown": "Artists in the base: {{count}}"
     },
     "eggs": {
       "intro": "Easter eggs of the donation media panel: while the chosen video plays, chosen panel buttons wear other icons - on every channel.",

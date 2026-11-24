@@ -26,8 +26,12 @@ const { CONNECTORS } = require("./donationMediaConnectors");
 const radioSources = require("../lib/radioSources");
 const { MusicRadio } = require("../lib/musicRadio");
 const musicGraphRepo = require("../db/musicGraphRepo");
+const musicArtistsRepo = require("../db/musicArtistsRepo");
+const musicFeaturesRepo = require("../db/musicFeaturesRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
 const streamSessionsRepo = require("../db/streamSessionsRepo");
+const { MusicTagRegistry } = require("../lib/musicTagRegistry");
+const { MusicFeatures } = require("../lib/musicFeatures");
 const { eventOf } = require("../lib/musicJournal");
 const { songId, artistOf } = require("../lib/musicGraph");
 const icons = require("../lib/donationMediaIcons");
@@ -63,6 +67,11 @@ const sessions = new Map(); // channelId -> Session
 // after every edit (reloadEggs).
 let eggs = new Map();
 
+// Every channel's: the artists' tags, and which changes of the choosing are on (loaded at boot and set by
+// the admin's page).
+const musicTags = new MusicTagRegistry({ repo: musicArtistsRepo, source: radioSources.artistTags });
+const musicFeatures = new MusicFeatures();
+
 class Session {
   constructor(channelId, channelLogin) {
     this.channelId = String(channelId);
@@ -92,7 +101,7 @@ class Session {
       },
       onFinished: (item, how) => this.onFinished(item, how),
     });
-    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo });
+    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo, tags: musicTags, features: musicFeatures });
     this.ready = Promise.resolve()
       // A failure here costs the theme, not the queue.
       .then(() => this.loadPanelSettings().catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load panel settings:`, err.message)))
@@ -598,6 +607,7 @@ function startChatCommands() {
 // Boot: start listening for every channel that has a platform connected.
 async function start() {
   startChatCommands();
+  await loadMusicFeatures().catch((err) => console.error("[donationMedia] could not load the music features:", err.message));
   await reloadEggs();
   try {
     const configs = await donationMediaRepo.listConfigured();
@@ -651,6 +661,11 @@ async function reload(channelId, channelLogin) {
 function statusOf(channelId) {
   const session = sessions.get(String(channelId));
   return session ? JSON.parse(JSON.stringify(session.status)) : {};
+}
+
+// Read at boot and after every save on the admin's page (routes/adminMusicGraph.js).
+async function loadMusicFeatures() {
+  musicFeatures.set(await musicFeaturesRepo.load());
 }
 
 // The channel's radio and its queue, for the admin's view of the music graph; null when no session of
@@ -915,6 +930,9 @@ module.exports = {
   setPlaceholder,
   statusOf,
   musicOf,
+  musicTags,
+  musicFeatures,
+  loadMusicFeatures,
   // realtime/socketServer.js's handler contract
   authorizeUpgrade,
   handleConnection,

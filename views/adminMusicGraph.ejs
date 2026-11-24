@@ -4,7 +4,7 @@
 <%#
   The donation media radio's music graph (routes/adminMusicGraph.js): drawn and filled by
   public/js/admin-music-graph.js from its JSON endpoint, moved by public/js/music-graph-sim.js.
-  Read-only.
+  Read-only but for the switches at the bottom.
 %>
 <%
   const gInput = 'bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-purple-600';
@@ -143,6 +143,30 @@
       <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.journalHeading') %></h2>
       <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.journalHint', { days: statsDays }) %></p>
       <div id="mg-journal" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6 text-sm text-neutral-300"></div>
+    </section>
+
+    <section id="mg-features" class="mt-10 max-w-2xl">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.featuresHeading') %></h2>
+      <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.featuresHint') %></p>
+      <form method="post" action="/admin/music-graph/features" class="space-y-3">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <% features.forEach(function (f) { %>
+        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <label for="mg-f-<%= f.name %>" class="text-sm text-neutral-300"><%= t('admin.graph.feature.' + f.name) %></label>
+          <span class="flex items-center gap-3">
+            <span class="text-xs text-neutral-500 tabular-nums" data-arm="<%= f.name %>"></span>
+            <select id="mg-f-<%= f.name %>" name="<%= f.name %>" class="<%= gInput %>">
+              <% f.modes.forEach(function (m) { %><option value="<%= m %>" <%= m === f.mode ? 'selected' : '' %>><%= t('admin.graph.featureMode.' + m) %></option><% }) %>
+            </select>
+          </span>
+        </div>
+        <% }) %>
+        <div class="flex items-center gap-3">
+          <button type="submit" class="<%= gButton %>"><%= t('admin.graph.featuresSave') %></button>
+          <% if (saved) { %><span class="text-sm text-green-400" role="status"><%= t('admin.graph.featuresSaved') %></span><% } %>
+        </div>
+      </form>
+      <p class="text-sm text-neutral-500 mt-4"><%= t('admin.graph.artistsKnown', { count: artistsKnown }) %></p>
     </section>
   </div>
   <script src="<%= asset('/js/admin-music-graph.js') %>" defer></script>
