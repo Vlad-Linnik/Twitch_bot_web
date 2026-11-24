@@ -30,7 +30,7 @@ const STRING_KEYS = [
   "wholeStatus", "wholeCut", "groupQuery", "groupColor", "removeGroup", "animate", "animateStop", "depthAll", "counts", "closeDetail",
   "journalEmpty", "journalTotal", "journalSkipped", "journalNotCounted", "reason.offline", "reason.muted", "reason.seeked",
   "interestStatus", "interestEmpty", "askedBy", "askedTimes", "askedLast", "sharedWith",
-  "feature.tags", "feature.crowd", "feature.model", "armOn", "armOff",
+  "feature.tags", "feature.model", "armOn", "armOff",
   "cut.source", "cut.mode", "cut.closeness", "cut.novelty", "cut.genre", "cut.place", "cut.hour", "cut.asked",
   "group.radio", "group.endless", "group.feed", "group.playlist", "group.new", "group.known", "group.asked", "group.notAsked",
   "state.root", "state.playing", "state.waiting", "state.liked", "state.disliked", "state.closed", "state.heard", "state.unheard",

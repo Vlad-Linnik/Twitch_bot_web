@@ -3807,7 +3807,6 @@
       "featuresSaved": "Saved.",
       "feature": {
         "tags": "Genre by the artist's tags",
-        "crowd": "Lowered for skips on other channels",
         "model": "Learnt weights",
         "similar": "Last.fm's similar songs from the base",
         "start": "Endless music starts from favourites"
@@ -3844,7 +3843,6 @@
         "unheard": "first time",
         "genre": "genre likeness",
         "energy": "energy",
-        "crowd": "skipped on other channels",
         "sameArtist": "same artist in a row",
         "moodAsked": "a mood was on",
         "newAsked": "new songs were asked for",

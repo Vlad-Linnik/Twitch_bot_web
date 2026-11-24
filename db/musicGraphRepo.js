@@ -57,7 +57,6 @@ async function ensureInitialized() {
       tracks.createIndex({ artist: 1 }),
       tracks.createIndex({ out: 1 }),
       taste.createIndex({ channelId: 1, from: 1, id: 1 }, { unique: true }),
-      taste.createIndex({ id: 1, from: 1 }),
       taste.createIndex({ updatedAt: 1 }, { expireAfterSeconds: USED_TTL_S }),
       stats.createIndex({ channelId: 1, day: 1, source: 1 }, { unique: true }),
     ]);
@@ -135,20 +134,6 @@ async function findSongs(ids, limit = 200) {
   const rows = new Map();
   for (const doc of await tracks.find({ song: { $in: ids } }).sort({ usedAt: -1 }).limit(limit).toArray()) if (!rows.has(doc.song)) rows.set(doc.song, toTrack(doc));
   return [...rows.values()];
-}
-
-// Of these songs, the ones at least `enough` other channels skip rather than hear.
-const CROWD_MS = 90 * DAY_MS;
-async function crowdSkips(channelId, ids, enough = 3) {
-  const { taste } = await ensureInitialized();
-  const rows = await taste
-    .aggregate([
-      { $match: { id: { $in: ids }, from: null, channelId: { $ne: String(channelId) }, at: { $gt: Date.now() - CROWD_MS }, score: { $lte: -0.5 }, $expr: { $gt: ["$skips", "$listens"] } } },
-      { $group: { _id: "$id", channels: { $sum: 1 } } },
-      { $match: { channels: { $gte: enough } } },
-    ])
-    .toArray();
-  return rows.map((r) => r._id);
 }
 
 async function findTrack(videoId) {
@@ -310,7 +295,6 @@ module.exports = {
   loadAll,
   findTrack,
   findSongs,
-  crowdSkips,
   findByArtist,
   saveNeighbours,
   saveLinks,

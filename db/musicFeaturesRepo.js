@@ -1,5 +1,5 @@
 // Web-only: MusicGraphSettings, one document - the switches of lib/musicFeatures.js:
-//   { _id: "features", modes: { tags, crowd, model, similar, start }, updatedAt, updatedBy }
+//   { _id: "features", modes: { tags, model, similar, start }, updatedAt, updatedBy }
 const { connectWeb } = require("./connection");
 
 const collection = async () => (await connectWeb()).collection("MusicGraphSettings");
