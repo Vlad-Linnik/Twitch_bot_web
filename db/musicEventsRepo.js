@@ -4,7 +4,8 @@
 // track is counts.
 //
 // On air a row also has category, viewers and hour (of the stream). Added a minute and a half after the
-// track ended: asked and chat (db/musicInterestRepo.js).
+// track ended, when the chat wrote anything: asked (how many viewers asked what was playing) and chat
+// { n, emotes } (messages, and those with an emote) - lib/musicInterest.js.
 const { connectWeb } = require("./connection");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -38,10 +39,10 @@ async function update(id, { set = {}, inc = {} }) {
 }
 
 // channelId null: every channel's.
-async function since(channelId, days, projection = {}) {
+async function since(channelId, days, projection = { title: 0, author: 0 }) {
   const events = await ensureInitialized();
   return events
-    .find({ ...(channelId ? { channelId: String(channelId) } : {}), endedAt: { $gte: new Date(Date.now() - days * DAY_MS) } }, { projection: { title: 0, author: 0, ...projection } })
+    .find({ ...(channelId ? { channelId: String(channelId) } : {}), endedAt: { $gte: new Date(Date.now() - days * DAY_MS) } }, { projection })
     .sort({ endedAt: -1 })
     .limit(READ_LIMIT)
     .toArray();

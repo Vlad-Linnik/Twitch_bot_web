@@ -7,6 +7,9 @@ const { requireLevel } = require("../middleware/permissions");
 const channelsRepo = require("../db/channelsRepo");
 const musicGraphRepo = require("../db/musicGraphRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
+const musicInterestRepo = require("../db/musicInterestRepo");
+const musicModels = require("../lib/musicModels");
+const { graphOf } = require("../lib/musicInterest");
 const musicFeaturesRepo = require("../db/musicFeaturesRepo");
 const musicArtistsRepo = require("../db/musicArtistsRepo");
 const adminActionLogsRepo = require("../db/adminActionLogsRepo");
@@ -16,7 +19,7 @@ const { summarize } = require("../lib/musicJournal");
 const donationMediaManager = require("../realtime/donationMediaManager");
 const { MusicRadio } = require("../lib/musicRadio");
 const { songId } = require("../lib/musicGraph");
-const { describe, pack } = require("../lib/musicGraphView");
+const { describe, describeInterest, pack } = require("../lib/musicGraphView");
 
 const router = express.Router();
 const requireAdmin = requireLevel(0);
@@ -25,7 +28,8 @@ const STRING_KEYS = [
   "loading", "failed", "empty", "nothingFound", "live", "stored", "total", "opened", "close", "streak", "close2", "far", "closeness", "share", "taste", "rested", "plays",
   "lastPlayed", "never", "via", "edges", "openTrack", "around", "notOpened", "wontPlay", "supply.graph", "supply.mix", "supply.grow", "supply.lastfm", "supply.artist", "supply.oembed", "sources", "noStats", "skipShare",
   "wholeStatus", "wholeCut", "groupQuery", "groupColor", "removeGroup", "animate", "animateStop", "depthAll", "counts", "closeDetail",
-  "journalEmpty", "journalTotal", "journalNotCounted", "reason.offline", "reason.muted", "reason.seeked",
+  "journalEmpty", "journalTotal", "journalSkipped", "journalNotCounted", "reason.offline", "reason.muted", "reason.seeked",
+  "interestStatus", "interestEmpty", "askedBy", "askedTimes", "askedLast", "sharedWith",
   "feature.tags", "feature.crowd", "feature.model", "armOn", "armOff",
   "cut.source", "cut.mode", "cut.closeness", "cut.novelty", "cut.genre", "cut.place", "cut.hour", "cut.asked",
   "group.radio", "group.endless", "group.feed", "group.playlist", "group.new", "group.known", "group.asked", "group.notAsked",
@@ -34,6 +38,7 @@ const STRING_KEYS = [
 // A channel with nothing playing is shown from the songs it heard to the end last.
 const STORED_ROOTS = 5;
 const STATS_DAYS = 14;
+const ASKED_ROWS = 12;
 // The whole graph: as many of the rows used last as the page can draw. Putting it together takes a
 // noticeable part of a second of this process, so one answer serves a minute of looking.
 const WHOLE_LIMIT = 4000;
@@ -41,7 +46,7 @@ const WHOLE_TTL_MS = 60 * 1000;
 const whole = new Map(); // channel id -> { at, reply: Promise }
 
 async function knownChannels() {
-  const ids = new Set(await musicGraphRepo.channelsWithTaste());
+  const ids = new Set([...(await musicGraphRepo.channelsWithTaste()), ...(await musicInterestRepo.channels())]);
   // listAll: a channel the bot is switched off on may still have a radio.
   const channels = (await channelsRepo.listAll()).filter((c) => ids.has(String(c.channelId)));
   return channels.map((c) => ({ channelId: String(c.channelId), channelLogin: c.channelLogin })).sort((a, b) => a.channelLogin.localeCompare(b.channelLogin));
@@ -57,6 +62,7 @@ router.get("/admin/music-graph", requireAdmin, async (req, res, next) => {
       features: Object.entries(FEATURES).map(([name, f]) => ({ name, modes: f.modes, mode: donationMediaManager.musicFeatures.modes[name] })),
       artistsKnown: await musicArtistsRepo.count(),
       saved: req.query.saved === "1",
+      model: musicModels.get("all"),
       strings: Object.fromEntries(STRING_KEYS.map((k) => [k, t(`admin.graph.${k}`)])),
     });
   } catch (err) {
@@ -102,7 +108,7 @@ function wholeOf(channelId, session) {
 }
 
 // ?channel=<id>  whose taste; ?q=<words or a video id>  around this track instead of the live radio;
-// ?whole=1  everything.
+// ?whole=1  everything; ?interest=1  the viewers' interest, a graph of its own.
 router.get("/admin/music-graph/data", requireAdmin, async (req, res, next) => {
   try {
     const channelId = typeof req.query.channel === "string" && /^\d{1,20}$/.test(req.query.channel) ? req.query.channel : "0";
@@ -110,6 +116,13 @@ router.get("/admin/music-graph/data", requireAdmin, async (req, res, next) => {
     const session = donationMediaManager.musicOf(channelId);
     const [stats, events] = await Promise.all([musicGraphRepo.statsSince(channelId, STATS_DAYS), musicEventsRepo.since(channelId, STATS_DAYS)]);
     stats.journal = summarize(events);
+    const interest = graphOf(await musicInterestRepo.forChannel(channelId));
+    stats.asked = interest.songs.slice(0, ASKED_ROWS);
+    if (req.query.interest === "1") {
+      const music = new MusicRadio({ channelId, sources: {}, repo: musicGraphRepo });
+      await music.load();
+      return res.json({ ...pack(describeInterest(music.graph, interest)), live: false, interest: true, viewers: interest.viewers, root: null, stats });
+    }
     if (req.query.whole === "1") return res.json({ ...(await wholeOf(channelId, session)), stats });
     const reply = (graph, roots, extra) => res.json({ ...pack(describe(graph, roots, { songId, ...extra.queue })), live: extra.live, root: extra.root || null, stats });
 

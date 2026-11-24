@@ -51,11 +51,12 @@
 
   let set = readSettings();
   let data = null;
-  let mode = "live"; // live | around | whole
+  let mode = "live"; // live | around | whole | interest
   let query = "";
   let selected = null; // a track's id
   let timer = null;
   let request = 0;
+  let first = true;
 
   function readSettings() {
     const fresh = JSON.parse(JSON.stringify(DEFAULTS));
@@ -751,7 +752,9 @@
     box.hidden = at < 0;
     if (at < 0) return;
     const n = data.nodes[at];
-    const steps = data.edges.filter((e) => e[0] === at).sort((a, b) => b[2] - a[2]).slice(0, 8);
+    const when = (at) => (at ? new Date(at).toLocaleString(lang, { dateStyle: "short", timeStyle: "short" }) : t("never"));
+    // Interest goes both ways along an edge.
+    const steps = data.edges.filter((e) => e[0] === at || (data.interest && e[1] === at)).map((e) => (e[0] === at ? e : [e[1], e[0], ...e.slice(2)])).sort((a, b) => b[2] - a[2]).slice(0, 8);
     const via = n.via && data.nodes.find((x) => x.id === n.via);
     const link = el("a", { href: `https://www.youtube.com/watch?v=${encodeURIComponent(n.videoId)}`, target: "_blank", rel: "noopener noreferrer", class: "text-purple-300 hover:text-purple-200 underline" }, t("openTrack"));
     const aroundIt = el("button", { type: "button", class: "text-purple-300 hover:text-purple-200 underline cursor-pointer", onclick: () => around(n) }, t("around"));
@@ -762,17 +765,18 @@
       el(
         "dl",
         {},
-        row(t("closeness"), `${percent(n.reach)} · ${n.reach >= data.near ? t("close2") : t("far")}`),
-        row(t("share"), `${number(n.p * 100, 1)}%`),
+        ...(data.interest
+          ? [row(t("askedBy"), number(n.askers)), row(t("askedTimes"), number(n.times)), row(t("askedLast"), when(n.askedAt))]
+          : [row(t("closeness"), `${percent(n.reach)} · ${n.reach >= data.near ? t("close2") : t("far")}`), row(t("share"), `${number(n.p * 100, 1)}%`)]),
         row(t("taste"), `${signed(n.score)} · ${t(`state.${n.state}`)}`),
-        row(t("rested"), percent(n.fresh)),
+        data.interest ? null : row(t("rested"), percent(n.fresh)),
         row(t("plays"), `${n.plays} / ${n.listens} / ${n.skips}`),
-        row(t("lastPlayed"), n.lastPlayedAt ? new Date(n.lastPlayedAt).toLocaleString(lang, { dateStyle: "short", timeStyle: "short" }) : t("never")),
+        row(t("lastPlayed"), when(n.lastPlayedAt)),
         via ? row(t("via"), short(nameOf(via), 40)) : null
       ),
       n.opened ? "" : el("p", { class: "mt-2 text-xs text-neutral-500" }, t("notOpened")),
       n.playable ? "" : el("p", { class: "mt-2 text-xs text-amber-400" }, t("wontPlay")),
-      steps.length ? el("div", { class: "mt-3 mb-1 text-neutral-500" }, t("edges")) : "",
+      steps.length ? el("div", { class: "mt-3 mb-1 text-neutral-500" }, t(data.interest ? "sharedWith" : "edges")) : "",
       el(
         "div",
         { class: "mb-3 -mx-1" },
@@ -953,7 +957,8 @@
     const card = (label, value) => el("div", { class: "rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-3" }, el("dt", { class: "text-xs text-neutral-500" }, label), el("dd", { class: "text-xl font-semibold text-neutral-100" }, value));
     $("mg-totals").replaceChildren(card(t("total"), number(data.total)), card(t("opened"), number(data.opened)), card(t("close"), number(data.close)), card(t("streak"), number(data.streak)));
 
-    const next = data.nodes.filter((n) => n.state !== "root" && n.state !== "playing" && n.state !== "closed" && n.playable && n.fresh > 0 && n.p > 0).sort((a, b) => b.p - a.p).slice(0, NEXT_ROWS);
+    $("mg-totals").hidden = Boolean(data.interest);
+    const next = (data.interest ? [] : data.nodes).filter((n) => n.state !== "root" && n.state !== "playing" && n.state !== "closed" && n.playable && n.fresh > 0 && n.p > 0).sort((a, b) => b.p - a.p).slice(0, NEXT_ROWS);
     const pick = (n) => {
       select(n.id, true);
       stage.scrollIntoView({ block: "center", behavior: still.matches ? "auto" : "smooth" });
@@ -986,6 +991,8 @@
         : [el("p", { class: "text-neutral-500" }, t("noStats"))])
     );
     drawJournal(data.stats.journal);
+    const asked = data.stats.asked || [];
+    $("mg-asked").replaceChildren(...(asked.length ? asked.map((s) => row(short(nameOf(s), 60), number(s.askers))) : [el("p", { class: "text-neutral-500" }, t("interestEmpty"))]));
   }
 
   const CUTS = ["closeness", "novelty", "genre", "source", "mode", "place", "hour", "asked"];
@@ -1002,7 +1009,7 @@
       $("mg-journal").replaceChildren(el("p", { class: "text-neutral-500" }, t("journalEmpty")));
       return;
     }
-    const total = [row(t("journalTotal"), share(j.total)), ...Object.entries(j.notCounted).map(([why, n]) => row(`${t("journalNotCounted")}: ${t(`reason.${why}`)}`, number(n)))];
+    const total = [row(t("journalSkipped"), share(j.total)), ...Object.entries(j.notCounted).map(([why, n]) => row(`${t("journalNotCounted")}: ${t(`reason.${why}`)}`, number(n)))];
     const cuts = CUTS.filter((c) => j.cuts[c]).map((c) =>
       block(t(`cut.${c}`), Object.keys(j.cuts[c]).sort(inOrder).map((g) => row(strings[`group.${g}`] || g, share(j.cuts[c][g]))))
     );
@@ -1020,10 +1027,12 @@
     if (!quiet) $("mg-status").textContent = t("loading");
     $("mg-live").setAttribute("aria-pressed", String(mode === "live"));
     $("mg-whole").setAttribute("aria-pressed", String(mode === "whole"));
+    $("mg-interest").setAttribute("aria-pressed", String(mode === "interest"));
     let got = null;
     try {
       const params = new URLSearchParams({ channel: $("mg-channel").value });
       if (mode === "whole") params.set("whole", "1");
+      else if (mode === "interest") params.set("interest", "1");
       else if (mode === "around") params.set("q", query);
       const res = await fetch(`/admin/music-graph/data?${params}`, { headers: { accept: "application/json" } });
       if (!res.ok) throw new Error(String(res.status));
@@ -1036,15 +1045,19 @@
     if (got && !(quiet && (gesture || growing))) {
       const same = data && view.nodes.length > 0 && shapeOf(data) === shapeOf(got);
       data = got;
-      $("mg-status").textContent = data.nodes.length === 0 ? t(mode === "around" ? "nothingFound" : "empty") : statusOf();
+      $("mg-status").textContent = data.nodes.length === 0 ? t(mode === "around" ? "nothingFound" : mode === "interest" ? "interestEmpty" : "empty") : statusOf();
       stopAnimation();
       rebuild({ alpha: same ? 0 : quiet ? 0.25 : 1 });
       drawDetail();
       drawTables();
+      // Back from saving the switches: the tables above them have only now got their height.
+      if (first && location.hash) document.querySelector(location.hash)?.scrollIntoView();
+      first = false;
     }
     if (data && data.live && mode === "live" && !document.hidden) timer = setTimeout(() => load(true), REFRESH_MS);
   }
   function statusOf() {
+    if (data.interest) return t("interestStatus").replace("{{songs}}", number(data.total)).replace("{{viewers}}", number(data.viewers));
     if (data.whole) return t("wholeStatus").replace("{{count}}", number(data.total)) + (data.cut ? t("wholeCut") : "");
     return data.root ? (data.live ? t("live") : t("stored")) + data.root : "";
   }
@@ -1070,6 +1083,7 @@
   });
   $("mg-live").addEventListener("click", () => show("live"));
   $("mg-whole").addEventListener("click", () => show("whole"));
+  $("mg-interest").addEventListener("click", () => show("interest"));
   $("mg-refresh").addEventListener("click", () => load());
   $("mg-channel").addEventListener("change", () => show(mode, query));
   $("mg-zoom-in").addEventListener("click", () => zoom(1.4));

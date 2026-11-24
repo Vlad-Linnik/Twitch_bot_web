@@ -29,8 +29,11 @@ const musicGraphRepo = require("../db/musicGraphRepo");
 const musicArtistsRepo = require("../db/musicArtistsRepo");
 const musicFeaturesRepo = require("../db/musicFeaturesRepo");
 const musicEventsRepo = require("../db/musicEventsRepo");
+const musicInterestRepo = require("../db/musicInterestRepo");
+const { readChat } = require("../lib/musicInterest");
 const streamSessionsRepo = require("../db/streamSessionsRepo");
 const { MusicTagRegistry } = require("../lib/musicTagRegistry");
+const musicModels = require("../lib/musicModels");
 const { MusicEnergy } = require("../lib/musicEnergy");
 const { MusicFeatures } = require("../lib/musicFeatures");
 const { eventOf } = require("../lib/musicJournal");
@@ -62,6 +65,13 @@ const LENGTH_RETRY_MS = 6 * 60 * 60 * 1000;
 // A radio top-up that found nothing new is not retried before this: the Mix of the same track
 // would answer the same, and a source that is down should not be asked every second.
 const RADIO_RETRY_MS = 2 * 60 * 1000;
+// The chat during a song is read this long after it, once the bot has written it: the messages from as
+// much after its start as after its end, because the viewers hear it that much later. A playing shorter
+// than the minimum is not looked at.
+const INTEREST_DELAY_MS = 90 * 1000;
+const INTEREST_LATER_MS = 8 * 1000;
+const INTEREST_MIN_MS = 10 * 1000;
+const EVENTS_KEPT = 20;
 
 const sessions = new Map(); // channelId -> Session
 // The site admin's Easter eggs, for every channel: videoId -> { slot: [icon] }. Loaded at boot and
@@ -91,6 +101,9 @@ class Session {
     this.lengthTried = new Map(); // videoId -> when
     this.live = { live: null }; // streamSessionsRepo.liveState(), as of the last minute
     this.touchedAt = null; // the last panel command
+    this.playing = null; // { item, startedAt } - what the viewers hear now, see trackInterest
+    this.events = new Map(); // videoId -> { id: Promise, at } - journal rows just written
+    this.interest = new Map(); // videoId -> { asked, chat } - counted before its row was written
     this.radioStarting = false; // startRadio's own first fetch is running; no top-up beside it
     this.buttons = icons.normalizeButtons(null);
     this.queue = new MediaQueue({
@@ -103,7 +116,7 @@ class Session {
       },
       onFinished: (item, how) => this.onFinished(item, how),
     });
-    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo, tags: musicTags, features: musicFeatures, energy: musicEnergy });
+    this.music = new MusicRadio({ channelId: this.channelId, sources: radioSources, repo: musicGraphRepo, tags: musicTags, features: musicFeatures, energy: musicEnergy, models: musicModels });
     this.ready = Promise.resolve()
       // A failure here costs the theme, not the queue.
       .then(() => this.loadPanelSettings().catch((err) => console.error(`[donationMedia] ${channelLogin}: could not load panel settings:`, err.message)))
@@ -151,6 +164,7 @@ class Session {
     if (prev && prev.key === key && (!current || now - prev.at < NOW_PLAYING_REFRESH_MS)) return;
 
     this.refreshLive();
+    this.trackInterest(current, now);
     const startedAt = current && prev && prev.itemId === current.id ? prev.startedAt : new Date(now);
     this.published = { key, at: now, itemId: current ? current.id : null, startedAt };
     const item = current
@@ -385,16 +399,70 @@ class Session {
     if (state.live) {
       event.category = state.category;
       event.viewers = state.viewers;
-      event.hour = Math.round(((Date.now() - new Date(state.startedAt).getTime()) / 3600000) * 100) / 100;
+      event.hour = this.streamHour();
     }
-    musicEventsRepo.add(event).catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not write the journal:`, err.message));
+    // Counted while it was cut off by a donation.
+    const before = this.interest.get(item.videoId);
+    if (before) Object.assign(event, before);
+    this.interest.delete(item.videoId);
+    const id = musicEventsRepo.add(event);
+    id.catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not write the journal:`, err.message));
+    this.events.delete(item.videoId);
+    this.events.set(item.videoId, { id, at: Date.now() });
+    if (this.events.size > EVENTS_KEPT) this.events.delete(this.events.keys().next().value);
+  }
+
+  // Called whenever what plays may have changed: the clip that stopped is looked at once the chat has
+  // been written.
+  trackInterest(current, now) {
+    const last = this.playing;
+    if (last && current && last.item.id === current.id) {
+      last.item = current;
+      return;
+    }
+    this.playing = current ? { item: current, startedAt: now } : null;
+    if (!last || now - last.startedAt < INTEREST_MIN_MS) return;
+    const author = channelNameFor(last.item.videoId, () => {}) || "";
+    setTimeout(() => {
+      this.countInterest(last.item, author, last.startedAt, now).catch((err) => console.error(`[donationMedia] ${this.channelLogin}: could not read the chat:`, err.message));
+    }, INTEREST_DELAY_MS).unref();
+  }
+
+  async countInterest(item, author, from, to) {
+    const config = await channelConfigRepo.getConfig(this.channelLogin);
+    const command = config.commands && config.commands.track;
+    const [messages, emotes] = await Promise.all([
+      musicInterestRepo.messagesBetween(this.channelLogin, from + INTEREST_LATER_MS, to + INTEREST_LATER_MS),
+      musicInterestRepo.emoteWords(this.channelLogin),
+    ]);
+    const { askers, chat } = readChat(messages, { channelId: this.channelId, signature: command && command.enabled ? command.signature : "", emotes });
+    const entry = item.upNextEntry;
+    const track = { videoId: item.videoId, title: item.title || "", author: (entry && entry.author) || author };
+    await musicInterestRepo.record(this.channelId, { ...track, id: (entry && entry.node) || songId(track), donation: !item.fromPlaylist }, askers);
+    if (!item.fromPlaylist || messages.length === 0) return;
+    const asked = askers.length;
+    const row = this.events.get(item.videoId);
+    if (row && row.at >= from) {
+      const id = await row.id;
+      await musicEventsRepo.update(id, { inc: { asked, "chat.n": chat.n, "chat.emotes": chat.emotes } });
+      return;
+    }
+    const before = this.interest.get(item.videoId) || { asked: 0, chat: { n: 0, emotes: 0 } };
+    this.interest.set(item.videoId, { asked: before.asked + asked, chat: { n: before.chat.n + chat.n, emotes: before.chat.emotes + chat.emotes } });
+    if (this.interest.size > EVENTS_KEPT) this.interest.delete(this.interest.keys().next().value);
   }
 
   refreshLive() {
     streamSessionsRepo
       .liveState(this.channelId)
       .then((state) => { this.live = state; })
-      .catch(() => { this.live = { live: null }; });
+      .catch(() => { this.live = { live: null }; })
+      .then(() => { this.music.context = { hour: this.streamHour() }; });
+  }
+
+  // Hours into the stream; null off air.
+  streamHour() {
+    return this.live.live ? Math.round(((Date.now() - new Date(this.live.startedAt).getTime()) / 3600000) * 100) / 100 : null;
   }
 
   // The track a panel pointed at, with a name for the seed: from wherever the panel saw it, else

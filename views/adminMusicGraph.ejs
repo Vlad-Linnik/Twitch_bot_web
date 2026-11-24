@@ -39,6 +39,7 @@
       <button type="submit" class="<%= gButton %>"><%= t('admin.graph.show') %></button>
       <button type="button" id="mg-live" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.liveButton') %></button>
       <button type="button" id="mg-whole" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.wholeButton') %></button>
+      <button type="button" id="mg-interest" aria-pressed="false" class="<%= gGhost %>"><%= t('admin.graph.interestButton') %></button>
       <button type="button" id="mg-refresh" class="<%= gGhost %>"><%= t('admin.graph.refresh') %></button>
     </form>
     <p id="mg-status" class="text-sm text-neutral-400 mb-3 min-h-[1.25rem]" role="status"></p>
@@ -145,6 +146,12 @@
       <div id="mg-journal" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6 text-sm text-neutral-300"></div>
     </section>
 
+    <section class="mt-10 max-w-2xl">
+      <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.askedHeading') %></h2>
+      <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.askedHint') %></p>
+      <dl id="mg-asked" class="text-sm text-neutral-300"></dl>
+    </section>
+
     <section id="mg-features" class="mt-10 max-w-2xl">
       <h2 class="text-lg font-semibold text-neutral-100 mb-1"><%= t('admin.graph.featuresHeading') %></h2>
       <p class="text-sm text-neutral-500 mb-4"><%= t('admin.graph.featuresHint') %></p>
@@ -166,6 +173,19 @@
           <% if (saved) { %><span class="text-sm text-green-400" role="status"><%= t('admin.graph.featuresSaved') %></span><% } %>
         </div>
       </form>
+      <h3 class="text-sm font-semibold text-neutral-200 mt-6 mb-1"><%= t('admin.graph.modelHeading') %></h3>
+      <% if (!model) { %>
+      <p class="text-sm text-neutral-500"><%= t('admin.graph.modelNone') %></p>
+      <% } else { %>
+      <p class="text-sm text-neutral-400"><%= t({ few: 'admin.graph.modelFew', worse: 'admin.graph.modelWorse', ready: 'admin.graph.modelReady' }[model.status], { rows: model.rows, rowsMin: model.rowsMin, skips: model.skips, skipsMin: model.skipsMin, auc: (model.auc || 0).toFixed(2), formula: (model.formulaAuc || 0).toFixed(2) }) %></p>
+      <% if (model.weights) { %>
+      <dl class="text-sm text-neutral-300 mt-2 max-w-xs">
+        <% model.names.map(function (n, i) { return { n: n, w: model.weights[i] }; }).sort(function (a, b) { return Math.abs(b.w) - Math.abs(a.w); }).forEach(function (x) { %>
+        <div class="flex justify-between gap-3 py-0.5"><dt class="text-neutral-500"><%= t('admin.graph.weight.' + x.n) %></dt><dd class="tabular-nums"><%= (x.w > 0 ? '+' : '') + x.w.toFixed(2) %></dd></div>
+        <% }) %>
+      </dl>
+      <p class="text-xs text-neutral-500 mt-1"><%= t('admin.graph.modelWeights') %></p>
+      <% } } %>
       <p class="text-sm text-neutral-500 mt-4"><%= t('admin.graph.artistsKnown', { count: artistsKnown }) %></p>
     </section>
   </div>
