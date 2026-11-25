@@ -6,13 +6,13 @@
   Below lg it is a drawer behind the "Sections" button; from lg up it is pinned open unless the
   visitor unpinned it (a cookie, so the first paint is already right), in which case it is the same
   drawer. public/js/settings-nav.js does the opening, closing and pinning; without JS the drawer
-  stays shut and every page is still reachable through the page's own links and the site nav.
+  stays shut, the category headings do not fold and every page is still reachable through the page's own links and the site nav.
 
   Links fade rather than slide (data-transition): the panel carries view-transition-name
   settings-nav (public/css/input.css), so moving between pages only the content changes.
 %>
 <% const sn = settingsNav; %>
-<div class="settings-shell" data-settings-shell data-pinned="<%= sn.pinned ? '1' : '0' %>" data-pin-cookie="<%= sn.pinCookie %>">
+<div class="settings-shell" data-settings-shell data-pinned="<%= sn.pinned ? '1' : '0' %>" data-pin-cookie="<%= sn.pinCookie %>" data-collapsed-cookie="<%= sn.collapsedCookie %>">
   <aside id="settings-nav" class="settings-nav" aria-label="<%= t('settingsNav.title') %>">
     <div class="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
       <span class="text-xs uppercase tracking-wide text-neutral-500 truncate">
@@ -41,16 +41,20 @@
           </a>
         <% } else { %>
           <div>
-            <div class="flex items-center gap-2 px-2 py-1 text-neutral-300 font-medium <%= category.active ? 'text-neutral-100' : '' %>">
+            <button type="button" class="settings-nav-link settings-nav-top settings-nav-category <%= category.active ? 'has-active' : '' %>"
+                    data-settings-nav-category="<%= category.key %>"
+                    aria-expanded="<%= category.collapsed ? 'false' : 'true' %>" aria-controls="settings-nav-cat-<%= category.key %>">
               <span class="w-5 text-center shrink-0" aria-hidden="true"><%= category.icon %></span>
-              <span class="truncate"><%= t(category.labelKey) %></span>
-            </div>
-            <ul class="ml-[1.1rem] mt-0.5 border-l border-neutral-800">
+              <span class="flex-1 min-w-0 truncate"><%= t(category.labelKey) %></span>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-nav-chevron" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <ul id="settings-nav-cat-<%= category.key %>" <%= category.collapsed ? 'hidden' : '' %> class="ml-[1.1rem] mt-0.5 border-l border-neutral-800">
               <% category.items.forEach(function(item) { %>
                 <li>
                   <a href="<%= item.href %>" data-transition="fade"
                      class="settings-nav-link settings-nav-sub <%= item.active ? 'is-active' : '' %>"
                      <%- item.active ? 'aria-current="page"' : '' %>>
+                    <span class="w-5 text-center shrink-0" aria-hidden="true"><%= item.icon %></span>
                     <span class="flex-1 min-w-0 truncate"><%= t(item.labelKey) %></span>
                     <% if (item.readOnly) { %><span class="settings-nav-lock" title="<%= t('settingsNav.viewOnly') %>">🔒<span class="sr-only"><%= t('settingsNav.viewOnly') %></span></span><% } %>
                   </a>

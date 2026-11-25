@@ -166,10 +166,12 @@ h1.settings-heading {
   bottom: 0;
   left: 0;
   z-index: 40;
-  width: 17rem;
+  width: 18rem;
   max-width: 85vw;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-700) transparent;
   background: var(--color-neutral-950);
   border-right: 1px solid var(--color-neutral-800);
   transform: translateX(-100%);
@@ -231,8 +233,15 @@ h1.settings-heading {
 .settings-nav-link:hover { color: var(--color-neutral-100); background: var(--color-neutral-900); }
 .settings-nav-link.is-active { color: var(--color-neutral-100); background: rgb(88 28 135 / 0.35); }
 .settings-nav-top { padding: 0.375rem 0.5rem; color: var(--color-neutral-300); font-weight: 500; }
-.settings-nav-sub { margin-left: -1px; padding: 0.3rem 0.5rem 0.3rem 0.85rem; border-left: 2px solid transparent; border-radius: 0 0.375rem 0.375rem 0; }
+.settings-nav-sub { margin-left: -1px; padding: 0.3rem 0.5rem 0.3rem 0.6rem; border-left: 2px solid transparent; border-radius: 0 0.375rem 0.375rem 0; }
 .settings-nav-sub.is-active { border-left-color: var(--color-purple-500); }
+/* A category's heading folds its pages; folded over the open page, it carries the highlight itself. */
+.settings-nav-category { width: 100%; text-align: left; cursor: pointer; }
+.settings-nav-category.has-active { color: var(--color-neutral-100); }
+.settings-nav-category.has-active[aria-expanded="false"] { background: rgb(88 28 135 / 0.35); }
+.settings-nav-chevron { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--color-neutral-600); transition: transform 0.15s, color 0.15s; }
+.settings-nav-category:hover .settings-nav-chevron { color: var(--color-neutral-300); }
+.settings-nav-category[aria-expanded="false"] .settings-nav-chevron { transform: rotate(-90deg); }
 .settings-nav-lock { font-size: 0.7rem; opacity: 0.7; }
 
 @media (min-width: 1024px) {
@@ -242,7 +251,7 @@ h1.settings-heading {
     visibility: visible;
     transition: none;
   }
-  .settings-shell[data-pinned="1"] .settings-content { padding-left: 17rem; }
+  .settings-shell[data-pinned="1"] .settings-content { padding-left: 18rem; }
   .settings-shell[data-pinned="1"] .settings-nav-bar,
   .settings-shell[data-pinned="1"] .settings-backdrop,
   .settings-shell[data-pinned="1"] .settings-nav-close { display: none; }

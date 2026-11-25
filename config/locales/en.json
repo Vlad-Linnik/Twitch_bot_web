@@ -2549,12 +2549,11 @@
       "bot": "The bot's own info command and how it replies when someone talks to it."
     },
     "category": {
-      "customCommands": "Custom commands",
+      "commands": "Commands",
       "variables": "Variables",
       "chatModeration": "Chat moderation",
       "unbanBureau": "Amnesty Bureau",
       "chatStats": "Chat statistics",
-      "fun": "Fun",
       "bot": "Bot",
       "management": "Management",
       "widgets": "Widgets"
