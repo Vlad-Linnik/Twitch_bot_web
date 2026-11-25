@@ -21,6 +21,7 @@ const settingsChangeLogRepo = require("../db/settingsChangeLogRepo");
 const { diffConfig } = require("../lib/settingsDiff");
 const { parseSubmittedConfig } = require("../lib/settingsValidation");
 const aiValidation = require("../lib/aiSettingsValidation");
+const aiTones = require("../lib/aiTones");
 const { diffLines } = require("../lib/promptDiff");
 
 const router = express.Router();
@@ -120,6 +121,22 @@ router.post("/admin/ai", settingsWriteLimiter, requireAdmin, verifyToken, async 
   }
 });
 
+// One after another, not at once: rows of the same target are merged against the latest of them
+// (settingsChangeLogRepo.logChange), and several tones changed by one save share a target.
+async function logAiChanges(req, changes) {
+  for (const c of changes) {
+    await settingsChangeLogRepo.logChange({
+      channelLogin: req.params.login,
+      user: req.user,
+      category: "settings",
+      action: "update",
+      target: c.field,
+      before: c.before,
+      after: c.after,
+    });
+  }
+}
+
 // --- per-channel --------------------------------------------------------------------------------
 
 router.get("/admin/ai/channels", requireAdmin, async (req, res, next) => {
@@ -148,12 +165,39 @@ router.get("/admin/ai/channels/:login", requireAdmin, async (req, res, next) => 
       channel,
       config,
       validation: aiValidation,
+      tones: aiTones,
+      toneState: aiTones.readTones(config.ai),
       saved: req.query.saved === "1",
     });
   } catch (err) {
     next(err);
   }
 });
+
+// Turning a tone on, from the radio on the channel's page (public/js/ai-tones.js). Only a stored
+// tone can be chosen here; one just added in the browser goes on with the form's own save.
+router.post(
+  "/admin/ai/channels/:login/tone",
+  settingsWriteLimiter,
+  requireAdmin,
+  verifyToken,
+  async (req, res, next) => {
+    try {
+      const channel = await channelsRepo.findByLogin(req.params.login);
+      if (!channel) return res.status(404).json({ ok: false, error: "channel" });
+
+      const { ai: existing } = await channelConfigRepo.getConfig(req.params.login);
+      const chosen = aiTones.chooseTone(existing, String(req.body.toneId ?? ""));
+      if (!chosen) return res.status(404).json({ ok: false, error: "tone" });
+
+      await channelConfigRepo.saveTone(req.params.login, chosen, req.user.userId);
+      await logAiChanges(req, aiTones.diffTones(existing, chosen));
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 router.post(
   "/admin/ai/channels/:login",
@@ -174,31 +218,20 @@ router.post(
       const parsed = parseSubmittedConfig(req.body, existing);
       await channelConfigRepo.saveConfig(req.params.login, parsed, req.user.userId);
 
-      const ai = aiValidation.parseChannelAi(req.body);
+      const ai = aiValidation.parseChannelAi(req.body, existing.ai);
       await channelConfigRepo.saveAiConfig(req.params.login, ai, req.user.userId);
 
       // Both halves land in the channel's own change log rather than only in the admin log: the
       // owner cannot edit these any more, but they can still see that they changed and when.
       const changes = diffConfig(existing, parsed);
-      for (const field of ["enabled", "tone", "cheatsheet"]) {
+      for (const field of ["enabled", "cheatsheet"]) {
         const before = existing.ai ? existing.ai[field] : null;
         if (before !== ai[field]) {
           changes.push({ field: `ai.${field}`, before: before ?? null, after: ai[field] });
         }
       }
-      await Promise.all(
-        changes.map((c) =>
-          settingsChangeLogRepo.logChange({
-            channelLogin: req.params.login,
-            user: req.user,
-            category: "settings",
-            action: "update",
-            target: c.field,
-            before: c.before,
-            after: c.after,
-          })
-        )
-      );
+      changes.push(...aiTones.diffTones(existing.ai, ai));
+      await logAiChanges(req, changes);
 
       res.redirect(`/admin/ai/channels/${req.params.login}?saved=1`);
     } catch (err) {

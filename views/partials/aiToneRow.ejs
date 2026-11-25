@@ -1,0 +1,20 @@
+<%# One tone card. row: { id, name, text, active }; a card with no id yet is the blank one. %>
+<div class="rounded-md border border-neutral-800 bg-neutral-900/60 has-[:checked]:border-purple-600" data-tone>
+  <input type="hidden" name="aiToneId" value="<%= row.id %>" data-tone-id />
+  <div class="flex items-center gap-2 px-3 py-2">
+    <input type="radio" name="aiToneActive" value="<%= row.id %>" <%= row.active ? 'checked' : '' %> autocomplete="off"
+           class="tone-radio shrink-0 accent-purple-500" aria-label="<%= t('admin.ai.toneTurnOn') %>" title="<%= t('admin.ai.toneTurnOn') %>" />
+    <input type="text" name="aiToneName" value="<%= row.name %>" maxlength="<%= tones.MAX_TONE_NAME_LEN %>"
+           placeholder="<%= t('admin.ai.toneNamePlaceholder') %>" aria-label="<%= t('admin.ai.toneNamePlaceholder') %>"
+           class="flex-1 min-w-0 rounded-md bg-transparent border border-transparent hover:border-neutral-800 px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-purple-500" />
+    <button type="button" hidden data-tone-toggle class="shrink-0 text-xs text-neutral-500 hover:text-neutral-300"
+            data-show="<%= t('admin.ai.toneShow') %>" data-hide="<%= t('admin.ai.toneHide') %>"><%= t('admin.ai.toneHide') %></button>
+    <button type="button" hidden data-tone-delete class="shrink-0 text-xs text-red-400 hover:text-red-300"
+            data-confirm-text="<%= t('admin.ai.toneDeleteConfirm') %>"><%= t('admin.ai.toneDelete') %></button>
+  </div>
+  <div class="px-3 pb-3" data-tone-body>
+    <textarea name="aiToneText" rows="5" maxlength="<%= tones.MAX_TONE_LEN %>"
+              aria-label="<%= t('admin.ai.tone') %>"
+              class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= row.text %></textarea>
+  </div>
+</div>

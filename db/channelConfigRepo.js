@@ -82,6 +82,8 @@ async function saveAiConfig(channelLogin, ai, updatedBy) {
       $set: {
         "ai.enabled": Boolean(ai.enabled),
         "ai.tone": String(ai.tone ?? ""),
+        "ai.tones": ai.tones,
+        "ai.toneId": ai.toneId,
         "ai.cheatsheet": String(ai.cheatsheet ?? ""),
         "ai.banRequesters": Array.isArray(ai.banRequesters) ? ai.banRequesters : [],
         updatedAt: new Date(),
@@ -94,4 +96,26 @@ async function saveAiConfig(channelLogin, ai, updatedBy) {
   return getConfig(login);
 }
 
-module.exports = { getConfig, saveConfig, saveAiConfig };
+// Which tone is on, alone: the switch on the admin page does not carry the rest of the form. All
+// three fields go together because ai.tone - the one the bot reads - is derived from the other two
+// (lib/aiTones.js).
+async function saveTone(channelLogin, { tone, tones, toneId }, updatedBy) {
+  const col = await ensureInitialized();
+  const login = channelLogin.toLowerCase();
+  await col.updateOne(
+    { channelLogin: login },
+    {
+      $set: {
+        "ai.tone": tone,
+        "ai.tones": tones,
+        "ai.toneId": toneId,
+        updatedAt: new Date(),
+        updatedBy: String(updatedBy),
+      },
+      $setOnInsert: { channelLogin: login },
+    },
+    { upsert: true }
+  );
+}
+
+module.exports = { getConfig, saveConfig, saveAiConfig, saveTone };

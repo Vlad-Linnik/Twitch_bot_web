@@ -43,11 +43,36 @@
           <p class="text-neutral-600 text-xs mt-2"><%= t('admin.ai.banRequestersMax') %>: <%= validation.MAX_BAN_REQUESTERS %></p>
         </div>
 
-        <div class="px-4 py-3">
-          <label class="block text-sm text-neutral-300 mb-1"><%= t('admin.ai.tone') %></label>
-          <p class="text-neutral-600 text-xs mb-2"><%= t('admin.ai.toneHint') %></p>
-          <textarea name="aiTone" rows="3" maxlength="<%= validation.MAX_TONE_LEN %>"
-                    class="w-full rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500"><%= config.ai ? config.ai.tone : '' %></textarea>
+        <%# The channel's tones. A saved one is switched on at once by its radio; everything else
+            here is part of the form. aiTones marks that the list was on the page at all. %>
+        <div class="px-4 py-3" data-tones data-max="<%= tones.MAX_TONES %>"
+             data-switch-url="/admin/ai/channels/<%= channel.channelLogin %>/tone"
+             data-text-switching="<%= t('admin.ai.toneSwitching') %>"
+             data-text-switched="<%= t('admin.ai.toneSwitched') %>"
+             data-text-failed="<%= t('admin.ai.toneSwitchFailed') %>"
+             data-text-unsaved="<%= t('admin.ai.toneUnsaved') %>"
+             data-text-deleted="<%= t('admin.ai.toneDeleted') %>">
+          <input type="hidden" name="aiTones" value="1" />
+          <p class="text-sm text-neutral-300 mb-1"><%= t('admin.ai.tone') %></p>
+          <p class="text-neutral-600 text-xs mb-3"><%= t('admin.ai.toneHint') %></p>
+
+          <label class="flex items-center gap-2 px-3 py-2 mb-2 rounded-md border border-neutral-800 text-sm text-neutral-400 has-[:checked]:border-purple-600">
+            <input type="radio" name="aiToneActive" value="" <%= toneState.toneId ? '' : 'checked' %> autocomplete="off" class="tone-radio shrink-0 accent-purple-500" />
+            <%= t('admin.ai.toneNone') %>
+          </label>
+          <div class="space-y-2" data-tone-list>
+            <% toneState.tones.forEach(function (tone) { %>
+              <%- include('partials/aiToneRow', { row: { id: tone.id, name: tone.name, text: tone.text, active: tone.id === toneState.toneId }, tones: tones }) %>
+            <% }); %>
+            <noscript>
+              <%- include('partials/aiToneRow', { row: { id: 'new-0', name: '', text: '', active: false }, tones: tones }) %>
+            </noscript>
+          </div>
+          <template data-tone-template><%- include('partials/aiToneRow', { row: { id: '', name: '', text: '', active: false }, tones: tones }) %></template>
+          <div class="mt-3" hidden>
+            <button type="button" data-tone-add class="px-3 py-1.5 rounded-md border border-neutral-700 hover:border-neutral-500 text-neutral-300 text-sm transition-colors">+ <%= t('admin.ai.toneAdd') %></button>
+          </div>
+          <p class="mt-2 text-xs text-neutral-500 min-h-4" data-tone-status role="status"></p>
         </div>
 
         <div class="px-4 py-3">
@@ -102,4 +127,5 @@
   </form>
 </main>
 
+<script src="<%= asset('/js/ai-tones.js') %>" defer></script>
 <%- include('partials/foot') %>
