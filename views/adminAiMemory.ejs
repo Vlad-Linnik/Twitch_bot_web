@@ -27,7 +27,7 @@
   <div class="flex flex-wrap items-end gap-3 mb-6">
     <form method="get" action="/admin/ai/memory">
       <label class="block text-xs text-neutral-500 mb-1"><%= t('admin.ai.colChannel') %></label>
-      <select name="channel" autocomplete="off" onchange="this.form.submit()"
+      <select name="channel" autocomplete="off" data-auto-submit
               class="rounded-md bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-purple-500">
         <% channels.forEach(function (c) { %>
           <option value="<%= c.channelLogin %>" <%= selected === c.channelLogin ? 'selected' : '' %>><%= c.channelLogin %></option>
