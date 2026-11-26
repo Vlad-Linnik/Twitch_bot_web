@@ -58,7 +58,7 @@
   // A button's icon: the pictures the server resolved for this slot (the channel's theme, or an
   // Easter egg of the clip playing now - state.icons, lib/donationMediaIcons.js), else the emoji.
   const DEFAULT_EMOJI = {
-    resume: "▶", pause: "⏸", skip: "⏭", restart: "↺", radio: "📻", moreArtist: "👤",
+    resume: "▶", pause: "⏸", skip: "⏭", restart: "↺", like: "👍", dislike: "👎", radio: "📻", moreArtist: "👤",
     hide: "🙈", blur: "🌫", image: "🖼", autoPlaylist: "🎶", infinite: "♾",
   };
   function icon(slot) {
@@ -454,22 +454,33 @@
     }
   }
 
-  // One click to keep a clip: the clip playing, a queued one or one from the history goes into the
-  // channel's own playlist. A clip already there shows as kept instead.
-  function playlistButton(item, { wide = false } = {}) {
-    if (!canControl || !item || item.platform === "playlist") return null;
-    const kept = (state.playlist || []).some((p) => p.videoId === item.videoId);
-    if (kept) {
-      return el("button", { class: "dm-btn is-small is-kept", type: "button", disabled: true, text: wide ? `★ ${t("inPlaylist")}` : "★", title: t("inPlaylist"), "aria-label": t("inPlaylist") });
-    }
-    return el("button", {
-      class: "dm-btn is-small",
-      type: "button",
-      text: wide ? `☆ ${t("toPlaylist")}` : "☆",
-      title: t("toPlaylistHint"),
-      "aria-label": t("toPlaylistHint"),
-      onclick: () => command("playlistAdd", { url: item.videoId }),
-    });
+  // Like / don't like, both toggles. Liked = in the liked tracks (the playlist); disliked = never
+  // offered again by the background music. `big`: the pair beside the title of the clip playing.
+  function rateButtons(item, { big = false } = {}) {
+    if (!canControl || !item || !item.videoId) return [];
+    const liked = (state.playlist || []).some((p) => p.videoId === item.videoId);
+    const disliked = (state.disliked || []).includes(item.videoId);
+    const button = (kind, on) => {
+      const hint = on ? t(`${kind}dHint`) : t(`${kind}Hint`);
+      return el(
+        "button",
+        {
+          class: `dm-btn dm-rate is-${kind}` + (big ? " is-big" : " is-small") + (on ? " is-active" : ""),
+          type: "button",
+          title: hint,
+          "aria-label": hint,
+          "aria-pressed": on ? "true" : "false",
+          onclick: () => command(kind, { url: item.videoId }, (result) => {
+            if (result && result.ok === false && result.reason === "full") {
+              playlistMsg.textContent = t("playlistFull");
+              playlistDetails.open = true;
+            }
+          }),
+        },
+        icon(kind)
+      );
+    };
+    return [button("like", liked), button("dislike", disliked)];
   }
 
   // Sent on release only: every value would come back as a state update and redraw the card,
@@ -614,7 +625,14 @@
       el("span", { id: "dm-time-total", text: "—" })
     );
 
-    const card = el("div", { class: "dm-now" }, el("div", { class: "dm-now-top" }, thumb(item), info), bar, times);
+    const rate = rateButtons(item, { big: true });
+    const card = el(
+      "div",
+      { class: "dm-now" },
+      el("div", { class: "dm-now-top" }, thumb(item), info, rate.length ? el("div", { class: "dm-rate-pair" }, ...rate) : null),
+      bar,
+      times
+    );
     if (canControl) {
       const actions = el("div", { class: "dm-now-actions" });
       card.appendChild(el("div", { class: "dm-now-bottom" }, actions, musicModes()));
@@ -626,8 +644,7 @@
             ? el("button", { class: "dm-btn is-primary", type: "button", onclick: () => command("resume") }, ...iconText("resume", t("resume")))
             : el("button", { class: "dm-btn is-primary", type: "button", onclick: () => command("pause") }, ...iconText("pause", t("pause"))),
           el("button", { class: "dm-btn is-danger", type: "button", onclick: () => command("skip") }, ...iconText("skip", t("skip"))),
-          el("button", { class: "dm-btn", type: "button", onclick: () => command("seek", { time: 0 }) }, ...iconText("restart", t("restart"))),
-          playlistButton(item, { wide: true })
+          el("button", { class: "dm-btn", type: "button", onclick: () => command("seek", { time: 0 }) }, ...iconText("restart", t("restart")))
         )
       );
       actions.appendChild(el("div", { class: "dm-controls" }, ...trackButtons(item.videoId, { wide: true })));
@@ -708,8 +725,7 @@
         if (index > 0) {
           actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: "⤒", title: t("moveTop"), "aria-label": t("moveTop"), onclick: () => command("moveTop", { id: item.id }) }));
         }
-        const keep = playlistButton(item);
-        if (keep) actions.appendChild(keep);
+        for (const b of rateButtons(item)) actions.appendChild(b);
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("remove", { id: item.id }) }));
       }
       const grip = canControl && state.queue.length > 1 ? makeGrip(queueList, item.id, index) : null;
@@ -931,8 +947,7 @@
       const actions = el("div", { class: "dm-row-actions" });
       if (canControl) {
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: "▶", title: t("upNextPlay"), "aria-label": t("upNextPlay"), onclick: () => command("upNextPlay", { id: entry.id }) }));
-        const keep = playlistButton(item);
-        if (keep) actions.appendChild(keep);
+        for (const b of rateButtons(item)) actions.appendChild(b);
         for (const b of trackButtons(entry.videoId)) actions.appendChild(b);
         actions.appendChild(el("button", { class: "dm-btn is-small is-danger", type: "button", text: "✕", title: t("remove"), "aria-label": t("remove"), onclick: () => command("upNextRemove", { id: entry.id }) }));
       }
@@ -966,8 +981,7 @@
       if (canControl) {
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: `↻ ${t("requeue")}`, title: t("requeueHint"), onclick: () => command("replay", { id: item.id }) }));
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: t("playNext"), title: t("playNextHint"), onclick: () => command("replay", { id: item.id, next: true }) }));
-        const keep = playlistButton(item);
-        if (keep) actions.appendChild(keep);
+        for (const b of rateButtons(item)) actions.appendChild(b);
         for (const b of trackButtons(item.videoId)) actions.appendChild(b);
       }
       historyBox.appendChild(row(item, { actions, extra }));

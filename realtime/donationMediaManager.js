@@ -1014,6 +1014,32 @@ async function runPanelCommand(session, principal, msg, reply) {
       }
       return;
     }
+    // A toggle: liked = in the playlist (the liked tracks), a second press takes it out.
+    case "like": {
+      const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
+      if (!videoId) return reply({ ok: false, reason: "bad" });
+      if (q.unlike(videoId)) return reply({ ok: true, liked: false });
+      const entry = q.like(videoId);
+      reply(entry ? { ok: true, liked: true } : { ok: false, reason: "full" });
+      if (entry) {
+        session.trackInfo(videoId).then((track) => {
+          if (track.title) q.setPlaylistTitle(entry.id, track.title);
+          q.setPlaylistInfo(videoId, { author: track.author });
+          session.music.noted(track, "liked");
+        }).catch(() => {});
+      }
+      return;
+    }
+    // A toggle as well. The name is read before the track leaves the playlist and the feed.
+    case "dislike": {
+      const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
+      if (!videoId) return reply({ ok: false, reason: "bad" });
+      if (q.undislike(videoId)) return reply({ ok: true, disliked: false });
+      const track = await session.trackInfo(videoId).catch(() => ({ videoId, title: "", author: "" }));
+      if (!q.dislike(videoId, track.title, principal.by)) return reply({ ok: false, reason: "duplicate" });
+      session.music.noted(track, "disliked");
+      return reply({ ok: true, disliked: true, title: track.title });
+    }
     case "radioStart": {
       const videoId = extractVideoId(typeof msg.url === "string" ? msg.url.slice(0, 300) : "");
       if (!videoId) return reply({ ok: false, reason: "bad" });
