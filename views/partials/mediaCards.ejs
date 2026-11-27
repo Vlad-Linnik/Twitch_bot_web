@@ -63,28 +63,41 @@
           <%- include('ratingTrio', { card }) %>
         </div>
       </div>
-
-      <%# Under the poster: what is not a score - hours on stream (games), the comment count. %>
-      <% if ((card.extras && card.extras.minutes) || card.commentCount) { %>
-      <p class="mt-2 px-0.5 flex items-center gap-2 text-[11px] tabular-nums">
-        <% if (card.extras && card.extras.minutes) { %>
-          <span class="inline-flex items-center gap-1 text-(--sec-accent-soft)" title="<%= st('onStream') %>">
-            <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 4v3.69l2.53 2.53-1.06 1.06-2.97-2.97V6h1.5z"/></svg>
-            <%= card.extras.minutes >= 60 ? st('hoursShort', { n: Math.round(card.extras.minutes / 60) }) : st('minutesShort', { n: card.extras.minutes }) %>
-          </span>
-        <% } %>
-        <% if (card.commentCount) { %>
-          <span class="ml-auto inline-flex items-center gap-1 text-stone-500" title="<%= t('comments.heading') %>">
-            <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 5a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H9l-4 4v-4H5a3 3 0 01-3-3z"/></svg>
-            <%= card.commentCount %>
-          </span>
-        <% } %>
-      </p>
-      <% } %>
-      <% if (card.excerpt) { %>
-        <p class="mt-1 px-0.5 text-[11px] italic text-stone-400 line-clamp-2">«<%= card.excerpt %>»</p>
-      <% } %>
     </a>
+
+    <%# Under the poster, outside the link (a control inside an <a> is invalid): the viewer's own
+        star, hours on stream (games), the comments. The star is a link to the card's own picker
+        (#rating), which is what it stays without JS; public/js/media-quick-rate.js opens the grid's
+        one shared ten-star panel over it instead. %>
+    <% const cardHref = '/' + channel.channelLogin + '/' + section + '/' + card.id; %>
+    <div class="mt-2 px-0.5 flex items-center gap-2 text-xs tabular-nums">
+      <% if (card.rate) { %>
+        <% const mine = card.rate.mine; %>
+        <a href="<%= card.rate.can ? cardHref + '#rating' : '/auth/login?returnTo=' + encodeURIComponent(cardHref + '#rating') %>"
+           <% if (card.rate.can) { %>data-quick-rate="<%= cardHref %>/rate" data-current="<%= mine || '' %>" aria-haspopup="dialog"<% } %>
+           title="<%= card.rate.can ? (mine ? st(card.rate.asStreamer ? 'quickRateMineStreamer' : 'quickRateMine', { n: mine }) : st('quickRate')) : st('loginToRate') %>"
+           class="group/rate inline-flex items-center gap-1.5 h-8 pl-2 pr-2.5 rounded-full font-bold ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-(--sec-accent)
+                  <%= mine ? 'bg-(--sec-accent)/15 ring-(--sec-accent)/50 text-white hover:bg-(--sec-accent)/25' : 'bg-white/5 ring-white/10 text-stone-400 hover:ring-(--sec-accent)/60 hover:text-(--sec-accent-soft)' %>">
+          <svg data-quick-star class="w-5 h-5 shrink-0 transition-colors <%= mine ? 'text-(--sec-accent)' : 'text-stone-500 group-hover/rate:text-(--sec-accent-soft)' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z"/></svg>
+          <span data-quick-readout data-empty="<%= st('quickRate') %>"><%= mine || st('quickRate') %></span>
+        </a>
+      <% } %>
+      <% if (card.extras && card.extras.minutes) { %>
+        <span class="inline-flex items-center gap-1 text-(--sec-accent-soft) text-[11px]" title="<%= st('onStream') %>">
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 4v3.69l2.53 2.53-1.06 1.06-2.97-2.97V6h1.5z"/></svg>
+          <%= card.extras.minutes >= 60 ? st('hoursShort', { n: Math.round(card.extras.minutes / 60) }) : st('minutesShort', { n: card.extras.minutes }) %>
+        </span>
+      <% } %>
+      <a href="<%= cardHref %>#comments" title="<%= t('comments.heading') %>"
+         class="ml-auto inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full font-bold ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-sky-400
+                <%= card.commentCount ? 'bg-sky-500/15 ring-sky-400/40 text-sky-200 hover:bg-sky-500/25' : 'bg-white/5 ring-white/10 text-stone-400 hover:ring-sky-400/50 hover:text-sky-200' %>">
+        <svg class="w-4 h-4 shrink-0 <%= card.commentCount ? 'text-sky-400' : '' %>" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 5a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H9l-4 4v-4H5a3 3 0 01-3-3z"/></svg>
+        <span class="sr-only"><%= t('comments.heading') %>:</span><%= card.commentCount %>
+      </a>
+    </div>
+    <% if (card.excerpt) { %>
+      <a href="<%= cardHref %>" tabindex="-1" class="block mt-1 px-0.5 text-[11px] italic text-stone-400 line-clamp-2 hover:text-stone-300">«<%= card.excerpt %>»</a>
+    <% } %>
     <% if (card.votable) { %>
       <div class="mt-2 px-0.5">
         <%- include('suggestionVote', { card, channel, section, csrf, user, size: 'sm' }) %>

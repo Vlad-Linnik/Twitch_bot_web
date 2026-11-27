@@ -20,7 +20,7 @@
 <p class="mt-1.5 flex items-center gap-1 text-xs font-bold tabular-nums text-white">
   <% parts.forEach(function(p, i) { %>
     <% if (i > 0) { %><span class="text-stone-500 font-normal" aria-hidden="true">/</span><% } %>
-    <span class="inline-flex items-center gap-1<%= p.value === null ? ' text-stone-500' : '' %>"
+    <span data-trio="<%= p.key %>" class="inline-flex items-center gap-1<%= p.value === null ? ' text-stone-500' : '' %>"
           title="<%= p.value === null ? st('ratingTipNone', { label: p.label }) : st('ratingTip', { label: p.label, value: p.value }) %>">
       <span class="sr-only"><%= p.label %>:</span>
       <% if (p.key === 'streamer') { %>
@@ -34,7 +34,7 @@
       <% } else { %>
         <span class="px-1 text-[9px] leading-[1.4] rounded-sm bg-[#f5c518] text-black font-black" aria-hidden="true">IMDb</span>
       <% } %>
-      <%= p.value === null ? '—' : p.value %>
+      <span data-trio-value><%= p.value === null ? '—' : p.value %></span>
     </span>
   <% }) %>
 </p>

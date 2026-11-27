@@ -31,6 +31,15 @@ async function getUserRating(itemId, userId) {
   return col.findOne({ itemId: oid, userId: String(userId) });
 }
 
+// One person's ratings of many cards at once (a grid portion): Map<itemId string, value>.
+async function getUserRatings(itemIds, userId) {
+  const oids = itemIds.map((id) => toOid(String(id))).filter(Boolean);
+  if (!oids.length || !userId) return new Map();
+  const col = await ensureInitialized();
+  const rows = await col.find({ itemId: { $in: oids }, userId: String(userId) }, { projection: { itemId: 1, value: 1 } }).toArray();
+  return new Map(rows.map((r) => [String(r.itemId), r.value]));
+}
+
 // Writes the rating and returns the previous one (or null), which the caller needs to move the
 // card's cache by the exact difference.
 async function setRating(itemId, userId, value, counted) {
@@ -73,4 +82,4 @@ async function markCounts(itemIds) {
   return new Map(rows.map((r) => [r._id, r.n]));
 }
 
-module.exports = { getUserRating, setRating, removeRating, deleteAllFor, markCounts };
+module.exports = { getUserRating, getUserRatings, setRating, removeRating, deleteAllFor, markCounts };

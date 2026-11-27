@@ -9,7 +9,7 @@
 //         arrows / Home / End move and preview, Enter or Space rates;
 //       * re-clicking your own score takes it back;
 //       * the post goes by fetch and the average, the count, the stars and the note are patched in
-//         place.
+//         place, with public/js/star-burst.js's animation.
 //   - "← all films": when this page was opened from the grid, the link goes BACK in history rather
 //     than to a fresh grid, so the visitor lands where they were - same scroll, same filters, same
 //     cards loaded on scroll (bfcache, or public/js/infinite-list.js's restore on a back_forward
@@ -162,6 +162,13 @@
       current = clearing ? 0 : data.value;
       sync();
       submitter.focus();
+      // public/js/star-burst.js: the lit stars twirl in turn, the plate's star spins and sprays.
+      if (clearing) {
+        if (window.starBurst) window.starBurst(myStar, { clear: true });
+      } else {
+        if (window.starCascade) window.starCascade(stars.slice(0, current).map((s) => s.querySelector("svg")));
+        if (window.starBurst) window.starBurst(myStar);
+      }
       // The streamer's own stars set the streamer's plate.
       if (streamerEl && "streamer" in data) {
         const has = Boolean(data.streamer);
@@ -185,7 +192,7 @@
       if (note) note.textContent = clearing ? note.dataset.noteCleared : data.counted ? note.dataset.noteCounted : note.dataset.noteNotCounted;
       // A score that counts needs no reading: the plate already shows it, so the picker closes.
       // One that does not count, or a cleared one, stays open on its note.
-      if (popover && !clearing && data.counted) setTimeout(() => { popover.open = false; }, 700);
+      if (popover && !clearing && data.counted) setTimeout(() => { popover.open = false; }, 900);
     } catch {
       paint(current);
       if (note) note.textContent = note.dataset.noteError;

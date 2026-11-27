@@ -284,8 +284,9 @@ function createMediaSectionRouter(cfg) {
     return { rows: filtered, genres: genresOf(rows) };
   }
 
-  function shapeCard(item, viewer = {}, myVotes = new Map()) {
+  function shapeCard(item, viewer = {}, myVotes = new Map(), rating = null) {
     const poster = posterFor(item, viewer);
+    const ratable = suggestions.isRatable(item);
     return {
       id: String(item._id),
       title: item.title,
@@ -309,7 +310,21 @@ function createMediaSectionRouter(cfg) {
       votable: suggestions.isVotable(item),
       score: item.votes?.score || 0,
       myVote: myVotes.get(String(item._id)) || 0,
+      // The grid's own star (partials/mediaCards.ejs): rated from the tile, without opening the
+      // card. The owner's stars are the streamer's score, as on the card's page.
+      rate: rating && ratable
+        ? { can: rating.can, asStreamer: rating.asStreamer, mine: rating.asStreamer ? item.ratings?.streamer ?? null : rating.mine.get(String(item._id)) ?? null }
+        : null,
     };
+  }
+
+  // What the grid's stars need for one portion: whether this person may rate (the same rule as the
+  // card's page), whether their stars are the streamer's, and their own marks - one query.
+  async function ratingFor(items, req) {
+    const asStreamer = isChannelOwner(req);
+    const can = Boolean(req.user) && (asStreamer || req.permission !== 1);
+    const mine = can && !asStreamer ? await mediaRatingsRepo.getUserRatings(items.filter(suggestions.isRatable).map((i) => i._id), req.user.userId) : new Map();
+    return { can, asStreamer, mine };
   }
 
   // The viewer's own votes on the cards of a portion - one query, only where voting is possible.
@@ -361,14 +376,15 @@ function createMediaSectionRouter(cfg) {
         view.tab === "suggestions" ? suggestAccess(req) : Promise.resolve(null),
       ]);
       const { items, nextCursor } = cursorPaging.pageSorted(spec, rows, parsed.cursor, ITEMS_PER_PORTION);
-      const myVotes = await myVotesFor(items, req);
+      const [myVotes, rating] = await Promise.all([myVotesFor(items, req), ratingFor(items, req)]);
       const viewer = viewerOf(req);
 
       res.render("mediaGrid", {
         channel,
         broadcaster,
         channelNav: buildChannelNav(channel, { permission, active: SECTION }),
-        cards: items.map((item) => shapeCard(item, viewer, myVotes)),
+        cards: items.map((item) => shapeCard(item, viewer, myVotes, rating)),
+        rateAsStreamer: rating.asStreamer,
         view,
         sorts: sortsFor(view.tab),
         tabs: visibleTabs(permission).map((key) => ({
@@ -451,9 +467,9 @@ function createMediaSectionRouter(cfg) {
         portion = cursorPaging.pageSorted(spec, rows, parsed.cursor, ITEMS_PER_PORTION);
       }
 
-      const myVotes = await myVotesFor(portion.items, req);
+      const [myVotes, rating] = await Promise.all([myVotesFor(portion.items, req), ratingFor(portion.items, req)]);
       const viewer = viewerOf(req);
-      const cards = portion.items.map((item) => shapeCard(item, viewer, myVotes));
+      const cards = portion.items.map((item) => shapeCard(item, viewer, myVotes, rating));
       const csrf = req.user ? res.locals.csrfToken || "" : "";
       res.render("partials/mediaCards", { cards, channel, section: SECTION, csrf }, (err, html) => {
         if (err) return next(err);

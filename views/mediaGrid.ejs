@@ -168,10 +168,38 @@
   <% } %>
 
   <%- include('partials/mediaAttribution', { which: sec.attribution }) %>
+
+  <% if (user && csrf) { %>
+    <%# The grid's one ten-star panel, moved under whichever tile's star opened it
+        (public/js/media-quick-rate.js). Inside <main>: the section's colours are set there. The same
+        picker as the card page's, posting to the same /rate route; the star of the score already
+        given takes it back. %>
+    <div data-quick-panel hidden role="dialog" aria-label="<%= st(rateAsStreamer ? 'yourRatingStreamer' : 'yourRating') %>"
+         data-csrf="<%= csrf %>"
+         data-label-pick="<%= st('starPick', { n: '{{n}}' }) %>" data-label-clear="<%= st('starClear', { n: '{{n}}' }) %>"
+         data-title-mine="<%= st(rateAsStreamer ? 'quickRateMineStreamer' : 'quickRateMine', { n: '{{n}}' }) %>" data-title-empty="<%= st('quickRate') %>"
+         data-note-counted="<%= st(rateAsStreamer ? 'rateStreamerSaved' : 'rateCounted') %>" data-note-not-counted="<%= st('rateNotCounted') %>"
+         data-note-cleared="<%= st(rateAsStreamer ? 'rateStreamerCleared' : 'rateCleared') %>" data-note-error="<%= st('rateError') %>"
+         data-as-streamer="<%= rateAsStreamer ? '1' : '' %>"
+         class="fixed z-50 w-max max-w-[calc(100vw-1rem)] rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-(--sec-accent)/30 shadow-2xl shadow-black/70 p-2.5">
+      <p class="px-1 pb-1.5 text-[11px] text-stone-400"><%= st(rateAsStreamer ? 'yourRatingStreamer' : 'yourRating') %></p>
+      <div role="radiogroup" aria-label="<%= st('starsLabel') %>" class="flex" data-quick-stars>
+        <% for (let n = 1; n <= 10; n++) { %>
+          <button type="button" data-star="<%= n %>" role="radio" aria-checked="false" data-lit="0"
+                  class="p-0.5 rounded text-stone-700 data-[lit=1]:text-(--sec-accent) transition-colors focus-visible:outline-2 focus-visible:outline-(--sec-accent)">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7 pointer-events-none" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6L10 15l-5.4 3 1.2-6L1.3 7.8l6.1-.7z"/></svg>
+          </button>
+        <% } %>
+      </div>
+      <p data-quick-note class="mt-1.5 px-1 w-0 min-w-full text-xs leading-snug text-stone-400" hidden></p>
+    </div>
+  <% } %>
 </main>
 
 <script src="<%= asset('/js/infinite-list.js') %>" defer></script>
 <script src="<%= asset('/js/media-grid.js') %>" defer></script>
 <script src="<%= asset('/js/suggestion-vote.js') %>" defer></script>
+<script src="<%= asset('/js/star-burst.js') %>" defer></script>
+<script src="<%= asset('/js/media-quick-rate.js') %>" defer></script>
 
 <%- include('partials/foot') %>
