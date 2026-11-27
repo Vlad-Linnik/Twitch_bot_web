@@ -138,10 +138,18 @@
             <% } %>
           </div>
         <% } %>
-        <% if (item.status === 'rejected' && item.rejectReason) { %>
-          <p class="mt-3 max-w-xl rounded-lg bg-black/30 ring-1 ring-white/10 px-3 py-2 text-sm text-stone-300">
-            <span class="text-stone-500"><%= st('suggest.rejectedBecause') %></span> <%= item.rejectReason %>
-          </p>
+        <% if (item.status === 'rejected' && (item.rejectReason || item.rejectedBy)) { %>
+          <div class="mt-3 max-w-xl rounded-lg bg-black/30 ring-1 ring-white/10 px-3 py-2 text-sm text-stone-300">
+            <% if (item.rejectReason) { %>
+              <p><span class="text-stone-500"><%= st('suggest.rejectedBecause') %></span> <%= item.rejectReason %></p>
+            <% } %>
+            <% if (item.rejectedBy) { %>
+              <p class="<%= item.rejectReason ? 'mt-1 ' : '' %>text-xs text-stone-400">
+                <%= st('suggest.rejectedBy') %> <span class="font-semibold text-stone-200"><%= item.rejectedBy %></span>
+                <% if (item.decidedAt) { %><span class="text-stone-600">· <%= new Date(item.decidedAt).toLocaleDateString(dateLocale) %></span><% } %>
+              </p>
+            <% } %>
+          </div>
         <% } %>
         <% if (item.votable) { %>
           <div class="mt-4">

@@ -711,6 +711,8 @@ function createMediaSectionRouter(cfg) {
         progress: value.progress,
       };
       if (value.status === "done" && item.status !== "done") set.doneAt = new Date();
+      // Out of `rejected` by an edit is the same as a reopen: the reason no longer describes the card.
+      if (item.status === "rejected" && value.status !== "rejected") set.rejectReason = null;
       if (poster) set.poster = poster;
       else if (keptCrop !== undefined) set["poster.crop"] = keptCrop;
       // The section's own fields and ids (an IMDb or Steam id); the config also clears
@@ -986,13 +988,15 @@ function createMediaSectionRouter(cfg) {
       if (!item || !canSeeCard(item, viewer)) return res.status(404).render("errors/404");
 
       const ownerHere = isChannelOwner(req);
-      const [broadcaster, thread, myRating, editor, myVote, viewerMarks] = await Promise.all([
+      const [broadcaster, thread, myRating, editor, myVote, viewerMarks, rejecter] = await Promise.all([
         profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
         discussion.threadPageLocals(req, res, channel, item),
         req.user ? mediaRatingsRepo.getUserRating(item._id, req.user.userId) : Promise.resolve(null),
         req.user ? canEdit(req) : Promise.resolve(false),
         req.user && suggestions.isVotable(item) ? mediaSuggestionVotesRepo.getUserVote(item._id, req.user.userId) : Promise.resolve(null),
         item.ratings?.viewers?.count ? mediaRatingsRepo.markCounts(item._id) : Promise.resolve(new Map()),
+        // Who rejected it: `decidedBy` keeps only the user id, the name comes from the profile cache.
+        item.status === "rejected" && item.decidedBy ? profileCacheRepo.getOrFetchProfile(item.decidedBy).catch(() => null) : Promise.resolve(null),
       ]);
       const poster = posterFor(item, viewer);
       const [[decorated], info] = await Promise.all([
@@ -1020,6 +1024,7 @@ function createMediaSectionRouter(cfg) {
           externalRating: externalRatingOf(item),
           info,
           extras: cfg.cardExtras ? cfg.cardExtras(decorated) : null,
+          rejectedBy: rejecter ? rejecter.displayName || rejecter.login || null : null,
         },
         // The channel's owner rates with the same stars, but what they set is the streamer's score -
         // whatever their level on the site (an owner who is also a site admin is level 0, not 1,

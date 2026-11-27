@@ -1912,7 +1912,9 @@
       "status": "Status",
       "statusOption": {
         "done": "Watched",
-        "accepted": "Planned"
+        "accepted": "Planned",
+        "suggested": "No status (suggestion)",
+        "rejected": "Rejected"
       },
       "imdbId": "IMDb (tt… or a link)",
       "progress": "How much was watched",
@@ -2008,7 +2010,8 @@
       "coverHint": "Your own cover only if the search doesn't have the film. JPEG, PNG or WebP up to 5 MB; everyone sees it after a moderator approves it.",
       "submit": "Suggest",
       "by": "Suggested by",
-      "rejectedBecause": "Rejected:"
+      "rejectedBecause": "Rejected:",
+      "rejectedBy": "Rejected by"
     },
     "vote": {
       "promote": "Promote - I want this watched",
