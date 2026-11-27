@@ -73,6 +73,7 @@ const PANEL_STRING_KEYS = [
   "playlistFull", "playlistStalled", "playlistBadge", "playlistNowPlaying", "like", "likeHint", "liked", "likedHint", "dislike", "dislikeHint", "disliked", "dislikedHint",
   "upNext", "upNextHint", "upNextEmpty", "upNextClear", "upNextPlay", "upNextBadge", "radio", "radioHint", "radioOn", "radioStop", "radioNothing", "moreArtist", "moreArtistHint", "moreArtistNothing", "aiPlaceholder", "aiSubmit", "aiNoKey", "aiFailed", "aiNothing", "added", "searching", "source.graph", "source.playlist", "source.mix", "source.lastfm", "source.author", "source.ai",
   "status.skipped", "status.removed", "status.error",
+  "failure.blocked", "failure.uaLaw", "failure.uaLawLink", "failure.only", "failure.blockedCount", "failure.removed", "failure.embed", "failure.badId", "failure.html5", "failure.code",
   "log.title", "log.empty", "log.everyone", "log.more", "log.via.chat", "log.via.dock", "log.on", "log.off", "log.place", "log.tracks",
   ...ACTION_LOG_ACTIONS.map((a) => `log.do.${a}`),
 ];

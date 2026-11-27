@@ -696,7 +696,60 @@
     document.getElementById("dm-time-total").textContent = duration > 0 ? formatTime(duration) : "—";
   }
 
-  function row(item, { num, actions, extra, grip }) {
+  // The law named for a clip blocked in Ukraine, on the Verkhovna Rada's own site.
+  const UA_LAW_URL = "https://zakon.rada.gov.ua/laws/show/2310-20";
+
+  // Why a clip in the history did not play (MediaQueue.setFailure, lib/youtubeAvailability.js).
+  let regionNames = null;
+  function regionName(code) {
+    try {
+      if (!regionNames) regionNames = new Intl.DisplayNames([locale], { type: "region" });
+      return regionNames.of(code) || code;
+    } catch (_) {
+      return code;
+    }
+  }
+  function failureText(failure) {
+    if (!failure || !failure.kind) return "";
+    const list = (codes) => codes.map(regionName).join(", ");
+    let text = "";
+    if (failure.kind === "region") {
+      if (Array.isArray(failure.blocked)) {
+        text = t("failure.blocked").replace("{list}", list(failure.blocked));
+      }
+      else if (Array.isArray(failure.only)) text = t("failure.only").replace("{list}", list(failure.only));
+      else text = t("failure.blockedCount").replace("{n}", String(failure.blockedCount));
+    } else if (["removed", "embed", "badId", "html5"].includes(failure.kind)) {
+      text = t(`failure.${failure.kind}`);
+    }
+    if (Number.isInteger(failure.code) && failure.kind !== "region") {
+      const code = t("failure.code").replace("{code}", String(failure.code));
+      text = text ? `${text} (${code})` : code;
+    }
+    return text;
+  }
+
+  // The history's clock: the time on each row, a heading above each day.
+  const timeFormat = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+  const dayFormat = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", weekday: "short" });
+  const dayYearFormat = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" });
+  const relativeDay = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  function dayStart(time) {
+    const d = new Date(time);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  function dayLabel(start) {
+    const today = dayStart(Date.now());
+    const days = Math.round((today - start) / 86400000);
+    let text;
+    if (days === 0 || days === 1) text = relativeDay.format(-days, "day");
+    else if (new Date(start).getFullYear() === new Date(today).getFullYear()) text = dayFormat.format(start);
+    else text = dayYearFormat.format(start);
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function row(item, { num, at, actions, extra, grip }) {
     const body = el("div", { class: "dm-row-body" }, donorLine(item), el("div", { class: "dm-title", text: titleOf(item), title: titleOf(item) }));
     if (item.message) body.appendChild(el("div", { class: "dm-msg-short", text: item.message, title: item.message }));
     if (extra) body.appendChild(extra);
@@ -705,6 +758,7 @@
       { class: "dm-row", "data-dm-id": String(item.id) },
       grip || null,
       num !== undefined ? el("span", { class: "dm-num", text: String(num) }) : null,
+      at !== undefined ? el("span", { class: "dm-at", text: at }) : null,
       el("a", { href: videoUrl(item), target: "_blank", rel: "noopener noreferrer", title: titleOf(item) }, thumb(item)),
       body,
       actions && actions.childNodes.length ? actions : null
@@ -972,11 +1026,33 @@
       historyBox.appendChild(el("div", { class: "dm-empty", text: t("historyEmpty") }));
       return;
     }
+    let lastDay = null;
     for (const item of state.history) {
-      const statusText = t(`status.${item.status}`);
+      const finished = Number(item.finishedAt);
+      const known = Number.isFinite(finished) && finished > 0;
+      if (known) {
+        const day = dayStart(finished);
+        if (day !== lastDay) {
+          historyBox.appendChild(el("div", { class: "dm-day", text: dayLabel(day) }));
+          lastDay = day;
+        }
+      }
+      let statusText = t(`status.${item.status}`);
+      if (item.status === "error") {
+        const why = failureText(item.failure);
+        if (why) statusText = `${statusText}: ${why}`;
+      }
       const extra = statusText && item.status !== "played"
         ? el("div", { class: `dm-st s-${item.status}`, text: item.by ? `${statusText} · ${item.by}` : statusText })
         : null;
+      // Ukraine bars Russian singers' songs and Russian-made recordings from public use, online
+      // included (Law No. 2310-IX, art. 15(2) of the Law on Culture). YouTube never says whose
+      // decision a block was; the law is named for every block in Ukraine.
+      const failure = item.failure;
+      if (extra && item.status === "error" && failure && failure.kind === "region" && Array.isArray(failure.blocked) && failure.blocked.includes("UA")) {
+        extra.appendChild(document.createTextNode(` ${t("failure.uaLaw")} `));
+        extra.appendChild(el("a", { class: "dm-st-link", href: UA_LAW_URL, target: "_blank", rel: "noopener noreferrer", text: t("failure.uaLawLink") }));
+      }
       const actions = el("div", { class: "dm-row-actions" });
       if (canControl) {
         actions.appendChild(el("button", { class: "dm-btn is-small", type: "button", text: `↻ ${t("requeue")}`, title: t("requeueHint"), onclick: () => command("replay", { id: item.id }) }));
@@ -984,7 +1060,7 @@
         for (const b of rateButtons(item)) actions.appendChild(b);
         for (const b of trackButtons(item.videoId)) actions.appendChild(b);
       }
-      historyBox.appendChild(row(item, { actions, extra }));
+      historyBox.appendChild(row(item, { at: known ? timeFormat.format(finished) : "", actions, extra }));
     }
   }
 

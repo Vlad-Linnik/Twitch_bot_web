@@ -112,8 +112,9 @@
             }
           }
         },
-        // Removed, private, not embeddable: report it and let the queue move on.
-        onError: () => finish(true),
+        // Removed, private, not embeddable, blocked in this country: report it with YouTube's code
+        // (the server works out which) and let the queue move on.
+        onError: (event) => finish(true, event && Number.isInteger(event.data) ? event.data : undefined),
       },
     });
   };
@@ -148,12 +149,14 @@
     player.loadVideoById(options);
   }
 
-  function finish(error) {
+  function finish(error, code) {
     if (!current) return;
     const id = current.id;
     current = null;
     show(false);
-    send({ type: "ended", id, error: Boolean(error) });
+    const msg = { type: "ended", id, error: Boolean(error) };
+    if (code !== undefined) msg.code = code;
+    send(msg);
   }
 
   function stop() {

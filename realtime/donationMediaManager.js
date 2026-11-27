@@ -43,6 +43,7 @@ const { MusicFeatures } = require("../lib/musicFeatures");
 const { eventOf } = require("../lib/musicJournal");
 const { songId, artistOf } = require("../lib/musicGraph");
 const icons = require("../lib/donationMediaIcons");
+const { failureReason } = require("../lib/youtubeAvailability");
 
 const SAVE_DEBOUNCE_MS = 1000;
 const PERMISSION_RECHECK_MS = 60 * 1000;
@@ -411,6 +412,7 @@ class Session {
   // feed is chosen anew at once, or the branch just skipped would go on from it.
   onFinished(item, how) {
     const q = this.queue;
+    if (how.status === "error" && !item.fromPlaylist && !item.upNextEntry) this.explainFailure(item, how.failure).catch(() => {});
     const known = authorCache.get(item.videoId);
     const author = (known && known.author) || "";
     this.recordDonations([[item, { status: how.status, at: Date.now(), author }]]);
@@ -422,6 +424,16 @@ class Session {
       q.replaceRadioTail(this.music.nextNow(q, { ...q.feedExclusions({ repeats: true, tail: false }), limit: tail }));
     }
     this.music.grow(q);
+  }
+
+  // A clip in the history failed: why, in words the panel can show. YouTube's code alone cannot tell
+  // a country block from embedding switched off (lib/youtubeAvailability.js), the watch page can.
+  async explainFailure(item, failure) {
+    const code = failure && Number.isInteger(failure.code) ? failure.code : undefined;
+    const page = await radioSources.availability(item.videoId);
+    const reason = failureReason(code, page);
+    console.log(`[donationMedia] ${this.channelLogin}: ${item.videoId} failed (code ${code === undefined ? "?" : code}): ${JSON.stringify(reason)}`);
+    this.queue.setFailure(item.id, reason);
   }
 
   // The donations' graph. Never in the queue's way: a failure costs the rows.
@@ -1112,7 +1124,9 @@ async function handleConnection(ws, principal) {
     if (!msg) return;
     try {
       if (principal.role === "player") {
-        if (msg.type === "ended") session.queue.videoEnded({ id: msg.id, error: msg.error === true });
+        if (msg.type === "ended") {
+          session.queue.videoEnded({ id: msg.id, error: msg.error === true, code: Number.isInteger(msg.code) && msg.code >= 0 && msg.code < 1000 ? msg.code : undefined });
+        }
         else if (msg.type === "progress") {
           session.queue.reportProgress({
             id: msg.id,

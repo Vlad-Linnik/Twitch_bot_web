@@ -4338,6 +4338,18 @@
         "removed": "removed from the queue",
         "error": "YouTube refused to play it"
       },
+      "failure": {
+        "blocked": "blocked in: {list}",
+        "uaLaw": "under",
+        "uaLawLink": "Ukraine's Law No. 2310-IX of 19.06.2022",
+        "only": "available only in: {list}",
+        "blockedCount": "blocked in {n} countries",
+        "removed": "the video was removed or made private",
+        "embed": "the owner does not allow playing it on other sites",
+        "badId": "invalid link",
+        "html5": "player error",
+        "code": "code {code}"
+      },
       "log": {
         "title": "Action log",
         "empty": "Nobody has done anything yet",
