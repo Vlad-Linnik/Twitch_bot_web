@@ -29,6 +29,8 @@ module.exports = createMediaSectionRouter({
   kind: "movie",
   sources: createMediaSources({ tmdbToken: env.tmdbReadToken }),
   sorts: ["added", "streamer", "viewers", "imdb", "comments", "score"],
+  // The owner's random pick among the suggestions (/movies/wheel).
+  wheel: true,
   view: {
     path: "movies",
     i18n: "movies",

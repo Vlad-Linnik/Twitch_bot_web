@@ -1,0 +1,176 @@
+<%- include('partials/head', { title: channel.channelLogin + ' · ' + st('wheel.title') }) %>
+<%- include('partials/nav') %>
+
+<%# The owner's wheel over the suggestions tab (routes/mediaSection.js's /wheel). Two modes with the
+    same chances - the plain wheel and one that eliminates until one is left; the arithmetic and its
+    proof are in lib/wheelMath.js, the drawing and the animations in public/js/media-wheel.js and
+    the .media-wheel-* rules of public/css/input.css. Nothing here is saved on the server: the list,
+    the weights, the mode, the spin length and the centre emote live in the browser (localStorage). %>
+<main class="pt-14 max-w-7xl mx-auto px-6 py-12 media-theme-<%= sec.theme %>">
+  <%- include('partials/channelHeader', { channel, broadcaster, channelNav }) %>
+
+  <% if (sectionPreview) { %>
+    <div class="mb-8 rounded-md border border-amber-800/60 bg-amber-950/40 text-amber-300 text-sm px-4 py-3"><%= st('previewNotice') %></div>
+  <% } %>
+
+  <a href="/<%= channel.channelLogin %>/<%= sec.path %>?tab=suggestions" data-transition="backward" class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('wheel.back') %></a>
+  <h2 class="text-2xl font-bold text-stone-100 mb-6"><%= st('wheel.title') %></h2>
+
+  <% if (!options.length) { %>
+    <p class="text-center text-stone-500 text-sm py-16"><%= st('wheel.empty') %></p>
+  <% } else { %>
+  <div data-wheel class="grid grid-cols-1 gap-8 xl:grid-cols-[22rem_minmax(0,1fr)_16rem] items-start">
+
+    <%# The wheel: first on a narrow screen, in the middle on a wide one. %>
+    <section class="min-w-0 order-1 xl:order-2">
+      <div data-wheel-stage class="media-wheel-stage relative mx-auto w-full max-w-[min(36rem,calc(100vh-10rem))] aspect-square select-none">
+        <canvas data-wheel-canvas class="absolute inset-0 w-full h-full"></canvas>
+        <%# The pointer: fixed at the top, the wheel turns under it; it flicks at every sector edge. %>
+        <svg data-wheel-pointer class="media-wheel-pointer absolute left-1/2 -top-2 w-10 h-12 drop-shadow-[0_3px_6px_rgba(0,0,0,.75)]" viewBox="0 0 36 44" aria-hidden="true">
+          <path d="M18 43 3 9a15 15 0 1 1 30 0Z" fill="var(--sec-accent)" stroke="#0c0a09" stroke-width="2.5"/>
+          <circle cx="18" cy="14" r="5" fill="#0c0a09"/>
+        </svg>
+        <%# The hub: the chosen emote, turning with the wheel. A click spins. %>
+        <button type="button" data-wheel-hub aria-label="<%= st('wheel.spin') %>"
+                class="media-wheel-hub absolute left-1/2 top-1/2 w-[22%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full bg-stone-950 ring-4 ring-(--sec-accent) shadow-xl shadow-black/70 grid place-items-center overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--sec-accent)">
+          <img data-wheel-emote alt="" class="w-[78%] h-[78%] object-contain pointer-events-none" hidden />
+          <span data-wheel-hub-text class="text-(--sec-accent-strong) font-extrabold uppercase tracking-wide text-[clamp(.6rem,1.6vw,.9rem)] pointer-events-none"><%= st('wheel.spin') %></span>
+        </button>
+        <%# What just happened, written over the wheel: who drops out, who won. %>
+        <div data-wheel-overlay class="media-wheel-overlay" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <%# The list of films. %>
+    <aside class="min-w-0 order-3 xl:order-1 rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-white/5 p-4">
+      <%# Where the weights come from: all equal, or from the votes on each suggestion (re-read on
+          every visit, so the wheel follows the voting). Editing a weight by hand makes it "custom". %>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-stone-500"><%= st('wheel.weights') %></span>
+        <div class="ml-auto inline-flex gap-1 p-1 rounded-full bg-stone-950/50 ring-1 ring-white/5" role="radiogroup" aria-label="<%= st('wheel.weights') %>">
+          <% ['equal', 'votes'].forEach(function(w) { %>
+            <button type="button" data-wheel-preset="<%= w %>" role="radio" aria-checked="false"<% if (w === 'votes') { %> title="<%= st('wheel.presetVotesHint') %>"<% } %>
+                    class="px-2.5 py-1 rounded-full text-xs font-semibold transition-colors text-stone-400 hover:text-(--sec-accent-soft) aria-checked:bg-(--sec-accent) aria-checked:text-stone-950 disabled:cursor-default">
+              <%= st(w === 'equal' ? 'wheel.presetEqual' : 'wheel.presetVotes') %>
+            </button>
+          <% }) %>
+        </div>
+      </div>
+      <p data-wheel-custom class="-mt-1 mb-2 text-right text-[11px] text-stone-500" hidden><%= st('wheel.weightsCustom') %></p>
+      <%# Which films go on the wheel: the top N by votes, everything above N votes, or by hand
+          with the boxes below. Each button only ticks and unticks - the boxes stay editable. %>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 text-xs text-stone-400">
+        <span class="inline-flex items-center gap-1.5">
+          <button type="button" data-wheel-pick="top" class="media-wheel-chip"><%= st('wheel.pickTop') %></button>
+          <input type="number" data-wheel-pick-top min="1" max="999" step="1" value="10" aria-label="<%= st('wheel.pickTop') %>"
+                 class="w-12 rounded bg-stone-950/60 border border-stone-700 text-right tabular-nums text-stone-100 px-1.5 py-0.5 focus:outline-none focus:border-(--sec-accent) disabled:opacity-50" />
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <button type="button" data-wheel-pick="above" class="media-wheel-chip"><%= st('wheel.pickAbove') %></button>
+          <input type="number" data-wheel-pick-above min="-999" max="9999" step="1" value="0" aria-label="<%= st('wheel.pickAbove') %>"
+                 class="w-12 rounded bg-stone-950/60 border border-stone-700 text-right tabular-nums text-stone-100 px-1.5 py-0.5 focus:outline-none focus:border-(--sec-accent) disabled:opacity-50" />
+        </span>
+      </div>
+      <div class="flex items-center gap-3 mb-2 text-xs">
+        <button type="button" data-wheel-all="1" class="text-stone-400 hover:text-(--sec-accent-soft) disabled:opacity-40"><%= st('wheel.all') %></button>
+        <button type="button" data-wheel-all="0" class="text-stone-400 hover:text-(--sec-accent-soft) disabled:opacity-40"><%= st('wheel.none') %></button>
+        <label class="ml-auto flex items-center gap-1.5 text-stone-400 cursor-pointer">
+          <input type="checkbox" data-wheel-hide-out class="accent-(--sec-accent)" />
+          <%= st('wheel.hideOut') %>
+        </label>
+      </div>
+      <ul data-wheel-list class="flex flex-col gap-1.5 max-h-[38rem] overflow-y-auto pr-1 -mr-1"></ul>
+      <p data-wheel-count class="mt-3 text-xs text-stone-500"></p>
+    </aside>
+
+    <%# Spin, mode, length, emote. %>
+    <aside class="min-w-0 order-2 xl:order-3 flex flex-col gap-4">
+      <div class="flex gap-2">
+        <button type="button" data-wheel-spin
+                class="flex-1 px-4 py-2.5 rounded-(--sec-radius-lg) bg-(--sec-accent) text-stone-950 font-extrabold uppercase tracking-wide hover:brightness-110 disabled:opacity-50 disabled:cursor-default transition">
+          <%= st('wheel.spin') %>
+        </button>
+        <button type="button" data-wheel-reset title="<%= st('wheel.reset') %>" aria-label="<%= st('wheel.reset') %>"
+                class="px-3 rounded-(--sec-radius-lg) ring-1 ring-stone-700 text-stone-300 hover:ring-(--sec-accent)/60 hover:text-(--sec-accent-soft) disabled:opacity-40 transition">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 p-1 rounded-full bg-(--sec-surface) ring-1 ring-white/5" role="radiogroup" aria-label="<%= st('wheel.modeLabel') %>">
+        <% ['plain', 'elimination'].forEach(function(m) { %>
+          <button type="button" data-wheel-mode="<%= m %>" role="radio" aria-checked="false"
+                  class="px-3 py-1.5 rounded-full text-sm font-semibold transition-colors text-stone-400 hover:text-(--sec-accent-soft) aria-checked:bg-(--sec-accent) aria-checked:text-stone-950 disabled:cursor-default">
+            <%= st('wheel.mode.' + m) %>
+          </button>
+        <% }) %>
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-stone-400">
+        <%= st('wheel.duration') %>
+        <input type="number" data-wheel-duration min="1" max="120" step="0.5" value="6"
+               class="w-20 rounded-md bg-(--sec-surface) border border-stone-700 text-right text-sm tabular-nums text-stone-100 px-2 py-1 focus:outline-none focus:border-(--sec-accent)" />
+        <%= st('wheel.secondsUnit') %>
+      </label>
+
+      <label data-wheel-auto-wrap class="flex items-center gap-2 text-sm text-stone-400 cursor-pointer">
+        <input type="checkbox" data-wheel-auto class="accent-(--sec-accent)" />
+        <%= st('wheel.auto') %>
+      </label>
+
+      <div class="relative">
+        <button type="button" data-wheel-emote-toggle aria-expanded="false"
+                class="w-full flex items-center gap-2 px-3 py-2 rounded-(--sec-radius-lg) ring-1 ring-stone-700 text-sm text-stone-200 hover:ring-(--sec-accent)/60 transition">
+          <img data-wheel-emote-preview alt="" class="w-6 h-6 object-contain" hidden />
+          <span class="flex-1 text-left"><%= st('wheel.emote') %></span>
+          <svg class="w-4 h-4 text-stone-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.5 7.5 10 12l4.5-4.5"/></svg>
+        </button>
+        <div data-wheel-emote-panel hidden class="media-wheel-pop absolute z-30 right-0 mt-2 w-[min(22rem,calc(100vw-3rem))] rounded-(--sec-radius-lg) bg-(--sec-surface) ring-1 ring-(--sec-accent)/30 shadow-2xl shadow-black/70 p-3">
+          <div class="flex gap-2 mb-2">
+            <input type="search" data-wheel-emote-search placeholder="<%= st('wheel.emoteSearch') %>" autocomplete="off"
+                   class="flex-1 min-w-0 rounded-full bg-stone-950/60 border border-stone-700 text-sm text-stone-100 px-3 py-1 focus:outline-none focus:border-(--sec-accent)" />
+            <button type="button" data-wheel-emote-none class="media-wheel-chip"><%= st('wheel.emoteNone') %></button>
+          </div>
+          <div data-wheel-emote-grid class="grid grid-cols-6 gap-1 max-h-72 overflow-y-auto"></div>
+          <p data-wheel-emote-note class="text-xs text-stone-500 py-2" hidden></p>
+        </div>
+      </div>
+
+      <details class="text-xs text-stone-400 leading-relaxed">
+        <summary class="cursor-pointer text-stone-300 hover:text-(--sec-accent-soft)"><%= st('wheel.mathTitle') %></summary>
+        <p class="mt-2"><%= st('wheel.math1') %></p>
+        <p class="mt-2 font-mono text-stone-200 text-center">p<sub>j</sub> = (W − w<sub>j</sub>) / ((n − 1)·W)</p>
+        <p class="mt-2"><%= st('wheel.math2') %></p>
+        <p class="mt-2 font-mono text-stone-200 text-center">Σ<sub>j≠i</sub> (W − w<sub>j</sub>)/((n − 1)W) · w<sub>i</sub>/(W − w<sub>j</sub>) = w<sub>i</sub>/W</p>
+        <p class="mt-2"><%= st('wheel.math3') %></p>
+      </details>
+    </aside>
+  </div>
+
+  <script type="application/json" id="wheel-data"><%- safeJson({
+    channel: channel.channelLogin,
+    base: '/' + channel.channelLogin + '/' + sec.path,
+    options: options,
+    labels: {
+      chance: st('wheel.chance'),
+      weight: st('wheel.weight'),
+      winner: st('wheel.winner'),
+      out: st('wheel.out'),
+      left: st('wheel.left', { n: '{{n}}' }),
+      onWheel: st('wheel.onWheel', { n: '{{n}}' }),
+      open: st('wheel.open'),
+      nothing: st('wheel.nothing'),
+      planned: st('wheel.planned'),
+      votes: st('wheel.votes', { n: '{{n}}' }),
+      again: st('wheel.again'),
+      emoteLoading: st('wheel.emoteLoading'),
+      emoteEmpty: st('wheel.emoteEmpty'),
+      emoteFailed: st('wheel.emoteFailed'),
+    },
+  }) %></script>
+  <% } %>
+</main>
+
+<script src="<%= asset('/js/shared/wheel-math.js') %>" defer></script>
+<script src="<%= asset('/js/media-wheel.js') %>" defer></script>
+
+<%- include('partials/foot') %>

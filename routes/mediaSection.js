@@ -56,6 +56,8 @@ const suggestions = require("../lib/mediaSuggestions");
 const imageGuard = require("../lib/userImageGuard");
 const { sanitizeReturnTo } = require("../lib/returnTo");
 const { fetchAllowedImage } = require("../lib/remoteImage");
+const emoteImages = require("../twitch/emoteImages");
+const { isAllowedImageUrl } = require("../lib/emoteImageHosts");
 const { isAllowedMediaImageUrl } = require("../lib/mediaImageHosts");
 const { createDiscussionRoutes } = require("./discussionRoutes");
 
@@ -404,6 +406,7 @@ function createMediaSectionRouter(cfg) {
         restoreKey: parsed.cursor ? null : restoreKeyOf(channel, view),
         totalShown: rows.length,
         canEdit: editor,
+        canWheel: Boolean(cfg.wheel) && permission <= 1,
         sectionPreview: res.locals.sectionPreview,
       });
     } catch (err) {
@@ -441,6 +444,76 @@ function createMediaSectionRouter(cfg) {
       next(err);
     }
   });
+
+  // The wheel (views/mediaWheel.ejs): the owner picks what to watch from the suggestions tab at
+  // random - a plain wheel or one that eliminates until one is left, with the same chances
+  // (lib/wheelMath.js). Levels 0-1 only: it is the streamer's tool, not a public lottery. The
+  // spin happens in the browser and decides nothing on the server; the cards are only listed.
+  if (cfg.wheel) {
+    router.get(`/:channel/${SECTION}/wheel`, page, async (req, res, next) => {
+      try {
+        const { channel, permission } = req;
+        if (!(permission <= 1)) return res.status(req.user ? 403 : 401).render("errors/403", { requiredLevel: 1 });
+        const [rows, broadcaster] = await Promise.all([
+          mediaItemsRepo.listForGrid(channel.channelLogin, KIND, TABS.suggestions.statuses),
+          profileCacheRepo.getOrFetchProfile(channel.channelId).catch(() => null),
+        ]);
+        const viewer = viewerOf(req);
+        const options = rows
+          .map((item) => {
+            const poster = posterFor(item, viewer);
+            return {
+              id: String(item._id),
+              title: item.title,
+              year: item.year || null,
+              status: item.status,
+              score: item.votes?.score || 0,
+              posterUrl: poster ? gridPosterUrl({ ...item, poster }) : null,
+            };
+          })
+          .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+        res.render("mediaWheel", {
+          channel,
+          broadcaster,
+          channelNav: buildChannelNav(channel, { permission, active: SECTION }),
+          options,
+          sectionPreview: res.locals.sectionPreview,
+        });
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    // The emotes the wheel's centre may show: the channel's own sets first (7TV, Twitch, BTTV, FFZ),
+    // then the global ones, each name once. Only pictures the page's CSP lets through.
+    router.get(`/:channel/${SECTION}/wheel/emotes.json`, pageJson, async (req, res, next) => {
+      try {
+        const { channel, permission } = req;
+        if (!(permission <= 1)) return res.status(403).json({ ok: false, error: "forbidden" });
+        const id = String(channel.channelId);
+        const sets = await Promise.all([
+          emoteImages.getSevenTvEmoteImages(id),
+          emoteImages.getChannelEmoteImages(id),
+          emoteImages.getBttvEmoteImages(id),
+          emoteImages.getFfzEmoteImages(id),
+          emoteImages.getSevenTvGlobalImages(),
+          emoteImages.getGlobalEmoteImages(),
+        ].map((p) => Promise.resolve(p).catch(() => new Map())));
+        const seen = new Set();
+        const emotes = [];
+        for (const set of sets) {
+          for (const [name, url] of set || []) {
+            if (seen.has(name) || !isAllowedImageUrl(url)) continue;
+            seen.add(name);
+            emotes.push({ name, url });
+          }
+        }
+        res.json({ ok: true, emotes: emotes.slice(0, 2000) });
+      } catch (err) {
+        next(err);
+      }
+    });
+  }
 
   // Static tails before /:id, or "list.json" and "new" would be read as card ids.
   router.get(`/:channel/${SECTION}/list.json`, pageJson, async (req, res, next) => {
