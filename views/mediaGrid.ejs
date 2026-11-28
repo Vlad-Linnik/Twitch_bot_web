@@ -46,7 +46,7 @@
           not offered rather than just hiding the button. %>
       <% if (suggest.allowed) { %>
         <a href="/<%= channel.channelLogin %>/<%= sec.path %>/suggest"
-           class="<%= canEdit ? '' : 'ml-auto ' %>inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500 text-stone-950 hover:bg-emerald-400 text-sm font-semibold transition-colors">
+           class="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500 text-stone-950 hover:bg-emerald-400 text-sm font-semibold transition-colors">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" /></svg>
           <%= st('suggest.button') %>
         </a>
@@ -56,7 +56,8 @@
         <span class="text-xs text-stone-500"><%= st('suggest.chatOnly') %></span>
       <% } %>
     <% } %>
-    <% if (canEdit) { %>
+    <%# An editor's "add" belongs to the watched list; the suggestions tab has its own "suggest". %>
+    <% if (canEdit && view.tab !== 'suggestions') { %>
       <a href="/<%= channel.channelLogin %>/<%= sec.path %>/new"
          class="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-(--sec-accent)/60 text-(--sec-accent-strong) hover:bg-(--sec-accent) hover:text-stone-950 text-sm font-semibold transition-colors">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" /></svg>
