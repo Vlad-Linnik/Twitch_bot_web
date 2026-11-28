@@ -357,6 +357,19 @@ function createMediaSectionRouter(cfg) {
     return `/${channel.channelLogin}/${SECTION}${qs ? `?${qs}` : ""}`;
   }
 
+  // "← back to the list" on a card's page: the tab the card lives in - a suggestion goes back to
+  // the suggestions, a rejected one to the rejected tab for those who have it (its author, who
+  // can open the card but not that tab, to the suggestions).
+  // Returns {href, label}: the label is the tab's own name, "all films" for the watched list.
+  function gridBackFor(channel, item, permission) {
+    let tab = Object.keys(TABS).find((key) => TABS[key].statuses.includes(item.status)) || "done";
+    if (!visibleTabs(permission).includes(tab)) tab = "suggestions";
+    return {
+      href: `/${channel.channelLogin}/${SECTION}${tab === "done" ? "" : `?tab=${tab}`}`,
+      label: tab === "done" ? "backToGrid" : `tab.${tab}`,
+    };
+  }
+
   const listSrcOf = (channel, view) =>
     `/${channel.channelLogin}/${SECTION}/list.json?${new URLSearchParams({ tab: view.tab, sort: view.sort, q: view.q, type: view.type, genre: view.genre, dir: view.dir })}`;
   const restoreKeyOf = (channel, view) =>
@@ -1096,6 +1109,7 @@ function createMediaSectionRouter(cfg) {
       res.render("mediaItem", {
         ...thread,
         broadcaster,
+        back: gridBackFor(channel, item, permission),
         channelNav: buildChannelNav(channel, { permission, active: SECTION }),
         item: {
           ...item,

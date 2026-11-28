@@ -38,7 +38,7 @@
     </div>
   <% } %>
 
-  <a href="/<%= channel.channelLogin %>/<%= sec.path %>" data-transition="backward" data-back-to-grid class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st('backToGrid') %></a>
+  <a href="<%= back.href %>" data-transition="backward" data-back-to-grid class="inline-flex items-center gap-1 mb-4 text-sm text-(--sec-accent-strong)/80 hover:text-(--sec-accent-soft)">&larr; <%= st(back.label) %></a>
 
   <%# Only the backdrop is clipped, not the article: the "your rating" popover has to be able to
       hang past the card's edge. %>
